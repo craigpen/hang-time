@@ -42,6 +42,7 @@ const STATIC_FILES = [
   { src: 'src/settings.html', dest: 'settings.html' },
   { src: 'src/oauth-handler.html', dest: 'oauth-handler.html' },
   { src: 'src/styles', dest: 'styles' },
+  { src: 'public', dest: 'public' },
 ];
 
 // ============================================================================
