@@ -1,0 +1,336 @@
+/**
+ * Hang Time - Theme & Color Scheme
+ * Supports dark and light modes
+ */
+
+:root {
+  color-scheme: light dark;
+}
+
+/* ============================================================================
+   Light Mode
+   ============================================================================ */
+
+@media (prefers-color-scheme: light) {
+  :root {
+    /* Background Colors */
+    --bg-primary: #f5f5f5;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f0f0f0;
+
+    /* Text Colors */
+    --text-primary: #333333;
+    --text-secondary: #666666;
+    --text-tertiary: #999999;
+
+    /* Accent Colors */
+    --accent-primary: #1a6fb5;
+    --accent-secondary: #0d47a1;
+    --accent-hover: #155a9f;
+
+    /* Status Colors */
+    --status-success: #2a8659;
+    --status-warning: #d97706;
+    --status-error: #dc2626;
+    --status-info: #1a5fc9;
+
+    /* Border & Divider */
+    --border-color: #dddddd;
+    --border-light: #eeeeee;
+
+    /* Button Colors */
+    --btn-primary-bg: #1a6fb5;
+    --btn-primary-text: #ffffff;
+    --btn-primary-hover: #155a9f;
+    --btn-secondary-bg: #e8e8e8;
+    --btn-secondary-text: #333333;
+    --btn-secondary-hover: #d0d0d0;
+    --btn-danger-bg: #dc2626;
+    --btn-danger-text: #ffffff;
+    --btn-danger-hover: #b91c1c;
+
+    /* Input Colors */
+    --input-bg: #ffffff;
+    --input-border: #dddddd;
+    --input-focus: #1a6fb5;
+    --input-placeholder: #999999;
+  }
+}
+
+/* ============================================================================
+   Dark Mode
+   ============================================================================ */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Background Colors */
+    --bg-primary: #1a1f2e;
+    --bg-secondary: #141824;
+    --bg-tertiary: #0f1219;
+
+    /* Text Colors */
+    --text-primary: #e0e6f0;
+    --text-secondary: #8898b8;
+    --text-tertiary: #6b7a94;
+
+    /* Accent Colors */
+    --accent-primary: #7eb8f7;
+    --accent-secondary: #5b9cf6;
+    --accent-hover: #8fc5f9;
+
+    /* Status Colors */
+    --status-success: #4caf7d;
+    --status-warning: #f59e0b;
+    --status-error: #f87171;
+    --status-info: #60a5fa;
+
+    /* Border & Divider */
+    --border-color: #2a3045;
+    --border-light: #1f2636;
+
+    /* Button Colors */
+    --btn-primary-bg: #7eb8f7;
+    --btn-primary-text: #141824;
+    --btn-primary-hover: #8fc5f9;
+    --btn-secondary-bg: #2a3045;
+    --btn-secondary-text: #e0e6f0;
+    --btn-secondary-hover: #3a4055;
+    --btn-danger-bg: #f87171;
+    --btn-danger-text: #141824;
+    --btn-danger-hover: #fb5757;
+
+    /* Input Colors */
+    --input-bg: #0f1219;
+    --input-border: #2a3045;
+    --input-focus: #7eb8f7;
+    --input-placeholder: #6b7a94;
+  }
+}
+
+/* ============================================================================
+   Common Styles (Apply to both themes)
+   ============================================================================ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 0.5em;
+}
+
+h1 { font-size: 1.5em; }
+h2 { font-size: 1.25em; }
+h3 { font-size: 1.1em; }
+h4 { font-size: 1em; }
+h5 { font-size: 0.95em; }
+h6 { font-size: 0.9em; }
+
+p {
+  margin-bottom: 0.75em;
+}
+
+a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Buttons */
+button {
+  font-family: inherit;
+  font-size: 0.95em;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  padding: 0.5em 1em;
+  transition: all 0.15s ease;
+}
+
+.btn-primary {
+  background-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+}
+
+.btn-primary:hover {
+  background-color: var(--btn-primary-hover);
+}
+
+.btn-secondary {
+  background-color: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+}
+
+.btn-secondary:hover {
+  background-color: var(--btn-secondary-hover);
+}
+
+.btn-danger {
+  background-color: var(--btn-danger-bg);
+  color: var(--btn-danger-text);
+}
+
+.btn-danger:hover {
+  background-color: var(--btn-danger-hover);
+}
+
+.btn-copy {
+  padding: 0.4em 0.8em;
+  font-size: 0.9em;
+  background-color: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+}
+
+.btn-copy:hover {
+  background-color: var(--btn-secondary-hover);
+}
+
+.btn-close {
+  background: none;
+  color: var(--text-secondary);
+  font-size: 1.5em;
+  padding: 0.25em 0.5em;
+}
+
+.btn-close:hover {
+  color: var(--text-primary);
+}
+
+.btn-settings {
+  background: none;
+  color: var(--text-secondary);
+  font-size: 1.1em;
+  padding: 0.5em;
+  border-radius: 4px;
+}
+
+.btn-settings:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* Form Elements */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
+  width: 100%;
+  padding: 0.5em 0.75em;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--input-bg);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.95em;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--input-focus);
+  box-shadow: 0 0 0 3px rgba(var(--accent-primary), 0.1);
+}
+
+input::placeholder {
+  color: var(--input-placeholder);
+}
+
+/* Checkboxes & Radios */
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+  margin-right: 0.5em;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.5em;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.checkbox-label,
+.radio-label {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.75em;
+}
+
+.checkbox-label input,
+.radio-label input {
+  margin-right: 0.75em;
+}
+
+/* Utilities */
+.help-text {
+  font-size: 0.85em;
+  color: var(--text-tertiary);
+  margin-top: 0.25em;
+  margin-bottom: 0.5em;
+}
+
+.error {
+  color: var(--status-error);
+}
+
+.warning {
+  color: var(--status-warning);
+}
+
+.success {
+  color: var(--status-success);
+}
+
+.info {
+  color: var(--status-info);
+}
+
+/* Dividers */
+hr {
+  border: none;
+  border-top: 1px solid var(--border-light);
+  margin: 1em 0;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-tertiary);
+}

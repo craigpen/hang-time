@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hang Time</title>
+  <link rel="stylesheet" href="styles/popup.css">
+  <link rel="stylesheet" href="styles/theme.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header class="popup-header">
+      <h1>Hang Time</h1>
+      <button id="settings-btn" class="btn-settings" title="Settings">⚙️</button>
+    </header>
+
+    <div id="no-activity" class="empty-state">
+      <p>No friends online right now</p>
+      <button id="add-friend-btn" class="btn-primary">Add a Friend</button>
+    </div>
+
+    <div id="active-friends" class="friends-grid">
+      <!-- Friend cards injected by popup.ts -->
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

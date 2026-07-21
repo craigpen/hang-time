@@ -1,0 +1,211 @@
+/**
+ * Hang Time - Popup Styles
+ */
+
+body {
+  width: 420px;
+  min-height: 100px;
+  max-height: 600px;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+}
+
+.popup-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ============================================================================
+   Header
+   ============================================================================ */
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+}
+
+.popup-header h1 {
+  font-size: 1.1em;
+  margin: 0;
+  color: var(--accent-primary);
+}
+
+.popup-header .btn-settings {
+  flex-shrink: 0;
+}
+
+/* ============================================================================
+   Empty State
+   ============================================================================ */
+
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2em 1em;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.empty-state p {
+  margin-bottom: 1em;
+  font-size: 0.95em;
+}
+
+.empty-state .btn-primary {
+  padding: 0.6em 1.2em;
+}
+
+/* ============================================================================
+   Friends Grid
+   ============================================================================ */
+
+.friends-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.friends-grid:empty {
+  display: none;
+}
+
+/* ============================================================================
+   Friend Card
+   ============================================================================ */
+
+.friend-card {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-light);
+  background-color: var(--bg-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.friend-card:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.friend-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.friend-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-badge {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  background-color: var(--bg-tertiary);
+  border-radius: 3px;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.friend-card-actions {
+  display: none;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+  flex-wrap: wrap;
+}
+
+.friend-card-actions.visible {
+  display: flex;
+}
+
+.friend-card-actions button {
+  flex: 1;
+  min-width: 70px;
+  padding: 6px 10px;
+  font-size: 0.85em;
+  background-color: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border: 1px solid var(--border-color);
+}
+
+.friend-card-actions button:hover {
+  background-color: var(--btn-secondary-hover);
+}
+
+.friend-card-actions .btn-join {
+  background-color: var(--accent-primary);
+  color: white;
+  border: none;
+}
+
+.friend-card-actions .btn-join:hover {
+  background-color: var(--accent-hover);
+}
+
+/* ============================================================================
+   Loading & States
+   ============================================================================ */
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2em;
+  color: var(--text-secondary);
+}
+
+.error {
+  padding: 1em;
+  background-color: rgba(220, 38, 38, 0.1);
+  color: var(--status-error);
+  border-radius: 4px;
+  margin: 1em;
+}
+
+/* ============================================================================
+   Scrollbar
+   ============================================================================ */
+
+.friends-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.friends-grid::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+.friends-grid::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 3px;
+}
+
+.friends-grid::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-tertiary);
+}
