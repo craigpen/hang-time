@@ -8,6 +8,7 @@ import { RelayPool, relayPool } from '../src/modules/nostr';
 import { StorageManager, storageManager } from '../src/modules/storage';
 import { IdentityManager, initializeIdentityManager, identityManager } from '../src/modules/identity';
 import { FriendManager, friendManager } from '../src/modules/friends';
+import { MessagingManager, initializeMessagingManager, getMessagingManager } from '../src/modules/messaging';
 import { ActivityDetector } from '../src/modules/activity';
 import { TabService } from '../src/modules/services/tabs';
 import { SteamService } from '../src/modules/services/steam';
@@ -70,13 +71,16 @@ async function initializeExtension(): Promise<void> {
     const identifier = await identityManager.getIdentifier();
     console.debug(`[Background] User identifier: ${identifier}`);
 
-    // Initialize Nostr relay pool
+    // Initialize Nostr relay pool first (needed by messaging)
+    console.debug(`[Background] Connecting to Nostr relays...`);
     const settings = await storageManager.getSettings();
     const relayUrls = settings.relay_urls || RelayPool.DEFAULT_RELAYS;
-
-    console.debug(`[Background] Connecting to ${relayUrls.length} Nostr relays...`);
     await relayPool.connect(relayUrls);
     console.debug(`[Background] Connected to Nostr (${relayPool.getConnectedRelayCount()} relays)`);
+
+    // Initialize messaging manager
+    initializeMessagingManager(storageManager, identityManager, relayPool);
+    console.debug('[Background] Messaging manager initialized');
 
     // Initialize activity detector
     activityDetector = new ActivityDetector(relayPool, storageManager, identityManager);
@@ -249,8 +253,13 @@ async function _getMessages(friendId?: string): Promise<ExtensionResponse> {
     return { success: false, error: 'friendId required' };
   }
 
-  const messages = await storageManager.getMessages(friendId);
-  return { success: true, data: messages };
+  try {
+    const messagingManager = getMessagingManager();
+    const messages = await messagingManager.getMessages(friendId);
+    return { success: true, data: messages };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get messages' };
+  }
 }
 
 async function _addFriend(identifier?: string, localName?: string): Promise<ExtensionResponse> {
@@ -304,10 +313,13 @@ async function _sendMessage(friendId?: string, content?: string): Promise<Extens
     return { success: false, error: 'friendId and content required' };
   }
 
-  // TODO: Implement message encryption and publishing
-  console.debug(`[Background] Message queued for ${friendId}`);
-
-  return { success: true };
+  try {
+    const messagingManager = getMessagingManager();
+    const message = await messagingManager.sendMessage(friendId, content);
+    return { success: true, data: message };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to send message' };
+  }
 }
 
 async function _toggleService(service?: string, enabled?: boolean): Promise<ExtensionResponse> {
@@ -496,8 +508,26 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
 }
 
 async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {
-  // TODO: Implement message decryption and storage
-  console.debug(`[Background] Message event from ${friendIdentifier}`);
+  try {
+    const messagingManager = getMessagingManager();
+    const timestamp = event.created_at * 1000;
+
+    const message = await messagingManager.receiveMessage(friendIdentifier, event.content, timestamp);
+
+    if (message) {
+      // Notify popup about new message
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'NEW_MESSAGE',
+          data: { message },
+        });
+      } catch (error) {
+        // Popup not open
+      }
+    }
+  } catch (error) {
+    console.error('[Background] Failed to handle message event:', error);
+  }
 }
 
 function _parseActivityEvent(event: NostrEvent) {
