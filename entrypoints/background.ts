@@ -7,6 +7,7 @@
 import { RelayPool, relayPool } from '../src/modules/nostr';
 import { StorageManager, storageManager } from '../src/modules/storage';
 import { IdentityManager, initializeIdentityManager, identityManager } from '../src/modules/identity';
+import { FriendManager, friendManager } from '../src/modules/friends';
 import { ActivityDetector } from '../src/modules/activity';
 import { TabService } from '../src/modules/services/tabs';
 import { SteamService } from '../src/modules/services/steam';
@@ -92,9 +93,14 @@ async function initializeExtension(): Promise<void> {
     console.debug('[Background] Activity detector started');
 
     // Subscribe to all friends' activities
-    const friends = await storageManager.getFriends();
+    const friends = await friendManager.getAllFriends();
+    console.debug(`[Background] Subscribing to ${friends.length} friends`);
     for (const friend of friends) {
-      await _subscribeToFriend(friend.identifier);
+      try {
+        await _subscribeToFriend(friend.identifier);
+      } catch (error) {
+        console.warn(`[Background] Failed to subscribe to friend ${friend.identifier}:`, error);
+      }
     }
 
     console.log('[Background] Initialization complete');
@@ -204,19 +210,7 @@ async function _getCurrentActivity(): Promise<ExtensionResponse> {
 }
 
 async function _getActiveFriends(): Promise<ExtensionResponse> {
-  const friends = await storageManager.getFriends();
-  const now = Date.now();
-
-  const activeFriends = friends.filter((friend) => {
-    if (friend.muted) return false;
-    if (!friend.current_activity) return false;
-    if (friend.current_activity.service === 'idle') return false;
-
-    // Only show if activity is recent (< 5 min old)
-    const activityAge = now - (friend.current_activity_timestamp ?? 0);
-    return activityAge < 5 * 60 * 1000;
-  });
-
+  const activeFriends = await friendManager.getActiveFriends();
   return { success: true, data: activeFriends };
 }
 
@@ -225,8 +219,12 @@ async function _getFriendActivityHistory(friendId?: string): Promise<ExtensionRe
     return { success: false, error: 'friendId required' };
   }
 
-  const history = await storageManager.getActivityHistory(friendId);
-  return { success: true, data: history };
+  try {
+    const history = await friendManager.getActivityHistory(friendId);
+    return { success: true, data: history };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get activity history' };
+  }
 }
 
 async function _getUserIdentifier(): Promise<ExtensionResponse> {
@@ -248,22 +246,13 @@ async function _addFriend(identifier?: string, localName?: string): Promise<Exte
     return { success: false, error: 'identifier and localName required' };
   }
 
-  const friend: Friend = {
-    id: Math.random().toString(36).substring(7),
-    identifier,
-    local_name: localName,
-    added_at: Date.now(),
-    last_seen: Date.now(),
-    muted: false,
-    hidden_services: [],
-  };
-
-  await storageManager.addFriend(friend);
-  await _subscribeToFriend(identifier);
-
-  console.debug(`[Background] Added friend: ${localName} (${identifier})`);
-
-  return { success: true, data: friend };
+  try {
+    const friend = await friendManager.addFriend(identifier, localName);
+    await _subscribeToFriend(identifier);
+    return { success: true, data: friend };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to add friend' };
+  }
 }
 
 async function _removeFriend(friendId?: string): Promise<ExtensionResponse> {
@@ -271,17 +260,18 @@ async function _removeFriend(friendId?: string): Promise<ExtensionResponse> {
     return { success: false, error: 'friendId required' };
   }
 
-  const friend = await storageManager.getFriend(friendId);
-  if (!friend) {
-    return { success: false, error: 'Friend not found' };
+  try {
+    const friend = await friendManager.getFriend(friendId);
+    if (!friend) {
+      return { success: false, error: 'Friend not found' };
+    }
+
+    await friendManager.removeFriend(friendId);
+    activeSubscriptions.delete(friend.identifier);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to remove friend' };
   }
-
-  await storageManager.removeFriend(friendId);
-  activeSubscriptions.delete(friend.identifier);
-
-  console.debug(`[Background] Removed friend: ${friend.local_name}`);
-
-  return { success: true };
 }
 
 async function _renameFriend(friendId?: string, newName?: string): Promise<ExtensionResponse> {
@@ -289,8 +279,12 @@ async function _renameFriend(friendId?: string, newName?: string): Promise<Exten
     return { success: false, error: 'friendId and newName required' };
   }
 
-  await storageManager.updateFriend(friendId, { local_name: newName });
-  return { success: true };
+  try {
+    await friendManager.renameFriend(friendId, newName);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to rename friend' };
+  }
 }
 
 async function _sendMessage(friendId?: string, content?: string): Promise<ExtensionResponse> {
@@ -322,10 +316,16 @@ async function _muteFriend(friendId?: string, mute?: boolean): Promise<Extension
     return { success: false, error: 'friendId and mute required' };
   }
 
-  await storageManager.updateFriend(friendId, { muted: mute });
-  console.debug(`[Background] Friend ${friendId}: ${mute ? 'muted' : 'unmuted'}`);
-
-  return { success: true };
+  try {
+    if (mute) {
+      await friendManager.muteFriend(friendId);
+    } else {
+      await friendManager.unmuteFriend(friendId);
+    }
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to mute/unmute friend' };
+  }
 }
 
 // ============================================================================
