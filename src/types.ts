@@ -170,10 +170,10 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'auto',
   relay_urls: [
-    'wss://nostr.pub',
-    'wss://relay.damus.io',
+    'wss://relay.nostr.band',
     'wss://nos.lol',
-    'wss://relayable.org',
+    'wss://relay.current.fyi',
+    'wss://nostr.wine',
   ],
   activity_poll_interval_ms: 5000,
   publish_rate_limit_ms: 2000,
