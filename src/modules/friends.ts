@@ -5,6 +5,7 @@
 
 import { Friend, FriendList, Activity } from '../types';
 import { StorageManager } from './storage';
+import { secureLog, validateFriendName, generateSecureRandom } from './security-utils';
 
 export class FriendManager {
   constructor(private storage: StorageManager) {}
@@ -35,6 +36,12 @@ export class FriendManager {
    * Add new friend
    */
   async addFriend(identifier: string, localName: string): Promise<Friend> {
+    // Validate friend name
+    const validation = validateFriendName(localName);
+    if (!validation.valid) {
+      throw new Error(validation.error);
+    }
+
     const existing = await this.getFriendByIdentifier(identifier);
     if (existing) {
       throw new Error(`Friend with identifier "${identifier}" already exists`);
@@ -51,7 +58,7 @@ export class FriendManager {
     };
 
     await this.storage.addFriend(friend);
-    console.debug('[FriendManager] Added friend:', localName);
+    secureLog.debug('FriendManager', `Added friend: ${localName}`);
 
     return friend;
   }
@@ -66,7 +73,7 @@ export class FriendManager {
     }
 
     await this.storage.removeFriend(friendId);
-    console.debug('[FriendManager] Removed friend:', friend.local_name);
+    secureLog.debug('FriendManager', `Removed friend: ${friend.local_name}`);
   }
 
   /**
@@ -79,7 +86,7 @@ export class FriendManager {
     }
 
     await this.storage.updateFriend(friendId, { local_name: newName });
-    console.debug('[FriendManager] Renamed friend to:', newName);
+    secureLog.debug('FriendManager', `Renamed friend to: ${newName}`);
   }
 
   /**
@@ -92,7 +99,7 @@ export class FriendManager {
     }
 
     await this.storage.updateFriend(friendId, { muted: true });
-    console.debug('[FriendManager] Muted friend:', friend.local_name);
+    secureLog.debug('FriendManager', `Muted friend: ${friend.local_name}`);
   }
 
   /**
@@ -105,7 +112,7 @@ export class FriendManager {
     }
 
     await this.storage.updateFriend(friendId, { muted: false });
-    console.debug('[FriendManager] Unmuted friend:', friend.local_name);
+    secureLog.debug('FriendManager', `Unmuted friend: ${friend.local_name}`);
   }
 
   /**
@@ -121,7 +128,7 @@ export class FriendManager {
     hidden.add(service);
 
     await this.storage.updateFriend(friendId, { hidden_services: Array.from(hidden) });
-    console.debug('[FriendManager] Hidden service from friend:', service);
+    secureLog.debug('FriendManager', `Hidden service from friend: ${service}`);
   }
 
   /**
@@ -137,7 +144,7 @@ export class FriendManager {
     hidden.delete(service);
 
     await this.storage.updateFriend(friendId, { hidden_services: Array.from(hidden) });
-    console.debug('[FriendManager] Shown service to friend:', service);
+    secureLog.debug('FriendManager', `Shown service to friend: ${service}`);
   }
 
   /**
@@ -190,7 +197,7 @@ export class FriendManager {
   }
 
   private _generateId(): string {
-    return Math.random().toString(36).substring(2, 15);
+    return generateSecureRandom(16);
   }
 }
 

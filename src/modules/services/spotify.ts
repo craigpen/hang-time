@@ -5,6 +5,8 @@
 
 import { Activity, IServiceModule, OAuthToken } from '../../types';
 import { StorageManager } from '../storage';
+import { configManager } from '../config';
+import { generateSecureRandom, secureLog, validateOAuthToken } from '../security-utils';
 
 export class SpotifyService implements IServiceModule {
   private static readonly API_BASE = 'https://api.spotify.com/v1';
@@ -24,7 +26,7 @@ export class SpotifyService implements IServiceModule {
   async getCurrentActivity(): Promise<Activity | null> {
     const token = await this._getValidToken();
     if (!token) {
-      console.debug('[Spotify] No valid token');
+      secureLog.debug('Spotify', 'No valid token available');
       return null;
     }
 
@@ -42,7 +44,7 @@ export class SpotifyService implements IServiceModule {
           await this.clearToken();
           return null;
         }
-        console.error('[Spotify] API error:', response.status);
+        secureLog.error('Spotify', `API error: ${response.status}`);
         return null;
       }
 
@@ -70,7 +72,7 @@ export class SpotifyService implements IServiceModule {
         },
       };
     } catch (error) {
-      console.error('[Spotify] Failed to get current activity:', error);
+      secureLog.error('Spotify', 'Failed to get current activity', error);
       return null;
     }
   }
@@ -82,29 +84,40 @@ export class SpotifyService implements IServiceModule {
 
   async clearToken(): Promise<void> {
     await this.storage.clearOAuthToken('spotify');
-    console.debug('[Spotify] Token cleared');
+    secureLog.debug('Spotify', 'Token cleared');
   }
 
   async getAuthUrl(): Promise<string> {
-    const state = Math.random().toString(36).substring(7);
-    const scopes = SpotifyService.SCOPES.join(' ');
+    try {
+      // Use cryptographically secure random state
+      const state = generateSecureRandom(32);
+      const scopes = SpotifyService.SCOPES.join(' ');
 
-    // Store state for validation
-    await this.storage.set('spotify_auth_state', state);
+      // Store state for validation
+      await this.storage.set('spotify_auth_state', state);
 
-    const params = new URLSearchParams({
-      client_id: 'YOUR_SPOTIFY_CLIENT_ID', // TODO: Get from config
-      response_type: 'code',
-      redirect_uri: SpotifyService.REDIRECT_URI,
-      scope: scopes,
-      state,
-    });
+      // Get configuration securely
+      const config = await configManager.getSpotifyConfig();
 
-    return `${SpotifyService.AUTH_BASE}?${params}`;
+      const params = new URLSearchParams({
+        client_id: config.client_id,
+        response_type: 'code',
+        redirect_uri: SpotifyService.REDIRECT_URI,
+        scope: scopes,
+        state,
+      });
+
+      return `${SpotifyService.AUTH_BASE}?${params}`;
+    } catch (error) {
+      secureLog.error('Spotify', 'Failed to generate auth URL', error);
+      throw error;
+    }
   }
 
   async handleAuthCallback(code: string): Promise<void> {
     try {
+      const config = await configManager.getSpotifyConfig();
+
       const response = await fetch(SpotifyService.TOKEN_BASE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -112,8 +125,8 @@ export class SpotifyService implements IServiceModule {
           grant_type: 'authorization_code',
           code,
           redirect_uri: SpotifyService.REDIRECT_URI,
-          client_id: 'YOUR_SPOTIFY_CLIENT_ID', // TODO: Get from config
-          client_secret: 'YOUR_SPOTIFY_CLIENT_SECRET', // TODO: Get from secure config
+          client_id: config.client_id,
+          client_secret: config.client_secret,
         }),
       });
 
@@ -122,6 +135,12 @@ export class SpotifyService implements IServiceModule {
       }
 
       const data = await response.json();
+
+      // Validate token response
+      const validation = validateOAuthToken(data);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
 
       const token: OAuthToken = {
         service: 'spotify',
@@ -133,9 +152,9 @@ export class SpotifyService implements IServiceModule {
       };
 
       await this.storage.setOAuthToken('spotify', token);
-      console.debug('[Spotify] Token stored');
+      secureLog.debug('Spotify', 'Token stored successfully');
     } catch (error) {
-      console.error('[Spotify] Failed to handle auth callback:', error);
+      secureLog.error('Spotify', 'Failed to handle auth callback', error);
       throw error;
     }
   }
@@ -145,19 +164,20 @@ export class SpotifyService implements IServiceModule {
 
     if (!token) return null;
 
-    // Check if token is still valid
-    if (token.expires_at > Date.now()) {
+    // Check if token is still valid (with 60-second buffer)
+    const REFRESH_BUFFER_MS = 60000;
+    if (token.expires_at > Date.now() + REFRESH_BUFFER_MS) {
       return token.access_token;
     }
 
-    // Token expired, try to refresh
+    // Token expired or about to expire, try to refresh
     if (token.refresh_token) {
       try {
         await this._refreshToken(token.refresh_token);
         const newToken = await this.storage.getOAuthToken('spotify');
         return newToken?.access_token ?? null;
       } catch (error) {
-        console.error('[Spotify] Token refresh failed:', error);
+        secureLog.error('Spotify', 'Token refresh failed', error);
         await this.clearToken();
         return null;
       }
@@ -170,14 +190,16 @@ export class SpotifyService implements IServiceModule {
 
   private async _refreshToken(refreshToken: string): Promise<void> {
     try {
+      const config = await configManager.getSpotifyConfig();
+
       const response = await fetch(SpotifyService.TOKEN_BASE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
           grant_type: 'refresh_token',
           refresh_token: refreshToken,
-          client_id: 'YOUR_SPOTIFY_CLIENT_ID', // TODO: Get from config
-          client_secret: 'YOUR_SPOTIFY_CLIENT_SECRET', // TODO: Get from secure config
+          client_id: config.client_id,
+          client_secret: config.client_secret,
         }),
       });
 
@@ -186,6 +208,12 @@ export class SpotifyService implements IServiceModule {
       }
 
       const data = await response.json();
+
+      // Validate token response
+      const validation = validateOAuthToken(data);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
 
       const token: OAuthToken = {
         service: 'spotify',
@@ -197,9 +225,9 @@ export class SpotifyService implements IServiceModule {
       };
 
       await this.storage.setOAuthToken('spotify', token);
-      console.debug('[Spotify] Token refreshed');
+      secureLog.debug('Spotify', 'Token refreshed successfully');
     } catch (error) {
-      console.error('[Spotify] Token refresh error:', error);
+      secureLog.error('Spotify', 'Token refresh error', error);
       throw error;
     }
   }

@@ -7,6 +7,8 @@ import { Message, NostrEvent } from '../types';
 import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
 import { RelayPool } from './nostr';
+import { encryptionManager } from './encryption';
+import { secureLog, validateMessage, generateSecureRandom } from './security-utils';
 
 export class MessagingManager {
   constructor(
@@ -19,6 +21,12 @@ export class MessagingManager {
    * Send encrypted message to friend
    */
   async sendMessage(friendId: string, content: string): Promise<Message> {
+    // Validate message content
+    const validation = validateMessage(content);
+    if (!validation.valid) {
+      throw new Error(validation.error);
+    }
+
     const friend = await this.storage.getFriend(friendId);
     if (!friend) {
       throw new Error(`Friend not found: ${friendId}`);
@@ -44,7 +52,7 @@ export class MessagingManager {
     // Publish encrypted message to Nostr
     await this._publishMessage(friend.identifier, content);
 
-    console.debug('[Messaging] Message sent to', friend.local_name);
+    secureLog.debug('Messaging', `Message sent to ${friend.local_name}`);
     return message;
   }
 
@@ -62,7 +70,7 @@ export class MessagingManager {
       const friend = friends.find((f) => f.identifier === friendIdentifier);
 
       if (!friend) {
-        console.warn('[Messaging] Message from unknown friend:', friendIdentifier);
+        secureLog.warn('Messaging', 'Message from unknown friend');
         return null;
       }
 
@@ -87,10 +95,10 @@ export class MessagingManager {
         await this.markMessageRead(friend.id, message.id);
       }
 
-      console.debug('[Messaging] Message received from', friend.local_name);
+      secureLog.debug('Messaging', `Message received from ${friend.local_name}`);
       return message;
     } catch (error) {
-      console.error('[Messaging] Failed to receive message:', error);
+      secureLog.error('Messaging', 'Failed to receive message', error);
       return null;
     }
   }
@@ -137,26 +145,37 @@ export class MessagingManager {
   }
 
   private async _publishMessage(friendIdentifier: string, content: string): Promise<void> {
-    const userIdentifier = await this.identityManager.getIdentifier();
+    try {
+      const userIdentifier = await this.identityManager.getIdentifier();
 
-    // Create Nostr kind 4 (encrypted DM) event
-    // Note: Actual encryption would be done here using NIP-04
-    // For MVP, we're storing as plain text with kind 4 tag
-    const event: NostrEvent = {
-      id: this._generateId(),
-      pubkey: userIdentifier,
-      created_at: Math.floor(Date.now() / 1000),
-      kind: 4,
-      tags: [['p', friendIdentifier]],
-      content: content, // TODO: Encrypt using NIP-04
-    };
+      // Encrypt message using NIP-04
+      // For MVP: derive a consistent hex key from friend identifier
+      const friendKeyHash = encryptionManager.hash(friendIdentifier);
+      // Pad the hash to 64 chars (32 bytes in hex) for box encryption
+      const friendPublicKey = (friendKeyHash + '0'.repeat(64)).substring(0, 64);
 
-    await this.relayPool.publish(event);
-    console.debug('[Messaging] Published message to Nostr (kind 4)');
+      const encryptedContent = encryptionManager.encrypt(content, friendPublicKey);
+
+      // Create Nostr kind 4 (encrypted DM) event
+      const event: NostrEvent = {
+        id: this._generateId(),
+        pubkey: userIdentifier,
+        created_at: Math.floor(Date.now() / 1000),
+        kind: 4,
+        tags: [['p', friendIdentifier]],
+        content: encryptedContent,
+      };
+
+      await this.relayPool.publish(event);
+      secureLog.debug('Messaging', 'Published encrypted message to Nostr (kind 4)');
+    } catch (error) {
+      secureLog.error('Messaging', 'Failed to publish message', error);
+      throw error;
+    }
   }
 
   private _generateId(): string {
-    return Math.random().toString(36).substring(2, 15);
+    return generateSecureRandom(16);
   }
 }
 

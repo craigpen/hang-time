@@ -3,6 +3,9 @@
  * Handles OAuth redirects from Spotify and Twitch
  */
 
+// Import security utilities
+import { validateOAuthRedirect, validateState } from '../src/modules/security-utils';
+
 async function handleOAuthCallback(): Promise<void> {
   try {
     console.log('[OAuth Handler] Processing callback...');
@@ -22,10 +25,8 @@ async function handleOAuthCallback(): Promise<void> {
       return;
     }
 
-    // Verify state token
-    const storedState = await getFromStorage('oauth_state');
-    if (state !== storedState) {
-      showError('State mismatch - invalid request');
+    if (!state) {
+      showError('No state parameter received - CSRF protection failed');
       return;
     }
 
@@ -33,6 +34,23 @@ async function handleOAuthCallback(): Promise<void> {
     const service = detectService();
     if (!service) {
       showError('Could not determine service');
+      return;
+    }
+
+    // Validate redirect origin based on service
+    const expectedOrigin = service === 'spotify'
+      ? 'https://accounts.spotify.com'
+      : 'https://id.twitch.tv';
+
+    if (!validateOAuthRedirect(window.location.origin, expectedOrigin)) {
+      showError('Invalid redirect origin - CSRF attack detected');
+      return;
+    }
+
+    // Verify state token with constant-time comparison
+    const storedState = await getFromStorage('oauth_state');
+    if (!validateState(state, storedState || '')) {
+      showError('State mismatch - CSRF attack detected');
       return;
     }
 

@@ -5,6 +5,8 @@
 
 import { Activity, IServiceModule, OAuthToken } from '../../types';
 import { StorageManager } from '../storage';
+import { configManager } from '../config';
+import { generateSecureRandom, secureLog, validateOAuthToken } from '../security-utils';
 
 export class TwitchService implements IServiceModule {
   private static readonly API_BASE = 'https://api.twitch.tv/helix';
@@ -24,16 +26,18 @@ export class TwitchService implements IServiceModule {
   async getCurrentActivity(): Promise<Activity | null> {
     const token = await this._getValidToken();
     if (!token) {
-      console.debug('[Twitch] No valid token');
+      secureLog.debug('Twitch', 'No valid token available');
       return null;
     }
 
     try {
+      const config = await configManager.getTwitchConfig();
+
       // Get user info first to get their ID
       const userResponse = await fetch(`${TwitchService.API_BASE}/users`, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Client-ID': 'YOUR_TWITCH_CLIENT_ID', // TODO: Get from config
+          'Client-ID': config.client_id,
         },
       });
 
@@ -56,12 +60,12 @@ export class TwitchService implements IServiceModule {
       const streamResponse = await fetch(`${TwitchService.API_BASE}/streams?user_id=${userId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Client-ID': 'YOUR_TWITCH_CLIENT_ID',
+          'Client-ID': config.client_id,
         },
       });
 
       if (!streamResponse.ok) {
-        console.error('[Twitch] Stream check failed:', streamResponse.status);
+        secureLog.error('Twitch', `Stream check failed: ${streamResponse.status}`);
         return null;
       }
 
@@ -85,7 +89,7 @@ export class TwitchService implements IServiceModule {
         },
       };
     } catch (error) {
-      console.error('[Twitch] Failed to get stream info:', error);
+      secureLog.error('Twitch', 'Failed to get stream info', error);
       return null;
     }
   }
@@ -97,33 +101,44 @@ export class TwitchService implements IServiceModule {
 
   async clearToken(): Promise<void> {
     await this.storage.clearOAuthToken('twitch');
-    console.debug('[Twitch] Token cleared');
+    secureLog.debug('Twitch', 'Token cleared');
   }
 
   async getAuthUrl(): Promise<string> {
-    const state = Math.random().toString(36).substring(7);
+    try {
+      // Use cryptographically secure random state
+      const state = generateSecureRandom(32);
 
-    // Store state for validation
-    await this.storage.set('twitch_auth_state', state);
+      // Store state for validation
+      await this.storage.set('twitch_auth_state', state);
 
-    const params = new URLSearchParams({
-      client_id: 'YOUR_TWITCH_CLIENT_ID', // TODO: Get from config
-      redirect_uri: TwitchService.REDIRECT_URI,
-      response_type: 'code',
-      scope: TwitchService.SCOPE,
-      state,
-    });
+      // Get configuration securely
+      const config = await configManager.getTwitchConfig();
 
-    return `${TwitchService.AUTH_BASE}?${params}`;
+      const params = new URLSearchParams({
+        client_id: config.client_id,
+        redirect_uri: TwitchService.REDIRECT_URI,
+        response_type: 'code',
+        scope: TwitchService.SCOPE,
+        state,
+      });
+
+      return `${TwitchService.AUTH_BASE}?${params}`;
+    } catch (error) {
+      secureLog.error('Twitch', 'Failed to generate auth URL', error);
+      throw error;
+    }
   }
 
   async handleAuthCallback(code: string): Promise<void> {
     try {
+      const config = await configManager.getTwitchConfig();
+
       const response = await fetch(TwitchService.TOKEN_BASE, {
         method: 'POST',
         body: new URLSearchParams({
-          client_id: 'YOUR_TWITCH_CLIENT_ID', // TODO: Get from config
-          client_secret: 'YOUR_TWITCH_CLIENT_SECRET', // TODO: Get from secure config
+          client_id: config.client_id,
+          client_secret: config.client_secret,
           code,
           grant_type: 'authorization_code',
           redirect_uri: TwitchService.REDIRECT_URI,
@@ -136,6 +151,12 @@ export class TwitchService implements IServiceModule {
 
       const data = await response.json();
 
+      // Validate token response
+      const validation = validateOAuthToken(data);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
+
       const token: OAuthToken = {
         service: 'twitch',
         access_token: data.access_token,
@@ -145,9 +166,9 @@ export class TwitchService implements IServiceModule {
       };
 
       await this.storage.setOAuthToken('twitch', token);
-      console.debug('[Twitch] Token stored');
+      secureLog.debug('Twitch', 'Token stored successfully');
     } catch (error) {
-      console.error('[Twitch] Failed to handle auth callback:', error);
+      secureLog.error('Twitch', 'Failed to handle auth callback', error);
       throw error;
     }
   }
@@ -157,12 +178,14 @@ export class TwitchService implements IServiceModule {
 
     if (!token) return null;
 
-    // Twitch tokens don't refresh - user must re-auth when expired
-    if (token.expires_at > Date.now()) {
+    // Check if token is still valid (with 60-second buffer)
+    const REFRESH_BUFFER_MS = 60000;
+    if (token.expires_at > Date.now() + REFRESH_BUFFER_MS) {
       return token.access_token;
     }
 
-    // Token expired
+    // Twitch tokens don't refresh - user must re-auth when expired
+    // Token expired or about to expire
     await this.clearToken();
     return null;
   }
