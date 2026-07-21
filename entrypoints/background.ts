@@ -7,7 +7,7 @@
 import { RelayPool, relayPool } from '../src/modules/nostr';
 import { StorageManager, storageManager } from '../src/modules/storage';
 import { IdentityManager, initializeIdentityManager, identityManager } from '../src/modules/identity';
-import { FriendManager, friendManager } from '../src/modules/friends';
+import { FriendManager, initializeFriendManager, getFriendManager } from '../src/modules/friends';
 import { MessagingManager, initializeMessagingManager, getMessagingManager } from '../src/modules/messaging';
 import { TimeSyncManager, initializeTimeSyncManager, getTimeSyncManager } from '../src/modules/time-sync';
 import { NotificationManager, initializeNotificationManager, getNotificationManager } from '../src/modules/notifications';
@@ -74,6 +74,10 @@ async function initializeExtension(): Promise<void> {
     const identifier = await identityManager.getIdentifier();
     console.debug(`[Background] User identifier: ${identifier}`);
 
+    // Initialize friend manager
+    initializeFriendManager(storageManager);
+    console.debug('[Background] Friend manager initialized');
+
     // Initialize Nostr relay pool first (needed by messaging)
     console.debug(`[Background] Connecting to Nostr relays...`);
     const settings = await storageManager.getSettings();
@@ -110,6 +114,7 @@ async function initializeExtension(): Promise<void> {
     console.debug('[Background] Activity detector started');
 
     // Subscribe to all friends' activities
+    const friendManager = getFriendManager();
     const friends = await friendManager.getAllFriends();
     console.debug(`[Background] Subscribing to ${friends.length} friends`);
     for (const friend of friends) {
@@ -248,8 +253,13 @@ async function _getCurrentActivity(): Promise<ExtensionResponse> {
 }
 
 async function _getActiveFriends(): Promise<ExtensionResponse> {
-  const activeFriends = await friendManager.getActiveFriends();
-  return { success: true, data: activeFriends };
+  try {
+    const friendManager = getFriendManager();
+    const activeFriends = await friendManager.getActiveFriends();
+    return { success: true, data: activeFriends };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get active friends' };
+  }
 }
 
 async function _getFriendActivityHistory(friendId?: string): Promise<ExtensionResponse> {
@@ -290,6 +300,7 @@ async function _addFriend(identifier?: string, localName?: string): Promise<Exte
   }
 
   try {
+    const friendManager = getFriendManager();
     const friend = await friendManager.addFriend(identifier, localName);
     await _subscribeToFriend(identifier);
     return { success: true, data: friend };
@@ -304,6 +315,7 @@ async function _removeFriend(friendId?: string): Promise<ExtensionResponse> {
   }
 
   try {
+    const friendManager = getFriendManager();
     const friend = await friendManager.getFriend(friendId);
     if (!friend) {
       return { success: false, error: 'Friend not found' };
@@ -323,6 +335,7 @@ async function _renameFriend(friendId?: string, newName?: string): Promise<Exten
   }
 
   try {
+    const friendManager = getFriendManager();
     await friendManager.renameFriend(friendId, newName);
     return { success: true };
   } catch (error) {
@@ -363,6 +376,7 @@ async function _muteFriend(friendId?: string, mute?: boolean): Promise<Extension
   }
 
   try {
+    const friendManager = getFriendManager();
     if (mute) {
       await friendManager.muteFriend(friendId);
     } else {

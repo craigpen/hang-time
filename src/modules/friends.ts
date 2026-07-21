@@ -194,5 +194,23 @@ export class FriendManager {
   }
 }
 
-// Singleton instance
-export const friendManager = new FriendManager(require('./storage').storageManager);
+// Singleton instance with lazy initialization
+let friendManagerInstance: FriendManager | null = null;
+
+export function initializeFriendManager(storage: StorageManager): void {
+  friendManagerInstance = new FriendManager(storage);
+}
+
+export function getFriendManager(): FriendManager {
+  if (!friendManagerInstance) {
+    throw new Error('FriendManager not initialized');
+  }
+  return friendManagerInstance;
+}
+
+// For backward compatibility with background.ts
+Object.defineProperty(exports, 'friendManager', {
+  get() {
+    return getFriendManager();
+  },
+});
