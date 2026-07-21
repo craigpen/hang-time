@@ -64,7 +64,10 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
   - [x] UI architecture (popup + overlays)
   - [x] Security & privacy design
   - [x] Implementation priority (6-week schedule)
-- [ ] Phase 2: Build Core Infrastructure (ready to start)
+- [ ] Phase 2: Build Core Infrastructure (Week 2 ✅ COMPLETE)
+  - [x] Week 1: Types, Storage, Identity, Build Pipeline ✅
+  - [x] Week 2: Nostr Relay Pool, Activity Detector, Service Worker ✅
+  - [ ] Week 3: Service Detection (Spotify, Twitch, Steam, Tabs)
 - [ ] Phase 3: Implement MVP Features
 - [ ] Phase 4: Co-Watching & Advanced Features
 - [ ] Phase 5: Testing & Validation & Release
@@ -75,21 +78,26 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
 
 See **PHASES.md** for detailed phase breakdown, deliverables, and success criteria.
 
-### Phase 1 Complete - Ready for Phase 2
+### Phase 2 Week 2 Complete - Core Infrastructure Built
 
-**Architecture finalized:**
-- ✅ Module hierarchy designed (11 core modules, 5 service modules)
-- ✅ Data models documented (User, Friend, Activity, Message, Nostr events)
-- ✅ Nostr relay pool architecture designed (WS connections, pub/sub)
-- ✅ Service detection pattern established (IServiceModule interface)
-- ✅ Background service worker lifecycle documented
-- ✅ UI architecture designed (popup + overlays)
-- ✅ Security & privacy patterns established (OAuth, encryption, XSS)
-- ✅ Build pipeline strategy (esbuild, Chrome/Firefox builds)
-- ✅ Implementation priority sequenced (6-week schedule)
+**Week 1 Delivered:**
+- ✅ types.ts: 450+ lines of type definitions
+- ✅ StorageManager: Full chrome.storage.local abstraction
+- ✅ IdentityManager: Memorable ID generation (Adjective+Animal+Number)
+- ✅ Build pipeline: esbuild for Chrome/Firefox builds
+- ✅ TypeScript strict mode: All type safety enabled
+- ✅ UI scaffolding: popup.html, settings.html, theme.css, popup.css, settings.css
 
-**Ready to begin Phase 2:** Core Infrastructure Build
-- Next: Implement types.ts, storage manager, identity manager, build pipeline
+**Week 2 Delivered:**
+- ✅ RelayPool: WebSocket connections to Nostr relays (4 default relays)
+- ✅ RelayConnection: Individual relay management with reconnection logic
+- ✅ ActivityDetector: Polls services and publishes to Nostr (5sec poll, 2sec rate limit)
+- ✅ Background Service Worker: Extension orchestration, message routing, subscriptions
+- ✅ PopupController: Display active friends with expandable cards
+- ✅ SettingsController: Settings page with identifier display and service toggles
+
+**Ready for Phase 2 Week 3:** Service Detection Modules
+- Next: Implement Spotify, Twitch, Steam, Netflix/YouTube activity detection
 
 ### References
 
