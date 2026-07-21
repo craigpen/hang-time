@@ -171,11 +171,12 @@ export class ActivityDetector {
   }
 
   private _generateEventId(): string {
-    // Generate a valid Nostr event ID (SHA256 hash in hex format)
-    // Create a unique string from timestamp and random data
+    // Generate a valid Nostr event ID (64-character hex string)
+    // Use SHA512 hash but truncate to 64 characters
     const seed = `${Date.now()}-${Math.random()}-${Math.random()}`;
-    // Hash it to get a 64-character hex string
-    return encryptionManager.hash(seed);
+    const fullHash = encryptionManager.hash(seed);
+    // Take first 64 characters (32 bytes in hex)
+    return fullHash.substring(0, 64);
   }
 
   private async _notifyPopup(message: ExtensionMessage): Promise<void> {
