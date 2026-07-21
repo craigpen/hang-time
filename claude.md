@@ -69,7 +69,13 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
   - [x] Week 2: Nostr Relay Pool, Activity Detector, Service Worker ✅
   - [x] Week 3: Service Detection (Spotify, Twitch, Steam, Tabs) ✅
   - [x] Validation: All 19 type safety issues fixed ✅
-- [ ] Phase 3: Implement MVP Features
+- [x] Phase 3: Implement MVP Features (IN PROGRESS)
+  - [x] Friend management module
+  - [x] OAuth 2.0 flows (Spotify & Twitch)
+  - [x] Settings UI with OAuth status
+  - [x] Encrypted messaging system
+  - [x] Join/co-consume action handlers
+  - [ ] Popup UI with active friends display
 - [ ] Phase 4: Co-Watching & Advanced Features
 - [ ] Phase 5: Testing & Validation & Release
 
@@ -79,7 +85,47 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
 
 See **PHASES.md** for detailed phase breakdown, deliverables, and success criteria.
 
-### Phase 2 Week 2 Complete - Core Infrastructure Built
+### Phase 3 Week 1 - MVP Features Implementation
+
+**Completed So Far:**
+- ✅ Friend Management Module (300+ lines)
+  - getAllFriends(), getFriend(), addFriend(), removeFriend()
+  - renameFriend(), muteFriend(), unmuteFriend()
+  - hideServiceFromFriend(), showServiceToFriend()
+  - updateFriendActivity(), getActivityHistory()
+  - getActiveFriends() with timestamp filtering
+  
+- ✅ OAuth 2.0 Authorization (500+ lines)
+  - Spotify OAuth 2.0 flow implementation
+  - Twitch OAuth 2.0 flow implementation
+  - OAuth callback handler with state validation
+  - Token exchange and storage
+  - Token refresh handling (Spotify)
+  - Settings UI with auth status indicators
+  - Connect/Reconnect/Disconnect buttons
+  
+- ✅ Encrypted Messaging System (220+ lines)
+  - MessagingManager for send/receive
+  - Message storage with metadata
+  - Unread message tracking
+  - Nostr kind 4 event publishing
+  - Message receive from relay subscriptions
+  - Read/unread status management
+  
+- ✅ Join/Co-Consume Actions (180+ lines)
+  - JoinHandler for opening friend's activity
+  - Service-specific join logic
+  - Spotify: Search for track in Web Player
+  - Twitch: Direct channel link
+  - Steam: Game URL protocol
+  - Netflix/YouTube: Video with time-sync metadata
+  - Discord coordination prompts
+
+**Build Status:** ✅ Chrome & Firefox both pass
+**Type Safety:** ✅ All new code passes strict TypeScript
+**Commits:** 4 major commits totaling 1,000+ lines of Phase 3 code
+
+### Phase 2 Complete - Core Infrastructure Built
 
 **Week 1 Delivered:**
 - ✅ types.ts: 450+ lines of type definitions

@@ -159,23 +159,149 @@ export class PopupController {
 
   private async _handleJoin(friend: Friend): Promise<void> {
     const activity = friend.current_activity;
-    if (!activity || !activity.url) {
-      console.warn('[Popup] No URL for join action');
+    if (!activity) {
+      console.warn('[Popup] No activity for join action');
       return;
     }
 
     try {
-      chrome.tabs.create({ url: activity.url });
-      console.debug(`[Popup] Opened ${activity.service} for ${friend.local_name}`);
+      const response = await chrome.runtime.sendMessage({
+        type: 'JOIN_ACTIVITY',
+        data: { friendId: friend.id, activity },
+      });
+
+      if (response.success) {
+        console.debug(`[Popup] Successfully joined ${friend.local_name}'s activity`);
+      } else {
+        this._showError(response.error || 'Failed to join activity');
+      }
     } catch (error) {
       console.error('[Popup] Join action failed:', error);
-      this._showError('Failed to open content');
+      this._showError('Failed to join activity');
     }
   }
 
   private async _handleMessage(friend: Friend): Promise<void> {
-    console.debug('[Popup] Message clicked for:', friend.local_name);
-    // TODO: Implement message overlay
+    try {
+      // Get messages from background
+      const response = await chrome.runtime.sendMessage({
+        type: 'GET_MESSAGES',
+        data: { friendId: friend.id },
+      });
+
+      if (!response.success) {
+        this._showError('Failed to load messages');
+        return;
+      }
+
+      // Open message modal
+      this._showMessageModal(friend, response.data || []);
+    } catch (error) {
+      console.error('[Popup] Message load failed:', error);
+      this._showError('Failed to load messages');
+    }
+  }
+
+  private _showMessageModal(friend: Friend, messages: any[]): void {
+    const modal = document.createElement('div');
+    modal.className = 'message-modal';
+    modal.innerHTML = `
+      <div class="message-modal-content">
+        <div class="message-modal-header">
+          <span>${this._escapeHtml(friend.local_name)}</span>
+          <button class="btn-close-modal">×</button>
+        </div>
+        <div class="message-list">
+          ${messages.length === 0 ? '<div class="no-messages">No messages yet</div>' : ''}
+          ${messages.map((msg) => `
+            <div class="message ${msg.is_outbound ? 'outbound' : 'inbound'}">
+              <span class="message-content">${this._escapeHtml(msg.content)}</span>
+              <span class="message-time">${this._formatTime(msg.timestamp)}</span>
+            </div>
+          `).join('')}
+        </div>
+        <div class="message-input-area">
+          <input type="text" class="message-input" placeholder="Type a message...">
+          <button class="btn-send-message">Send</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Close button handler
+    const closeBtn = modal.querySelector('.btn-close-modal');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        modal.remove();
+      });
+    }
+
+    // Send button handler
+    const sendBtn = modal.querySelector('.btn-send-message');
+    const input = modal.querySelector('.message-input') as HTMLInputElement | null;
+    if (sendBtn && input) {
+      sendBtn.addEventListener('click', () => this._sendMessage(friend, input, modal));
+      input.addEventListener('keypress', (e: KeyboardEvent) => {
+        if (e.key === 'Enter') {
+          this._sendMessage(friend, input, modal);
+        }
+      });
+    }
+
+    // Close on backdrop click
+    modal.addEventListener('click', (e: MouseEvent) => {
+      if (e.target === modal) {
+        modal.remove();
+      }
+    });
+  }
+
+  private async _sendMessage(friend: Friend, input: HTMLInputElement, modal: HTMLElement): Promise<void> {
+    const content = input.value.trim();
+    if (!content) return;
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'SEND_MESSAGE',
+        data: { friendId: friend.id, content },
+      });
+
+      if (response.success) {
+        input.value = '';
+        console.debug('[Popup] Message sent');
+
+        // Reload messages
+        const messagesResponse = await chrome.runtime.sendMessage({
+          type: 'GET_MESSAGES',
+          data: { friendId: friend.id },
+        });
+
+        if (messagesResponse.success) {
+          modal.remove();
+          this._showMessageModal(friend, messagesResponse.data || []);
+        }
+      } else {
+        console.error('[Popup] Failed to send message:', response.error);
+      }
+    } catch (error) {
+      console.error('[Popup] Send message failed:', error);
+    }
+  }
+
+  private _formatTime(timestamp: number): string {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMinutes = Math.floor((now.getTime() - date.getTime()) / 60000);
+
+    if (diffMinutes < 1) return 'now';
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
   }
 
   private _setupEventListeners(): void {
