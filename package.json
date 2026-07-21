@@ -1,0 +1,35 @@
+{
+  "name": "hang-time",
+  "version": "0.1.0",
+  "description": "Decentralized browser extension for co-consuming content with friends via Nostr",
+  "scripts": {
+    "build": "node scripts/build.js chrome",
+    "build:chrome": "node scripts/build.js chrome",
+    "build:firefox": "node scripts/build.js firefox",
+    "build:all": "npm run build:chrome && npm run build:firefox",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "zip": "npm run build:all && node scripts/create-zip.js"
+  },
+  "keywords": [
+    "hang-time",
+    "co-viewing",
+    "co-watching",
+    "social",
+    "nostr",
+    "decentralized",
+    "browser-extension"
+  ],
+  "author": "Craig",
+  "license": MIT,
+  "devDependencies": {
+    "adm-zip": "^0.5.17",
+    "cheerio": "^1.2.0",
+    "esbuild": "^0.28.1",
+    "jsdom": "^29.1.1",
+    "vitest": "^1.0.0"
+  },
+  "dependencies": {
+    "webextension-polyfill": "^0.12.0"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Hang Time",
+  "description": "Hang out and consume content together with friends",
+  "version": "0.1.0",
+  "author": "Craig",
+  "permissions": [
+    "tabs",
+    "storage",
+    "webRequest",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://api.spotify.com/*",
+    "https://api.twitch.tv/*",
+    "https://api.steampowered.com/*"
+  ],
+  "background": {
+    "service_worker": "entrypoints/background.js"
+  },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Hang Time"
+  },
+  "icons": {
+    "16": "public/icon-16.png",
+    "32": "public/icon-32.png",
+    "48": "public/icon-48.png",
+    "128": "public/icon-128.png"
+  }
+}

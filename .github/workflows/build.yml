@@ -1,0 +1,52 @@
+name: Build Extension Releases
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Chrome
+        run: npm run build:chrome
+
+      - name: Build Firefox
+        run: npm run build:firefox
+
+      - name: Create Chrome zip
+        run: |
+          cd dist/chrome-mv3
+          zip -r ../hang-time-chrome-$(node -e "console.log(require('../../package.json').version)").zip .
+          cd ../..
+
+      - name: Create Firefox zip
+        run: |
+          cd dist/firefox-mv3
+          zip -r ../hang-time-firefox-$(node -e "console.log(require('../../package.json').version)").zip .
+          cd ../..
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=$(node -e "console.log(require('./package.json').version)")" >> $GITHUB_OUTPUT
+
+      - name: Upload zips to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload ${{ github.event.release.tag_name }} \
+            dist/hang-time-chrome-${{ steps.version.outputs.VERSION }}.zip \
+            dist/hang-time-firefox-${{ steps.version.outputs.VERSION }}.zip

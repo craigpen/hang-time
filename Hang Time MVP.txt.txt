@@ -1,0 +1,284 @@
+Hang Time Extension – MVP Specification
+
+OVERVIEW
+A browser extension that detects what you're consuming locally (games, music, video, streams) and shows active friends in real-time. Quick actions let you join what they're doing. Includes time-synced co-watching, in-extension chat, and optional voice coordination. Fully decentralized via Nostr relays.
+
+CORE CONCEPT
+"Hang out and consume content together." Show only active friends doing something right now. Click to join. Chat while watching/playing. Coordinate via voice if desired.
+
+ARCHITECTURE
+
+Extension generates unique memorable identifier on first install (e.g., "VascillatingMonkeyCough")
+Users add friends by local name + friend's identifier
+Extension detects user's own activity and publishes to Nostr relays in real-time
+Extension subscribes to friends' activity via Nostr and displays active friends as cards
+All OAuth tokens stored locally (never sent to backend)
+Encrypted direct messages via Nostr kind 4 events
+No backend server. No user database. All data local or via public Nostr relays.
+
+
+SUPPORTED SERVICES
+Users enable/disable service monitoring in settings:
+
+Spotify: Currently playing (OAuth + periodic API query)
+Twitch: Currently streaming (OAuth + periodic API query)
+Steam: Game library + currently playing (Steam ID + public API query)
+Netflix: Currently watching (active tab detection)
+YouTube: Currently watching (active tab detection)
+
+
+MAIN UI: ACTIVE FRIENDS CARDS
+Extension popup displays:
+
+Cards for each active friend (currently playing, streaming, watching)
+Card shows: Friend name + activity badge (e.g., "🎵 Spotify: Song X")
+Click card to expand
+If no active friends: empty state with settings/help
+
+Click friend card to expand:
+
+Full activity details (what service, what content)
+Services in common (highlighted)
+One-click actions: "Join now" / "Share" / "Message"
+
+Settings button:
+
+Access to all configuration
+
+
+JOIN/CO-CONSUME EXPERIENCE
+Clicking "Join now":
+
+For streaming (Twitch):
+
+Opens friend's Twitch stream in new tab
+Auto-play if possible
+
+
+For video (Netflix, YouTube):
+
+Opens the same video/show
+Time sync: Extension detects both users on same video, seeks to same timestamp (one-time sync at join)
+Chat overlay: Encrypted chat box floats over video
+Voice option: Prompt appears: "Join [Friend]'s Discord?" with one-click link to friend's Discord username or server invite
+
+
+For music (Spotify):
+
+Opens Spotify to same song
+Both can add to queue, control playback
+
+
+For games (Steam):
+
+Shows game in library
+One-click copy Steam ID for in-game invite
+Optional: overlay with chat + voice prompt
+
+
+
+
+BROWSE TOGETHER MODE
+New feature: "Looking for something to do with a friend?"
+
+Select a friend
+Browse/search available content together (games, movies, music)
+Both see same options in real-time
+Coordinate on choice
+Launch together (time-sync, chat overlay, etc.)
+
+
+ENCRYPTED CHAT & COMMUNICATION
+In-extension chat:
+
+Accessible from friend card or co-watching overlay
+Messages encrypted via Nostr (kind 4)
+Auto-decrypt when received
+Show message history with timestamps
+Visible only to sender and recipient
+
+Voice communication:
+
+Option A (MVP): Prompt to "Join [Friend]'s Discord?" with one-click link (if Discord info provided)
+Option B (nice-to-have): P2P audio via WebRTC (future feature, requires signaling)
+
+
+CORE FEATURES
+Identity & Friend Management:
+
+Generate memorable identifier locally on first install
+Display identifier with copy-to-clipboard button
+Add friends: input local name + friend's memorable identifier
+Remove friends
+Rename friends locally
+Mute friends or hide specific services from certain friends
+Show online status (actively streaming/playing vs. idle)
+
+Activity Publishing:
+
+User enables/disables services in settings
+For OAuth services: user connects account, token stored locally
+For Steam: user provides Steam ID
+For Netflix/YouTube: extension monitors active browser tabs
+Extension publishes activity to Nostr on each service change (song, game, stream starts)
+Rate limit: max one publish per 2-5 seconds
+Publish data: { identifier, service, content, timestamp, metadata }
+User can manually hide specific activity from publishing
+
+Activity Display:
+
+Only active friends shown as cards (not inactive)
+Each card: friend name + activity badge + one-click actions
+Click to expand and see full details
+Services in common highlighted
+One-click join/share/message actions
+
+Filtering & Sorting:
+
+Filter by service (show only Spotify, only Steam, etc.)
+Filter by status (only active friends, all friends)
+Sort by: most recent, friend name, service
+Toggle: "Show only services I have enabled"
+
+Co-Watching Features (for video/streaming):
+
+Time sync: One-time sync of video timestamp when joining (YouTube, generic HTML5, Twitch)
+Chat overlay: Floating encrypted chat box over video
+Voice prompt: Optional Discord call with one-click link to friend's Discord info
+
+Browse Together Mode:
+
+Select a friend to browse with
+Search/browse available content
+Both see options in real-time
+Coordinate on choice
+Launch and auto-join together
+
+Nostr Integration:
+
+Connect to hardcoded list of public relays (nostr.pub, relay.damus.io, nos.lol, etc.)
+Connect to multiple relays simultaneously for redundancy
+Graceful fallback if relay is unavailable
+Subscribe to friends' identifiers for real-time activity updates
+Publish user's own activity to all connected relays
+
+Privacy & Control:
+
+All activity published to Nostr is non-sensitive (no personal details)
+Users control which services are monitored (enable/disable in settings)
+Users can hide specific activity from publishing
+Mute/hide activity from specific friends
+Identifiers are anonymous (memorable names, not real identities)
+
+
+UI STRUCTURE
+Main Popup:
+
+Active friends cards (name + activity badge)
+Click card to expand details and actions
+Settings button (gear icon)
+Empty state if no active friends
+
+Settings Page:
+
+Service toggles (Spotify, Twitch, Steam, Netflix, YouTube)
+Connect/authorize buttons for each service
+Display user's own memorable identifier (copy button)
+Discord username or invite link (optional)
+Mute/hide settings per friend
+Notification preferences
+Filter/sort preferences
+Nostr relay configuration (optional, advanced)
+
+Co-Watching Overlay:
+
+Chat box (floating)
+Friend name and activity
+Voice call prompt with Discord link
+Minimize/close options
+
+Browse Together Mode:
+
+Friend selector
+Search/browse content UI
+Real-time updates as both browse
+"Launch together" button
+
+
+DATA MODEL
+Local Storage:
+User Profile:
+- memorable_identifier (string)
+- services_enabled: { spotify, twitch, steam, netflix, youtube }
+- spotify_token (oauth)
+- twitch_token (oauth)
+- steam_id (string)
+- discord_info (string, optional: username or invite link)
+
+Friends:
+- [{ local_name, identifier, muted, hidden_services, last_seen }]
+
+Activity History (per friend):
+- [{ timestamp, service, content, metadata }]
+
+Messages (per friend):
+- [{ timestamp, sender, content (encrypted), }]
+Nostr Events Published:
+Activity Event (kind 1):
+{
+  pubkey: user_identifier,
+  content: "Listening to Song X on Spotify",
+  tags: [["service", "spotify"], ["content", "Song X"]],
+  created_at: timestamp
+}
+
+Chat Message (kind 4 - encrypted):
+{
+  pubkey: sender_identifier,
+  content: (encrypted message),
+  tags: [["p", recipient_identifier]],
+  created_at: timestamp
+}
+
+OUT OF SCOPE (MVP)
+
+Console game detection
+Video platform library matching (Netflix/YouTube private history comparison)
+Real-time game invites (manual via Steam/Discord)
+Advanced analytics or activity trends
+Mobile app
+Cloud backup of friend list
+Public profiles or activity feeds
+P2P audio (noted as nice-to-have for future)
+Netflix/Disney+ co-watching time sync (DRM restrictions)
+Firefox support (planned for post-MVP)
+
+
+BROWSER SUPPORT
+
+Manifest V3: Chrome, Edge, Opera (same codebase)
+Firefox: Planned for post-MVP
+
+
+TECH STACK
+
+Manifest V3 (Chrome, Edge, Opera)
+Extension storage API (local data)
+Nostr.js library (pub-sub via Nostr relays)
+Spotify Web API (OAuth + currently playing)
+Twitch API (OAuth + streaming status)
+Steam Web API (public game library)
+Tab detection for Netflix/YouTube (content script)
+Browser Notification API
+HTML5 video API (for YouTube time sync)
+
+
+NICE-TO-HAVE FUTURE FEATURES
+
+P2P audio via WebRTC (requires signaling infrastructure)
+Extended activity history and trends
+Custom Nostr relay configuration
+Discord integration for voice calls
+Activity recommendations based on friend habits
+More services (Epic Games, GOG, etc.)
+Firefox support

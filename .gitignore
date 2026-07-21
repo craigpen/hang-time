@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.wxt/
+*.log
+.env
+.env.local
+.DS_Store
+*.zip
+.vscode/
+*.swp
+*.swo
