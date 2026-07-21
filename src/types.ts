@@ -170,10 +170,11 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'auto',
   relay_urls: [
-    'wss://relay.nostr.band',
+    'wss://relay.primal.net',
     'wss://nos.lol',
-    'wss://relay.current.fyi',
+    'wss://relay.snort.social',
     'wss://nostr.wine',
+    'wss://relay.mostr.pub',
   ],
   activity_poll_interval_ms: 5000,
   publish_rate_limit_ms: 2000,

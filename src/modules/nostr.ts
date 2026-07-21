@@ -22,7 +22,7 @@ export class RelayConnection implements IRelayConnection {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectAttempts: number = 0;
 
-  static readonly TIMEOUT_MS = 5000;
+  static readonly TIMEOUT_MS = 8000;
   static readonly MAX_RECONNECT_ATTEMPTS = 5;
   static readonly RECONNECT_DELAY_MS = 3000;
 
@@ -225,10 +225,11 @@ export class RelayPool {
   private subscriptions: Map<string, Set<(event: NostrEvent) => Promise<void>>> = new Map();
 
   static readonly DEFAULT_RELAYS = [
-    'wss://relay.nostr.band',
+    'wss://relay.primal.net',
     'wss://nos.lol',
-    'wss://relay.current.fyi',
+    'wss://relay.snort.social',
     'wss://nostr.wine',
+    'wss://relay.mostr.pub',
   ];
 
   async connect(relayUrls: string[]): Promise<void> {
