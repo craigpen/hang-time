@@ -175,7 +175,10 @@ export class MessagingManager {
   }
 
   private _generateId(): string {
-    return generateSecureRandom(16);
+    // Generate a valid Nostr event ID (SHA256 hash in hex format)
+    // For Nostr events, we need a 64-char hex string, not random base64
+    const seed = `msg-${Date.now()}-${Math.random()}`;
+    return encryptionManager.hash(seed);
   }
 }
 

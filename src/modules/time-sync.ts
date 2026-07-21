@@ -6,6 +6,7 @@
 import { NostrEvent } from '../types';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
+import { encryptionManager } from './encryption';
 
 export interface TimeSyncEvent {
   friendIdentifier: string;
@@ -176,7 +177,9 @@ export class TimeSyncManager {
   }
 
   private _generateId(): string {
-    return Math.random().toString(36).substring(2, 15);
+    // Generate a valid Nostr event ID (SHA256 hash in hex format)
+    const seed = `sync-${Date.now()}-${Math.random()}`;
+    return encryptionManager.hash(seed);
   }
 }
 

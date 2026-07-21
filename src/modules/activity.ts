@@ -14,6 +14,7 @@ import {
 import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
+import { encryptionManager } from './encryption';
 
 export class ActivityDetector {
   private services: Map<string, IServiceModule> = new Map();
@@ -170,7 +171,11 @@ export class ActivityDetector {
   }
 
   private _generateEventId(): string {
-    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // Generate a valid Nostr event ID (SHA256 hash in hex format)
+    // Create a unique string from timestamp and random data
+    const seed = `${Date.now()}-${Math.random()}-${Math.random()}`;
+    // Hash it to get a 64-character hex string
+    return encryptionManager.hash(seed);
   }
 
   private async _notifyPopup(message: ExtensionMessage): Promise<void> {
