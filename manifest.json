@@ -4,6 +4,7 @@
   "description": "Hang out and consume content together with friends",
   "version": "0.1.0",
   "author": "Craig",
+  "minimum_chrome_version": "116",
   "permissions": [
     "tabs",
     "storage",
@@ -16,7 +17,12 @@
     "https://api.twitch.tv/*",
     "https://api.steampowered.com/*",
     "https://accounts.spotify.com/*",
-    "https://id.twitch.tv/*"
+    "https://id.twitch.tv/*",
+    "wss://*.primal.net/*",
+    "wss://*.lol/*",
+    "wss://*.social/*",
+    "wss://*.wine/*",
+    "wss://*.pub/*"
   ],
   "web_accessible_resources": [
     {

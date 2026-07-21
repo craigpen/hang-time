@@ -23,11 +23,13 @@ export class RelayConnection implements IRelayConnection {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectAttempts: number = 0;
   private pendingPublishes: Map<string, {resolve: () => void, reject: (error: Error) => void, timeout: NodeJS.Timeout}> = new Map();
+  private heartbeatTimer: NodeJS.Timeout | null = null;
 
   static readonly TIMEOUT_MS = 8000;
   static readonly MAX_RECONNECT_ATTEMPTS = 5;
   static readonly RECONNECT_DELAY_MS = 3000;
   static readonly PUBLISH_TIMEOUT_MS = 5000;
+  static readonly HEARTBEAT_INTERVAL_MS = 25000;
 
   constructor(url: string) {
     this.url = url;
@@ -55,6 +57,9 @@ export class RelayConnection implements IRelayConnection {
             this.isConnected = true;
             this.reconnectAttempts = 0;
             console.debug(`[Nostr] Connected to relay: ${this.url}`);
+
+            // Start heartbeat to prevent proxy timeout
+            this._startHeartbeat();
 
             // Re-send all queued subscriptions
             for (const [identifier, callback] of this.subscriptions.entries()) {
@@ -241,6 +246,11 @@ export class RelayConnection implements IRelayConnection {
       this.reconnectTimer = null;
     }
 
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+
     // Clean up pending publishes
     for (const [, pending] of this.pendingPublishes.entries()) {
       clearTimeout(pending.timeout);
@@ -259,6 +269,21 @@ export class RelayConnection implements IRelayConnection {
 
     this.isConnected = false;
     this.subscriptionId = 0;
+  }
+
+  private _startHeartbeat(): void {
+    // Send heartbeat every 25 seconds to prevent proxy idle timeout
+    // Most proxies/NAT devices have 30-60 second idle timeout
+    this.heartbeatTimer = setInterval(() => {
+      if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        try {
+          // Send empty EOSE as heartbeat (valid Nostr message, no side effects)
+          this.ws.send(JSON.stringify(['EOSE', 'heartbeat']));
+        } catch (error) {
+          console.debug(`[Nostr] Heartbeat failed on ${this.url}:`, error);
+        }
+      }
+    }, RelayConnection.HEARTBEAT_INTERVAL_MS);
   }
 
   private _attemptReconnect(): void {
