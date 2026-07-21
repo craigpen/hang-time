@@ -81,12 +81,17 @@ async function initializeExtension(): Promise<void> {
     initializeFriendManager(storageManager);
     console.debug('[Background] Friend manager initialized');
 
-    // Initialize Nostr relay pool first (needed by messaging)
+    // Initialize Nostr relay pool (optional - extension works without relays)
     console.debug(`[Background] Connecting to Nostr relays...`);
     const settings = await storageManager.getSettings();
     const relayUrls = settings.relay_urls || RelayPool.DEFAULT_RELAYS;
-    await relayPool.connect(relayUrls);
-    console.debug(`[Background] Connected to Nostr (${relayPool.getConnectedRelayCount()} relays)`);
+    try {
+      await relayPool.connect(relayUrls);
+      console.debug(`[Background] Connected to Nostr (${relayPool.getConnectedRelayCount()} relays)`);
+    } catch (error) {
+      console.warn(`[Background] Nostr relay connection failed (optional):`, error);
+      console.log('[Background] Extension will work in offline mode - relays unavailable');
+    }
 
     // Initialize messaging manager
     initializeMessagingManager(storageManager, identityManager, relayPool);
