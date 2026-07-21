@@ -78,7 +78,11 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
   - [x] Popup UI with active friends display
   - [x] Message modal/overlay system
   - [x] Real-time activity updates
-- [ ] Phase 4: Co-Watching & Advanced Features
+- [x] Phase 4: Co-Watching & Advanced Features (IN PROGRESS)
+  - [x] Time-sync for YouTube/Netflix video
+  - [x] Notification system (friend online, new message)
+  - [x] Content script for video detection
+  - [ ] Browse together mode
 - [ ] Phase 5: Testing & Validation & Release
 
 ### Development Methodology
@@ -126,6 +130,35 @@ See **PHASES.md** for detailed phase breakdown, deliverables, and success criter
 **Build Status:** ✅ Chrome & Firefox both pass
 **Type Safety:** ✅ All new code passes strict TypeScript
 **Commits:** 7 major commits totaling 1,700+ lines of Phase 3 code
+
+### Phase 4 Week 1 - Co-Watching Features Implementation
+
+**Completed So Far:**
+- ✅ Time Sync Module (300+ lines)
+  - Publish time-sync events to Nostr with video position
+  - Handle incoming time-sync from friends
+  - Calculate recommended sync positions
+  - Automatic cleanup of stale sync events
+  - 2-second sync tolerance (configurable)
+  
+- ✅ Video Sync Content Script (250+ lines)
+  - YouTube detection and monitoring
+  - Netflix detection and monitoring
+  - Real-time video element polling
+  - Automatic sync publishing (every 5 seconds)
+  - Listen for sync requests and auto-seek
+  - Subtle sync notifications
+  
+- ✅ Notification System (180+ lines)
+  - Friend came online notifications
+  - New message notifications
+  - Join suggestion notifications
+  - 30-second cooldown to prevent spam
+  - Preference-based control
+  - Click-to-open functionality
+
+**Build Status:** ✅ Chrome & Firefox both pass
+**Commits:** 2 major commits totaling 730+ lines of Phase 4 code
 
 ### Phase 3 Complete Summary
 
