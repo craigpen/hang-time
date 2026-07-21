@@ -28,7 +28,9 @@ export class ActivityDetector {
     private relayPool: RelayPool,
     private storageManager: StorageManager,
     private identityManager: IdentityManager
-  ) {}
+  ) {
+    // Services will be registered separately via registerService()
+  }
 
   registerService(name: string, service: IServiceModule): void {
     this.services.set(name, service);

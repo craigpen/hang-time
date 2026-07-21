@@ -8,6 +8,10 @@ import { RelayPool, relayPool } from '../src/modules/nostr';
 import { StorageManager, storageManager } from '../src/modules/storage';
 import { IdentityManager, initializeIdentityManager, identityManager } from '../src/modules/identity';
 import { ActivityDetector } from '../src/modules/activity';
+import { TabService } from '../src/modules/services/tabs';
+import { SteamService } from '../src/modules/services/steam';
+import { SpotifyService } from '../src/modules/services/spotify';
+import { TwitchService } from '../src/modules/services/twitch';
 import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } from '../src/types';
 
 // ============================================================================
@@ -75,6 +79,15 @@ async function initializeExtension(): Promise<void> {
 
     // Initialize activity detector
     activityDetector = new ActivityDetector(relayPool, storageManager, identityManager);
+
+    // Register all service modules
+    activityDetector.registerService('spotify', new SpotifyService(storageManager));
+    activityDetector.registerService('twitch', new TwitchService(storageManager));
+    activityDetector.registerService('steam', new SteamService(storageManager));
+    activityDetector.registerService('tabs', new TabService(storageManager));
+
+    console.debug('[Background] Services registered');
+
     await activityDetector.start();
     console.debug('[Background] Activity detector started');
 
