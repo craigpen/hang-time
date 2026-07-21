@@ -10,6 +10,7 @@ import { IdentityManager, initializeIdentityManager, identityManager } from '../
 import { FriendManager, friendManager } from '../src/modules/friends';
 import { MessagingManager, initializeMessagingManager, getMessagingManager } from '../src/modules/messaging';
 import { TimeSyncManager, initializeTimeSyncManager, getTimeSyncManager } from '../src/modules/time-sync';
+import { NotificationManager, initializeNotificationManager, getNotificationManager } from '../src/modules/notifications';
 import { JoinHandler } from '../src/modules/join-handler';
 import { ActivityDetector } from '../src/modules/activity';
 import { TabService } from '../src/modules/services/tabs';
@@ -89,6 +90,10 @@ async function initializeExtension(): Promise<void> {
     const timeSyncManager = getTimeSyncManager();
     timeSyncManager.startMonitoring();
     console.debug('[Background] Time sync manager initialized');
+
+    // Initialize notification manager
+    initializeNotificationManager(storageManager);
+    console.debug('[Background] Notification manager initialized');
 
     // Initialize activity detector
     activityDetector = new ActivityDetector(relayPool, storageManager, identityManager);
@@ -568,6 +573,8 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
 
   // Regular activity event
   const activity = _parseActivityEvent(event);
+  const wasActive = friend.current_activity?.service !== 'idle';
+
   await storageManager.updateFriend(friend.id, {
     current_activity: activity,
     current_activity_timestamp: Date.now(),
@@ -575,6 +582,16 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
   });
 
   await storageManager.addActivityToHistory(friend.id, activity);
+
+  // Send notification if friend came online
+  if (!wasActive && activity.service !== 'idle') {
+    try {
+      const notificationManager = getNotificationManager();
+      await notificationManager.notifyFriendOnline(friend.id, friend.local_name, activity.content);
+    } catch (error) {
+      console.error('[Background] Failed to send online notification:', error);
+    }
+  }
 
   // Notify popup
   try {
@@ -595,6 +612,19 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
     const message = await messagingManager.receiveMessage(friendIdentifier, event.content, timestamp);
 
     if (message) {
+      // Send notification for new message
+      try {
+        const friends = await storageManager.getFriends();
+        const friend = friends.find((f) => f.identifier === friendIdentifier);
+
+        if (friend) {
+          const notificationManager = getNotificationManager();
+          await notificationManager.notifyNewMessage(friend.id, friend.local_name, event.content);
+        }
+      } catch (error) {
+        console.error('[Background] Failed to send message notification:', error);
+      }
+
       // Notify popup about new message
       try {
         await chrome.runtime.sendMessage({
