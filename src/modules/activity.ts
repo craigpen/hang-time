@@ -9,6 +9,7 @@ import {
   IServiceModule,
   NostrEvent,
   ExtensionResponse,
+  ExtensionMessage,
 } from '../types';
 import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
@@ -99,7 +100,7 @@ export class ActivityDetector {
     const serviceOrder: ServiceName[] = ['spotify', 'twitch', 'steam', 'netflix', 'youtube'];
 
     for (const serviceName of serviceOrder) {
-      if (!(profile.services_enabled as any)[serviceName]) {
+      if (!profile.services_enabled[serviceName]) {
         continue;
       }
 
@@ -170,7 +171,7 @@ export class ActivityDetector {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   }
 
-  private async _notifyPopup(message: any): Promise<void> {
+  private async _notifyPopup(message: ExtensionMessage): Promise<void> {
     try {
       // Try to send to popup if it's open
       await chrome.runtime.sendMessage(message);

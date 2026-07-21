@@ -586,7 +586,10 @@ export class IdentityManager {
   }
 }
 
-// Singleton instance
-export const identityManager = new IdentityManager(
-  require('./storage').storageManager
-);
+// Singleton instance created on demand
+export let identityManager: IdentityManager;
+
+// Initialize singleton (called from background.ts)
+export function initializeIdentityManager(storage: StorageManager): void {
+  identityManager = new IdentityManager(storage);
+}

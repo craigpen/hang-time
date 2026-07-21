@@ -103,7 +103,7 @@ export class RelayConnection implements IRelayConnection {
       return;
     }
 
-    this._sendSubscription(identifier);
+    this._sendSubscription(identifier, callback);
   }
 
   async disconnect(): Promise<void> {
@@ -111,7 +111,7 @@ export class RelayConnection implements IRelayConnection {
     console.debug(`[Nostr] Disconnected from relay: ${this.url}`);
   }
 
-  private _sendSubscription(identifier: string): void {
+  private _sendSubscription(identifier: string, _callback?: (event: NostrEvent) => Promise<void>): void {
     if (!this.isConnected || !this.ws) return;
 
     try {
@@ -135,13 +135,17 @@ export class RelayConnection implements IRelayConnection {
       const message = JSON.parse(data);
 
       if (!Array.isArray(message) || message.length < 2) {
+        console.warn(`[Nostr] Invalid message format from ${this.url}`);
         return;
       }
 
-      const [type, , event] = message;
+      const [type] = message;
 
-      if (type === 'EVENT' && event) {
-        this._handleEvent(event);
+      if (type === 'EVENT' && message.length >= 3) {
+        const event = message[2];
+        if (this._validateEvent(event)) {
+          this._handleEvent(event);
+        }
       } else if (type === 'EOSE') {
         console.debug(`[Nostr] Subscription ended on ${this.url}`);
       }

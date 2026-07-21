@@ -6,9 +6,9 @@
 
 import { RelayPool, relayPool } from '../src/modules/nostr';
 import { StorageManager, storageManager } from '../src/modules/storage';
-import { IdentityManager, identityManager } from '../src/modules/identity';
+import { IdentityManager, initializeIdentityManager, identityManager } from '../src/modules/identity';
 import { ActivityDetector } from '../src/modules/activity';
-import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse } from '../src/types';
+import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } from '../src/types';
 
 // ============================================================================
 // GLOBAL STATE (recreated on each service worker restart)
@@ -58,6 +58,9 @@ async function initializeExtension(): Promise<void> {
     // Initialize storage
     await storageManager.initialize();
 
+    // Initialize identity manager
+    initializeIdentityManager(storageManager);
+
     // Generate or load user identifier
     const identifier = await identityManager.getIdentifier();
     console.debug(`[Background] User identifier: ${identifier}`);
@@ -96,30 +99,37 @@ async function initializeExtension(): Promise<void> {
 /**
  * Message handler for popup ↔ background communication
  */
-chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
-  (async () => {
-    try {
-      console.debug(`[Background] Message: ${message.type}`);
+chrome.runtime.onMessage.addListener(
+  (message: ExtensionMessage, sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
+    (async () => {
+      try {
+        if (!message || !message.type) {
+          sendResponse({ success: false, error: 'Invalid message format' });
+          return;
+        }
 
-      // Ensure initialized
-      if (!initialized) {
-        await initializeExtension();
+        console.debug(`[Background] Message: ${message.type}`);
+
+        // Ensure initialized
+        if (!initialized) {
+          await initializeExtension();
+        }
+
+        const response: ExtensionResponse = await _handleMessage(message);
+        sendResponse(response);
+      } catch (error) {
+        console.error(`[Background] Handler error:`, error);
+        sendResponse({
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
       }
+    })();
 
-      const response: ExtensionResponse = await _handleMessage(message);
-      sendResponse(response);
-    } catch (error) {
-      console.error(`[Background] Handler error for ${message.type}:`, error);
-      sendResponse({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  })();
-
-  // Return true to indicate we'll respond asynchronously
-  return true;
-});
+    // Return true to indicate we'll respond asynchronously
+    return true;
+  }
+);
 
 /**
  * Route message to appropriate handler
@@ -282,11 +292,13 @@ async function _sendMessage(friendId?: string, content?: string): Promise<Extens
 }
 
 async function _toggleService(service?: string, enabled?: boolean): Promise<ExtensionResponse> {
-  if (!service || enabled === undefined) {
+  if (!service || typeof enabled !== 'boolean') {
     return { success: false, error: 'service and enabled required' };
   }
 
-  await storageManager.setServiceEnabled(service, enabled);
+  // Type-safe cast since we've validated above
+  const serviceTyped = service as ServiceName;
+  await storageManager.setServiceEnabled(serviceTyped, enabled);
   console.debug(`[Background] Service ${service}: ${enabled ? 'enabled' : 'disabled'}`);
 
   return { success: true };

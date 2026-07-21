@@ -43,8 +43,14 @@ export class PopupController {
         type: 'GET_ACTIVE_FRIENDS',
       });
 
-      if (!response.success) {
-        this._showError(`Failed to load friends: ${response.error}`);
+      if (!response.success || !response.data) {
+        this._showError(`Failed to load friends: ${response.error || 'Unknown error'}`);
+        return;
+      }
+
+      if (!Array.isArray(response.data)) {
+        console.error('[Popup] Invalid response data type');
+        this._showError('Failed to load friends');
         return;
       }
 
@@ -108,7 +114,11 @@ export class PopupController {
   }
 
   private _toggleCardExpanded(card: HTMLElement, friend: Friend): void {
-    const actionsDiv = card.querySelector('.friend-card-actions') as HTMLElement;
+    const actionsDiv = card.querySelector('.friend-card-actions') as HTMLElement | null;
+    if (!actionsDiv) {
+      console.error('[Popup] Actions div not found');
+      return;
+    }
     const isExpanded = actionsDiv.style.display !== 'none';
 
     if (isExpanded) {
@@ -117,9 +127,9 @@ export class PopupController {
     } else {
       // Collapse other expanded cards
       if (this.expandedFriendId) {
-        const otherCard = document.querySelector(`[data-friend-id="${this.expandedFriendId}"]`) as HTMLElement;
+        const otherCard = document.querySelector(`[data-friend-id="${this.expandedFriendId}"]`) as HTMLElement | null;
         if (otherCard) {
-          const otherActions = otherCard.querySelector('.friend-card-actions') as HTMLElement;
+          const otherActions = otherCard.querySelector('.friend-card-actions') as HTMLElement | null;
           if (otherActions) otherActions.style.display = 'none';
         }
       }
@@ -128,18 +138,18 @@ export class PopupController {
       this.expandedFriendId = friend.id;
 
       // Attach action handlers
-      const joinBtn = actionsDiv.querySelector('.btn-join') as HTMLButtonElement;
-      const msgBtn = actionsDiv.querySelector('.btn-message') as HTMLButtonElement;
+      const joinBtn = actionsDiv.querySelector('.btn-join') as HTMLButtonElement | null;
+      const msgBtn = actionsDiv.querySelector('.btn-message') as HTMLButtonElement | null;
 
       if (joinBtn) {
-        joinBtn.onclick = (e) => {
+        joinBtn.onclick = (e: MouseEvent) => {
           e.stopPropagation();
           this._handleJoin(friend);
         };
       }
 
       if (msgBtn) {
-        msgBtn.onclick = (e) => {
+        msgBtn.onclick = (e: MouseEvent) => {
           e.stopPropagation();
           this._handleMessage(friend);
         };
@@ -184,6 +194,7 @@ export class PopupController {
       youtube: '📹',
       netflix: '🎬',
       steam: '🎮',
+      idle: '•',
     };
     return badges[service] ?? '•';
   }

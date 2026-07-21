@@ -35,7 +35,7 @@ export class StorageManager {
   /**
    * Set value in storage
    */
-  async set(key: string, value: any): Promise<void> {
+  async set<T>(key: string, value: T): Promise<void> {
     try {
       await chrome.storage.local.set({ [key]: value });
     } catch (error) {
@@ -47,9 +47,9 @@ export class StorageManager {
   /**
    * Update nested object in storage (merge with existing)
    */
-  async update(key: string, updates: Record<string, any>): Promise<void> {
+  async update<T extends Record<string, any>>(key: string, updates: Partial<T>): Promise<void> {
     try {
-      const current = (await this.get(key, {})) as Record<string, any>;
+      const current = (await this.get<T>(key)) as T | undefined;
       const merged = { ...current, ...updates };
       await this.set(key, merged);
     } catch (error) {
@@ -153,21 +153,21 @@ export class StorageManager {
     await this.set(STORAGE_KEYS.OAUTH_TOKENS, tokens);
   }
 
-  async getOAuthToken(service: string): Promise<OAuthToken | undefined> {
+  async getOAuthToken(service: 'spotify' | 'twitch'): Promise<OAuthToken | undefined> {
     const tokens = await this.getOAuthTokens();
-    return (tokens as any)[service];
+    return tokens[service];
   }
 
-  async setOAuthToken(service: string, token: OAuthToken): Promise<void> {
+  async setOAuthToken(service: 'spotify' | 'twitch', token: OAuthToken): Promise<void> {
     const tokens = await this.getOAuthTokens();
-    (tokens as any)[service] = token;
+    tokens[service] = token;
     await this.setOAuthTokens(tokens);
     console.debug(`[Storage] Stored OAuth token for ${service}`);
   }
 
-  async clearOAuthToken(service: string): Promise<void> {
+  async clearOAuthToken(service: 'spotify' | 'twitch'): Promise<void> {
     const tokens = await this.getOAuthTokens();
-    delete (tokens as any)[service];
+    delete tokens[service];
     await this.setOAuthTokens(tokens);
     console.debug(`[Storage] Cleared OAuth token for ${service}`);
   }
@@ -253,18 +253,18 @@ export class StorageManager {
     await this.update(STORAGE_KEYS.SETTINGS, updates);
   }
 
-  async getServiceEnabled(service: string): Promise<boolean> {
+  async getServiceEnabled(service: ServiceName): Promise<boolean> {
     const profile = await this.getUserProfile();
     if (!profile) return false;
-    return (profile.services_enabled as any)[service] ?? false;
+    return profile.services_enabled[service] ?? false;
   }
 
-  async setServiceEnabled(service: string, enabled: boolean): Promise<void> {
+  async setServiceEnabled(service: ServiceName, enabled: boolean): Promise<void> {
     const profile = await this.getUserProfile();
     if (!profile) {
       throw new StorageError('User profile not found');
     }
-    (profile.services_enabled as any)[service] = enabled;
+    profile.services_enabled[service] = enabled;
     await this.setUserProfile(profile);
   }
 
@@ -275,9 +275,10 @@ export class StorageManager {
   /**
    * Get all data at once (useful for initialization)
    */
-  async getAllData(): Promise<Record<string, any>> {
+  async getAllData(): Promise<Record<string, unknown>> {
     try {
-      return await chrome.storage.local.get();
+      const data = await chrome.storage.local.get();
+      return data as Record<string, unknown>;
     } catch (error) {
       console.error('[Storage] Failed to get all data:', error);
       throw new StorageError('Failed to get all data', { error });

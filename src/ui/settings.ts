@@ -19,10 +19,10 @@ export class SettingsController {
         type: 'GET_USER_IDENTIFIER',
       });
 
-      if (response.success) {
+      if (response.success && response.data) {
         const identifierElement = document.getElementById('user-identifier');
         if (identifierElement) {
-          identifierElement.textContent = response.data.identifier;
+          identifierElement.textContent = response.data.identifier || 'Loading...';
         }
       }
     } catch (error) {
@@ -54,17 +54,21 @@ export class SettingsController {
 
     // Service toggles
     document.querySelectorAll('input[type="checkbox"][data-service]').forEach((toggle) => {
-      toggle.addEventListener('change', (e) => {
-        const service = (e.target as HTMLInputElement).dataset.service;
-        const enabled = (e.target as HTMLInputElement).checked;
-        this._toggleService(service, enabled);
+      toggle.addEventListener('change', (e: Event) => {
+        if (!(e.target instanceof HTMLInputElement)) return;
+        const service = e.target.dataset.service;
+        const enabled = e.target.checked;
+        if (service) {
+          this._toggleService(service, enabled);
+        }
       });
     });
 
     // Theme selector
     document.querySelectorAll('input[type="radio"][name="theme"]').forEach((radio) => {
-      radio.addEventListener('change', (e) => {
-        const theme = (e.target as HTMLInputElement).value;
+      radio.addEventListener('change', (e: Event) => {
+        if (!(e.target instanceof HTMLInputElement)) return;
+        const theme = e.target.value;
         this._setTheme(theme);
       });
     });
