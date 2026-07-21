@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hang Time - Settings</title>
+  <link rel="stylesheet" href="styles/settings.css">
+  <link rel="stylesheet" href="styles/theme.css">
+</head>
+<body>
+  <div class="settings-container">
+    <header class="settings-header">
+      <h1>Hang Time Settings</h1>
+      <button id="close-btn" class="btn-close" title="Close">&times;</button>
+    </header>
+
+    <div class="settings-content">
+      <!-- User Identifier Section -->
+      <section class="settings-section">
+        <h2>Your Identity</h2>
+        <div class="identity-card">
+          <label>Your Memorable Identifier:</label>
+          <div class="identifier-display">
+            <span id="user-identifier" class="identifier-text">Loading...</span>
+            <button id="copy-id-btn" class="btn-copy" title="Copy to clipboard">📋 Copy</button>
+          </div>
+          <p class="help-text">Share this ID with friends to add them</p>
+        </div>
+      </section>
+
+      <!-- Discord Section -->
+      <section class="settings-section">
+        <h2>Discord (Optional)</h2>
+        <div class="form-group">
+          <label for="discord-info">Discord Username or Invite Link</label>
+          <input
+            type="text"
+            id="discord-info"
+            class="form-input"
+            placeholder="username or https://discord.gg/..."
+          >
+          <p class="help-text">Used for voice coordination when co-watching</p>
+        </div>
+      </section>
+
+      <!-- Services Section -->
+      <section class="settings-section">
+        <h2>Enabled Services</h2>
+        <div class="services-grid">
+          <div class="service-toggle">
+            <label class="toggle-switch">
+              <input type="checkbox" id="service-spotify" data-service="spotify">
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="service-name">🎵 Spotify</span>
+          </div>
+
+          <div class="service-toggle">
+            <label class="toggle-switch">
+              <input type="checkbox" id="service-twitch" data-service="twitch">
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="service-name">📺 Twitch</span>
+          </div>
+
+          <div class="service-toggle">
+            <label class="toggle-switch">
+              <input type="checkbox" id="service-steam" data-service="steam">
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="service-name">🎮 Steam</span>
+          </div>
+
+          <div class="service-toggle">
+            <label class="toggle-switch">
+              <input type="checkbox" id="service-netflix" data-service="netflix">
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="service-name">🎬 Netflix</span>
+          </div>
+
+          <div class="service-toggle">
+            <label class="toggle-switch">
+              <input type="checkbox" id="service-youtube" data-service="youtube">
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="service-name">📹 YouTube</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- OAuth Status -->
+      <section class="settings-section" id="oauth-section" style="display: none;">
+        <h2>Service Authentication</h2>
+        <div id="oauth-status" class="oauth-status">
+          <!-- OAuth buttons injected by settings.ts -->
+        </div>
+      </section>
+
+      <!-- Notifications Section -->
+      <section class="settings-section">
+        <h2>Notifications</h2>
+        <div class="notification-prefs">
+          <label class="checkbox-label">
+            <input type="checkbox" id="notif-friend-online" checked>
+            <span>Friend came online</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="notif-new-message" checked>
+            <span>New message received</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="notif-join-suggestion">
+            <span>Suggest joining friend's activity</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Theme Section -->
+      <section class="settings-section">
+        <h2>Theme</h2>
+        <div class="theme-selector">
+          <label class="radio-label">
+            <input type="radio" name="theme" value="auto" checked>
+            <span>Auto (System)</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="theme" value="light">
+            <span>Light</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="theme" value="dark">
+            <span>Dark</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Danger Zone -->
+      <section class="settings-section danger-zone">
+        <h2>Danger Zone</h2>
+        <button id="clear-all-btn" class="btn-danger">Clear All Data</button>
+        <p class="help-text">This will delete all settings, friends, and messages. Cannot be undone.</p>
+      </section>
+    </div>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

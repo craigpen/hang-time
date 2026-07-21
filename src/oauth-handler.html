@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authorizing...</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background-color: #f5f5f5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    }
+    .container {
+      text-align: center;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #e0e0e0;
+      border-top-color: #1a6fb5;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.3em;
+      color: #333;
+    }
+    p {
+      color: #666;
+      margin-top: 10px;
+      font-size: 0.9em;
+    }
+    .error {
+      color: #dc2626;
+      background-color: #fee2e2;
+      padding: 10px;
+      border-radius: 4px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner"></div>
+    <h1>Authorizing...</h1>
+    <p>Please wait while we complete the authorization.</p>
+    <div id="error" class="error" style="display: none;"></div>
+  </div>
+
+  <script src="oauth-handler.js"></script>
+</body>
+</html>
