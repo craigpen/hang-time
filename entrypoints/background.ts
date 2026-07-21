@@ -38,6 +38,9 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   console.log(`[Background] Extension ${details.reason}`);
 
   if (details.reason === 'install') {
+    // Initialize the extension first
+    await initializeExtension();
+
     // First install: generate memorable identifier and open settings
     const profile = await storageManager.getUserProfile();
     if (!profile) {
