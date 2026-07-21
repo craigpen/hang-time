@@ -33,6 +33,7 @@ const ENTRYPOINTS = {
   popup: 'src/ui/popup.ts',
   settings: 'src/ui/settings.ts',
   'oauth-handler': 'entrypoints/oauth-handler.ts',
+  'video-sync': 'entrypoints/video-sync.ts',
 };
 
 const STATIC_FILES = [

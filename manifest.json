@@ -31,6 +31,13 @@
     "default_title": "Hang Time"
   },
   "options_page": "src/settings.html",
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*", "https://youtu.be/*", "https://www.netflix.com/*"],
+      "js": ["video-sync.js"],
+      "run_at": "document_start"
+    }
+  ],
   "icons": {
     "16": "public/icon-16.png",
     "32": "public/icon-32.png",
