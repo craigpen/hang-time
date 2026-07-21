@@ -53,20 +53,33 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
 - [x] Create GitHub project
 - [x] Set up package.json and build pipeline
 - [x] Configure agent validation pipeline (AGENTS.md)
-- [ ] Create Manifest V3 and entrypoints
-- [ ] Build basic popup UI
-- [ ] Implement settings page
-- [ ] Add activity detection logic
+- [x] Document development phases (PHASES.md)
+- [ ] **Phase 1: Architecture & Design** (in progress)
+- [ ] Phase 2: Build Core Infrastructure
+- [ ] Phase 3: Implement MVP Features
+- [ ] Phase 4: Co-Watching & Advanced Features
+- [ ] Phase 5: Testing & Validation & Release
+
+### Development Methodology
+
+**Agent-Driven Development**: Each phase uses a targeted agent stack to design, build, validate, and test.
+
+See **PHASES.md** for detailed phase breakdown, deliverables, and success criteria.
 
 ### Known Issues & TODOs
 
-- [ ] Need to finalize build script (esbuild setup)
-- [ ] Plan OAuth flows for Spotify/Twitch
-- [ ] Design folder/file structure for modules
-- [ ] Test Nostr relay connectivity
+Phase 1 (Current):
+- [ ] Research reference projects for MV3 patterns
+- [ ] Design Nostr relay pool architecture
+- [ ] Design service detection modules
+- [ ] Document data models (storage schema)
+- [ ] Create data flow diagrams
+- [ ] Get alignment before coding Phase 2
 
 ### References
 
 - **MVP Spec**: Hang Time MVP.txt.txt (in root)
+- **Development Phases**: PHASES.md
 - **Agent Pipeline**: AGENTS.md, AGENT_ORCHESTRATION.md
+- **Architecture**: docs/ARCHITECTURE.md
 - **Reference Project**: ../tab-lifecycle-manager
