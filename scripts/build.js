@@ -25,6 +25,7 @@ const BUILD_CONFIG = {
   bundle: true,
   sourcemap: true,
   minify: false,
+  splitting: false,
   logLevel: 'info',
 };
 

@@ -214,10 +214,3 @@ export function getFriendManager(): FriendManager {
   }
   return friendManagerInstance;
 }
-
-// For backward compatibility with background.ts
-Object.defineProperty(exports, 'friendManager', {
-  get() {
-    return getFriendManager();
-  },
-});
