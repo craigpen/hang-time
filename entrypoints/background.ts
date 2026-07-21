@@ -9,6 +9,7 @@ import { StorageManager, storageManager } from '../src/modules/storage';
 import { IdentityManager, initializeIdentityManager, identityManager } from '../src/modules/identity';
 import { FriendManager, friendManager } from '../src/modules/friends';
 import { MessagingManager, initializeMessagingManager, getMessagingManager } from '../src/modules/messaging';
+import { JoinHandler } from '../src/modules/join-handler';
 import { ActivityDetector } from '../src/modules/activity';
 import { TabService } from '../src/modules/services/tabs';
 import { SteamService } from '../src/modules/services/steam';
@@ -203,6 +204,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
 
     case 'HANDLE_OAUTH_CALLBACK':
       return _handleOAuthCallback(message.data?.service, message.data?.code);
+
+    case 'JOIN_ACTIVITY':
+      return _joinActivity(message.data?.friendId, message.data?.activity);
 
     default:
       return {
@@ -448,6 +452,20 @@ async function _handleOAuthCallback(service?: string, code?: string): Promise<Ex
   } catch (error) {
     console.error(`[Background] OAuth callback error:`, error);
     return { success: false, error: error instanceof Error ? error.message : 'Failed to handle OAuth callback' };
+  }
+}
+
+async function _joinActivity(friendId?: string, activity?: any): Promise<ExtensionResponse> {
+  if (!friendId || !activity) {
+    return { success: false, error: 'friendId and activity required' };
+  }
+
+  try {
+    const joinHandler = new JoinHandler(storageManager);
+    await joinHandler.joinActivity(friendId, activity);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to join activity' };
   }
 }
 
