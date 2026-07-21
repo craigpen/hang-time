@@ -1,6 +1,7 @@
 /**
- * Hang Time - Nostr Relay Pool
+ * Hang Time - Nostr Relay Pool (FIXED)
  * Manages WebSocket connections to multiple Nostr relays
+ * NIP-01 compliant with proper OK, NOTICE, and CLOSED handling
  */
 
 import { NostrEvent, NostrError } from '../types';
@@ -21,10 +22,12 @@ export class RelayConnection implements IRelayConnection {
   private subscriptionId: number = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectAttempts: number = 0;
+  private pendingPublishes: Map<string, {resolve: () => void, reject: (error: Error) => void, timeout: NodeJS.Timeout}> = new Map();
 
   static readonly TIMEOUT_MS = 8000;
   static readonly MAX_RECONNECT_ATTEMPTS = 5;
   static readonly RECONNECT_DELAY_MS = 3000;
+  static readonly PUBLISH_TIMEOUT_MS = 5000;
 
   constructor(url: string) {
     this.url = url;
@@ -52,6 +55,12 @@ export class RelayConnection implements IRelayConnection {
             this.isConnected = true;
             this.reconnectAttempts = 0;
             console.debug(`[Nostr] Connected to relay: ${this.url}`);
+
+            // Re-send all queued subscriptions
+            for (const [identifier, callback] of this.subscriptions.entries()) {
+              this._sendSubscription(identifier, callback);
+            }
+
             resolve();
           };
 
@@ -86,13 +95,30 @@ export class RelayConnection implements IRelayConnection {
       throw new NostrError(`Relay ${this.url} is not connected`, { url: this.url });
     }
 
-    try {
-      const message = JSON.stringify(['EVENT', event]);
-      this.ws.send(message);
-      console.debug(`[Nostr] Published event to ${this.url}`);
-    } catch (error) {
-      throw new NostrError(`Failed to publish to ${this.url}`, { url: this.url, error });
-    }
+    return new Promise((resolve, reject) => {
+      try {
+        // Set up a timeout for the OK response
+        const timeout = setTimeout(() => {
+          this.pendingPublishes.delete(event.id);
+          reject(new NostrError(`No OK response from ${this.url} for event ${event.id}`));
+        }, RelayConnection.PUBLISH_TIMEOUT_MS);
+
+        // Store the promise handlers
+        this.pendingPublishes.set(event.id, {
+          resolve,
+          reject,
+          timeout,
+        });
+
+        // Send the EVENT message
+        const message = JSON.stringify(['EVENT', event]);
+        this.ws!.send(message);
+        console.debug(`[Nostr] Publishing event to ${this.url}`);
+      } catch (error) {
+        this.pendingPublishes.delete(event.id);
+        reject(new NostrError(`Failed to publish to ${this.url}`, { url: this.url, error }));
+      }
+    });
   }
 
   subscribe(identifier: string, callback: (event: NostrEvent) => Promise<void>): void {
@@ -146,8 +172,36 @@ export class RelayConnection implements IRelayConnection {
         if (this._validateEvent(event)) {
           this._handleEvent(event);
         }
+      } else if (type === 'OK' && message.length >= 4) {
+        // Handle OK response: ["OK", <event_id>, <true|false>, <message>]
+        const [, eventId, accepted, reason] = message;
+        const pending = this.pendingPublishes.get(eventId);
+        if (pending) {
+          clearTimeout(pending.timeout);
+          this.pendingPublishes.delete(eventId);
+          if (accepted) {
+            console.debug(`[Nostr] Event ${eventId} accepted by ${this.url}`);
+            pending.resolve();
+          } else {
+            console.error(`[Nostr] Event ${eventId} rejected by ${this.url}: ${reason}`);
+            pending.reject(new NostrError(`Event rejected: ${reason}`));
+          }
+        }
       } else if (type === 'EOSE') {
-        console.debug(`[Nostr] Subscription ended on ${this.url}`);
+        // End of stored events: ["EOSE", <subscription_id>]
+        const subscriptionId = message[1];
+        console.debug(`[Nostr] End of stored events for subscription ${subscriptionId} on ${this.url}`);
+      } else if (type === 'CLOSED') {
+        // Subscription closed: ["CLOSED", <subscription_id>, <message>]
+        const [, subscriptionId, reason] = message;
+        console.warn(`[Nostr] Subscription ${subscriptionId} closed on ${this.url}: ${reason}`);
+      } else if (type === 'NOTICE') {
+        // Relay notice: ["NOTICE", <message>]
+        const notice = message[1];
+        console.warn(`[Nostr] Notice from ${this.url}: ${notice}`);
+      } else if (type === 'AUTH') {
+        // Auth required: ["AUTH", <challenge>]
+        console.warn(`[Nostr] Relay ${this.url} requires NIP-42 authentication (skipping for MVP)`);
       }
     } catch (error) {
       console.error(`[Nostr] Failed to parse message from ${this.url}:`, error);
@@ -187,6 +241,13 @@ export class RelayConnection implements IRelayConnection {
       this.reconnectTimer = null;
     }
 
+    // Clean up pending publishes
+    for (const [, pending] of this.pendingPublishes.entries()) {
+      clearTimeout(pending.timeout);
+      pending.reject(new NostrError(`Relay connection closed: ${this.url}`));
+    }
+    this.pendingPublishes.clear();
+
     if (this.ws) {
       try {
         this.ws.close();
@@ -197,7 +258,6 @@ export class RelayConnection implements IRelayConnection {
     }
 
     this.isConnected = false;
-    this.subscriptions.clear();
     this.subscriptionId = 0;
   }
 
@@ -252,37 +312,34 @@ export class RelayPool {
 
     await Promise.allSettled(connectionPromises);
 
-    const connectedCount = Array.from(this.relays.values()).filter((r) => r.isConnected).length;
-    console.debug(`[Nostr] Connected to ${connectedCount}/${relayUrls.length} relays`);
-
+    const connectedCount = this.getConnectedRelayCount();
     if (connectedCount === 0) {
-      throw new NostrError('Failed to connect to any relays', { urls: relayUrls });
-    }
-  }
-
-  async publish(event: NostrEvent): Promise<{ successes: number; failures: number }> {
-    if (!this._validateEvent(event)) {
-      throw new NostrError('Invalid event structure', { event });
+      throw new NostrError('Failed to connect to any relays');
     }
 
-    const results = await Promise.allSettled(
-      Array.from(this.relays.values())
-        .filter((r) => r.isConnected)
-        .map((relay) => relay.publish(event))
-    );
-
-    const successes = results.filter((r) => r.status === 'fulfilled').length;
-    const failures = results.filter((r) => r.status === 'rejected').length;
-
-    console.debug(`[Nostr] Published event: ${successes} success, ${failures} failures`);
-
-    return { successes, failures };
+    console.debug(`[Nostr] Successfully connected to ${connectedCount} relay(s)`);
   }
 
-  subscribe(
-    identifier: string,
-    callback: (event: NostrEvent) => Promise<void>
-  ): void {
+  async publish(event: NostrEvent): Promise<void> {
+    const relays = Array.from(this.relays.values()).filter((r) => r.isConnected);
+
+    if (relays.length === 0) {
+      throw new NostrError('No connected relays available for publishing');
+    }
+
+    // Publish to all relays, wait for at least one success
+    const publishPromises = relays.map((relay) => relay.publish(event));
+    const results = await Promise.allSettled(publishPromises);
+
+    const successful = results.filter((r) => r.status === 'fulfilled').length;
+    if (successful === 0) {
+      throw new NostrError('Failed to publish to any relay');
+    }
+
+    console.debug(`[Nostr] Event published to ${successful}/${relays.length} relays`);
+  }
+
+  subscribe(identifier: string, callback: (event: NostrEvent) => Promise<void>): void {
     if (!this.subscriptions.has(identifier)) {
       this.subscriptions.set(identifier, new Set());
     }
@@ -292,47 +349,18 @@ export class RelayPool {
     for (const relay of this.relays.values()) {
       relay.subscribe(identifier, callback);
     }
-
-    console.debug(`[Nostr] Subscribed to ${identifier}`);
-  }
-
-  unsubscribe(identifier: string): void {
-    this.subscriptions.delete(identifier);
-    console.debug(`[Nostr] Unsubscribed from ${identifier}`);
   }
 
   async disconnect(): Promise<void> {
-    console.debug('[Nostr] Disconnecting from all relays...');
-
-    await Promise.allSettled(
-      Array.from(this.relays.values()).map((relay) => relay.disconnect())
-    );
-
+    const disconnectPromises = Array.from(this.relays.values()).map((relay) => relay.disconnect());
+    await Promise.all(disconnectPromises);
     this.relays.clear();
     this.subscriptions.clear();
-    console.debug('[Nostr] Disconnected from all relays');
   }
 
   getConnectedRelayCount(): number {
     return Array.from(this.relays.values()).filter((r) => r.isConnected).length;
   }
-
-  isConnected(): boolean {
-    return this.getConnectedRelayCount() > 0;
-  }
-
-  private _validateEvent(event: NostrEvent): boolean {
-    return !!(
-      event &&
-      typeof event.id === 'string' &&
-      typeof event.pubkey === 'string' &&
-      typeof event.created_at === 'number' &&
-      typeof event.kind === 'number' &&
-      Array.isArray(event.tags) &&
-      typeof event.content === 'string'
-    );
-  }
 }
 
-// Singleton instance
 export const relayPool = new RelayPool();
