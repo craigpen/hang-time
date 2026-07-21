@@ -211,19 +211,78 @@ body {
   gap: 0.75em;
 }
 
-.oauth-button {
-  padding: 0.75em 1em;
+.oauth-service {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75em;
+  background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  background-color: var(--bg-secondary);
+}
+
+.service-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+}
+
+.service-label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.status-badge {
+  font-size: 0.85em;
+  font-weight: 500;
+  padding: 0.25em 0.5em;
+  border-radius: 3px;
+  width: fit-content;
+}
+
+.status-connected {
+  background-color: var(--status-success);
+  color: white;
+}
+
+.status-disconnected {
+  background-color: var(--status-warning);
+  color: white;
+}
+
+.service-actions {
+  display: flex;
+  gap: 0.5em;
+}
+
+.btn-oauth,
+.btn-oauth-secondary {
+  padding: 0.5em 1em;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-primary);
   color: var(--text-primary);
   cursor: pointer;
   transition: all 0.15s;
+  font-size: 0.85em;
+  white-space: nowrap;
 }
 
-.oauth-button:hover {
-  background-color: var(--bg-tertiary);
+.btn-oauth:hover {
+  background-color: var(--accent-primary);
+  color: white;
   border-color: var(--accent-primary);
+}
+
+.btn-oauth-secondary {
+  background-color: transparent;
+  border-color: var(--border-color);
+}
+
+.btn-oauth-secondary:hover {
+  background-color: var(--status-error);
+  border-color: var(--status-error);
+  color: white;
 }
 
 /* ============================================================================

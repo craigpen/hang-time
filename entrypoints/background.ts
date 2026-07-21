@@ -188,6 +188,18 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'MUTE_FRIEND':
       return _muteFriend(message.data?.friendId, message.data?.mute);
 
+    case 'GET_OAUTH_STATUS':
+      return _getOAuthStatus(message.data?.service);
+
+    case 'AUTHENTICATE_SERVICE':
+      return _authenticateService(message.data?.service);
+
+    case 'DISCONNECT_SERVICE':
+      return _disconnectService(message.data?.service);
+
+    case 'HANDLE_OAUTH_CALLBACK':
+      return _handleOAuthCallback(message.data?.service, message.data?.code);
+
     default:
       return {
         success: false,
@@ -325,6 +337,105 @@ async function _muteFriend(friendId?: string, mute?: boolean): Promise<Extension
     return { success: true };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to mute/unmute friend' };
+  }
+}
+
+async function _getOAuthStatus(service?: string): Promise<ExtensionResponse> {
+  if (!service) {
+    return { success: false, error: 'service required' };
+  }
+
+  try {
+    const serviceTyped = service as ServiceName;
+    let hasToken = false;
+
+    if (serviceTyped === 'spotify') {
+      const spotifyService = new SpotifyService(storageManager);
+      hasToken = await spotifyService.hasToken();
+    } else if (serviceTyped === 'twitch') {
+      const twitchService = new TwitchService(storageManager);
+      hasToken = await twitchService.hasToken();
+    }
+
+    return { success: true, data: { service, hasToken } };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get OAuth status' };
+  }
+}
+
+async function _authenticateService(service?: string): Promise<ExtensionResponse> {
+  if (!service) {
+    return { success: false, error: 'service required' };
+  }
+
+  try {
+    const serviceTyped = service as ServiceName;
+    let authUrl: string | null = null;
+
+    if (serviceTyped === 'spotify') {
+      const spotifyService = new SpotifyService(storageManager);
+      authUrl = await spotifyService.getAuthUrl();
+    } else if (serviceTyped === 'twitch') {
+      const twitchService = new TwitchService(storageManager);
+      authUrl = await twitchService.getAuthUrl();
+    } else {
+      return { success: false, error: `OAuth not supported for ${service}` };
+    }
+
+    return { success: true, data: { authUrl } };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get auth URL' };
+  }
+}
+
+async function _disconnectService(service?: string): Promise<ExtensionResponse> {
+  if (!service) {
+    return { success: false, error: 'service required' };
+  }
+
+  try {
+    const serviceTyped = service as ServiceName;
+
+    if (serviceTyped === 'spotify') {
+      const spotifyService = new SpotifyService(storageManager);
+      await spotifyService.clearToken();
+    } else if (serviceTyped === 'twitch') {
+      const twitchService = new TwitchService(storageManager);
+      await twitchService.clearToken();
+    } else {
+      return { success: false, error: `Cannot disconnect from ${service}` };
+    }
+
+    console.debug(`[Background] Disconnected from ${service}`);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to disconnect' };
+  }
+}
+
+async function _handleOAuthCallback(service?: string, code?: string): Promise<ExtensionResponse> {
+  if (!service || !code) {
+    return { success: false, error: 'service and code required' };
+  }
+
+  try {
+    const serviceTyped = service as ServiceName;
+
+    if (serviceTyped === 'spotify') {
+      const spotifyService = new SpotifyService(storageManager);
+      await spotifyService.handleAuthCallback(code);
+    } else if (serviceTyped === 'twitch') {
+      const twitchService = new TwitchService(storageManager);
+      await twitchService.handleAuthCallback(code);
+    } else {
+      return { success: false, error: `OAuth callback not supported for ${service}` };
+    }
+
+    console.log(`[Background] OAuth callback handled for ${service}`);
+    return { success: true };
+  } catch (error) {
+    console.error(`[Background] OAuth callback error:`, error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to handle OAuth callback' };
   }
 }
 
