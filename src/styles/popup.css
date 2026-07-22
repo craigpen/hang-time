@@ -14,8 +14,8 @@ body {
 .popup-container {
   display: flex;
   flex-direction: column;
+  width: 100%;
   min-height: 100%;
-  overflow: visible;
 }
 
 /* ============================================================================
@@ -302,12 +302,11 @@ body {
    ============================================================================ */
 
 .empty-state {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 1em 1em;
+  padding: 3em 1em;
   text-align: center;
   color: var(--text-secondary);
 }
@@ -364,8 +363,6 @@ body {
    ============================================================================ */
 
 .friends-grid {
-  flex: 1;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -495,13 +492,13 @@ body {
   top: 0;
   left: 0;
   right: 0;
+  bottom: 0;
   background-color: var(--bg-primary);
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  overflow: visible;
+  overflow: hidden;
   width: 500px;
-  min-height: 100%;
 }
 
 .settings-panel-header {
