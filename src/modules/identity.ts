@@ -7,6 +7,7 @@ import * as secp from '@noble/secp256k1';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { StorageManager } from './storage';
 import { UserProfile, AuthError } from '../types';
+import { deriveKeypairFromIdentifier } from './security-utils';
 
 // Configure secp256k1 to use sha256 for signing
 secp.hashes.sha256 = sha256;
@@ -77,7 +78,7 @@ export class IdentityManager {
     }
 
     const identifier = this._createMemorableId();
-    const { pubkey, secretKey } = this._deriveSigningKeypairFromIdentifier(identifier);
+    const { pubkey, secretKey } = deriveKeypairFromIdentifier(identifier);
     const now = Date.now();
 
     // Create new profile only if none exists
@@ -107,33 +108,6 @@ export class IdentityManager {
     return identifier;
   }
 
-  /**
-   * Derive Nostr signing keypair deterministically from identifier
-   * Both sides can recreate the same keypair from the same identifier
-   */
-  private _deriveSigningKeypairFromIdentifier(identifier: string): { pubkey: string; secretKey: string } {
-    const encoder = new TextEncoder();
-    const identifierBytes = encoder.encode(identifier);
-    const hash = sha256(identifierBytes);
-    // Use first 32 bytes of SHA-256 hash as secret key
-    const secretKeyBytes = new Uint8Array(hash.slice(0, 32));
-    const secretKey = this._bytesToHex(secretKeyBytes);
-
-    // Derive Schnorr public key (32 bytes, raw x-coordinate for Nostr)
-    const publicKeyBytes = secp.schnorr.getPublicKey(secretKeyBytes);
-    const pubkey = this._bytesToHex(publicKeyBytes);
-
-    return { pubkey, secretKey };
-  }
-
-  private _bytesToHex(bytes: Uint8Array): string {
-    let hex = '';
-    for (let i = 0; i < bytes.length; i++) {
-      const byte = bytes[i].toString(16);
-      hex += byte.length === 1 ? '0' + byte : byte;
-    }
-    return hex;
-  }
 
   /**
    * Create a memorable identifier using adjective + animal + number

@@ -5,9 +5,7 @@
 
 import { Friend, FriendList, Activity } from '../types';
 import { StorageManager } from './storage';
-import { secureLog, validateFriendName, generateSecureRandom } from './security-utils';
-import { sha256 } from '@noble/hashes/sha2.js';
-import * as secp from '@noble/secp256k1';
+import { secureLog, validateFriendName, generateSecureRandom, deriveKeypairFromIdentifier } from './security-utils';
 
 export class FriendManager {
   constructor(private storage: StorageManager) {}
@@ -214,22 +212,9 @@ export class FriendManager {
   }
 
   private _derivePubkeyFromIdentifier(identifier: string): string {
-    // Derive deterministic Schnorr public key from identifier (same as identity.ts)
-    // This ensures friend pubkeys match what they derive from their own identifier
-    const encoder = new TextEncoder();
-    const identifierBytes = encoder.encode(identifier);
-    const hash = sha256(identifierBytes);
-    // Use first 32 bytes of SHA-256 hash as secret key
-    const secretKeyBytes = new Uint8Array(hash.slice(0, 32));
-    // Derive Schnorr public key (32 bytes, raw x-coordinate for Nostr)
-    const publicKeyBytes = secp.schnorr.getPublicKey(secretKeyBytes);
-    // Convert to hex string
-    let hex = '';
-    for (let i = 0; i < publicKeyBytes.length; i++) {
-      const byte = publicKeyBytes[i].toString(16);
-      hex += byte.length === 1 ? '0' + byte : byte;
-    }
-    return hex;
+    // Use shared keypair derivation (same as identity.ts)
+    const { pubkey } = deriveKeypairFromIdentifier(identifier);
+    return pubkey;
   }
 }
 

@@ -200,6 +200,42 @@ function sanitizeString(str: string): string {
 }
 
 /**
+ * Derive Nostr keypair from memorable identifier
+ * Single source of truth for keypair derivation to prevent drift
+ */
+export function deriveKeypairFromIdentifier(identifier: string): { pubkey: string; secretKey: string } {
+  const { sha256 } = require('@noble/hashes/sha2.js');
+  const secp = require('@noble/secp256k1');
+
+  const encoder = new TextEncoder();
+  const identifierBytes = encoder.encode(identifier);
+  const hash = sha256(identifierBytes);
+
+  // Use first 32 bytes of SHA-256 hash as secret key
+  const secretKeyBytes = new Uint8Array(hash.slice(0, 32));
+  const secretKey = _bytesToHex(secretKeyBytes);
+
+  // Derive Schnorr public key (32 bytes, raw x-coordinate for Nostr)
+  const publicKeyBytes = secp.schnorr.getPublicKey(secretKeyBytes);
+  const pubkey = _bytesToHex(publicKeyBytes);
+
+  return { pubkey, secretKey };
+}
+
+/**
+ * Convert byte array to hex string
+ * Private helper for deriveKeypairFromIdentifier
+ */
+function _bytesToHex(bytes: Uint8Array): string {
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) {
+    const byte = bytes[i].toString(16);
+    hex += byte.length === 1 ? '0' + byte : byte;
+  }
+  return hex;
+}
+
+/**
  * Safe console logging wrapper
  * Always sanitizes error information
  */
