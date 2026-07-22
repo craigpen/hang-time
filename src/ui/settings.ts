@@ -84,18 +84,22 @@ export class SettingsController {
 
   private async _loadServiceStatus(): Promise<void> {
     try {
-      const currentActivity = await chrome.runtime.sendMessage({
-        type: 'GET_CURRENT_ACTIVITY',
+      // Get browser activities (Netflix and YouTube shown separately)
+      const browserActivitiesResponse = await chrome.runtime.sendMessage({
+        type: 'GET_BROWSER_ACTIVITIES',
       });
 
-      const activity = currentActivity.success && currentActivity.data ? currentActivity.data : null;
+      const browserActivities = browserActivitiesResponse.success && browserActivitiesResponse.data
+        ? browserActivitiesResponse.data
+        : { netflix: null, youtube: null };
 
       // Update browser tab service status
       for (const service of this.browserTabServices) {
         const statusDiv = document.getElementById(`status-${service}`);
         if (statusDiv) {
-          if (activity && activity.service === service && activity.service !== 'idle') {
-            statusDiv.textContent = `Watching: ${this._truncateContent(activity.content)}`;
+          const serviceActivity = browserActivities[service as keyof typeof browserActivities];
+          if (serviceActivity && serviceActivity.service !== 'idle') {
+            statusDiv.textContent = `Watching: ${this._truncateContent(serviceActivity.content)}`;
             statusDiv.className = 'service-status status-active';
           } else {
             statusDiv.textContent = 'Idle';
@@ -103,6 +107,13 @@ export class SettingsController {
           }
         }
       }
+
+      // Get current activity for OAuth services
+      const currentActivity = await chrome.runtime.sendMessage({
+        type: 'GET_CURRENT_ACTIVITY',
+      });
+
+      const activity = currentActivity.success && currentActivity.data ? currentActivity.data : null;
 
       // Update OAuth service status
       const spotifyStatusDiv = document.getElementById('status-spotify');

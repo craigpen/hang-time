@@ -7,6 +7,8 @@ import { Activity, IServiceModule } from '../../types';
 import { StorageManager } from '../storage';
 
 export class TabService implements IServiceModule {
+  private lastDetected: Map<string, Activity> = new Map();
+
   constructor(private storage: StorageManager) {}
 
   async isEnabled(): Promise<boolean> {
@@ -56,38 +58,22 @@ export class TabService implements IServiceModule {
         });
       }
 
-      // If activities detected, return compound activity showing all services
+      // Store all detected services for later retrieval
+      this.lastDetected.clear();
+      for (const activity of detectedActivities) {
+        this.lastDetected.set(activity.service, activity);
+      }
+
+      // If activities detected, return the most recently accessed one
       if (detectedActivities.length > 0) {
-        // Find the most recently accessed overall
         const mostRecent = detectedActivities.reduce((a, b) => {
           const aTime = (a.metadata?.lastAccessed as number) || 0;
           const bTime = (b.metadata?.lastAccessed as number) || 0;
           return aTime > bTime ? a : b;
         });
 
-        // Build content string showing all services
-        const serviceContents = detectedActivities
-          .sort((a, b) => ((b.metadata?.lastAccessed as number) || 0) - ((a.metadata?.lastAccessed as number) || 0))
-          .map((a) => `${a.service}: ${a.content}`)
-          .join(' | ');
-
-        console.debug(`[TabService] Detected ${detectedActivities.length} service(s): ${serviceContents}`);
-
-        // Return primary (most recent) but include all detected in metadata
-        return {
-          service: mostRecent.service,
-          content: serviceContents,
-          url: mostRecent.url,
-          timestamp: Date.now(),
-          metadata: {
-            ...mostRecent.metadata,
-            allDetected: detectedActivities.map((a) => ({
-              service: a.service,
-              content: a.content,
-              lastAccessed: a.metadata?.lastAccessed,
-            })),
-          },
-        };
+        console.debug(`[TabService] Detected ${detectedActivities.length} service(s), returning most recent: ${mostRecent.service}`);
+        return mostRecent;
       }
 
       console.debug('[TabService] No video content found');
@@ -115,6 +101,14 @@ export class TabService implements IServiceModule {
 
   async handleAuthCallback(code: string): Promise<void> {
     // No auth to handle
+  }
+
+  /**
+   * Get the last detected activity for a specific service
+   * Called by settings UI to display each service's status separately
+   */
+  getDetectedActivity(service: 'netflix' | 'youtube'): Activity | null {
+    return this.lastDetected.get(service) || null;
   }
 
   private _getBaseDomain(url: string): string {

@@ -183,6 +183,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'GET_CURRENT_ACTIVITY':
       return _getCurrentActivity();
 
+    case 'GET_BROWSER_ACTIVITIES':
+      return _getBrowserActivities();
+
     case 'GET_ACTIVE_FRIENDS':
       return _getActiveFriends();
 
@@ -253,6 +256,22 @@ async function _getCurrentActivity(): Promise<ExtensionResponse> {
 
   const activity = await activityDetector.detectCurrentActivity();
   return { success: true, data: activity };
+}
+
+async function _getBrowserActivities(): Promise<ExtensionResponse> {
+  // Get the TabService and retrieve detected activities for Netflix and YouTube separately
+  const tabService = activityDetector.services?.get('tabs') as any;
+  if (!tabService) {
+    return { success: true, data: { netflix: null, youtube: null } };
+  }
+
+  return {
+    success: true,
+    data: {
+      netflix: tabService.getDetectedActivity?.('netflix') || null,
+      youtube: tabService.getDetectedActivity?.('youtube') || null,
+    },
+  };
 }
 
 async function _getActiveFriends(): Promise<ExtensionResponse> {

@@ -130,6 +130,8 @@ export class ActivityDetector {
     }
 
     // Check browser tab detection (netflix and youtube)
+    // TabService detects all browser services and returns the most recently accessed
+    // The settings UI will display each separately
     if (profile.services_enabled.netflix || profile.services_enabled.youtube) {
       const tabService = this.services.get('tabs');
       if (tabService) {
