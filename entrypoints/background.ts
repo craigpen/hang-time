@@ -550,11 +550,19 @@ async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
  * Subscribe to friend's activity and messages
  */
 async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
-  if (activeSubscriptions.has(friendIdentifier)) {
+  // Look up friend to get their pubkey
+  const friendManager = getFriendManager();
+  const friend = await friendManager.getFriendByIdentifier(friendIdentifier);
+  if (!friend) {
+    console.error(`[Background] Friend not found: ${friendIdentifier}`);
     return;
   }
 
-  relayPool.subscribe(friendIdentifier, async (event: NostrEvent) => {
+  if (activeSubscriptions.has(friend.pubkey)) {
+    return;
+  }
+
+  relayPool.subscribe(friend.pubkey, async (event: NostrEvent) => {
     console.debug(`[Background] Event from ${friendIdentifier} (kind ${event.kind})`);
 
     if (event.kind === 1) {
@@ -566,8 +574,8 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
     }
   });
 
-  activeSubscriptions.set(friendIdentifier, undefined);
-  console.debug(`[Background] Subscribed to friend: ${friendIdentifier}`);
+  activeSubscriptions.set(friend.pubkey, undefined);
+  console.debug(`[Background] Subscribed to friend: ${friendIdentifier} (pubkey: ${friend.pubkey})`);
 }
 
 async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {
