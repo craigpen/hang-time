@@ -561,16 +561,16 @@ export class PopupController {
   }
 
   private _getFaviconUrl(service: string): string {
-    const domains: Record<string, string> = {
-      netflix: 'netflix.com',
-      youtube: 'youtube.com',
-      spotify: 'spotify.com',
-      twitch: 'twitch.tv',
-      steam: 'steampowered.com',
+    const iconMap: Record<string, string> = {
+      netflix: 'icons/netflix.png',
+      youtube: 'icons/youtube.png',
+      spotify: 'icons/spotify.png',
+      twitch: 'icons/twitch.png',
+      steam: 'icons/steampowered.png',
     };
-    const domain = domains[service];
-    if (!domain) return '';
-    return `https://www.google.com/s2/favicons?sz=16&domain=${domain}`;
+    const icon = iconMap[service];
+    if (!icon) return '';
+    return chrome.runtime.getURL(icon);
   }
 
   private _getServiceLabel(service: string): string {
