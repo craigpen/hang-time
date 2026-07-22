@@ -6,7 +6,7 @@
 
 import nacl from 'tweetnacl';
 import { decodeUTF8, encodeBase64, decodeBase64 } from 'tweetnacl-util';
-import { sign } from '@noble/secp256k1';
+import { schnorr } from '@noble/secp256k1';
 
 export class EncryptionManager {
   /**
@@ -202,9 +202,9 @@ export class EncryptionManager {
     try {
       const secretKeyBytes = this._hexToBytes(secretKeyHex);
       const eventIdBytes = this._hexToBytes(eventId);
-      // Sign using secp256k1 Schnorr signature
-      const signature = sign(eventIdBytes, secretKeyBytes);
-      // Return as hex string
+      // Sign using secp256k1 Schnorr signature (BIP-340)
+      const signature = schnorr.sign(eventIdBytes, secretKeyBytes);
+      // Return as hex string (64-char hex = 32 bytes)
       return signature.toHex();
     } catch (error) {
       throw new Error(`Event signing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
