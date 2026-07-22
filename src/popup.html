@@ -14,9 +14,37 @@
       <button id="settings-btn" class="btn-settings" title="Settings">⚙️</button>
     </header>
 
+    <!-- My Activity Card -->
+    <div id="my-activity" class="my-activity-card">
+      <div class="my-activity-header">
+        <span class="my-activity-label">My Activity</span>
+        <button id="copy-id-btn" class="btn-copy-id" title="Copy identifier">📋</button>
+      </div>
+      <div class="my-activity-id">
+        <span id="my-id-display">Loading...</span>
+      </div>
+      <div id="my-activity-status" class="my-activity-status">
+        Activity: <span id="activity-badge">Idle</span>
+      </div>
+      <div id="my-services" class="my-services-list">
+        <!-- Services dynamically populated -->
+      </div>
+    </div>
+
+    <!-- Add Friend Form -->
+    <div id="add-friend-form" class="add-friend-form">
+      <h3>Add a Friend</h3>
+      <input type="text" id="friend-identifier" placeholder="e.g., luminous-mountain-penguin-crystal" />
+      <input type="text" id="friend-nickname" placeholder="e.g., Alice" />
+      <div class="form-buttons">
+        <button id="friend-submit-btn" class="btn-primary">Add Friend</button>
+        <button id="friend-cancel-btn" class="btn-secondary">Cancel</button>
+      </div>
+    </div>
+
     <div id="no-activity" class="empty-state">
       <p>No friends online right now</p>
-      <button id="add-friend-btn" class="btn-primary">Add a Friend</button>
+      <button id="add-friend-btn-alt" class="btn-primary">Add a Friend</button>
     </div>
 
     <div id="active-friends" class="friends-grid">

@@ -10,6 +10,9 @@ export class PopupController {
   private noActivityPlaceholder: HTMLElement | null = null;
   private expandedFriendId: string | null = null;
   private refreshInterval: NodeJS.Timeout | null = null;
+  private addFriendForm: HTMLElement | null = null;
+  private friendIdentifierInput: HTMLInputElement | null = null;
+  private friendNicknameInput: HTMLInputElement | null = null;
 
   static readonly REFRESH_INTERVAL_MS = 3000;
 
@@ -18,6 +21,9 @@ export class PopupController {
 
     this.activeFriendsContainer = document.getElementById('active-friends');
     this.noActivityPlaceholder = document.getElementById('no-activity');
+    this.addFriendForm = document.getElementById('add-friend-form');
+    this.friendIdentifierInput = document.getElementById('friend-identifier') as HTMLInputElement;
+    this.friendNicknameInput = document.getElementById('friend-nickname') as HTMLInputElement;
 
     if (!this.activeFriendsContainer || !this.noActivityPlaceholder) {
       console.error('[Popup] Required DOM elements not found');
@@ -25,12 +31,16 @@ export class PopupController {
     }
 
     this._setupEventListeners();
+    await this._loadMyActivity();
     await this.refreshFriends();
 
     // Auto-refresh
     this.refreshInterval = setInterval(() => {
+      this._loadMyActivity().catch((error) => {
+        console.error('[Popup] Activity refresh failed:', error);
+      });
       this.refreshFriends().catch((error) => {
-        console.error('[Popup] Refresh failed:', error);
+        console.error('[Popup] Friends refresh failed:', error);
       });
     }, PopupController.REFRESH_INTERVAL_MS);
 
@@ -304,6 +314,55 @@ export class PopupController {
     return `${diffDays}d ago`;
   }
 
+  private async _loadMyActivity(): Promise<void> {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'GET_CURRENT_ACTIVITY',
+      });
+
+      const identifierResponse = await chrome.runtime.sendMessage({
+        type: 'GET_USER_IDENTIFIER',
+      });
+
+      if (!identifierResponse.success || !identifierResponse.data) {
+        console.error('[Popup] Failed to get user identifier');
+        return;
+      }
+
+      const identifier = identifierResponse.data.identifier;
+      const idDisplay = document.getElementById('my-id-display');
+      if (idDisplay) {
+        idDisplay.textContent = identifier;
+      }
+
+      const activity = response.success && response.data ? response.data : null;
+      this._renderMyActivity(activity);
+    } catch (error) {
+      console.error('[Popup] Failed to load my activity:', error);
+    }
+  }
+
+  private _renderMyActivity(activity: Activity | null): void {
+    const activityBadge = document.getElementById('activity-badge');
+    if (activityBadge) {
+      if (!activity || activity.service === 'idle') {
+        activityBadge.textContent = 'Idle';
+        activityBadge.className = 'status-idle';
+      } else {
+        const badge = this._getActivityBadge(activity.service);
+        activityBadge.textContent = `${badge} ${this._escapeHtml(activity.content)}`;
+        activityBadge.className = 'status-active';
+      }
+    }
+
+    const servicesList = document.getElementById('my-services');
+    if (servicesList) {
+      // For now, we'll show a simple list of services
+      // In a full implementation, this would show enabled services with their current status
+      servicesList.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.85em; margin: 0;">Services are displayed on Settings page</p>';
+    }
+  }
+
   private _setupEventListeners(): void {
     const settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) {
@@ -312,26 +371,86 @@ export class PopupController {
       });
     }
 
-    const addFriendBtn = document.getElementById('add-friend-btn');
-    if (addFriendBtn) {
-      addFriendBtn.addEventListener('click', () => this._handleAddFriend());
+    // Copy ID button
+    const copyIdBtn = document.getElementById('copy-id-btn');
+    if (copyIdBtn) {
+      copyIdBtn.addEventListener('click', () => this._handleCopyId());
+    }
+
+    // Add friend button from empty state
+    const addFriendBtnAlt = document.getElementById('add-friend-btn-alt');
+    if (addFriendBtnAlt) {
+      addFriendBtnAlt.addEventListener('click', () => this._showAddFriendForm());
+    }
+
+    // Form submit button
+    const submitBtn = document.getElementById('friend-submit-btn');
+    if (submitBtn) {
+      submitBtn.addEventListener('click', () => this._handleAddFriendSubmit());
+    }
+
+    // Form cancel button
+    const cancelBtn = document.getElementById('friend-cancel-btn');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => this._hideAddFriendForm());
+    }
+
+    // Allow Enter key to submit form
+    if (this.friendNicknameInput) {
+      this.friendNicknameInput.addEventListener('keypress', (e: KeyboardEvent) => {
+        if (e.key === 'Enter') {
+          this._handleAddFriendSubmit();
+        }
+      });
     }
   }
 
-  private async _handleAddFriend(): Promise<void> {
-    const input = prompt(
-      'Enter friend details (comma-separated):\n\n' +
-      'Format: identifier, local_name\n\n' +
-      'Example: luminous-mountain-penguin-crystal, Alice\n\n' +
-      'The identifier is a 4-word name (shared by your friend)'
-    );
+  private _handleCopyId(): void {
+    const idDisplay = document.getElementById('my-id-display');
+    if (idDisplay && idDisplay.textContent) {
+      navigator.clipboard.writeText(idDisplay.textContent).then(() => {
+        console.debug('[Popup] Identifier copied');
+        // Visual feedback
+        const copyBtn = document.getElementById('copy-id-btn');
+        if (copyBtn) {
+          const originalText = copyBtn.textContent;
+          copyBtn.textContent = '✓ Copied';
+          setTimeout(() => {
+            copyBtn.textContent = originalText;
+          }, 2000);
+        }
+      });
+    }
+  }
 
-    if (!input || !input.trim()) return;
+  private _showAddFriendForm(): void {
+    if (this.addFriendForm) {
+      this.addFriendForm.style.display = 'block';
+      if (this.friendIdentifierInput) {
+        this.friendIdentifierInput.focus();
+      }
+    }
+    if (this.noActivityPlaceholder) {
+      this.noActivityPlaceholder.style.display = 'none';
+    }
+  }
 
-    const [identifier, localName] = input.split(',').map((s) => s.trim());
+  private _hideAddFriendForm(): void {
+    if (this.addFriendForm) {
+      this.addFriendForm.style.display = 'none';
+    }
+    // Only show empty state if no friends
+    this.refreshFriends().catch((error) => {
+      console.error('[Popup] Refresh failed:', error);
+    });
+  }
+
+  private async _handleAddFriendSubmit(): Promise<void> {
+    const identifier = this.friendIdentifierInput?.value.trim();
+    const localName = this.friendNicknameInput?.value.trim();
 
     if (!identifier || !localName) {
-      alert('Please provide both identifier and local name (comma-separated)');
+      alert('Please fill in both identifier and nickname');
       return;
     }
 
@@ -343,6 +462,10 @@ export class PopupController {
 
       if (response.success) {
         console.debug('[Popup] Friend added successfully');
+        // Clear form
+        if (this.friendIdentifierInput) this.friendIdentifierInput.value = '';
+        if (this.friendNicknameInput) this.friendNicknameInput.value = '';
+        this._hideAddFriendForm();
         await this.refreshFriends();
       } else {
         alert(`Failed to add friend: ${response.error || 'Unknown error'}`);

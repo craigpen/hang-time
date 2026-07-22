@@ -4,13 +4,26 @@
 
 export class SettingsController {
   private oauthServices = ['spotify', 'twitch'];
+  private browserTabServices = ['netflix', 'youtube'];
+  private allServices = ['spotify', 'twitch', 'steam', 'netflix', 'youtube'];
+  private statusRefreshInterval: NodeJS.Timeout | null = null;
+
+  static readonly STATUS_REFRESH_INTERVAL_MS = 4000;
 
   async init(): Promise<void> {
     console.debug('[Settings] Initializing...');
 
     await this._loadSettings();
     await this._loadOAuthStatus();
+    await this._loadServiceStatus();
     this._setupEventListeners();
+
+    // Auto-refresh service status
+    this.statusRefreshInterval = setInterval(() => {
+      this._loadServiceStatus().catch((error) => {
+        console.error('[Settings] Status refresh failed:', error);
+      });
+    }, SettingsController.STATUS_REFRESH_INTERVAL_MS);
 
     console.debug('[Settings] Initialization complete');
   }
@@ -35,48 +48,120 @@ export class SettingsController {
 
   private async _loadOAuthStatus(): Promise<void> {
     try {
-      const statusDiv = document.getElementById('oauth-status');
-      if (!statusDiv) return;
-
-      statusDiv.innerHTML = '';
-
       for (const service of this.oauthServices) {
         const response = await chrome.runtime.sendMessage({
           type: 'GET_OAUTH_STATUS',
           data: { service },
         });
 
-        const container = document.createElement('div');
-        container.className = 'oauth-service';
-        container.dataset.service = service;
+        const container = document.getElementById(`${service}-auth-container`);
+        if (!container) continue;
 
-        const statusText = response.success && response.data?.hasToken ? 'Connected' : 'Not Connected';
-        const statusClass = response.success && response.data?.hasToken ? 'status-connected' : 'status-disconnected';
+        container.innerHTML = '';
+        const statusText = response.success && response.data?.hasToken ? 'Reconnect' : 'Connect';
 
-        container.innerHTML = `
-          <div class="service-info">
-            <span class="service-label">${this._getServiceLabel(service)}</span>
-            <span class="status-badge ${statusClass}">${statusText}</span>
-          </div>
-          <div class="service-actions">
-            <button class="btn-oauth" data-service="${service}" data-action="authenticate">
-              ${response.success && response.data?.hasToken ? 'Reconnect' : 'Connect'}
-            </button>
-            ${response.success && response.data?.hasToken ? `<button class="btn-oauth-secondary" data-service="${service}" data-action="disconnect">Disconnect</button>` : ''}
-          </div>
-        `;
+        const connectBtn = document.createElement('button');
+        connectBtn.className = 'btn-oauth';
+        connectBtn.dataset.service = service;
+        connectBtn.textContent = statusText;
+        connectBtn.addEventListener('click', () => this._authenticateService(service));
 
-        statusDiv.appendChild(container);
-      }
+        container.appendChild(connectBtn);
 
-      // Show the section if there are services
-      const oauthSection = document.getElementById('oauth-section');
-      if (oauthSection) {
-        oauthSection.style.display = 'block';
+        if (response.success && response.data?.hasToken) {
+          const disconnectBtn = document.createElement('button');
+          disconnectBtn.className = 'btn-oauth-secondary';
+          disconnectBtn.dataset.service = service;
+          disconnectBtn.textContent = 'Disconnect';
+          disconnectBtn.addEventListener('click', () => this._disconnectService(service));
+          container.appendChild(disconnectBtn);
+        }
       }
     } catch (error) {
       console.error('[Settings] Failed to load OAuth status:', error);
     }
+  }
+
+  private async _loadServiceStatus(): Promise<void> {
+    try {
+      const currentActivity = await chrome.runtime.sendMessage({
+        type: 'GET_CURRENT_ACTIVITY',
+      });
+
+      const activity = currentActivity.success && currentActivity.data ? currentActivity.data : null;
+
+      // Update browser tab service status
+      for (const service of this.browserTabServices) {
+        const statusDiv = document.getElementById(`status-${service}`);
+        if (statusDiv) {
+          if (activity && activity.service === service && activity.service !== 'idle') {
+            statusDiv.textContent = `Watching: ${this._truncateContent(activity.content)}`;
+            statusDiv.className = 'service-status status-active';
+          } else {
+            statusDiv.textContent = 'Idle';
+            statusDiv.className = 'service-status status-idle';
+          }
+        }
+      }
+
+      // Update OAuth service status
+      const spotifyStatusDiv = document.getElementById('status-spotify');
+      if (spotifyStatusDiv) {
+        const spotifyAuth = await chrome.runtime.sendMessage({
+          type: 'GET_OAUTH_STATUS',
+          data: { service: 'spotify' },
+        });
+        if (spotifyAuth.success && spotifyAuth.data?.hasToken) {
+          if (activity && activity.service === 'spotify' && activity.service !== 'idle') {
+            spotifyStatusDiv.textContent = `Playing: ${this._truncateContent(activity.content)}`;
+            spotifyStatusDiv.className = 'service-status status-active';
+          } else {
+            spotifyStatusDiv.textContent = 'Connected';
+            spotifyStatusDiv.className = 'service-status status-idle';
+          }
+        } else {
+          spotifyStatusDiv.textContent = 'Not Connected';
+          spotifyStatusDiv.className = 'service-status status-error';
+        }
+      }
+
+      const twitchStatusDiv = document.getElementById('status-twitch');
+      if (twitchStatusDiv) {
+        const twitchAuth = await chrome.runtime.sendMessage({
+          type: 'GET_OAUTH_STATUS',
+          data: { service: 'twitch' },
+        });
+        if (twitchAuth.success && twitchAuth.data?.hasToken) {
+          if (activity && activity.service === 'twitch' && activity.service !== 'idle') {
+            twitchStatusDiv.textContent = `Streaming: ${this._truncateContent(activity.content)}`;
+            twitchStatusDiv.className = 'service-status status-active';
+          } else {
+            twitchStatusDiv.textContent = 'Connected';
+            twitchStatusDiv.className = 'service-status status-idle';
+          }
+        } else {
+          twitchStatusDiv.textContent = 'Not Connected';
+          twitchStatusDiv.className = 'service-status status-error';
+        }
+      }
+
+      const steamStatusDiv = document.getElementById('status-steam');
+      if (steamStatusDiv) {
+        if (activity && activity.service === 'steam' && activity.service !== 'idle') {
+          steamStatusDiv.textContent = `Playing: ${this._truncateContent(activity.content)}`;
+          steamStatusDiv.className = 'service-status status-active';
+        } else {
+          steamStatusDiv.textContent = 'Not Configured';
+          steamStatusDiv.className = 'service-status status-idle';
+        }
+      }
+    } catch (error) {
+      console.error('[Settings] Failed to load service status:', error);
+    }
+  }
+
+  private _truncateContent(content: string): string {
+    return content.length > 40 ? content.substring(0, 40) + '...' : content;
   }
 
   private _getServiceLabel(service: string): string {
@@ -88,10 +173,11 @@ export class SettingsController {
   }
 
   private _setupEventListeners(): void {
-    // Settings button
-    const settingsBtn = document.getElementById('close-btn');
-    if (settingsBtn) {
-      settingsBtn.addEventListener('click', () => {
+    // Close button
+    const closeBtn = document.getElementById('close-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        this._cleanup();
         window.close();
       });
     }
@@ -109,28 +195,7 @@ export class SettingsController {
       });
     }
 
-    // OAuth buttons
-    document.querySelectorAll('.btn-oauth').forEach((btn) => {
-      btn.addEventListener('click', (e: Event) => {
-        if (!(e.target instanceof HTMLElement)) return;
-        const service = e.target.dataset.service;
-        if (service) {
-          this._authenticateService(service);
-        }
-      });
-    });
-
-    document.querySelectorAll('.btn-oauth-secondary').forEach((btn) => {
-      btn.addEventListener('click', (e: Event) => {
-        if (!(e.target instanceof HTMLElement)) return;
-        const service = e.target.dataset.service;
-        if (service) {
-          this._disconnectService(service);
-        }
-      });
-    });
-
-    // Service toggles
+    // Service toggles for browser tabs
     document.querySelectorAll('input[type="checkbox"][data-service]').forEach((toggle) => {
       toggle.addEventListener('change', (e: Event) => {
         if (!(e.target instanceof HTMLInputElement)) return;
@@ -141,6 +206,12 @@ export class SettingsController {
         }
       });
     });
+
+    // Steam verify button
+    const steamVerifyBtn = document.getElementById('steam-verify-btn');
+    if (steamVerifyBtn) {
+      steamVerifyBtn.addEventListener('click', () => this._verifySteamId());
+    }
 
     // Theme selector
     document.querySelectorAll('input[type="radio"][name="theme"]').forEach((radio) => {
@@ -159,6 +230,44 @@ export class SettingsController {
           this._clearAllData();
         }
       });
+    }
+  }
+
+  private _cleanup(): void {
+    if (this.statusRefreshInterval) {
+      clearInterval(this.statusRefreshInterval);
+    }
+  }
+
+  private async _verifySteamId(): Promise<void> {
+    const steamIdInput = document.getElementById('steam-id-input') as HTMLInputElement | null;
+    if (!steamIdInput || !steamIdInput.value.trim()) {
+      alert('Please enter a Steam ID');
+      return;
+    }
+
+    const steamId = steamIdInput.value.trim();
+    // Simple validation - Steam IDs are numeric
+    if (!/^\d+$/.test(steamId)) {
+      alert('Steam ID must be numeric');
+      return;
+    }
+
+    try {
+      // Store Steam ID
+      const profile = await chrome.storage.local.get('user_profile');
+      const userProfile = profile.user_profile || {};
+      userProfile.steam_id = steamId;
+      await chrome.storage.local.set({ user_profile: userProfile });
+
+      console.debug('[Settings] Steam ID verified and stored');
+      alert('Steam ID verified and saved');
+
+      // Refresh status
+      await this._loadServiceStatus();
+    } catch (error) {
+      console.error('[Settings] Failed to verify Steam ID:', error);
+      alert('Failed to verify Steam ID');
     }
   }
 

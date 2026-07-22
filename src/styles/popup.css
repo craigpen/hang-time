@@ -44,6 +44,179 @@ body {
 }
 
 /* ============================================================================
+   My Activity Card
+   ============================================================================ */
+
+.my-activity-card {
+  flex-shrink: 0;
+  padding: 12px 14px;
+  background-color: var(--bg-tertiary);
+  border-bottom: 2px solid var(--border-color);
+  border-radius: 0;
+}
+
+.my-activity-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.my-activity-label {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.9em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-copy-id {
+  background: none;
+  border: none;
+  font-size: 1.1em;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-copy-id:hover {
+  color: var(--text-primary);
+}
+
+.my-activity-id {
+  margin-bottom: 8px;
+  padding: 8px;
+  background-color: var(--bg-primary);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.8em;
+  color: var(--accent-primary);
+  font-weight: 600;
+  word-break: break-all;
+  border: 1px solid var(--border-color);
+}
+
+#my-id-display {
+  word-break: break-all;
+}
+
+.my-activity-status {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#activity-badge {
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-weight: 500;
+  font-size: 0.9em;
+}
+
+#activity-badge.status-idle {
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+#activity-badge.status-active {
+  background-color: var(--accent-primary);
+  color: white;
+}
+
+.my-services-list {
+  font-size: 0.8em;
+  color: var(--text-tertiary);
+}
+
+/* ============================================================================
+   Add Friend Form
+   ============================================================================ */
+
+.add-friend-form {
+  display: none;
+  padding: 12px 14px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.add-friend-form.visible {
+  display: block;
+}
+
+.add-friend-form h3 {
+  margin: 0 0 10px 0;
+  font-size: 0.95em;
+  color: var(--text-primary);
+}
+
+.add-friend-form input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.85em;
+  box-sizing: border-box;
+}
+
+.add-friend-form input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.add-friend-form input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.form-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.form-buttons button {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  font-weight: 500;
+}
+
+#friend-submit-btn {
+  background-color: var(--accent-primary);
+  color: white;
+  border: none;
+}
+
+#friend-submit-btn:hover {
+  background-color: var(--accent-hover);
+}
+
+#friend-cancel-btn {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+#friend-cancel-btn:hover {
+  background-color: var(--bg-tertiary);
+}
+
+/* ============================================================================
    Empty State
    ============================================================================ */
 

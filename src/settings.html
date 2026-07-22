@@ -43,57 +43,76 @@
         </div>
       </section>
 
-      <!-- Services Section -->
+      <!-- Browser Tabs Detection Section -->
       <section class="settings-section">
-        <h2>Enabled Services</h2>
-        <div class="services-grid">
-          <div class="service-toggle">
-            <label class="toggle-switch">
-              <input type="checkbox" id="service-spotify" data-service="spotify">
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="service-name">🎵 Spotify</span>
+        <h2>Browser Tabs Detection</h2>
+        <div class="service-detection-list">
+          <div class="service-detection-item">
+            <div class="service-detection-header">
+              <span class="service-label">🎬 Netflix</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="service-netflix" data-service="netflix">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="service-status" id="status-netflix">Idle</div>
           </div>
 
-          <div class="service-toggle">
-            <label class="toggle-switch">
-              <input type="checkbox" id="service-twitch" data-service="twitch">
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="service-name">📺 Twitch</span>
-          </div>
-
-          <div class="service-toggle">
-            <label class="toggle-switch">
-              <input type="checkbox" id="service-steam" data-service="steam">
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="service-name">🎮 Steam</span>
-          </div>
-
-          <div class="service-toggle">
-            <label class="toggle-switch">
-              <input type="checkbox" id="service-netflix" data-service="netflix">
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="service-name">🎬 Netflix</span>
-          </div>
-
-          <div class="service-toggle">
-            <label class="toggle-switch">
-              <input type="checkbox" id="service-youtube" data-service="youtube">
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="service-name">📹 YouTube</span>
+          <div class="service-detection-item">
+            <div class="service-detection-header">
+              <span class="service-label">📹 YouTube</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="service-youtube" data-service="youtube">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="service-status" id="status-youtube">Idle</div>
           </div>
         </div>
       </section>
 
-      <!-- OAuth Status -->
-      <section class="settings-section" id="oauth-section" style="display: none;">
-        <h2>Service Authentication</h2>
-        <div id="oauth-status" class="oauth-status">
-          <!-- OAuth buttons injected by settings.ts -->
+      <!-- Service Integrations Section -->
+      <section class="settings-section">
+        <h2>Service Integrations</h2>
+
+        <!-- Spotify -->
+        <div class="service-integration-item">
+          <div class="service-integration-header">
+            <span class="service-label">🎵 Spotify</span>
+          </div>
+          <div class="service-integration-controls">
+            <div id="spotify-auth-container" class="auth-button-container">
+              <!-- Auth button injected by settings.ts -->
+            </div>
+            <div class="service-status" id="status-spotify">Not Connected</div>
+          </div>
+        </div>
+
+        <!-- Twitch -->
+        <div class="service-integration-item">
+          <div class="service-integration-header">
+            <span class="service-label">📺 Twitch</span>
+          </div>
+          <div class="service-integration-controls">
+            <div id="twitch-auth-container" class="auth-button-container">
+              <!-- Auth button injected by settings.ts -->
+            </div>
+            <div class="service-status" id="status-twitch">Not Connected</div>
+          </div>
+        </div>
+
+        <!-- Steam -->
+        <div class="service-integration-item">
+          <div class="service-integration-header">
+            <span class="service-label">🎮 Steam</span>
+          </div>
+          <div class="service-integration-controls">
+            <div class="steam-input-group">
+              <input type="text" id="steam-id-input" placeholder="Enter Steam ID" class="form-input">
+              <button id="steam-verify-btn" class="btn-verify">Verify</button>
+            </div>
+            <div class="service-status" id="status-steam">Not Configured</div>
+          </div>
         </div>
       </section>
 

@@ -129,19 +129,19 @@ body {
 }
 
 /* ============================================================================
-   Service Toggles
+   Service Detection Items (Browser Tabs)
    ============================================================================ */
 
-.services-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 1em;
+.service-detection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75em;
 }
 
-.service-toggle {
+.service-detection-item {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 0.5em;
   padding: 0.75em;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -149,13 +149,107 @@ body {
   transition: background-color 0.15s;
 }
 
-.service-toggle:hover {
+.service-detection-item:hover {
   background-color: var(--bg-tertiary);
 }
 
-.service-name {
+.service-detection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.service-status {
+  font-size: 0.8em;
+  color: var(--text-secondary);
+  padding-left: 0;
+}
+
+/* ============================================================================
+   Service Integration Items
+   ============================================================================ */
+
+.service-integration-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75em;
+  padding: 0.75em;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-bottom: 0.75em;
+}
+
+.service-integration-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.service-integration-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.auth-button-container {
+  display: flex;
+  gap: 0.5em;
+  flex-wrap: wrap;
+}
+
+.steam-input-group {
+  display: flex;
+  gap: 0.5em;
+}
+
+.steam-input-group input {
+  flex: 1;
+  padding: 0.5em;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.85em;
+}
+
+.steam-input-group input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.btn-verify {
+  padding: 0.5em 1em;
+  background-color: var(--accent-primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.85em;
+  white-space: nowrap;
+  transition: background-color 0.15s;
+}
+
+.btn-verify:hover {
+  background-color: var(--accent-hover);
+}
+
+/* ============================================================================
+   Service Toggles
+   ============================================================================ */
+
+.service-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+}
+
+.service-label {
   font-weight: 500;
   color: var(--text-primary);
+  font-size: 0.9em;
 }
 
 /* Toggle Switch */
@@ -202,58 +296,35 @@ body {
 }
 
 /* ============================================================================
-   OAuth Status
+   Service Status Indicators
    ============================================================================ */
 
-.oauth-status {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75em;
-}
-
-.oauth-service {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.75em;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-}
-
-.service-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25em;
-}
-
-.service-label {
+.service-status {
+  font-size: 0.8em;
   font-weight: 500;
-  color: var(--text-primary);
-}
-
-.status-badge {
-  font-size: 0.85em;
-  font-weight: 500;
-  padding: 0.25em 0.5em;
+  padding: 4px 8px;
   border-radius: 3px;
   width: fit-content;
 }
 
-.status-connected {
-  background-color: var(--status-success);
+.service-status.status-active {
+  background-color: var(--accent-primary);
   color: white;
 }
 
-.status-disconnected {
-  background-color: var(--status-warning);
-  color: white;
+.service-status.status-idle {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
-.service-actions {
-  display: flex;
-  gap: 0.5em;
+.service-status.status-error {
+  background-color: rgba(220, 38, 38, 0.1);
+  color: var(--status-error);
 }
+
+/* ============================================================================
+   OAuth Status & Buttons
+   ============================================================================ */
 
 .btn-oauth,
 .btn-oauth-secondary {
@@ -266,6 +337,7 @@ body {
   transition: all 0.15s;
   font-size: 0.85em;
   white-space: nowrap;
+  font-weight: 500;
 }
 
 .btn-oauth:hover {
