@@ -437,3 +437,37 @@ body {
 .settings-content::-webkit-scrollbar-thumb:hover {
   background-color: var(--text-tertiary);
 }
+
+/* ============================================================================
+   Footer
+   ============================================================================ */
+
+.panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.footer-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.footer-links a {
+  color: var(--accent-primary);
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.footer-links a:hover {
+  opacity: 0.7;
+}
