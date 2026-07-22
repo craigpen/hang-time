@@ -54,6 +54,7 @@ export interface OAuthTokens {
 export interface Friend {
   id: string;
   identifier: string;
+  pubkey: string; // Nostr public key (64-char hex)
   local_name: string;
   added_at: number;
   last_seen: number;

@@ -6,6 +6,7 @@
 import { Friend, FriendList, Activity } from '../types';
 import { StorageManager } from './storage';
 import { secureLog, validateFriendName, generateSecureRandom } from './security-utils';
+import { sha256 } from '@noble/hashes/sha2';
 
 export class FriendManager {
   constructor(private storage: StorageManager) {}
@@ -47,9 +48,13 @@ export class FriendManager {
       throw new Error(`Friend with identifier "${identifier}" already exists`);
     }
 
+    // Derive pubkey deterministically from identifier using SHA-256
+    const pubkey = this._derivePubkeyFromIdentifier(identifier);
+
     const friend: Friend = {
       id: this._generateId(),
       identifier,
+      pubkey,
       local_name: localName,
       added_at: Date.now(),
       last_seen: Date.now(),

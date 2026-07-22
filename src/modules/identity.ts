@@ -620,11 +620,54 @@ export class IdentityManager {
       'Archmandrate',
     ];
 
-    const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
-    const animal = animals[Math.floor(Math.random() * animals.length)];
-    const number = Math.floor(Math.random() * 10000);
+    // Use 4 words from different categories for strong collision resistance
+    const descriptors = [
+      'luminous', 'wandering', 'vibrant', 'silver', 'golden', 'crimson', 'azure', 'emerald',
+      'scarlet', 'violet', 'bronze', 'copper', 'crystal', 'frozen', 'blazing', 'serene',
+      'dancing', 'sleeping', 'soaring', 'diving', 'climbing', 'flowing', 'rushing', 'gentle',
+      'mighty', 'tender', 'ancient', 'modern', 'distant', 'hidden', 'bright', 'dark',
+      'swift', 'slow', 'bold', 'shy', 'wild', 'tame', 'deep', 'shallow',
+      'vast', 'tiny', 'warm', 'cool', 'dry', 'wet', 'thick', 'thin',
+      'smooth', 'rough', 'soft', 'hard', 'quiet', 'loud', 'fast', 'slow',
+      'heavy', 'light', 'full', 'empty', 'rich', 'poor', 'strong', 'weak',
+    ];
 
-    return `${adjective}${animal}${number}`;
+    const elements = [
+      'mountain', 'river', 'ocean', 'forest', 'desert', 'glacier', 'volcano', 'canyon',
+      'valley', 'plateau', 'island', 'coast', 'lake', 'storm', 'sunset', 'sunrise',
+      'meadow', 'garden', 'grove', 'cliff', 'peak', 'summit', 'ridge', 'slope',
+      'stream', 'waterfall', 'spring', 'cave', 'grotto', 'bridge', 'tower', 'temple',
+      'stone', 'sand', 'soil', 'tree', 'flower', 'grass', 'herb', 'vine',
+      'cloud', 'wind', 'rain', 'snow', 'frost', 'mist', 'shadow', 'light',
+      'fire', 'water', 'earth', 'air', 'sky', 'star', 'moon', 'sun',
+    ];
+
+    const creatures = [
+      'penguin', 'eagle', 'dolphin', 'whale', 'bear', 'wolf', 'fox', 'deer',
+      'rabbit', 'squirrel', 'owl', 'raven', 'swan', 'crane', 'heron', 'kingfisher',
+      'butterfly', 'dragonfly', 'bee', 'ant', 'spider', 'beetle', 'moth', 'cricket',
+      'salmon', 'trout', 'pike', 'perch', 'shark', 'ray', 'octopus', 'squid',
+      'lion', 'tiger', 'leopard', 'cheetah', 'panther', 'cougar', 'puma', 'jaguar',
+      'otter', 'seal', 'walrus', 'manatee', 'dugong', 'badger', 'meerkat', 'mongoose',
+      'peacock', 'pheasant', 'partridge', 'quail', 'ibis', 'flamingo', 'stork', 'pelican',
+    ];
+
+    const objects = [
+      'crystal', 'lighthouse', 'compass', 'anchor', 'lantern', 'prism', 'mirror', 'lens',
+      'shell', 'pearl', 'gem', 'jewel', 'coin', 'key', 'lock', 'chest',
+      'bell', 'chime', 'gong', 'harp', 'lute', 'flute', 'drum', 'horn',
+      'candle', 'torch', 'ember', 'spark', 'flame', 'coal', 'dust', 'ash',
+      'feather', 'quill', 'brush', 'thread', 'needle', 'knot', 'rope', 'net',
+      'sail', 'mast', 'hull', 'deck', 'bow', 'stern', 'anchor', 'helm',
+      'dagger', 'sword', 'shield', 'arrow', 'bow', 'spear', 'lance', 'staff',
+    ];
+
+    const desc = descriptors[Math.floor(Math.random() * descriptors.length)];
+    const elem = elements[Math.floor(Math.random() * elements.length)];
+    const creature = creatures[Math.floor(Math.random() * creatures.length)];
+    const obj = objects[Math.floor(Math.random() * objects.length)];
+
+    return `${desc}-${elem}-${creature}-${obj}`;
   }
 
   /**
