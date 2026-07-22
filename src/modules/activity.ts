@@ -160,8 +160,8 @@ export class ActivityDetector {
       sig,
     };
 
-    const result = await this.relayPool.publish(event);
-    console.debug(`[Activity] Published ${activity.service} to Nostr (${result.successes}/${result.successes + result.failures} relays)`);
+    await this.relayPool.publish(event);
+    console.debug(`[Activity] Published ${activity.service} activity to Nostr`);
   }
 
   private _buildEventContent(activity: Activity): string {
