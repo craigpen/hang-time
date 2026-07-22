@@ -18,11 +18,18 @@ export class TabService implements IServiceModule {
   async getCurrentActivity(): Promise<Activity | null> {
     try {
       const tabs = await chrome.tabs.query({ windowType: 'normal' });
+      console.debug(`[TabService] Found ${tabs.length} tabs`);
+
+      // Log all tabs for debugging
+      tabs.forEach((tab, idx) => {
+        console.debug(`[TabService] Tab ${idx}: ${tab.title} | ${tab.url}`);
+      });
 
       // Check each service in priority order, using most recently accessed tab
       const netflixTab = this._findMostRecentTabByDomain(tabs, 'netflix');
       if (netflixTab) {
         const title = this._extractNetflixTitle(netflixTab.title || '');
+        console.debug(`[TabService] Detected Netflix: ${title}`);
         return {
           service: 'netflix',
           content: title || 'Netflix Content',
@@ -35,6 +42,7 @@ export class TabService implements IServiceModule {
       const youtubeTab = this._findMostRecentTabByDomain(tabs, 'youtube');
       if (youtubeTab) {
         const title = this._extractYouTubeTitle(youtubeTab.title || '');
+        console.debug(`[TabService] Detected YouTube: ${title}`);
         return {
           service: 'youtube',
           content: title || 'YouTube Video',
@@ -44,6 +52,7 @@ export class TabService implements IServiceModule {
         };
       }
 
+      console.debug('[TabService] No video content found');
       // No video content found
       return { service: 'idle', content: 'Idle', timestamp: Date.now(), metadata: {} };
     } catch (error) {
