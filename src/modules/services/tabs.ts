@@ -25,31 +25,50 @@ export class TabService implements IServiceModule {
         console.debug(`[TabService] Tab ${idx}: ${tab.title} | ${tab.url}`);
       });
 
-      // Check each service in priority order, using most recently accessed tab
+      // Detect ALL active services, not just the first one
+      const detectedActivities: Activity[] = [];
+
+      // Check for Netflix
       const netflixTab = this._findMostRecentTabByDomain(tabs, 'netflix');
       if (netflixTab) {
         const title = this._extractNetflixTitle(netflixTab.title || '');
         console.debug(`[TabService] Detected Netflix: ${title}`);
-        return {
+        detectedActivities.push({
           service: 'netflix',
           content: title || 'Netflix Content',
           url: netflixTab.url,
           timestamp: Date.now(),
-          metadata: { title },
-        };
+          metadata: { title, lastAccessed: netflixTab.lastAccessed || 0 },
+        });
       }
 
+      // Check for YouTube
       const youtubeTab = this._findMostRecentTabByDomain(tabs, 'youtube');
       if (youtubeTab) {
         const title = this._extractYouTubeTitle(youtubeTab.title || '');
         console.debug(`[TabService] Detected YouTube: ${title}`);
-        return {
+        detectedActivities.push({
           service: 'youtube',
           content: title || 'YouTube Video',
           url: youtubeTab.url,
           timestamp: Date.now(),
-          metadata: { title },
-        };
+          metadata: { title, lastAccessed: youtubeTab.lastAccessed || 0 },
+        });
+      }
+
+      // If multiple activities detected, return the most recently accessed one
+      if (detectedActivities.length > 1) {
+        const mostRecent = detectedActivities.reduce((a, b) => {
+          const aTime = (a.metadata?.lastAccessed as number) || 0;
+          const bTime = (b.metadata?.lastAccessed as number) || 0;
+          return aTime > bTime ? a : b;
+        });
+        console.debug(`[TabService] Multiple services detected, returning most recent: ${mostRecent.service}`);
+        return mostRecent;
+      }
+
+      if (detectedActivities.length === 1) {
+        return detectedActivities[0];
       }
 
       console.debug('[TabService] No video content found');
