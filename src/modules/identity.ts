@@ -3,9 +3,13 @@
  * Generates and manages user's memorable identifier
  */
 
-import { getPublicKey } from '@noble/secp256k1';
+import * as secp from '@noble/secp256k1';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { StorageManager } from './storage';
 import { UserProfile, AuthError } from '../types';
+
+// Configure secp256k1 to use sha256 for signing
+secp.hashes.sha256 = sha256;
 
 export class IdentityManager {
   private identifierCache: string | null = null;
@@ -114,7 +118,7 @@ export class IdentityManager {
     const secretKey = this._bytesToHex(secretKeyBytes);
 
     // Derive public key from secret key
-    const publicKeyBytes = getPublicKey(secretKeyBytes);
+    const publicKeyBytes = secp.getPublicKey(secretKeyBytes);
     const pubkey = this._bytesToHex(publicKeyBytes);
 
     return { pubkey, secretKey };

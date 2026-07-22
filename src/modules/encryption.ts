@@ -6,8 +6,11 @@
 
 import nacl from 'tweetnacl';
 import { decodeUTF8, encodeBase64, decodeBase64 } from 'tweetnacl-util';
-import { schnorr } from '@noble/secp256k1';
-import { sha256 } from '@noble/hashes/sha2'; // Enables schnorr signing
+import * as secp from '@noble/secp256k1';
+import { sha256 } from '@noble/hashes/sha2.js';
+
+// Configure secp256k1 to use sha256 for Schnorr signing
+secp.hashes.sha256 = sha256;
 
 export class EncryptionManager {
   /**
@@ -204,7 +207,7 @@ export class EncryptionManager {
       const secretKeyBytes = this._hexToBytes(secretKeyHex);
       const eventIdBytes = this._hexToBytes(eventId);
       // Sign using secp256k1 Schnorr signature (BIP-340)
-      const signature = schnorr.sign(eventIdBytes, secretKeyBytes);
+      const signature = secp.schnorr.sign(eventIdBytes, secretKeyBytes);
       // Return as hex string (64-char hex = 32 bytes)
       return signature.toHex();
     } catch (error) {
