@@ -204,6 +204,19 @@ export class FriendManager {
   private _generateId(): string {
     return generateSecureRandom(16);
   }
+
+  private _derivePubkeyFromIdentifier(identifier: string): string {
+    // Derive deterministic pubkey from identifier using SHA-256
+    // This allows the same identifier to always produce the same pubkey
+    const hash = sha256(identifier);
+    // SHA-256 produces 32 bytes, convert to 64-char hex string
+    let hex = '';
+    for (let i = 0; i < hash.length; i++) {
+      const byte = hash[i].toString(16);
+      hex += byte.length === 1 ? '0' + byte : byte;
+    }
+    return hex;
+  }
 }
 
 // Singleton instance with lazy initialization
