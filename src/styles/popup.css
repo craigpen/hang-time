@@ -984,3 +984,167 @@ body {
 .footer-links a:hover {
   opacity: 0.7;
 }
+
+/* ============================================================================
+   COLLAPSIBLE LIST STYLES (New popup structure)
+   ============================================================================ */
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+}
+
+.activity-item {
+  border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.activity-item.my-activity-item {
+  border-bottom: 2px solid var(--accent-primary);
+}
+
+.activity-item.my-activity-item .activity-header {
+  font-weight: 600;
+  background-color: var(--bg-tertiary);
+  cursor: default;
+}
+
+.activity-item.inactive {
+  opacity: 0.6;
+}
+
+.activity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.activity-header:hover:not(.my-activity-item .activity-header) {
+  background-color: var(--bg-tertiary);
+}
+
+.activity-label {
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.activity-status {
+  font-size: 0.85em;
+  color: var(--text-tertiary);
+  padding: 2px 8px;
+  border-radius: 3px;
+  background-color: var(--bg-tertiary);
+}
+
+.activity-content {
+  padding: 0 16px;
+  overflow: hidden;
+  background-color: var(--bg-secondary);
+}
+
+.activity-items {
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.activity-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.95em;
+  color: var(--text-secondary);
+}
+
+.activity-badge {
+  font-size: 1.2em;
+  min-width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.activity-content-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.activity-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 0 16px 0;
+  flex-wrap: wrap;
+}
+
+.activity-actions .btn-action {
+  padding: 6px 12px;
+  font-size: 0.85em;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.activity-actions .btn-action:hover {
+  background-color: var(--accent-primary);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+.activity-actions .btn-action.btn-join {
+  background-color: var(--accent-primary);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+.activity-actions .btn-action.btn-join:hover {
+  opacity: 0.9;
+}
+
+.activity-item.expanded {
+  border-bottom-color: var(--accent-primary);
+}
+
+.toggle-section {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-secondary);
+  font-size: 0.9em;
+}
+
+.toggle-label input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.friends-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.no-friends {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-tertiary);
+}
