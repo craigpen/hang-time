@@ -146,6 +146,10 @@ export class ActivityDetector {
     // Must be done AFTER all tags are added
     const id = await this._computeEventId(pubkey, created_at, kind, tags, content);
 
+    // Sign the event with the user's secret key
+    const secretKey = await this.identityManager.getSecretKey();
+    const sig = encryptionManager.signEvent(id, secretKey);
+
     const event: NostrEvent = {
       id,
       pubkey,
@@ -153,6 +157,7 @@ export class ActivityDetector {
       kind,
       tags,
       content,
+      sig,
     };
 
     const result = await this.relayPool.publish(event);

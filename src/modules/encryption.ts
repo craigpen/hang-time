@@ -194,6 +194,20 @@ export class EncryptionManager {
     }
   }
 
+  /**
+   * Sign an event ID with a secret key (Schnorr signature for Nostr)
+   */
+  signEvent(eventId: string, secretKeyHex: string): string {
+    try {
+      const secretKeyBytes = this._hexToBytes(secretKeyHex);
+      const eventIdBytes = this._hexToBytes(eventId);
+      const signature = nacl.sign.detached(eventIdBytes, secretKeyBytes);
+      return this._bytesToHex(signature);
+    } catch (error) {
+      throw new Error(`Event signing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
   // Private utility methods
   private _hexToBytes(hex: string): Uint8Array {
     if (hex.length % 2 !== 0) {

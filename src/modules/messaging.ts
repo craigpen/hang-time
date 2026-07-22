@@ -163,6 +163,10 @@ export class MessagingManager {
       // Compute event ID from canonical event format (required by NIP-01)
       const id = await this._computeEventId(userPubkey, created_at, kind, tags, encryptedContent);
 
+      // Sign the event with the user's secret key
+      const secretKey = await this.identityManager.getSecretKey();
+      const sig = encryptionManager.signEvent(id, secretKey);
+
       // Create Nostr kind 4 (encrypted DM) event
       const event: NostrEvent = {
         id,
@@ -171,6 +175,7 @@ export class MessagingManager {
         kind,
         tags,
         content: encryptedContent,
+        sig,
       };
 
       await this.relayPool.publish(event);

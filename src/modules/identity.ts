@@ -3,6 +3,7 @@
  * Generates and manages user's memorable identifier
  */
 
+import nacl from 'tweetnacl';
 import { StorageManager } from './storage';
 import { UserProfile, AuthError } from '../types';
 
@@ -49,6 +50,17 @@ export class IdentityManager {
   }
 
   /**
+   * Get user's Nostr secret key (hex format, for signing)
+   */
+  async getSecretKey(): Promise<string> {
+    const profile = await this.storage.getUserProfile();
+    if (!profile?.secret_key) {
+      throw new Error('Secret key not found - user profile not initialized');
+    }
+    return profile.secret_key;
+  }
+
+  /**
    * Generate new memorable identifier
    * Uses memorable adjective + animal + random number pattern
    */
@@ -61,13 +73,14 @@ export class IdentityManager {
     }
 
     const identifier = this._createMemorableId();
-    const pubkey = this._generatePubkey();
+    const { pubkey, secretKey } = this._generateSigningKeypair();
     const now = Date.now();
 
     // Create user profile
     const profile: UserProfile = {
       memorable_identifier: identifier,
       pubkey,
+      secret_key: secretKey,
       created_at: now,
       services_enabled: {
         spotify: false,
@@ -91,11 +104,17 @@ export class IdentityManager {
   }
 
   /**
-   * Generate a random hex public key for Nostr (64 characters)
+   * Generate Nostr signing keypair (public + secret key)
+   * Uses NaCl signing (Ed25519)
    */
-  private _generatePubkey(): string {
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
+  private _generateSigningKeypair(): { pubkey: string; secretKey: string } {
+    const keyPair = nacl.sign.keyPair();
+    const pubkey = this._bytesToHex(keyPair.publicKey);
+    const secretKey = this._bytesToHex(keyPair.secretKey);
+    return { pubkey, secretKey };
+  }
+
+  private _bytesToHex(bytes: Uint8Array): string {
     let hex = '';
     for (let i = 0; i < bytes.length; i++) {
       const byte = bytes[i].toString(16);

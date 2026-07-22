@@ -10,6 +10,7 @@
 export interface UserProfile {
   memorable_identifier: string;
   pubkey: string; // Hex public key for Nostr (64 chars)
+  secret_key: string; // Hex secret key for signing events (128 chars)
   created_at: number;
   discord_info?: string;
   services_enabled: {

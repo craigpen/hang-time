@@ -57,6 +57,10 @@ export class TimeSyncManager {
       // Compute event ID from canonical event format (required by NIP-01)
       const id = await this._computeEventId(userPubkey, created_at, kind, tags, content);
 
+      // Sign the event with the user's secret key
+      const secretKey = await this.identityManager.getSecretKey();
+      const sig = encryptionManager.signEvent(id, secretKey);
+
       const event: NostrEvent = {
         id,
         pubkey: userPubkey,
@@ -64,6 +68,7 @@ export class TimeSyncManager {
         kind,
         tags,
         content,
+        sig,
       };
 
       await this.relayPool.publish(event);
