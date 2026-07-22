@@ -726,7 +726,6 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
   const friend = friends.find((f) => f.identifier === friendIdentifier);
 
   if (!friend) {
-    console.debug(`[Background] Received activity event but friend not found: ${friendIdentifier}`);
     return;
   }
 
@@ -743,8 +742,6 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
   // Regular activity event
   const activity = _parseActivityEvent(event);
   const wasActive = friend.current_activity?.service !== 'idle';
-
-  console.debug(`[Background] Updating friend activity: ${friendIdentifier} -> ${activity.service}: ${activity.content}`);
 
   await storageManager.updateFriend(friend.id, {
     current_activity: activity,
