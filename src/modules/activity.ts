@@ -99,11 +99,15 @@ export class ActivityDetector {
       return { service: 'idle', content: 'Idle', timestamp: Date.now(), metadata: {} };
     }
 
+    console.debug('[Activity] Services enabled:', profile.services_enabled);
+
     // Check each enabled service in order
-    const serviceOrder: ServiceName[] = ['spotify', 'twitch', 'steam', 'netflix', 'youtube'];
+    // Note: netflix and youtube detection is handled by 'tabs' service
+    const serviceOrder: ServiceName[] = ['spotify', 'twitch', 'steam'];
 
     for (const serviceName of serviceOrder) {
       if (!profile.services_enabled[serviceName]) {
+        console.debug(`[Activity] ${serviceName} disabled, skipping`);
         continue;
       }
 
@@ -113,12 +117,33 @@ export class ActivityDetector {
       }
 
       try {
+        console.debug(`[Activity] Checking ${serviceName}...`);
         const activity = await service.getCurrentActivity();
         if (activity && activity.service !== 'idle') {
+          console.debug(`[Activity] Detected ${serviceName}: ${activity.content}`);
           return activity;
         }
+        console.debug(`[Activity] ${serviceName} returned idle or null`);
       } catch (error) {
-        console.error(`[Activity] Failed to detect ${serviceName}:`, error);
+        console.error(`[Activity] CRITICAL ERROR detecting ${serviceName}:`, error);
+      }
+    }
+
+    // Check browser tab detection (netflix and youtube)
+    if (profile.services_enabled.netflix || profile.services_enabled.youtube) {
+      const tabService = this.services.get('tabs');
+      if (tabService) {
+        try {
+          console.debug('[Activity] Checking tabs for netflix/youtube...');
+          const activity = await tabService.getCurrentActivity();
+          if (activity && activity.service !== 'idle') {
+            console.debug(`[Activity] Detected from tabs: ${activity.service}`);
+            return activity;
+          }
+          console.debug('[Activity] tabs service returned idle or null');
+        } catch (error) {
+          console.error('[Activity] CRITICAL ERROR detecting tabs:', error);
+        }
       }
     }
 
