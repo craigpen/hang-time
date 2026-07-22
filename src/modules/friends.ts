@@ -7,6 +7,7 @@ import { Friend, FriendList, Activity } from '../types';
 import { StorageManager } from './storage';
 import { secureLog, validateFriendName, generateSecureRandom } from './security-utils';
 import { sha256 } from '@noble/hashes/sha2.js';
+import * as secp from '@noble/secp256k1';
 
 export class FriendManager {
   constructor(private storage: StorageManager) {}
@@ -213,15 +214,19 @@ export class FriendManager {
   }
 
   private _derivePubkeyFromIdentifier(identifier: string): string {
-    // Derive deterministic pubkey from identifier using SHA-256
-    // This allows the same identifier to always produce the same pubkey
+    // Derive deterministic Schnorr public key from identifier (same as identity.ts)
+    // This ensures friend pubkeys match what they derive from their own identifier
     const encoder = new TextEncoder();
-    const bytes = encoder.encode(identifier);
-    const hash = sha256(bytes);
-    // SHA-256 produces 32 bytes, convert to 64-char hex string
+    const identifierBytes = encoder.encode(identifier);
+    const hash = sha256(identifierBytes);
+    // Use first 32 bytes of SHA-256 hash as secret key
+    const secretKeyBytes = new Uint8Array(hash.slice(0, 32));
+    // Derive Schnorr public key (32 bytes, raw x-coordinate for Nostr)
+    const publicKeyBytes = secp.schnorr.getPublicKey(secretKeyBytes);
+    // Convert to hex string
     let hex = '';
-    for (let i = 0; i < hash.length; i++) {
-      const byte = hash[i].toString(16);
+    for (let i = 0; i < publicKeyBytes.length; i++) {
+      const byte = publicKeyBytes[i].toString(16);
       hex += byte.length === 1 ? '0' + byte : byte;
     }
     return hex;
