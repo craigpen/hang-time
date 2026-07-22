@@ -156,13 +156,20 @@ export class MessagingManager {
 
       const encryptedContent = encryptionManager.encrypt(content, friendPublicKey);
 
+      const created_at = Math.floor(Date.now() / 1000);
+      const kind = 4;
+      const tags: Array<[string, string]> = [['p', friendIdentifier]];
+
+      // Compute event ID from canonical event format (required by NIP-01)
+      const id = this._computeEventId(userPubkey, created_at, kind, tags, encryptedContent);
+
       // Create Nostr kind 4 (encrypted DM) event
       const event: NostrEvent = {
-        id: this._generateId(),
+        id,
         pubkey: userPubkey,
-        created_at: Math.floor(Date.now() / 1000),
-        kind: 4,
-        tags: [['p', friendIdentifier]],
+        created_at,
+        kind,
+        tags,
         content: encryptedContent,
       };
 
@@ -174,16 +181,12 @@ export class MessagingManager {
     }
   }
 
-  private _generateId(): string {
-    // Generate a valid Nostr event ID (64-character hex string, 32 random bytes)
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    let hex = '';
-    for (let i = 0; i < bytes.length; i++) {
-      const byte = bytes[i].toString(16);
-      hex += byte.length === 1 ? '0' + byte : byte;
-    }
-    return hex;
+  private _computeEventId(pubkey: string, created_at: number, kind: number, tags: Array<[string, string]>, content: string): string {
+    // Nostr event ID = SHA-256 hash of canonical event format
+    // Canonical format: [0, pubkey, created_at, kind, tags, content]
+    const eventData = [0, pubkey, created_at, kind, tags, content];
+    const canonicalJson = JSON.stringify(eventData);
+    return encryptionManager.hash(canonicalJson).substring(0, 64);
   }
 }
 

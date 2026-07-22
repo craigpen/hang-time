@@ -128,17 +128,24 @@ export class ActivityDetector {
 
   private async _publishActivity(activity: Activity): Promise<void> {
     const pubkey = await this.identityManager.getPubkey();
+    const created_at = Math.floor(Date.now() / 1000);
+    const kind = 1;
+    const tags = [
+      ['service', activity.service],
+      ['content', activity.content],
+    ];
+    const content = this._buildEventContent(activity);
+
+    // Compute event ID from canonical event format (required by NIP-01)
+    const id = this._computeEventId(pubkey, created_at, kind, tags, content);
 
     const event: NostrEvent = {
-      id: this._generateEventId(),
+      id,
       pubkey,
-      created_at: Math.floor(Date.now() / 1000),
-      kind: 1,
-      tags: [
-        ['service', activity.service],
-        ['content', activity.content],
-      ],
-      content: this._buildEventContent(activity),
+      created_at,
+      kind,
+      tags,
+      content,
     };
 
     if (activity.url) {
@@ -170,16 +177,12 @@ export class ActivityDetector {
     );
   }
 
-  private _generateEventId(): string {
-    // Generate a valid Nostr event ID (64-character hex string, 32 random bytes)
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    let hex = '';
-    for (let i = 0; i < bytes.length; i++) {
-      const byte = bytes[i].toString(16);
-      hex += byte.length === 1 ? '0' + byte : byte;
-    }
-    return hex;
+  private _computeEventId(pubkey: string, created_at: number, kind: number, tags: Array<[string, string]>, content: string): string {
+    // Nostr event ID = SHA-256 hash of canonical event format
+    // Canonical format: [0, pubkey, created_at, kind, tags, content]
+    const eventData = [0, pubkey, created_at, kind, tags, content];
+    const canonicalJson = JSON.stringify(eventData);
+    return encryptionManager.hash(canonicalJson).substring(0, 64);
   }
 
   private async _notifyPopup(message: ExtensionMessage): Promise<void> {

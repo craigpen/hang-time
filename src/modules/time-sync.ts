@@ -42,21 +42,28 @@ export class TimeSyncManager {
   ): Promise<void> {
     try {
       const userPubkey = await this.identityManager.getPubkey();
+      const created_at = Math.floor(Date.now() / 1000);
+      const kind = 1; // Use kind 1 for time-sync events with special tags
+      const tags: Array<[string, string]> = [
+        ['type', 'time-sync'],
+        ['service', service],
+        ['video_id', videoId],
+        ['current_time', Math.floor(currentTime).toString()],
+        ['duration', Math.floor(duration).toString()],
+        ['playing', isPlaying ? 'true' : 'false'],
+      ];
+      const content = `Watching ${service}: ${videoId} at ${this._formatTime(currentTime)}/${this._formatTime(duration)}`;
+
+      // Compute event ID from canonical event format (required by NIP-01)
+      const id = this._computeEventId(userPubkey, created_at, kind, tags, content);
 
       const event: NostrEvent = {
-        id: this._generateId(),
+        id,
         pubkey: userPubkey,
-        created_at: Math.floor(Date.now() / 1000),
-        kind: 1, // Use kind 1 for time-sync events with special tags
-        tags: [
-          ['type', 'time-sync'],
-          ['service', service],
-          ['video_id', videoId],
-          ['current_time', Math.floor(currentTime).toString()],
-          ['duration', Math.floor(duration).toString()],
-          ['playing', isPlaying ? 'true' : 'false'],
-        ],
-        content: `Watching ${service}: ${videoId} at ${this._formatTime(currentTime)}/${this._formatTime(duration)}`,
+        created_at,
+        kind,
+        tags,
+        content,
       };
 
       await this.relayPool.publish(event);
@@ -176,16 +183,12 @@ export class TimeSyncManager {
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   }
 
-  private _generateId(): string {
-    // Generate a valid Nostr event ID (64-character hex string, 32 random bytes)
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    let hex = '';
-    for (let i = 0; i < bytes.length; i++) {
-      const byte = bytes[i].toString(16);
-      hex += byte.length === 1 ? '0' + byte : byte;
-    }
-    return hex;
+  private _computeEventId(pubkey: string, created_at: number, kind: number, tags: Array<[string, string]>, content: string): string {
+    // Nostr event ID = SHA-256 hash of canonical event format
+    // Canonical format: [0, pubkey, created_at, kind, tags, content]
+    const eventData = [0, pubkey, created_at, kind, tags, content];
+    const canonicalJson = JSON.stringify(eventData);
+    return encryptionManager.hash(canonicalJson).substring(0, 64);
   }
 }
 
