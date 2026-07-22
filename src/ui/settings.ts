@@ -173,6 +173,16 @@ export class SettingsController {
   }
 
   private _setupEventListeners(): void {
+    // Refresh status button
+    const refreshBtn = document.getElementById('refresh-status-btn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        this._loadServiceStatus().catch((error) => {
+          console.error('[Settings] Refresh failed:', error);
+        });
+      });
+    }
+
     // Close button
     const closeBtn = document.getElementById('close-btn');
     if (closeBtn) {

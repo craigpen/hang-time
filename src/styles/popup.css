@@ -62,6 +62,25 @@ body {
   margin-bottom: 8px;
 }
 
+.my-activity-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  font-size: 1em;
+  cursor: pointer;
+  padding: 4px 6px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.btn-icon:hover {
+  opacity: 1;
+}
+
 .my-activity-label {
   font-weight: 600;
   color: var(--text-primary);

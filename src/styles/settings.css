@@ -49,6 +49,30 @@ body {
   padding: 20px;
 }
 
+.settings-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.btn-refresh {
+  padding: 8px 16px;
+  background-color: var(--accent-primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9em;
+  transition: opacity 0.2s;
+}
+
+.btn-refresh:hover {
+  opacity: 0.9;
+}
+
 /* ============================================================================
    Sections
    ============================================================================ */

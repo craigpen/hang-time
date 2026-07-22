@@ -371,6 +371,12 @@ export class PopupController {
       });
     }
 
+    // Refresh activity button
+    const refreshBtn = document.getElementById('refresh-activity-btn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => this._loadMyActivity());
+    }
+
     // Copy ID button
     const copyIdBtn = document.getElementById('copy-id-btn');
     if (copyIdBtn) {
