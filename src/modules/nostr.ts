@@ -324,11 +324,7 @@ export class RelayPool {
   private subscriptions: Map<string, Set<(event: NostrEvent) => Promise<void>>> = new Map();
 
   static readonly DEFAULT_RELAYS = [
-    'wss://relay.damus.io',
     'wss://nos.lol',
-    'wss://relay.snort.social',
-    'wss://nostr.mom',
-    'wss://relay.mostr.pub',
   ];
 
   async connect(relayUrls: string[]): Promise<void> {
