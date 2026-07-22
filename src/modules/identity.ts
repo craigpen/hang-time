@@ -117,8 +117,8 @@ export class IdentityManager {
     crypto.getRandomValues(secretKeyBytes);
     const secretKey = this._bytesToHex(secretKeyBytes);
 
-    // Derive public key from secret key
-    const publicKeyBytes = secp.getPublicKey(secretKeyBytes);
+    // Derive Schnorr public key (32 bytes, raw x-coordinate for Nostr)
+    const publicKeyBytes = secp.schnorr.getPublicKey(secretKeyBytes);
     const pubkey = this._bytesToHex(publicKeyBytes);
 
     return { pubkey, secretKey };
