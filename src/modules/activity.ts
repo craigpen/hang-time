@@ -130,13 +130,20 @@ export class ActivityDetector {
     const pubkey = await this.identityManager.getPubkey();
     const created_at = Math.floor(Date.now() / 1000);
     const kind = 1;
-    const tags = [
+    const tags: Array<[string, string]> = [
       ['service', activity.service],
       ['content', activity.content],
     ];
+
+    // Add URL tag before computing event ID
+    if (activity.url) {
+      tags.push(['url', activity.url]);
+    }
+
     const content = this._buildEventContent(activity);
 
     // Compute event ID from canonical event format (required by NIP-01)
+    // Must be done AFTER all tags are added
     const id = this._computeEventId(pubkey, created_at, kind, tags, content);
 
     const event: NostrEvent = {
@@ -147,10 +154,6 @@ export class ActivityDetector {
       tags,
       content,
     };
-
-    if (activity.url) {
-      event.tags.push(['url', activity.url]);
-    }
 
     const result = await this.relayPool.publish(event);
     console.debug(`[Activity] Published ${activity.service} to Nostr (${result.successes}/${result.successes + result.failures} relays)`);
