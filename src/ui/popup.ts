@@ -535,13 +535,27 @@ export class PopupController {
     item.className = 'activity-item-row';
     item.title = activity.content;
 
-    const badge = this._getActivityBadge(activity.service);
-    const content = this._escapeHtml(this._truncateActivityContent(activity.content));
+    // Favicon with fallback
+    const faviconDiv = document.createElement('div');
+    faviconDiv.className = 'activity-item-favicon';
+    const img = document.createElement('img');
+    img.src = this._getFaviconUrl(activity.service);
+    img.alt = activity.service;
+    img.onerror = () => {
+      img.style.display = 'none';
+      const fallback = document.createElement('span');
+      fallback.textContent = this._getActivityBadge(activity.service);
+      faviconDiv.appendChild(fallback);
+    };
+    faviconDiv.appendChild(img);
 
-    item.innerHTML = `
-      <span class="activity-badge">${badge}</span>
-      <span class="activity-content-text">${content}</span>
-    `;
+    // Content
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'activity-content-text';
+    contentDiv.textContent = this._truncateActivityContent(activity.content);
+
+    item.appendChild(faviconDiv);
+    item.appendChild(contentDiv);
 
     return item;
   }
