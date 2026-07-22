@@ -4,7 +4,7 @@
  * NIP-01 compliant with proper OK, NOTICE, and CLOSED handling
  */
 
-import { NostrEvent, NostrError } from '../types';
+import { NostrEvent, NostrError, DEFAULT_RELAY_URLS } from '../types';
 
 export interface IRelayConnection {
   url: string;
@@ -323,9 +323,7 @@ export class RelayPool {
   private relays: Map<string, RelayConnection> = new Map();
   private subscriptions: Map<string, Set<(event: NostrEvent) => Promise<void>>> = new Map();
 
-  static readonly DEFAULT_RELAYS = [
-    'wss://nos.lol',
-  ];
+  static readonly DEFAULT_RELAYS = DEFAULT_RELAY_URLS;
 
   async connect(relayUrls: string[]): Promise<void> {
     console.debug(`[Nostr] Connecting to ${relayUrls.length} relays...`);

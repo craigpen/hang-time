@@ -173,11 +173,15 @@ export interface Settings {
   message_history_limit: number;
 }
 
+// ============================================================================
+// NOSTR RELAYS (Single source of truth)
+// ============================================================================
+
+export const DEFAULT_RELAY_URLS = ['wss://nos.lol'];
+
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'auto',
-  relay_urls: [
-    'wss://nos.lol',
-  ],
+  relay_urls: DEFAULT_RELAY_URLS,
   activity_poll_interval_ms: 5000,
   publish_rate_limit_ms: 2000,
   show_offline_friends: false,
