@@ -3,7 +3,7 @@
  * Generates and manages user's memorable identifier
  */
 
-import nacl from 'tweetnacl';
+import { getPublicKey } from '@noble/secp256k1';
 import { StorageManager } from './storage';
 import { UserProfile, AuthError } from '../types';
 
@@ -105,12 +105,18 @@ export class IdentityManager {
 
   /**
    * Generate Nostr signing keypair (public + secret key)
-   * Uses NaCl signing (Ed25519)
+   * Uses secp256k1 Schnorr signatures (Nostr standard)
    */
   private _generateSigningKeypair(): { pubkey: string; secretKey: string } {
-    const keyPair = nacl.sign.keyPair();
-    const pubkey = this._bytesToHex(keyPair.publicKey);
-    const secretKey = this._bytesToHex(keyPair.secretKey);
+    // Generate random 32-byte secret key
+    const secretKeyBytes = new Uint8Array(32);
+    crypto.getRandomValues(secretKeyBytes);
+    const secretKey = this._bytesToHex(secretKeyBytes);
+
+    // Derive public key from secret key
+    const publicKeyBytes = getPublicKey(secretKeyBytes);
+    const pubkey = this._bytesToHex(publicKeyBytes);
+
     return { pubkey, secretKey };
   }
 
