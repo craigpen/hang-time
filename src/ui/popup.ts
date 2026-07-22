@@ -311,6 +311,35 @@ export class PopupController {
         chrome.runtime.openOptionsPage();
       });
     }
+
+    const addFriendBtn = document.getElementById('add-friend-btn');
+    if (addFriendBtn) {
+      addFriendBtn.addEventListener('click', () => this._handleAddFriend());
+    }
+  }
+
+  private async _handleAddFriend(): Promise<void> {
+    const identifier = prompt('Enter friend\'s Nostr identifier:\n\n(e.g., AwfulArbitrative2001)');
+    if (!identifier || !identifier.trim()) return;
+
+    const localName = prompt('Nickname for this friend:') || identifier;
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'ADD_FRIEND',
+        data: { identifier: identifier.trim(), localName: localName.trim() },
+      });
+
+      if (response.success) {
+        console.debug('[Popup] Friend added successfully');
+        await this.refreshFriends();
+      } else {
+        alert(`Failed to add friend: ${response.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('[Popup] Add friend failed:', error);
+      alert('Failed to add friend');
+    }
   }
 
   private _getActivityBadge(service: string): string {
