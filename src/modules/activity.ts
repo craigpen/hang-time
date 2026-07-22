@@ -144,7 +144,7 @@ export class ActivityDetector {
 
     // Compute event ID from canonical event format (required by NIP-01)
     // Must be done AFTER all tags are added
-    const id = this._computeEventId(pubkey, created_at, kind, tags, content);
+    const id = await this._computeEventId(pubkey, created_at, kind, tags, content);
 
     const event: NostrEvent = {
       id,
@@ -180,12 +180,13 @@ export class ActivityDetector {
     );
   }
 
-  private _computeEventId(pubkey: string, created_at: number, kind: number, tags: Array<[string, string]>, content: string): string {
-    // Nostr event ID = SHA-256 hash of canonical event format
+  private async _computeEventId(pubkey: string, created_at: number, kind: number, tags: Array<[string, string]>, content: string): Promise<string> {
+    // Nostr event ID = SHA-256 hash of canonical event format (NIP-01)
     // Canonical format: [0, pubkey, created_at, kind, tags, content]
     const eventData = [0, pubkey, created_at, kind, tags, content];
     const canonicalJson = JSON.stringify(eventData);
-    return encryptionManager.hash(canonicalJson).substring(0, 64);
+    const hash256 = await encryptionManager.sha256(canonicalJson);
+    return hash256.substring(0, 64);
   }
 
   private async _notifyPopup(message: ExtensionMessage): Promise<void> {

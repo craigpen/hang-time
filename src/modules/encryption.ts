@@ -173,11 +173,25 @@ export class EncryptionManager {
   }
 
   /**
-   * Hash a string (for validation/checksums)
+   * Hash a string (SHA-512 via NaCl, for validation/checksums)
    */
   hash(data: string): string {
     const hash = nacl.hash(decodeUTF8(data));
     return this._bytesToHex(hash);
+  }
+
+  /**
+   * Compute SHA-256 hash (for Nostr event IDs per NIP-01)
+   */
+  async sha256(data: string): Promise<string> {
+    try {
+      const encoder = new TextEncoder();
+      const dataBuffer = encoder.encode(data);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+      return this._bytesToHex(new Uint8Array(hashBuffer));
+    } catch (error) {
+      throw new Error(`SHA-256 hashing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   // Private utility methods
