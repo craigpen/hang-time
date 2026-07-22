@@ -88,10 +88,13 @@ export class StorageManager {
   // ============================================================================
 
   async getUserProfile(): Promise<UserProfile | undefined> {
-    return this.get<UserProfile>(STORAGE_KEYS.USER_PROFILE);
+    const profile = await this.get<UserProfile>(STORAGE_KEYS.USER_PROFILE);
+    console.debug('[Storage] Loaded profile with steam_id:', profile?.steam_id);
+    return profile;
   }
 
   async setUserProfile(profile: UserProfile): Promise<void> {
+    console.debug('[Storage] Saving profile with steam_id:', profile.steam_id);
     await this.set(STORAGE_KEYS.USER_PROFILE, profile);
   }
 

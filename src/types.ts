@@ -13,6 +13,7 @@ export interface UserProfile {
   secret_key: string; // Hex secret key for signing events (128 chars)
   created_at: number;
   discord_info?: string;
+  steam_id?: string;
   services_enabled: {
     spotify: boolean;
     twitch: boolean;
@@ -96,9 +97,11 @@ export interface ActivityHistory {
 
 export interface Message {
   id: string;
+  friend_id: string;
+  friend_identifier: string;
   sender_identifier: string;
-  recipient_identifier: string;
-  content_encrypted: string;
+  content: string;
+  is_outbound: boolean;
   timestamp: number;
   read: boolean;
   nostr_event_id?: string;
@@ -205,10 +208,14 @@ export const STORAGE_KEYS = {
 
 export type ExtensionMessageType =
   | 'GET_CURRENT_ACTIVITY'
+  | 'GET_ALL_ACTIVE_ACTIVITIES'
+  | 'GET_BROWSER_ACTIVITIES'
   | 'GET_ACTIVE_FRIENDS'
+  | 'GET_ALL_FRIENDS'
   | 'GET_FRIEND_ACTIVITY_HISTORY'
   | 'GET_USER_IDENTIFIER'
   | 'GET_MESSAGES'
+  | 'GET_OAUTH_STATUS'
   | 'ADD_FRIEND'
   | 'REMOVE_FRIEND'
   | 'RENAME_FRIEND'
@@ -216,6 +223,14 @@ export type ExtensionMessageType =
   | 'TOGGLE_SERVICE'
   | 'MUTE_FRIEND'
   | 'UNMUTE_FRIEND'
+  | 'SAVE_SETTINGS'
+  | 'RESTORE_SETTINGS'
+  | 'AUTHENTICATE_SERVICE'
+  | 'DISCONNECT_SERVICE'
+  | 'HANDLE_OAUTH_CALLBACK'
+  | 'JOIN_ACTIVITY'
+  | 'PUBLISH_VIDEO_SYNC'
+  | 'CHECK_VIDEO_SYNC'
   | 'ACTIVITY_CHANGED'
   | 'FRIEND_ACTIVITY_UPDATED'
   | 'NEW_MESSAGE'

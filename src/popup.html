@@ -17,21 +17,28 @@
     <!-- My Activity Card -->
     <div id="my-activity" class="my-activity-card">
       <div class="my-activity-header">
-        <span class="my-activity-label">My Activity</span>
+        <div class="my-activity-title">
+          <span class="my-activity-label">My Activity</span>
+          <span class="my-activity-id-inline" id="my-id-display" title="Click to copy">Loading...</span>
+        </div>
         <div class="my-activity-buttons">
           <button id="refresh-activity-btn" class="btn-icon" title="Refresh activity">🔄</button>
           <button id="copy-id-btn" class="btn-copy-id" title="Copy identifier">📋</button>
         </div>
       </div>
-      <div class="my-activity-id">
-        <span id="my-id-display">Loading...</span>
-      </div>
       <div id="my-activity-status" class="my-activity-status">
-        Activity: <span id="activity-badge">Idle</span>
+        <div id="activity-list" class="activity-list">
+          <!-- Services dynamically populated -->
+        </div>
       </div>
-      <div id="my-services" class="my-services-list">
-        <!-- Services dynamically populated -->
-      </div>
+    </div>
+
+    <!-- Show Inactive Friends Toggle -->
+    <div id="show-inactive-toggle" class="show-inactive-toggle" style="display: none;">
+      <label class="toggle-label">
+        <input type="checkbox" id="show-inactive-checkbox">
+        <span>Show inactive friends</span>
+      </label>
     </div>
 
     <!-- Add Friend Form -->
@@ -58,6 +65,134 @@
     <div class="panel-footer">
       <div class="footer-links">
         Support me: <a href="https://ko-fi.com/craigpen" target="_blank">Ko-Fi</a> | <a href="https://buymeacoffee.com/craigpen" target="_blank">Buy Me a Coffee</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Panel (Overlay) -->
+  <div id="settings-panel" class="settings-panel" style="display: none;">
+    <div class="settings-panel-header">
+      <h2>Settings</h2>
+      <div class="settings-header-buttons">
+        <button id="settings-refresh-btn" class="btn-icon-small" title="Refresh status">🔄</button>
+        <button id="settings-close-btn" class="btn-close">×</button>
+      </div>
+    </div>
+    <div class="settings-panel-content">
+      <!-- User Identifier -->
+      <div class="settings-section">
+        <h3>Your Identity</h3>
+        <div class="identifier-group">
+          <span id="user-identifier-popup" class="identifier-text">Loading...</span>
+          <button id="copy-id-popup-btn" class="btn-copy" title="Copy to clipboard">📋</button>
+        </div>
+      </div>
+
+      <!-- Discord -->
+      <div class="settings-section">
+        <h3>Discord (Optional)</h3>
+        <input type="text" id="discord-info-popup" placeholder="username or https://discord.gg/..." class="form-input">
+        <p class="help-text">Used for voice coordination</p>
+      </div>
+
+      <!-- Browser Tabs Detection -->
+      <div class="settings-section">
+        <h3>Browser Tabs Detection</h3>
+        <div class="service-item">
+          <div class="service-header">
+            <label class="checkbox-label">
+              <input type="checkbox" id="service-netflix-popup" data-service="netflix">
+              <span>🎬 Netflix</span>
+            </label>
+          </div>
+          <div class="service-status" id="status-netflix-popup">Idle</div>
+        </div>
+        <div class="service-item">
+          <div class="service-header">
+            <label class="checkbox-label">
+              <input type="checkbox" id="service-youtube-popup" data-service="youtube">
+              <span>📹 YouTube</span>
+            </label>
+          </div>
+          <div class="service-status" id="status-youtube-popup">Idle</div>
+        </div>
+      </div>
+
+      <!-- Service Integrations -->
+      <div class="settings-section">
+        <h3>Service Integrations</h3>
+
+        <div class="service-item">
+          <div class="service-header">
+            <span>🎵 Spotify</span>
+          </div>
+          <div id="spotify-auth-popup-container" class="auth-buttons"></div>
+          <div class="service-status" id="status-spotify-popup">Not Connected</div>
+        </div>
+
+        <div class="service-item">
+          <div class="service-header">
+            <span>📺 Twitch</span>
+          </div>
+          <div id="twitch-auth-popup-container" class="auth-buttons"></div>
+          <div class="service-status" id="status-twitch-popup">Not Connected</div>
+        </div>
+
+        <div class="service-item">
+          <div class="service-header">
+            <span>🎮 Steam</span>
+          </div>
+          <div class="steam-input-group">
+            <input type="text" id="steam-id-popup-input" placeholder="Enter Steam ID" class="form-input">
+            <button id="steam-verify-popup-btn" class="btn-verify">Verify</button>
+          </div>
+          <div class="service-status" id="status-steam-popup">Not Configured</div>
+        </div>
+      </div>
+
+      <!-- Notifications -->
+      <div class="settings-section">
+        <h3>Notifications</h3>
+        <label class="checkbox-label">
+          <input type="checkbox" id="notif-friend-online-popup" checked>
+          <span>Friend came online</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="notif-new-message-popup" checked>
+          <span>New message received</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="notif-join-suggestion-popup">
+          <span>Suggest joining friend's activity</span>
+        </label>
+      </div>
+
+      <!-- Theme -->
+      <div class="settings-section">
+        <h3>Theme</h3>
+        <label class="radio-label">
+          <input type="radio" name="theme-popup" value="auto" checked>
+          <span>Auto (System)</span>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="theme-popup" value="light">
+          <span>Light</span>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="theme-popup" value="dark">
+          <span>Dark</span>
+        </label>
+      </div>
+
+      <!-- Backup & Restore -->
+      <div class="settings-section">
+        <h3>Backup & Restore</h3>
+        <div class="backup-buttons">
+          <button id="export-settings-popup-btn" class="btn-backup">📥 Export</button>
+          <button id="import-settings-popup-btn" class="btn-backup">📤 Import</button>
+          <input type="file" id="import-file-popup-input" accept=".json" style="display: none;" />
+        </div>
+        <p class="help-text">Download your settings to backup. Import to restore.</p>
       </div>
     </div>
   </div>

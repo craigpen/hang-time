@@ -30,19 +30,94 @@ export class SettingsController {
 
   private async _loadSettings(): Promise<void> {
     try {
-      // Load user identifier
+      // Load user profile with all settings
       const response = await chrome.runtime.sendMessage({
         type: 'GET_USER_IDENTIFIER',
       });
 
       if (response.success && response.data) {
+        // Load identifier
         const identifierElement = document.getElementById('user-identifier');
         if (identifierElement) {
           identifierElement.textContent = response.data.identifier || 'Loading...';
         }
+
+        // Load Discord info
+        const discordInput = document.getElementById('discord-info') as HTMLInputElement;
+        if (discordInput && response.data.discord_info) {
+          discordInput.value = response.data.discord_info;
+        }
+
+        // Load service toggles
+        for (const service of this.allServices) {
+          const toggle = document.getElementById(`service-${service}`) as HTMLInputElement;
+          if (toggle && response.data.services_enabled) {
+            toggle.checked = response.data.services_enabled[service as keyof typeof response.data.services_enabled] ?? false;
+          }
+        }
+
+        // Load notification preferences
+        const notifFriendOnline = document.getElementById('notif-friend-online') as HTMLInputElement;
+        if (notifFriendOnline && response.data.notification_preferences) {
+          notifFriendOnline.checked = response.data.notification_preferences.friend_online ?? true;
+        }
+
+        const notifNewMessage = document.getElementById('notif-new-message') as HTMLInputElement;
+        if (notifNewMessage && response.data.notification_preferences) {
+          notifNewMessage.checked = response.data.notification_preferences.new_message ?? true;
+        }
+
+        const notifJoinSuggestion = document.getElementById('notif-join-suggestion') as HTMLInputElement;
+        if (notifJoinSuggestion && response.data.notification_preferences) {
+          notifJoinSuggestion.checked = response.data.notification_preferences.join_suggestion ?? false;
+        }
+
+        // Load Steam ID
+        const steamIdInput = document.getElementById('steam-id-input') as HTMLInputElement;
+        if (steamIdInput && response.data.steam_id) {
+          steamIdInput.value = response.data.steam_id;
+        }
       }
     } catch (error) {
-      console.error('[Settings] Failed to load:', error);
+      console.error('[Settings] Failed to load settings:', error);
+    }
+  }
+
+  private async _saveSettings(): Promise<void> {
+    try {
+      const discordInput = (document.getElementById('discord-info') as HTMLInputElement)?.value || '';
+      const steamIdInput = (document.getElementById('steam-id-input') as HTMLInputElement)?.value || '';
+
+      // Collect service toggles
+      const servicesEnabled: Record<string, boolean> = {};
+      for (const service of this.allServices) {
+        const toggle = document.getElementById(`service-${service}`) as HTMLInputElement;
+        servicesEnabled[service] = toggle?.checked ?? false;
+      }
+
+      // Collect notification preferences
+      const notifFriendOnline = (document.getElementById('notif-friend-online') as HTMLInputElement)?.checked ?? true;
+      const notifNewMessage = (document.getElementById('notif-new-message') as HTMLInputElement)?.checked ?? true;
+      const notifJoinSuggestion = (document.getElementById('notif-join-suggestion') as HTMLInputElement)?.checked ?? false;
+
+      // Save to background
+      await chrome.runtime.sendMessage({
+        type: 'SAVE_SETTINGS',
+        data: {
+          discord_info: discordInput,
+          steam_id: steamIdInput,
+          services_enabled: servicesEnabled,
+          notification_preferences: {
+            friend_online: notifFriendOnline,
+            new_message: notifNewMessage,
+            join_suggestion: notifJoinSuggestion,
+          },
+        },
+      });
+
+      console.debug('[Settings] Settings saved');
+    } catch (error) {
+      console.error('[Settings] Failed to save settings:', error);
     }
   }
 
@@ -99,11 +174,11 @@ export class SettingsController {
         if (statusDiv) {
           const serviceActivity = browserActivities[service as keyof typeof browserActivities];
           if (serviceActivity && serviceActivity.service !== 'idle') {
-            statusDiv.textContent = `Watching: ${this._truncateContent(serviceActivity.content)}`;
-            statusDiv.className = 'service-status status-active';
+            statusDiv.innerHTML = `<span class="status-indicator">●</span> ${this._escapeHtml(this._truncateContent(serviceActivity.content))}`;
+            statusDiv.className = 'service-status-text active';
           } else {
-            statusDiv.textContent = 'Idle';
-            statusDiv.className = 'service-status status-idle';
+            statusDiv.innerHTML = '<span class="status-indicator-idle">○</span> Not active';
+            statusDiv.className = 'service-status-text';
           }
         }
       }
@@ -216,6 +291,12 @@ export class SettingsController {
       });
     }
 
+    // Discord info input
+    const discordInput = document.getElementById('discord-info') as HTMLInputElement;
+    if (discordInput) {
+      discordInput.addEventListener('change', () => this._saveSettings());
+    }
+
     // Service toggles for browser tabs
     document.querySelectorAll('input[type="checkbox"][data-service]').forEach((toggle) => {
       toggle.addEventListener('change', (e: Event) => {
@@ -224,8 +305,14 @@ export class SettingsController {
         const enabled = e.target.checked;
         if (service) {
           this._toggleService(service, enabled);
+          this._saveSettings();
         }
       });
+    });
+
+    // Notification preferences
+    document.querySelectorAll('input[type="checkbox"]:not([data-service])').forEach((checkbox) => {
+      checkbox.addEventListener('change', () => this._saveSettings());
     });
 
     // Steam verify button
@@ -243,6 +330,32 @@ export class SettingsController {
       });
     });
 
+    // Export settings button
+    const exportBtn = document.getElementById('export-settings-btn');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => this._exportSettings());
+    }
+
+    // Import settings button
+    const importBtn = document.getElementById('import-settings-btn');
+    if (importBtn) {
+      importBtn.addEventListener('click', () => {
+        const fileInput = document.getElementById('import-file-input') as HTMLInputElement;
+        fileInput?.click();
+      });
+    }
+
+    // Import file input
+    const importFileInput = document.getElementById('import-file-input') as HTMLInputElement;
+    if (importFileInput) {
+      importFileInput.addEventListener('change', (e: Event) => {
+        const files = (e.target as HTMLInputElement).files;
+        if (files && files.length > 0) {
+          this._importSettings(files[0]);
+        }
+      });
+    }
+
     // Clear all data button
     const clearBtn = document.getElementById('clear-all-btn');
     if (clearBtn) {
@@ -251,6 +364,66 @@ export class SettingsController {
           this._clearAllData();
         }
       });
+    }
+  }
+
+  private async _exportSettings(): Promise<void> {
+    try {
+      // Get current settings
+      const response = await chrome.runtime.sendMessage({
+        type: 'GET_USER_IDENTIFIER',
+      });
+
+      if (response.success && response.data) {
+        const settings = {
+          version: '1.0',
+          exported_at: new Date().toISOString(),
+          data: response.data,
+        };
+
+        // Download as JSON
+        const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `hang-time-settings-${Date.now()}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+
+        console.debug('[Settings] Settings exported');
+      }
+    } catch (error) {
+      console.error('[Settings] Export failed:', error);
+      alert('Failed to export settings');
+    }
+  }
+
+  private async _importSettings(file: File): Promise<void> {
+    try {
+      const text = await file.text();
+      const backup = JSON.parse(text);
+
+      if (!backup.data || !backup.data.identifier) {
+        alert('Invalid backup file');
+        return;
+      }
+
+      // Send to background to save
+      const response = await chrome.runtime.sendMessage({
+        type: 'RESTORE_SETTINGS',
+        data: backup,
+      });
+
+      if (response.success) {
+        alert('Settings imported successfully. Please reload.');
+        // Reload the page to reflect changes
+        location.reload();
+      } else {
+        alert('Failed to import settings');
+      }
+    } catch (error) {
+      console.error('[Settings] Import failed:', error);
+      alert('Failed to parse settings file');
     }
   }
 
@@ -387,6 +560,12 @@ export class SettingsController {
       console.error('[Settings] Clear data failed:', error);
       alert('Failed to clear data');
     }
+  }
+
+  private _escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 }
 

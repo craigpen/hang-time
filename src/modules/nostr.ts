@@ -62,7 +62,9 @@ export class RelayConnection implements IRelayConnection {
             this._startHeartbeat();
 
             // Re-send all queued subscriptions
+            console.debug(`[Nostr] Connection opened to ${this.url}, re-sending ${this.subscriptions.size} subscriptions`);
             for (const [identifier, callback] of this.subscriptions.entries()) {
+              console.debug(`[Nostr] Re-sending subscription for ${identifier.substring(0, 16)}...`);
               this._sendSubscription(identifier, callback);
             }
 
@@ -118,7 +120,7 @@ export class RelayConnection implements IRelayConnection {
         // Send the EVENT message
         const message = JSON.stringify(['EVENT', event]);
         this.ws!.send(message);
-        console.debug(`[Nostr] Publishing event to ${this.url}`);
+        console.debug(`[Nostr] Publishing event (pubkey: ${event.pubkey.substring(0, 16)}..., kind: ${event.kind}) to ${this.url}`);
       } catch (error) {
         this.pendingPublishes.delete(event.id);
         reject(new NostrError(`Failed to publish to ${this.url}`, { url: this.url, error }));
@@ -128,9 +130,10 @@ export class RelayConnection implements IRelayConnection {
 
   subscribe(identifier: string, callback: (event: NostrEvent) => Promise<void>): void {
     this.subscriptions.set(identifier, callback);
+    console.debug(`[Nostr] Subscribe called for ${identifier.substring(0, 16)}... on ${this.url}, connected: ${this.isConnected}`);
 
     if (!this.isConnected || !this.ws) {
-      console.debug(`[Nostr] Relay not connected, queueing subscription for ${identifier}`);
+      console.debug(`[Nostr] Relay not connected, queueing subscription for ${identifier.substring(0, 16)}... on ${this.url}`);
       return;
     }
 
@@ -155,7 +158,7 @@ export class RelayConnection implements IRelayConnection {
 
       const message = JSON.stringify(['REQ', subscriptionId, filter]);
       this.ws.send(message);
-      console.debug(`[Nostr] Subscribed to ${identifier} on ${this.url}`);
+      console.debug(`[Nostr] Subscribed to author ${identifier.substring(0, 16)}... (filter: ${JSON.stringify(filter)}) on ${this.url}`);
     } catch (error) {
       console.error(`[Nostr] Failed to subscribe on ${this.url}:`, error);
     }
@@ -171,6 +174,7 @@ export class RelayConnection implements IRelayConnection {
       }
 
       const [type] = message;
+      console.debug(`[Nostr] Received message type "${type}" from ${this.url}`);
 
       if (type === 'EVENT' && message.length >= 3) {
         const event = message[2];
@@ -219,12 +223,21 @@ export class RelayConnection implements IRelayConnection {
       return;
     }
 
+    console.debug(`[Nostr] Received event (pubkey: ${event.pubkey.substring(0, 16)}..., kind: ${event.kind}) from ${this.url}`);
+    console.debug(`[Nostr] Current subscriptions: ${Array.from(this.subscriptions.keys()).map(k => k.substring(0, 16) + '...').join(', ')}`);
+
+    let found = false;
     for (const [identifier, callback] of this.subscriptions.entries()) {
       if (event.pubkey === identifier) {
+        found = true;
+        console.debug(`[Nostr] Event matches subscription for ${identifier.substring(0, 16)}..., invoking callback`);
         callback(event).catch((error) => {
           console.error(`[Nostr] Callback error for ${identifier}:`, error);
         });
       }
+    }
+    if (!found && this.subscriptions.size > 0) {
+      console.debug(`[Nostr] Event pubkey ${event.pubkey.substring(0, 16)}... does NOT match any subscriptions`);
     }
   }
 

@@ -69,7 +69,7 @@ export class IdentityManager {
    * Uses memorable adjective + animal + random number pattern
    */
   async generateIdentifier(): Promise<string> {
-    // Check if one already exists
+    // Check if one already exists - never overwrite
     const existing = await this.storage.getUserProfile();
     if (existing?.memorable_identifier) {
       this.identifierCache = existing.memorable_identifier;
@@ -80,7 +80,7 @@ export class IdentityManager {
     const { pubkey, secretKey } = this._generateSigningKeypair();
     const now = Date.now();
 
-    // Create user profile
+    // Create new profile only if none exists
     const profile: UserProfile = {
       memorable_identifier: identifier,
       pubkey,

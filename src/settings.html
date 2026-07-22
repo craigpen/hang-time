@@ -60,7 +60,7 @@
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div class="service-status" id="status-netflix">Idle</div>
+            <div class="service-status-text" id="status-netflix">Not active</div>
           </div>
 
           <div class="service-detection-item">
@@ -71,7 +71,7 @@
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div class="service-status" id="status-youtube">Idle</div>
+            <div class="service-status-text" id="status-youtube">Not active</div>
           </div>
         </div>
       </section>
@@ -157,6 +157,17 @@
             <span>Dark</span>
           </label>
         </div>
+      </section>
+
+      <!-- Backup & Restore -->
+      <section class="settings-section">
+        <h2>Backup & Restore</h2>
+        <div class="backup-buttons">
+          <button id="export-settings-btn" class="btn-primary">📥 Export Settings</button>
+          <button id="import-settings-btn" class="btn-primary">📤 Import Settings</button>
+          <input type="file" id="import-file-input" accept=".json" style="display: none;" />
+        </div>
+        <p class="help-text">Download your settings to backup. Import to restore.</p>
       </section>
 
       <!-- Danger Zone -->

@@ -120,36 +120,39 @@ body {
    ============================================================================ */
 
 .identity-card {
-  background-color: var(--bg-secondary);
+  background-color: transparent;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  padding: 1em;
+  padding: 0.75em;
   margin-bottom: 1em;
+  opacity: 0.8;
 }
 
 .identity-card label {
   font-weight: 500;
-  margin-bottom: 0.75em;
+  margin-bottom: 0.5em;
   display: block;
+  font-size: 0.9em;
+  color: var(--text-secondary);
 }
 
 .identifier-display {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 0.75em;
-  padding: 0.75em;
-  background-color: var(--bg-primary);
-  border-radius: 4px;
+  margin-bottom: 0.5em;
+  padding: 0.5em 0;
+  background-color: transparent;
+  border-radius: 0;
   word-break: break-all;
 }
 
 .identifier-text {
   flex: 1;
   font-family: monospace;
-  font-size: 0.9em;
-  color: var(--accent-primary);
-  font-weight: 600;
+  font-size: 0.8em;
+  color: var(--text-tertiary);
+  font-weight: 400;
 }
 
 /* ============================================================================
@@ -346,6 +349,34 @@ body {
   color: var(--status-error);
 }
 
+.service-status-text {
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  margin-left: 8px;
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.service-status-text.active {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.status-indicator {
+  color: var(--accent-primary);
+  font-size: 0.8em;
+  min-width: 8px;
+}
+
+.status-indicator-idle {
+  color: var(--text-tertiary);
+  font-size: 0.8em;
+  min-width: 8px;
+  opacity: 0.5;
+}
+
 /* ============================================================================
    OAuth Status & Buttons
    ============================================================================ */
@@ -419,6 +450,32 @@ body {
 
 .theme-selector input[type="radio"] {
   margin-right: 0.75em;
+}
+
+/* ============================================================================
+   Backup & Restore
+   ============================================================================ */
+
+.backup-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 1em;
+}
+
+.backup-buttons button {
+  flex: 1;
+  padding: 10px 16px;
+  background-color: var(--accent-primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+
+.backup-buttons button:hover {
+  opacity: 0.9;
 }
 
 /* ============================================================================

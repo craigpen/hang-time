@@ -22,11 +22,6 @@ export class TabService implements IServiceModule {
       const tabs = await chrome.tabs.query({ windowType: 'normal' });
       console.debug(`[TabService] Found ${tabs.length} tabs`);
 
-      // Log all tabs for debugging
-      tabs.forEach((tab, idx) => {
-        console.debug(`[TabService] Tab ${idx}: ${tab.title} | ${tab.url}`);
-      });
-
       // Detect ALL active services, not just the first one
       const detectedActivities: Activity[] = [];
 

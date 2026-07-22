@@ -85,8 +85,13 @@ async function initializeExtension(): Promise<void> {
     console.debug(`[Background] Connecting to Nostr relays...`);
     const settings = await storageManager.getSettings();
     const relayUrls = settings.relay_urls || RelayPool.DEFAULT_RELAYS;
-    await relayPool.connect(relayUrls);
-    console.debug(`[Background] Connected to Nostr (${relayPool.getConnectedRelayCount()} relays)`);
+    try {
+      await relayPool.connect(relayUrls);
+      console.debug(`[Background] Connected to Nostr (${relayPool.getConnectedRelayCount()} relays)`);
+    } catch (error) {
+      console.warn('[Background] Failed to connect to relays, will retry in background:', error);
+      // Continue initialization - relays will reconnect automatically
+    }
 
     // Initialize messaging manager
     initializeMessagingManager(storageManager, identityManager, relayPool);
@@ -183,11 +188,17 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'GET_CURRENT_ACTIVITY':
       return _getCurrentActivity();
 
+    case 'GET_ALL_ACTIVE_ACTIVITIES':
+      return _getAllActiveActivities();
+
     case 'GET_BROWSER_ACTIVITIES':
       return _getBrowserActivities();
 
     case 'GET_ACTIVE_FRIENDS':
       return _getActiveFriends();
+
+    case 'GET_ALL_FRIENDS':
+      return _getAllFriends();
 
     case 'GET_FRIEND_ACTIVITY_HISTORY':
       return _getFriendActivityHistory(message.data?.friendId);
@@ -212,6 +223,12 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
 
     case 'TOGGLE_SERVICE':
       return _toggleService(message.data?.service, message.data?.enabled);
+
+    case 'SAVE_SETTINGS':
+      return _saveSettings(message.data);
+
+    case 'RESTORE_SETTINGS':
+      return _restoreSettings(message.data);
 
     case 'MUTE_FRIEND':
       return _muteFriend(message.data?.friendId, message.data?.mute);
@@ -258,6 +275,15 @@ async function _getCurrentActivity(): Promise<ExtensionResponse> {
   return { success: true, data: activity };
 }
 
+async function _getAllActiveActivities(): Promise<ExtensionResponse> {
+  if (!activityDetector) {
+    return { success: false, error: 'Activity detector not initialized' };
+  }
+
+  const activities = await activityDetector.detectAllActiveActivities();
+  return { success: true, data: activities };
+}
+
 async function _getBrowserActivities(): Promise<ExtensionResponse> {
   // Get the TabService and retrieve detected activities for Netflix and YouTube separately
   const tabService = activityDetector.services?.get('tabs') as any;
@@ -284,6 +310,16 @@ async function _getActiveFriends(): Promise<ExtensionResponse> {
   }
 }
 
+async function _getAllFriends(): Promise<ExtensionResponse> {
+  try {
+    const friendManager = getFriendManager();
+    const allFriends = await friendManager.getAllFriends();
+    return { success: true, data: allFriends };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get all friends' };
+  }
+}
+
 async function _getFriendActivityHistory(friendId?: string): Promise<ExtensionResponse> {
   if (!friendId) {
     return { success: false, error: 'friendId required' };
@@ -298,8 +334,11 @@ async function _getFriendActivityHistory(friendId?: string): Promise<ExtensionRe
 }
 
 async function _getUserIdentifier(): Promise<ExtensionResponse> {
-  const identifier = await identityManager.getIdentifier();
-  return { success: true, data: { identifier } };
+  const profile = await storageManager.getUserProfile();
+  if (!profile) {
+    return { success: false, error: 'user profile not found' };
+  }
+  return { success: true, data: profile };
 }
 
 async function _getMessages(friendId?: string): Promise<ExtensionResponse> {
@@ -344,7 +383,7 @@ async function _removeFriend(friendId?: string): Promise<ExtensionResponse> {
     }
 
     await friendManager.removeFriend(friendId);
-    activeSubscriptions.delete(friend.identifier);
+    activeSubscriptions.delete(friend.pubkey);
     return { success: true };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to remove friend' };
@@ -407,6 +446,76 @@ async function _muteFriend(friendId?: string, mute?: boolean): Promise<Extension
     return { success: true };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to mute/unmute friend' };
+  }
+}
+
+async function _saveSettings(data?: any): Promise<ExtensionResponse> {
+  if (!data) {
+    return { success: false, error: 'settings data required' };
+  }
+
+  try {
+    const profile = await storageManager.getUserProfile();
+    if (!profile) {
+      return { success: false, error: 'user profile not found' };
+    }
+
+    console.debug('[Background] Saving settings - received steam_id:', data.steam_id);
+
+    // Update profile with new settings
+    if (data.discord_info !== undefined) {
+      profile.discord_info = data.discord_info;
+    }
+    if (data.services_enabled) {
+      profile.services_enabled = { ...profile.services_enabled, ...data.services_enabled };
+    }
+    if (data.notification_preferences !== undefined) {
+      profile.notification_preferences = data.notification_preferences;
+    }
+    if (data.steam_id !== undefined) {
+      profile.steam_id = data.steam_id;
+    }
+
+    console.debug('[Background] Saving settings - profile.steam_id after update:', profile.steam_id);
+
+    // Save updated profile
+    await storageManager.setUserProfile(profile);
+    console.debug('[Background] Settings saved');
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to save settings' };
+  }
+}
+
+async function _restoreSettings(data?: any): Promise<ExtensionResponse> {
+  if (!data || !data.data) {
+    return { success: false, error: 'restore data required' };
+  }
+
+  try {
+    const profileData = data.data;
+    if (!profileData.identifier) {
+      return { success: false, error: 'invalid backup format' };
+    }
+
+    // Get current profile to preserve identifier (don't override user identity)
+    const currentProfile = await storageManager.getUserProfile();
+    if (!currentProfile) {
+      return { success: false, error: 'user profile not found' };
+    }
+
+    // Merge backup data with current profile, preserving identifier
+    const restoredProfile: any = { ...profileData };
+    restoredProfile.identifier = currentProfile.identifier;
+
+    // Save merged profile
+    await storageManager.setUserProfile(restoredProfile);
+    console.debug('[Background] Settings restored');
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to restore settings' };
   }
 }
 
@@ -570,6 +679,8 @@ async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
  */
 async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
   // Look up friend to get their pubkey
+  // Note: pubkey is derived deterministically from identifier, so adding yourself
+  // as a friend will subscribe to your own activity events from Nostr
   const friendManager = getFriendManager();
   const friend = await friendManager.getFriendByIdentifier(friendIdentifier);
   if (!friend) {

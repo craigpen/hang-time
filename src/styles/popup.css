@@ -3,9 +3,8 @@
  */
 
 body {
-  width: 420px;
+  width: 500px;
   min-height: 100px;
-  max-height: 600px;
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -15,8 +14,8 @@ body {
 .popup-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
+  overflow: visible;
 }
 
 /* ============================================================================
@@ -59,12 +58,49 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
+.my-activity-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.my-activity-label {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 0.95em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.my-activity-id-inline {
+  font-size: 0.75em;
+  color: var(--text-tertiary);
+  opacity: 0.65;
+  font-family: monospace;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.my-activity-id-inline:hover {
+  opacity: 1;
 }
 
 .my-activity-buttons {
   display: flex;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .btn-icon {
@@ -73,20 +109,13 @@ body {
   font-size: 1em;
   cursor: pointer;
   padding: 4px 6px;
-  opacity: 0.7;
+  opacity: 0.6;
   transition: opacity 0.2s;
 }
 
 .btn-icon:hover {
   opacity: 1;
 }
-
-.my-activity-label {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 0.9em;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .btn-copy-id {
@@ -127,34 +156,67 @@ body {
 }
 
 .my-activity-status {
-  font-size: 0.85em;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
+  padding: 8px 0;
+}
+
+.activity-list {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
 }
 
-#activity-badge {
-  padding: 3px 8px;
-  border-radius: 3px;
+.activity-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.1em;
   font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.5;
+  transition: color 0.2s ease;
+  cursor: default;
+  padding: 4px 0;
+}
+
+.activity-item:hover {
+  color: var(--accent-primary);
+}
+
+.activity-item-status {
   font-size: 0.9em;
+  min-width: 10px;
+  text-align: center;
+  opacity: 0.8;
 }
 
-#activity-badge.status-idle {
-  background-color: var(--bg-secondary);
+.activity-item-favicon {
+  font-size: 1.2em;
+  min-width: 20px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.activity-item-favicon img {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+}
+
+.activity-item-label {
+  font-weight: 600;
+  min-width: 40px;
   color: var(--text-secondary);
+  font-size: 0.95em;
 }
 
-#activity-badge.status-active {
-  background-color: var(--accent-primary);
-  color: white;
-}
-
-.my-services-list {
-  font-size: 0.8em;
-  color: var(--text-tertiary);
+.activity-item-content {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
 }
 
 /* ============================================================================
@@ -245,24 +307,56 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2em 1em;
+  padding: 1em 1em;
   text-align: center;
   color: var(--text-secondary);
 }
 
 .empty-state p {
-  margin: 0 0 1em 0;
-  font-size: 0.95em;
+  margin: 0 0 0.75em 0;
+  font-size: 0.9em;
 }
 
 .empty-state .btn-primary {
-  padding: 0.7em 1.5em;
-  font-size: 0.95em;
+  padding: 0.5em 1.2em;
+  font-size: 0.9em;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-weight: 500;
   transition: background-color 0.15s;
+}
+
+/* ============================================================================
+   Show Inactive Friends Toggle
+   ============================================================================ */
+
+.show-inactive-toggle {
+  padding: 8px 14px;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.toggle-label input[type="checkbox"]:checked ~ span {
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 /* ============================================================================
@@ -365,6 +459,308 @@ body {
 
 .friend-card-actions .btn-join:hover {
   background-color: var(--accent-hover);
+}
+
+.friend-card-inactive {
+  opacity: 0.7;
+}
+
+.friend-card-inactive .friend-card-header {
+  opacity: 0.8;
+}
+
+.friend-status-indicator {
+  flex-shrink: 0;
+  font-size: 0.8em;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.friend-card-actions .btn-remove {
+  background-color: rgba(220, 38, 38, 0.2);
+  color: var(--status-error);
+  border-color: var(--status-error);
+}
+
+.friend-card-actions .btn-remove:hover {
+  background-color: rgba(220, 38, 38, 0.3);
+}
+
+/* ============================================================================
+   Settings Panel
+   ============================================================================ */
+
+.settings-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background-color: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  overflow: visible;
+  width: 500px;
+  min-height: 100%;
+}
+
+.settings-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.settings-panel-header h2 {
+  margin: 0;
+  font-size: 1em;
+  color: var(--text-primary);
+}
+
+.settings-header-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.btn-icon-small {
+  background: none;
+  border: none;
+  font-size: 0.9em;
+  cursor: pointer;
+  padding: 4px 6px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.btn-icon-small:hover {
+  opacity: 1;
+}
+
+.settings-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 14px;
+}
+
+.settings-section {
+  margin-bottom: 1.5em;
+}
+
+.settings-section h3 {
+  margin: 0 0 0.75em 0;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.help-text {
+  margin: 0.5em 0 0 0;
+  font-size: 0.8em;
+  color: var(--text-tertiary);
+}
+
+.checkbox-label,
+.radio-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-bottom: 0.5em;
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"],
+.radio-label input[type="radio"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 0.9em;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.form-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.identifier-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.identifier-text {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.8em;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-copy {
+  padding: 4px 8px;
+  background-color: transparent;
+  border: none;
+  font-size: 0.9em;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: opacity 0.2s;
+}
+
+.btn-copy:hover {
+  opacity: 0.7;
+}
+
+.service-item {
+  margin-bottom: 1em;
+  padding: 0.75em;
+  background-color: var(--bg-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.service-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5em;
+}
+
+.service-status {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  margin-top: 0.5em;
+}
+
+.auth-buttons {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 0.5em;
+  flex-wrap: wrap;
+}
+
+.btn-oauth,
+.btn-oauth-secondary {
+  flex: 1;
+  min-width: 80px;
+  padding: 6px 10px;
+  font-size: 0.85em;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-oauth {
+  background-color: var(--accent-primary);
+  color: white;
+  border: none;
+}
+
+.btn-oauth:hover {
+  opacity: 0.9;
+}
+
+.btn-oauth-secondary {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.btn-oauth-secondary:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.steam-input-group {
+  display: flex;
+  gap: 6px;
+}
+
+.steam-input-group .form-input {
+  flex: 1;
+}
+
+.btn-verify {
+  padding: 8px 12px;
+  background-color: var(--accent-primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+}
+
+.btn-verify:hover {
+  opacity: 0.9;
+}
+
+#settings-close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  cursor: pointer;
+  color: var(--text-primary);
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+#settings-close-btn:hover {
+  opacity: 1;
+}
+
+.backup-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 0.75em;
+}
+
+.btn-backup {
+  flex: 1;
+  padding: 8px 12px;
+  background-color: var(--accent-primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9em;
+  transition: opacity 0.2s;
+}
+
+.btn-backup:hover {
+  opacity: 0.9;
 }
 
 /* ============================================================================

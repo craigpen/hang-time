@@ -94,63 +94,86 @@ export class ActivityDetector {
   }
 
   async detectCurrentActivity(): Promise<Activity | null> {
+    const allActivities = await this.detectAllActiveActivities();
+    // Return the most recent activity for publishing to Nostr
+    if (allActivities.length > 0) {
+      return allActivities[0];
+    }
+    return { service: 'idle', content: 'Idle', timestamp: Date.now(), metadata: {} };
+  }
+
+  async detectAllActiveActivities(): Promise<Activity[]> {
     const profile = await this.storageManager.getUserProfile();
     if (!profile) {
-      return { service: 'idle', content: 'Idle', timestamp: Date.now(), metadata: {} };
+      return [];
     }
+
+    const activities: Activity[] = [];
+    const seenServices = new Set<string>();
 
     console.debug('[Activity] Services enabled:', profile.services_enabled);
 
-    // Check each enabled service in order
-    // Note: netflix and youtube detection is handled by 'tabs' service
-    const serviceOrder: ServiceName[] = ['spotify', 'twitch', 'steam'];
-
-    for (const serviceName of serviceOrder) {
-      if (!profile.services_enabled[serviceName]) {
-        console.debug(`[Activity] ${serviceName} disabled, skipping`);
-        continue;
-      }
+    // Check each enabled OAuth service (Spotify, Twitch, Steam)
+    const oauthServices: ServiceName[] = ['spotify', 'twitch', 'steam'];
+    for (const serviceName of oauthServices) {
+      if (!profile.services_enabled[serviceName]) continue;
 
       const service = this.services.get(serviceName);
-      if (!service) {
-        continue;
-      }
+      if (!service) continue;
 
       try {
         console.debug(`[Activity] Checking ${serviceName}...`);
         const activity = await service.getCurrentActivity();
         if (activity && activity.service !== 'idle') {
           console.debug(`[Activity] Detected ${serviceName}: ${activity.content}`);
-          return activity;
+          activities.push(activity);
+          seenServices.add(serviceName);
         }
-        console.debug(`[Activity] ${serviceName} returned idle or null`);
       } catch (error) {
-        console.error(`[Activity] CRITICAL ERROR detecting ${serviceName}:`, error);
+        console.error(`[Activity] ERROR detecting ${serviceName}:`, error);
       }
     }
 
-    // Check browser tab detection (netflix and youtube)
-    // TabService detects all browser services and returns the most recently accessed
-    // The settings UI will display each separately
+    // Check browser tabs (Netflix, YouTube)
     if (profile.services_enabled.netflix || profile.services_enabled.youtube) {
-      const tabService = this.services.get('tabs');
+      const tabService = this.services.get('tabs') as any;
       if (tabService) {
         try {
-          console.debug('[Activity] Checking tabs for netflix/youtube...');
-          const activity = await tabService.getCurrentActivity();
-          if (activity && activity.service !== 'idle') {
-            console.debug(`[Activity] Detected from tabs: ${activity.service}`);
-            return activity;
+          console.debug('[Activity] Checking browser tabs...');
+
+          // Call getCurrentActivity first to populate the lastDetected map
+          await tabService.getCurrentActivity();
+
+          // Get Netflix activity
+          if (profile.services_enabled.netflix) {
+            const netflixActivity = tabService.getDetectedActivity('netflix');
+            if (netflixActivity && netflixActivity.service !== 'idle') {
+              console.debug(`[Activity] Detected netflix: ${netflixActivity.content}`);
+              activities.push(netflixActivity);
+              seenServices.add('netflix');
+            }
           }
-          console.debug('[Activity] tabs service returned idle or null');
+
+          // Get YouTube activity
+          if (profile.services_enabled.youtube) {
+            const youtubeActivity = tabService.getDetectedActivity('youtube');
+            if (youtubeActivity && youtubeActivity.service !== 'idle') {
+              console.debug(`[Activity] Detected youtube: ${youtubeActivity.content}`);
+              activities.push(youtubeActivity);
+              seenServices.add('youtube');
+            }
+          }
         } catch (error) {
-          console.error('[Activity] CRITICAL ERROR detecting tabs:', error);
+          console.error('[Activity] ERROR detecting browser tabs:', error);
         }
       }
     }
 
-    // No activity detected
-    return { service: 'idle', content: 'Idle', timestamp: Date.now(), metadata: {} };
+    // Sort by timestamp, most recent first
+    activities.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    console.debug(`[Activity] Detected ${activities.length} active service(s)`);
+    return activities;
   }
 
   private async _publishActivity(activity: Activity): Promise<void> {
