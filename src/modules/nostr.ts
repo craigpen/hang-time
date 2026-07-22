@@ -26,7 +26,6 @@ export class RelayConnection implements IRelayConnection {
   private heartbeatTimer: NodeJS.Timeout | null = null;
 
   static readonly TIMEOUT_MS = 8000;
-  static readonly MAX_RECONNECT_ATTEMPTS = 5;
   static readonly RECONNECT_DELAY_MS = 3000;
   static readonly PUBLISH_TIMEOUT_MS = 5000;
   static readonly HEARTBEAT_INTERVAL_MS = 25000;
@@ -301,19 +300,17 @@ export class RelayConnection implements IRelayConnection {
   }
 
   private _attemptReconnect(): void {
-    if (this.reconnectAttempts >= RelayConnection.MAX_RECONNECT_ATTEMPTS) {
-      console.error(`[Nostr] Max reconnect attempts reached for ${this.url}`);
-      return;
-    }
-
     this.reconnectAttempts++;
-    const delay = RelayConnection.RECONNECT_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1);
+    // Cap delay at 60 seconds to avoid excessive backoff, but keep retrying forever
+    const delay = Math.min(RelayConnection.RECONNECT_DELAY_MS * Math.pow(2, Math.min(this.reconnectAttempts - 1, 4)), 60000);
 
     console.debug(`[Nostr] Reconnecting to ${this.url} in ${delay}ms (attempt ${this.reconnectAttempts})`);
 
     this.reconnectTimer = setTimeout(() => {
       this.connect().catch((error) => {
         console.error(`[Nostr] Reconnection failed for ${this.url}:`, error);
+        // Automatically schedule next reconnect attempt
+        this._attemptReconnect();
       });
     }, delay);
   }

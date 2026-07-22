@@ -67,25 +67,38 @@ async function initializeExtension(): Promise<void> {
   try {
     console.log('[Background] Initializing extension...');
 
-    // Initialize storage
-    await storageManager.initialize();
+    try {
+      console.debug('[Background] Initializing storage...');
+      await storageManager.initialize();
+      console.debug('[Background] Storage initialized');
+    } catch (error) {
+      console.error('[Background] Storage initialization failed:', error);
+      throw error;
+    }
 
-    // Initialize identity manager
-    initializeIdentityManager(storageManager);
+    try {
+      console.debug('[Background] Initializing identity manager...');
+      initializeIdentityManager(storageManager);
+      console.debug('[Background] Identity manager initialized');
 
-    // Generate or load user identifier
-    const identifier = await identityManager.getIdentifier();
-    console.debug(`[Background] User identifier: ${identifier}`);
+      // Generate or load user identifier
+      const identifier = await identityManager.getIdentifier();
+      console.debug(`[Background] User identifier: ${identifier}`);
+    } catch (error) {
+      console.error('[Background] Identity initialization failed:', error);
+      throw error;
+    }
 
     // Initialize friend manager
     initializeFriendManager(storageManager);
     console.debug('[Background] Friend manager initialized');
 
     // Initialize Nostr relay pool (required for messaging and activity sync)
-    console.debug(`[Background] Connecting to Nostr relays...`);
-    const settings = await storageManager.getSettings();
-    const relayUrls = settings.relay_urls || RelayPool.DEFAULT_RELAYS;
     try {
+      console.debug(`[Background] Connecting to Nostr relays...`);
+      const settings = await storageManager.getSettings();
+      const relayUrls = settings.relay_urls || RelayPool.DEFAULT_RELAYS;
+      console.debug(`[Background] Relay URLs: ${JSON.stringify(relayUrls)}`);
       await relayPool.connect(relayUrls);
       console.debug(`[Background] Connected to Nostr (${relayPool.getConnectedRelayCount()} relays)`);
     } catch (error) {
