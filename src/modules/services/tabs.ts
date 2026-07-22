@@ -19,30 +19,26 @@ export class TabService implements IServiceModule {
     try {
       const tabs = await chrome.tabs.query({ windowType: 'normal' });
 
-      // Group tabs by domain and find most recently accessed for each
-      const youTubeTabs = tabs.filter((t) => t.url && this._isYouTubeVideo(t.url));
-      const netflixTabs = tabs.filter((t) => t.url && this._isNetflixContent(t.url));
-
-      // Check Netflix first (arbitrary priority), then YouTube
-      if (netflixTabs.length > 0) {
-        const mostRecent = this._getMostRecentTab(netflixTabs);
-        const title = this._extractNetflixTitle(mostRecent.title || '');
+      // Check each service in priority order, using most recently accessed tab
+      const netflixTab = this._findMostRecentTabByDomain(tabs, 'netflix');
+      if (netflixTab) {
+        const title = this._extractNetflixTitle(netflixTab.title || '');
         return {
           service: 'netflix',
           content: title || 'Netflix Content',
-          url: mostRecent.url,
+          url: netflixTab.url,
           timestamp: Date.now(),
           metadata: { title },
         };
       }
 
-      if (youTubeTabs.length > 0) {
-        const mostRecent = this._getMostRecentTab(youTubeTabs);
-        const title = this._extractYouTubeTitle(mostRecent.title || '');
+      const youtubeTab = this._findMostRecentTabByDomain(tabs, 'youtube');
+      if (youtubeTab) {
+        const title = this._extractYouTubeTitle(youtubeTab.title || '');
         return {
           service: 'youtube',
           content: title || 'YouTube Video',
-          url: mostRecent.url,
+          url: youtubeTab.url,
           timestamp: Date.now(),
           metadata: { title },
         };
@@ -72,6 +68,38 @@ export class TabService implements IServiceModule {
 
   async handleAuthCallback(code: string): Promise<void> {
     // No auth to handle
+  }
+
+  private _getBaseDomain(url: string): string {
+    try {
+      const urlObj = new URL(url);
+      let host = urlObj.hostname;
+      // Remove www. prefix if present
+      if (host.startsWith('www.')) {
+        host = host.slice(4);
+      }
+      return host;
+    } catch {
+      return '';
+    }
+  }
+
+  private _findMostRecentTabByDomain(tabs: chrome.tabs.Tab[], domain: string): chrome.tabs.Tab | null {
+    const matchingTabs = tabs.filter((tab) => {
+      if (!tab.url) return false;
+      const baseDomain = this._getBaseDomain(tab.url);
+
+      if (domain === 'youtube') {
+        return baseDomain === 'youtube.com' || baseDomain === 'youtu.be';
+      }
+      if (domain === 'netflix') {
+        return baseDomain === 'netflix.com';
+      }
+      return false;
+    });
+
+    if (matchingTabs.length === 0) return null;
+    return this._getMostRecentTab(matchingTabs);
   }
 
   private _isYouTubeVideo(url: string): boolean {
