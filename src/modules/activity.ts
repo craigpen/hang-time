@@ -171,12 +171,15 @@ export class ActivityDetector {
   }
 
   private _generateEventId(): string {
-    // Generate a valid Nostr event ID (64-character hex string)
-    // Use SHA512 hash but truncate to 64 characters
-    const seed = `${Date.now()}-${Math.random()}-${Math.random()}`;
-    const fullHash = encryptionManager.hash(seed);
-    // Take first 64 characters (32 bytes in hex)
-    return fullHash.substring(0, 64);
+    // Generate a valid Nostr event ID (64-character hex string, 32 random bytes)
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) {
+      const byte = bytes[i].toString(16);
+      hex += byte.length === 1 ? '0' + byte : byte;
+    }
+    return hex;
   }
 
   private async _notifyPopup(message: ExtensionMessage): Promise<void> {
