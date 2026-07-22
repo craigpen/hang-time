@@ -77,7 +77,7 @@ export class IdentityManager {
     }
 
     const identifier = this._createMemorableId();
-    const { pubkey, secretKey } = this._generateSigningKeypair();
+    const { pubkey, secretKey } = this._deriveSigningKeypairFromIdentifier(identifier);
     const now = Date.now();
 
     // Create new profile only if none exists
@@ -108,13 +108,15 @@ export class IdentityManager {
   }
 
   /**
-   * Generate Nostr signing keypair (public + secret key)
-   * Uses secp256k1 Schnorr signatures (Nostr standard)
+   * Derive Nostr signing keypair deterministically from identifier
+   * Both sides can recreate the same keypair from the same identifier
    */
-  private _generateSigningKeypair(): { pubkey: string; secretKey: string } {
-    // Generate random 32-byte secret key
-    const secretKeyBytes = new Uint8Array(32);
-    crypto.getRandomValues(secretKeyBytes);
+  private _deriveSigningKeypairFromIdentifier(identifier: string): { pubkey: string; secretKey: string } {
+    const encoder = new TextEncoder();
+    const identifierBytes = encoder.encode(identifier);
+    const hash = sha256(identifierBytes);
+    // Use first 32 bytes of SHA-256 hash as secret key
+    const secretKeyBytes = new Uint8Array(hash.slice(0, 32));
     const secretKey = this._bytesToHex(secretKeyBytes);
 
     // Derive Schnorr public key (32 bytes, raw x-coordinate for Nostr)
