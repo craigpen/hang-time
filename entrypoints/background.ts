@@ -678,9 +678,6 @@ async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
  * Subscribe to friend's activity and messages
  */
 async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
-  // Look up friend to get their pubkey
-  // Note: pubkey is derived deterministically from identifier, so adding yourself
-  // as a friend will subscribe to your own activity events from Nostr
   const friendManager = getFriendManager();
   const friend = await friendManager.getFriendByIdentifier(friendIdentifier);
   if (!friend) {
@@ -688,11 +685,14 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
     return;
   }
 
-  if (activeSubscriptions.has(friend.pubkey)) {
+  // Derive pubkey fresh from identifier (deterministic, ensures consistency)
+  const pubkey = friendManager.derivePubkeyFromIdentifier(friendIdentifier);
+
+  if (activeSubscriptions.has(pubkey)) {
     return;
   }
 
-  relayPool.subscribe(friend.pubkey, async (event: NostrEvent) => {
+  relayPool.subscribe(pubkey, async (event: NostrEvent) => {
     console.debug(`[Background] Event from ${friendIdentifier} (kind ${event.kind})`);
 
     if (event.kind === 1) {
@@ -704,8 +704,8 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
     }
   });
 
-  activeSubscriptions.set(friend.pubkey, undefined);
-  console.debug(`[Background] Subscribed to friend: ${friendIdentifier} (pubkey: ${friend.pubkey})`);
+  activeSubscriptions.set(pubkey, undefined);
+  console.debug(`[Background] Subscribed to friend: ${friendIdentifier} (pubkey: ${pubkey})`);
 }
 
 async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {

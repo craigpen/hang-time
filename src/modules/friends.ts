@@ -34,6 +34,13 @@ export class FriendManager {
   }
 
   /**
+   * Derive pubkey from identifier (for subscription)
+   */
+  derivePubkeyFromIdentifier(identifier: string): string {
+    return this._derivePubkeyFromIdentifier(identifier);
+  }
+
+  /**
    * Add new friend
    */
   async addFriend(identifier: string, localName: string): Promise<Friend> {
