@@ -17,6 +17,7 @@ export class PopupController {
   private showInactiveCheckbox: HTMLInputElement | null = null;
   private showInactiveFriends: boolean = false;
   private settingsPanel: HTMLElement | null = null;
+  private popupContainer: HTMLElement | null = null;
 
   static readonly REFRESH_INTERVAL_MS = 3000;
 
@@ -31,6 +32,7 @@ export class PopupController {
     this.showInactiveToggle = document.getElementById('show-inactive-toggle');
     this.showInactiveCheckbox = document.getElementById('show-inactive-checkbox') as HTMLInputElement;
     this.settingsPanel = document.getElementById('settings-panel');
+    this.popupContainer = document.getElementById('popup-container');
 
     if (!this.activeFriendsContainer || !this.noActivityPlaceholder) {
       console.error('[Popup] Required DOM elements not found');
@@ -109,6 +111,7 @@ export class PopupController {
     if (!displayFriends || displayFriends.length === 0) {
       this.activeFriendsContainer!.style.display = 'none';
       this.noActivityPlaceholder!.style.display = 'block';
+      this._resizePopupToFitContent();
       return;
     }
 
@@ -120,6 +123,9 @@ export class PopupController {
       const card = this._createFriendCard(friend);
       this.activeFriendsContainer!.appendChild(card);
     }
+
+    // Resize popup to fit new content
+    this._resizePopupToFitContent();
   }
 
   private _createFriendCard(friend: Friend): HTMLElement {
@@ -650,6 +656,8 @@ export class PopupController {
   private _showSettingsPanel(): void {
     if (this.settingsPanel) {
       this.settingsPanel.style.display = 'flex';
+      // Resize popup to fit settings content
+      this._resizePopupToFitSettings();
     }
   }
 
@@ -657,6 +665,39 @@ export class PopupController {
     await this._saveSettingsPanel();
     if (this.settingsPanel) {
       this.settingsPanel.style.display = 'none';
+      // Resize popup back to fit main content
+      this._resizePopupToFitContent();
+    }
+  }
+
+  private _resizePopupToFitSettings(): void {
+    const body = document.body;
+    const settingsContent = document.querySelector('.settings-panel-content');
+
+    if (settingsContent) {
+      // Measure the settings content height
+      const contentHeight = settingsContent.scrollHeight;
+      // Add padding from settings-panel-content
+      const computedStyle = window.getComputedStyle(settingsContent);
+      const padding = parseFloat(computedStyle.paddingTop) + parseFloat(computedStyle.paddingBottom);
+
+      // Add header height (settings-panel-header)
+      const header = document.querySelector('.settings-panel-header');
+      const headerHeight = header ? header.clientHeight : 40;
+
+      const totalHeight = headerHeight + contentHeight + padding + 20; // 20px buffer
+      body.style.minHeight = totalHeight + 'px';
+      console.debug(`[Popup] Resized for settings: ${totalHeight}px`);
+    }
+  }
+
+  private _resizePopupToFitContent(): void {
+    const body = document.body;
+    if (this.popupContainer) {
+      // Measure the main popup content height
+      const contentHeight = this.popupContainer.scrollHeight;
+      body.style.minHeight = Math.max(100, contentHeight) + 'px';
+      console.debug(`[Popup] Resized for content: ${contentHeight}px`);
     }
   }
 
