@@ -56,19 +56,38 @@ export class TabService implements IServiceModule {
         });
       }
 
-      // If multiple activities detected, return the most recently accessed one
-      if (detectedActivities.length > 1) {
+      // If activities detected, return compound activity showing all services
+      if (detectedActivities.length > 0) {
+        // Find the most recently accessed overall
         const mostRecent = detectedActivities.reduce((a, b) => {
           const aTime = (a.metadata?.lastAccessed as number) || 0;
           const bTime = (b.metadata?.lastAccessed as number) || 0;
           return aTime > bTime ? a : b;
         });
-        console.debug(`[TabService] Multiple services detected, returning most recent: ${mostRecent.service}`);
-        return mostRecent;
-      }
 
-      if (detectedActivities.length === 1) {
-        return detectedActivities[0];
+        // Build content string showing all services
+        const serviceContents = detectedActivities
+          .sort((a, b) => ((b.metadata?.lastAccessed as number) || 0) - ((a.metadata?.lastAccessed as number) || 0))
+          .map((a) => `${a.service}: ${a.content}`)
+          .join(' | ');
+
+        console.debug(`[TabService] Detected ${detectedActivities.length} service(s): ${serviceContents}`);
+
+        // Return primary (most recent) but include all detected in metadata
+        return {
+          service: mostRecent.service,
+          content: serviceContents,
+          url: mostRecent.url,
+          timestamp: Date.now(),
+          metadata: {
+            ...mostRecent.metadata,
+            allDetected: detectedActivities.map((a) => ({
+              service: a.service,
+              content: a.content,
+              lastAccessed: a.metadata?.lastAccessed,
+            })),
+          },
+        };
       }
 
       console.debug('[TabService] No video content found');
