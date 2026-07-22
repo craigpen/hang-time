@@ -18,11 +18,11 @@
     "https://api.steampowered.com/*",
     "https://accounts.spotify.com/*",
     "https://id.twitch.tv/*",
-    "wss://*.primal.net/*",
-    "wss://*.lol/*",
-    "wss://*.social/*",
-    "wss://*.wine/*",
-    "wss://*.pub/*"
+    "wss://relay.damus.io/*",
+    "wss://nos.lol/*",
+    "wss://relay.snort.social/*",
+    "wss://nostr.mom/*",
+    "wss://relay.mostr.pub/*"
   ],
   "web_accessible_resources": [
     {
