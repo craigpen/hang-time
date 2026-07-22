@@ -6,7 +6,7 @@
 import { Friend, FriendList, Activity } from '../types';
 import { StorageManager } from './storage';
 import { secureLog, validateFriendName, generateSecureRandom } from './security-utils';
-import { sha256 } from '@noble/hashes/sha2';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 export class FriendManager {
   constructor(private storage: StorageManager) {}
