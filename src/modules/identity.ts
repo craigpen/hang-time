@@ -32,6 +32,23 @@ export class IdentityManager {
   }
 
   /**
+   * Get user's Nostr public key (hex format)
+   */
+  async getPubkey(): Promise<string> {
+    const profile = await this.storage.getUserProfile();
+    if (!profile?.pubkey) {
+      // Generate if not found (shouldn't happen after first init)
+      await this.generateIdentifier();
+      const updated = await this.storage.getUserProfile();
+      if (!updated?.pubkey) {
+        throw new Error('Failed to generate pubkey');
+      }
+      return updated.pubkey;
+    }
+    return profile.pubkey;
+  }
+
+  /**
    * Generate new memorable identifier
    * Uses memorable adjective + animal + random number pattern
    */
@@ -44,11 +61,13 @@ export class IdentityManager {
     }
 
     const identifier = this._createMemorableId();
+    const pubkey = this._generatePubkey();
     const now = Date.now();
 
     // Create user profile
     const profile: UserProfile = {
       memorable_identifier: identifier,
+      pubkey,
       created_at: now,
       services_enabled: {
         spotify: false,
@@ -69,6 +88,20 @@ export class IdentityManager {
 
     console.debug('[Identity] Generated identifier:', identifier);
     return identifier;
+  }
+
+  /**
+   * Generate a random hex public key for Nostr (64 characters)
+   */
+  private _generatePubkey(): string {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) {
+      const byte = bytes[i].toString(16);
+      hex += byte.length === 1 ? '0' + byte : byte;
+    }
+    return hex;
   }
 
   /**

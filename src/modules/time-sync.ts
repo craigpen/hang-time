@@ -41,11 +41,11 @@ export class TimeSyncManager {
     service: string
   ): Promise<void> {
     try {
-      const userIdentifier = await this.identityManager.getIdentifier();
+      const userPubkey = await this.identityManager.getPubkey();
 
       const event: NostrEvent = {
         id: this._generateId(),
-        pubkey: userIdentifier,
+        pubkey: userPubkey,
         created_at: Math.floor(Date.now() / 1000),
         kind: 1, // Use kind 1 for time-sync events with special tags
         tags: [

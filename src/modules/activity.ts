@@ -127,11 +127,11 @@ export class ActivityDetector {
   }
 
   private async _publishActivity(activity: Activity): Promise<void> {
-    const identifier = await this.identityManager.getIdentifier();
+    const pubkey = await this.identityManager.getPubkey();
 
     const event: NostrEvent = {
       id: this._generateEventId(),
-      pubkey: identifier,
+      pubkey,
       created_at: Math.floor(Date.now() / 1000),
       kind: 1,
       tags: [

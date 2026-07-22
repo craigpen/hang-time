@@ -146,7 +146,7 @@ export class MessagingManager {
 
   private async _publishMessage(friendIdentifier: string, content: string): Promise<void> {
     try {
-      const userIdentifier = await this.identityManager.getIdentifier();
+      const userPubkey = await this.identityManager.getPubkey();
 
       // Encrypt message using NIP-04
       // For MVP: derive a consistent hex key from friend identifier
@@ -159,7 +159,7 @@ export class MessagingManager {
       // Create Nostr kind 4 (encrypted DM) event
       const event: NostrEvent = {
         id: this._generateId(),
-        pubkey: userIdentifier,
+        pubkey: userPubkey,
         created_at: Math.floor(Date.now() / 1000),
         kind: 4,
         tags: [['p', friendIdentifier]],
