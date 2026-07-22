@@ -6,14 +6,14 @@
 import { Friend, Activity, ExtensionResponse } from '../types';
 
 export class PopupController {
-  private activeFriendsContainer: HTMLElement | null = null;
-  private noActivityPlaceholder: HTMLElement | null = null;
+  private friendsContainer: HTMLElement | null = null;
+  private myActivityList: HTMLElement | null = null;
+  private noFriendsPlaceholder: HTMLElement | null = null;
   private expandedFriendId: string | null = null;
   private refreshInterval: NodeJS.Timeout | null = null;
   private addFriendForm: HTMLElement | null = null;
   private friendIdentifierInput: HTMLInputElement | null = null;
   private friendNicknameInput: HTMLInputElement | null = null;
-  private showInactiveToggle: HTMLElement | null = null;
   private showInactiveCheckbox: HTMLInputElement | null = null;
   private showInactiveFriends: boolean = false;
   private settingsPanel: HTMLElement | null = null;
@@ -24,17 +24,17 @@ export class PopupController {
   async init(): Promise<void> {
     console.debug('[Popup] Initializing...');
 
-    this.activeFriendsContainer = document.getElementById('active-friends');
-    this.noActivityPlaceholder = document.getElementById('no-activity');
+    this.friendsContainer = document.getElementById('friends-container');
+    this.myActivityList = document.getElementById('my-activity-list');
+    this.noFriendsPlaceholder = document.getElementById('no-friends');
     this.addFriendForm = document.getElementById('add-friend-form');
     this.friendIdentifierInput = document.getElementById('friend-identifier') as HTMLInputElement;
     this.friendNicknameInput = document.getElementById('friend-nickname') as HTMLInputElement;
-    this.showInactiveToggle = document.getElementById('show-inactive-toggle');
     this.showInactiveCheckbox = document.getElementById('show-inactive-checkbox') as HTMLInputElement;
     this.settingsPanel = document.getElementById('settings-panel');
     this.popupContainer = document.getElementById('popup-container');
 
-    if (!this.activeFriendsContainer || !this.noActivityPlaceholder) {
+    if (!this.friendsContainer || !this.myActivityList) {
       console.error('[Popup] Required DOM elements not found');
       return;
     }
@@ -102,75 +102,158 @@ export class PopupController {
   }
 
   private _renderFriends(friends: Friend[]): void {
-    // Filter based on toggle
-    let displayFriends = friends;
-    if (!this.showInactiveFriends) {
-      displayFriends = friends.filter((f) => f.current_activity && f.current_activity.service !== 'idle');
+    // Separate active and inactive friends
+    const activeFriends = friends.filter((f) => f.current_activity && f.current_activity.service !== 'idle');
+    const inactiveFriends = friends.filter((f) => !f.current_activity || f.current_activity.service === 'idle');
+
+    // Show/hide based on toggle
+    let displayFriends: Friend[] = activeFriends;
+    if (this.showInactiveFriends && inactiveFriends.length > 0) {
+      displayFriends = [...activeFriends, ...inactiveFriends];
     }
 
     if (!displayFriends || displayFriends.length === 0) {
-      this.activeFriendsContainer!.style.display = 'none';
-      this.noActivityPlaceholder!.style.display = 'block';
+      this.friendsContainer!.innerHTML = '';
+      this.noFriendsPlaceholder!.style.display = 'block';
       this._resizePopupToFitContent();
       return;
     }
 
-    this.activeFriendsContainer!.style.display = 'flex';
-    this.noActivityPlaceholder!.style.display = 'none';
-    this.activeFriendsContainer!.innerHTML = '';
+    this.noFriendsPlaceholder!.style.display = 'none';
+    this.friendsContainer!.innerHTML = '';
 
     for (const friend of displayFriends) {
-      const card = this._createFriendCard(friend);
-      this.activeFriendsContainer!.appendChild(card);
+      const item = this._createFriendItem(friend);
+      const isInactive = !friend.current_activity || friend.current_activity.service === 'idle';
+      if (isInactive) {
+        item.classList.add('inactive');
+      }
+      this.friendsContainer!.appendChild(item);
     }
 
-    // Resize popup to fit new content
     this._resizePopupToFitContent();
   }
 
-  private _createFriendCard(friend: Friend): HTMLElement {
-    const card = document.createElement('div');
-    card.className = 'friend-card';
-    card.dataset.friendId = friend.id;
+  private _createFriendItem(friend: Friend): HTMLElement {
+    const item = document.createElement('div');
+    item.className = 'activity-item';
+    item.dataset.friendId = friend.id;
 
     const activity = friend.current_activity;
     const isInactive = !activity || activity.service === 'idle';
+    const statusText = isInactive ? 'Inactive' : 'Active';
 
-    if (isInactive) {
-      card.classList.add('friend-card-inactive');
-      card.innerHTML = `
-        <div class="friend-card-header">
-          <span class="friend-name">${this._escapeHtml(friend.local_name)}</span>
-          <span class="friend-status-indicator">Inactive</span>
-        </div>
-        <div class="friend-card-actions" style="display: none;">
-          <button class="btn-message">Message</button>
-          <button class="btn-remove">Remove</button>
-        </div>
+    const header = document.createElement('div');
+    header.className = 'activity-header';
+    header.innerHTML = `
+      <span class="activity-label">${this._escapeHtml(friend.local_name)}</span>
+      <span class="activity-status">${statusText}</span>
+    `;
+    item.appendChild(header);
+
+    // Collapsible content
+    const content = document.createElement('div');
+    content.className = 'activity-content';
+    content.style.display = 'none';
+
+    // Activities list
+    const activitiesList = document.createElement('div');
+    activitiesList.className = 'activity-items';
+
+    // Get all active activities (should fetch all, not just current_activity)
+    // For now, show current_activity
+    if (!isInactive) {
+      const activityItem = this._createActivityItemElement(activity);
+      activitiesList.appendChild(activityItem);
+    } else {
+      activitiesList.innerHTML = '<div class="activity-item-text">Idle</div>';
+    }
+
+    content.appendChild(activitiesList);
+
+    // Action buttons
+    const actions = document.createElement('div');
+    actions.className = 'activity-actions';
+    if (!isInactive) {
+      actions.innerHTML = `
+        <button class="btn-action btn-join" title="Join">Join Now</button>
+        <button class="btn-action btn-message" title="Message">Message</button>
+        <button class="btn-action btn-remove" title="Remove">Remove</button>
       `;
     } else {
-      const badge = this._getActivityBadge(activity.service);
-      const shortContent = activity.content.length > 30 ? activity.content.substring(0, 30) + '...' : activity.content;
-
-      card.innerHTML = `
-        <div class="friend-card-header">
-          <span class="friend-name">${this._escapeHtml(friend.local_name)}</span>
-          <span class="activity-badge">${badge} ${this._escapeHtml(shortContent)}</span>
-        </div>
-        <div class="friend-card-actions" style="display: none;">
-          <button class="btn-join">Join Now</button>
-          <button class="btn-message">Message</button>
-        </div>
+      actions.innerHTML = `
+        <button class="btn-action btn-message" title="Message">Message</button>
+        <button class="btn-action btn-remove" title="Remove">Remove</button>
       `;
     }
+    content.appendChild(actions);
 
-    // Click to expand
-    const header = card.querySelector('.friend-card-header');
-    if (header) {
-      header.addEventListener('click', () => this._toggleCardExpanded(card, friend));
+    item.appendChild(content);
+
+    // Toggle expand/collapse on header click
+    header.addEventListener('click', () => {
+      const isExpanded = content.style.display !== 'none';
+      if (isExpanded) {
+        content.style.display = 'none';
+        item.classList.remove('expanded');
+        this.expandedFriendId = null;
+      } else {
+        // Collapse other items
+        document.querySelectorAll('.activity-item.expanded').forEach((el) => {
+          const elContent = el.querySelector('.activity-content') as HTMLElement | null;
+          if (elContent) elContent.style.display = 'none';
+          el.classList.remove('expanded');
+        });
+
+        content.style.display = 'block';
+        item.classList.add('expanded');
+        this.expandedFriendId = friend.id;
+      }
+      this._resizePopupToFitContent();
+    });
+
+    // Attach action button listeners
+    const joinBtn = actions.querySelector('.btn-join') as HTMLButtonElement | null;
+    const msgBtn = actions.querySelector('.btn-message') as HTMLButtonElement | null;
+    const removeBtn = actions.querySelector('.btn-remove') as HTMLButtonElement | null;
+
+    if (joinBtn) {
+      joinBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._handleJoin(friend);
+      });
     }
 
-    return card;
+    if (msgBtn) {
+      msgBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._handleMessage(friend);
+      });
+    }
+
+    if (removeBtn) {
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._handleRemoveFriend(friend);
+      });
+    }
+
+    return item;
+  }
+
+  private _createActivityItemElement(activity: Activity): HTMLElement {
+    const item = document.createElement('div');
+    item.className = 'activity-item-row';
+
+    const badge = this._getActivityBadge(activity.service);
+    const content = this._escapeHtml(activity.content);
+
+    item.innerHTML = `
+      <span class="activity-badge">${badge}</span>
+      <span class="activity-content-text">${content}</span>
+    `;
+
+    return item;
   }
 
   private _toggleCardExpanded(card: HTMLElement, friend: Friend): void {
@@ -425,57 +508,40 @@ export class PopupController {
   }
 
   private _renderMyActivity(activities: Activity[]): void {
-    const activityList = document.getElementById('activity-list');
-    if (!activityList) return;
+    if (!this.myActivityList) return;
 
-    activityList.innerHTML = '';
+    this.myActivityList.innerHTML = '';
 
     if (!activities || activities.length === 0) {
       const idleItem = document.createElement('div');
-      idleItem.className = 'activity-item';
-      idleItem.innerHTML = '<div style="color: var(--text-tertiary);">Idle</div>';
-      activityList.appendChild(idleItem);
+      idleItem.className = 'activity-item-row';
+      idleItem.innerHTML = '<span style="color: var(--text-tertiary);">Idle</span>';
+      this.myActivityList.appendChild(idleItem);
       return;
     }
 
-    // Show all active activities in order (most recent first)
+    // Show all active activities (most recent first)
     for (const activity of activities) {
-      activityList.appendChild(
-        this._createActivityItem(activity.service, activity.content)
+      this.myActivityList.appendChild(
+        this._createActivityItem(activity)
       );
     }
+
+    this._resizePopupToFitContent();
   }
 
-  private _createActivityItem(service: string, content: string): HTMLElement {
+  private _createActivityItem(activity: Activity): HTMLElement {
     const item = document.createElement('div');
-    item.className = 'activity-item';
-    item.title = content;
+    item.className = 'activity-item-row';
+    item.title = activity.content;
 
-    // Status indicator (active dot)
-    const status = document.createElement('div');
-    status.className = 'activity-item-status';
-    status.textContent = '●';
-    status.style.color = 'var(--accent-primary)';
+    const badge = this._getActivityBadge(activity.service);
+    const content = this._escapeHtml(this._truncateActivityContent(activity.content));
 
-    // Favicon
-    const favicon = document.createElement('div');
-    favicon.className = 'activity-item-favicon';
-    favicon.innerHTML = `<img src="${this._getFaviconUrl(service)}" alt="${service}" onerror="this.style.display='none'">`;
-
-    // Fallback to emoji if favicon fails to load
-    const fallbackEmoji = document.createElement('span');
-    fallbackEmoji.textContent = this._getActivityBadge(service);
-    fallbackEmoji.style.display = 'none';
-    favicon.appendChild(fallbackEmoji);
-
-    // Content
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'activity-item-content';
-    contentDiv.textContent = this._truncateActivityContent(content);
-
-    item.appendChild(status);
-    item.appendChild(favicon);
-    item.appendChild(contentDiv);
+    item.innerHTML = `
+      <span class="activity-badge">${badge}</span>
+      <span class="activity-content-text">${content}</span>
+    `;
 
     return item;
   }

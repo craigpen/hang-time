@@ -14,51 +14,54 @@
       <button id="settings-btn" class="btn-settings" title="Settings">⚙️</button>
     </header>
 
-    <!-- My Activity Card -->
-    <div id="my-activity" class="my-activity-card">
-      <div class="my-activity-header">
-        <div class="my-activity-title">
-          <span class="my-activity-label">My Activity</span>
-          <span class="my-activity-id-inline" id="my-id-display" title="Click to copy">Loading...</span>
+    <!-- Activity List -->
+    <div id="activity-list" class="activity-list">
+      <!-- My Activity (always expanded) -->
+      <div class="activity-item my-activity-item expanded">
+        <div class="activity-header">
+          <span class="activity-label">My Activity</span>
+          <div class="activity-buttons">
+            <button id="refresh-activity-btn" class="btn-icon" title="Refresh">🔄</button>
+            <button id="copy-id-btn" class="btn-copy-id" title="Copy identifier">📋</button>
+          </div>
         </div>
-        <div class="my-activity-buttons">
-          <button id="refresh-activity-btn" class="btn-icon" title="Refresh activity">🔄</button>
-          <button id="copy-id-btn" class="btn-copy-id" title="Copy identifier">📋</button>
+        <div class="activity-content">
+          <div id="my-activity-list" class="activity-items">
+            <!-- Activities populated by JS -->
+          </div>
+          <div id="my-id-display" class="my-id-display"></div>
         </div>
       </div>
-      <div id="my-activity-status" class="my-activity-status">
-        <div id="activity-list" class="activity-list">
-          <!-- Services dynamically populated -->
-        </div>
-      </div>
-    </div>
 
-    <!-- Show Inactive Friends Toggle -->
-    <div id="show-inactive-toggle" class="show-inactive-toggle" style="display: none;">
-      <label class="toggle-label">
-        <input type="checkbox" id="show-inactive-checkbox">
-        <span>Show inactive friends</span>
-      </label>
+      <!-- Show Inactive Friends Toggle -->
+      <div class="toggle-section">
+        <label class="toggle-label">
+          <input type="checkbox" id="show-inactive-checkbox">
+          <span>Show inactive friends</span>
+        </label>
+      </div>
+
+      <!-- Friends List -->
+      <div id="friends-container" class="friends-container">
+        <!-- Friends populated by JS -->
+      </div>
+
+      <!-- Empty State -->
+      <div id="no-friends" class="empty-state" style="display: none;">
+        <p>No friends online right now</p>
+        <button id="add-friend-btn-empty" class="btn-primary">Add a Friend</button>
+      </div>
     </div>
 
     <!-- Add Friend Form -->
-    <div id="add-friend-form" class="add-friend-form">
+    <div id="add-friend-form" class="add-friend-form" style="display: none;">
       <h3>Add a Friend</h3>
-      <input type="text" id="friend-identifier" placeholder="Friend's memorable identifier (e.g., luminous-mountain-penguin-crystal)" />
-      <input type="text" id="friend-nickname" placeholder="Your nickname for them (e.g., Alice)" />
+      <input type="text" id="friend-identifier" placeholder="Friend's memorable identifier" />
+      <input type="text" id="friend-nickname" placeholder="Your nickname for them" />
       <div class="form-buttons">
         <button id="friend-submit-btn" class="btn-primary">Add Friend</button>
         <button id="friend-cancel-btn" class="btn-secondary">Cancel</button>
       </div>
-    </div>
-
-    <div id="no-activity" class="empty-state">
-      <p>No friends online right now</p>
-      <button id="add-friend-btn-alt" class="btn-primary">Add a Friend</button>
-    </div>
-
-    <div id="active-friends" class="friends-grid">
-      <!-- Friend cards injected by popup.ts -->
     </div>
 
     <!-- Footer -->
