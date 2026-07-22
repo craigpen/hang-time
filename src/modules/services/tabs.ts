@@ -19,32 +19,33 @@ export class TabService implements IServiceModule {
     try {
       const tabs = await chrome.tabs.query({ windowType: 'normal' });
 
-      for (const tab of tabs) {
-        if (!tab.url || !tab.title) continue;
+      // Group tabs by domain and find most recently accessed for each
+      const youTubeTabs = tabs.filter((t) => t.url && this._isYouTubeVideo(t.url));
+      const netflixTabs = tabs.filter((t) => t.url && this._isNetflixContent(t.url));
 
-        // Check for YouTube
-        if (this._isYouTubeVideo(tab.url)) {
-          const title = this._extractYouTubeTitle(tab.title);
-          return {
-            service: 'youtube',
-            content: title || 'YouTube Video',
-            url: tab.url,
-            timestamp: Date.now(),
-            metadata: { title },
-          };
-        }
+      // Check Netflix first (arbitrary priority), then YouTube
+      if (netflixTabs.length > 0) {
+        const mostRecent = this._getMostRecentTab(netflixTabs);
+        const title = this._extractNetflixTitle(mostRecent.title || '');
+        return {
+          service: 'netflix',
+          content: title || 'Netflix Content',
+          url: mostRecent.url,
+          timestamp: Date.now(),
+          metadata: { title },
+        };
+      }
 
-        // Check for Netflix
-        if (this._isNetflixContent(tab.url)) {
-          const title = this._extractNetflixTitle(tab.title);
-          return {
-            service: 'netflix',
-            content: title || 'Netflix Content',
-            url: tab.url,
-            timestamp: Date.now(),
-            metadata: { title },
-          };
-        }
+      if (youTubeTabs.length > 0) {
+        const mostRecent = this._getMostRecentTab(youTubeTabs);
+        const title = this._extractYouTubeTitle(mostRecent.title || '');
+        return {
+          service: 'youtube',
+          content: title || 'YouTube Video',
+          url: mostRecent.url,
+          timestamp: Date.now(),
+          metadata: { title },
+        };
       }
 
       // No video content found
@@ -96,5 +97,14 @@ export class TabService implements IServiceModule {
       .trim();
 
     return cleaned || pageTitle;
+  }
+
+  private _getMostRecentTab(tabs: chrome.tabs.Tab[]): chrome.tabs.Tab {
+    // Find the tab with the most recent lastAccessed timestamp
+    return tabs.reduce((most, current) => {
+      const currentTime = current.lastAccessed || 0;
+      const mostTime = most.lastAccessed || 0;
+      return currentTime > mostTime ? current : most;
+    });
   }
 }
