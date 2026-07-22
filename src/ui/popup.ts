@@ -1001,15 +1001,20 @@ export class PopupController {
 
   private async _exportSettingsPopup(): Promise<void> {
     try {
-      const response = await chrome.runtime.sendMessage({
+      const profileResponse = await chrome.runtime.sendMessage({
         type: 'GET_USER_IDENTIFIER',
       });
 
-      if (response.success && response.data) {
+      const friendsResponse = await chrome.runtime.sendMessage({
+        type: 'GET_ALL_FRIENDS',
+      });
+
+      if (profileResponse.success && profileResponse.data) {
         const settings = {
           version: '1.0',
           exported_at: new Date().toISOString(),
-          data: response.data,
+          profile: profileResponse.data,
+          friends: friendsResponse.success ? friendsResponse.data : [],
         };
 
         const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
@@ -1020,7 +1025,7 @@ export class PopupController {
         link.click();
         URL.revokeObjectURL(url);
 
-        console.debug('[Popup] Settings exported');
+        console.debug('[Popup] Settings exported (including friends list)');
       }
     } catch (error) {
       console.error('[Popup] Export failed:', error);
