@@ -319,15 +319,26 @@ export class PopupController {
   }
 
   private async _handleAddFriend(): Promise<void> {
-    const identifier = prompt('Enter friend\'s Nostr identifier:\n\n(e.g., AwfulArbitrative2001)');
-    if (!identifier || !identifier.trim()) return;
+    const input = prompt(
+      'Enter friend details (comma-separated):\n\n' +
+      'Format: identifier, local_name\n\n' +
+      'Example: luminous-mountain-penguin-crystal, Alice\n\n' +
+      'The identifier is a 4-word name (shared by your friend)'
+    );
 
-    const localName = prompt('Nickname for this friend:') || identifier;
+    if (!input || !input.trim()) return;
+
+    const [identifier, localName] = input.split(',').map((s) => s.trim());
+
+    if (!identifier || !localName) {
+      alert('Please provide both identifier and local name (comma-separated)');
+      return;
+    }
 
     try {
       const response = await chrome.runtime.sendMessage({
         type: 'ADD_FRIEND',
-        data: { identifier: identifier.trim(), localName: localName.trim() },
+        data: { identifier, localName },
       });
 
       if (response.success) {

@@ -208,7 +208,9 @@ export class FriendManager {
   private _derivePubkeyFromIdentifier(identifier: string): string {
     // Derive deterministic pubkey from identifier using SHA-256
     // This allows the same identifier to always produce the same pubkey
-    const hash = sha256(identifier);
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(identifier);
+    const hash = sha256(bytes);
     // SHA-256 produces 32 bytes, convert to 64-char hex string
     let hex = '';
     for (let i = 0; i < hash.length; i++) {
