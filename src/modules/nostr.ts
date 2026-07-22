@@ -311,9 +311,9 @@ export class RelayPool {
 
   static readonly DEFAULT_RELAYS = [
     'wss://relay.damus.io',
-    'wss://nostr.pub',
     'wss://nos.lol',
     'wss://relay.snort.social',
+    'wss://nostr.mom',
     'wss://relay.mostr.pub',
   ];
 

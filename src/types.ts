@@ -173,9 +173,9 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'auto',
   relay_urls: [
     'wss://relay.damus.io',
-    'wss://nostr.pub',
     'wss://nos.lol',
     'wss://relay.snort.social',
+    'wss://nostr.mom',
     'wss://relay.mostr.pub',
   ],
   activity_poll_interval_ms: 5000,
