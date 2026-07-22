@@ -277,8 +277,9 @@ export class RelayConnection implements IRelayConnection {
     this.heartbeatTimer = setInterval(() => {
       if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
         try {
-          // Send empty EOSE as heartbeat (valid Nostr message, no side effects)
-          this.ws.send(JSON.stringify(['EOSE', 'heartbeat']));
+          // Send a CLOSE message for a dummy subscription to keep connection alive
+          // This is a valid Nostr protocol message with no side effects
+          this.ws.send(JSON.stringify(['CLOSE', 'heartbeat']));
         } catch (error) {
           console.debug(`[Nostr] Heartbeat failed on ${this.url}:`, error);
         }
