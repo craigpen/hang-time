@@ -7,6 +7,7 @@
 import nacl from 'tweetnacl';
 import { decodeUTF8, encodeBase64, decodeBase64 } from 'tweetnacl-util';
 import { schnorr } from '@noble/secp256k1';
+import { sha256 } from '@noble/hashes/sha2'; // Enables schnorr signing
 
 export class EncryptionManager {
   /**
