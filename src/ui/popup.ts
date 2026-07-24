@@ -72,17 +72,17 @@ export class PopupController {
   async refreshFriends(): Promise<void> {
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'GET_ALL_FRIENDS',
+        type: 'GET_ALL_ACTIVITIES',
       });
 
-      console.debug('[Popup] GET_ALL_FRIENDS response:', response);
+      console.debug('[Popup] GET_ALL_ACTIVITIES response:', response);
 
-      if (!response.success || !Array.isArray(response.data)) {
+      if (!response.success || !response.data) {
         this._showError(`Failed to load friends: ${response.error || 'Unknown error'}`);
         return;
       }
 
-      const friends = response.data as Friend[];
+      const friends = response.data.friends || [];
       console.debug(`[Popup] Got ${friends.length} friends:`, friends);
       this._renderFriends(friends);
     } catch (error) {
@@ -786,12 +786,19 @@ export class PopupController {
       const identifier = identifierResponse.data.identifier;
       this.userIdentifier = identifier;
 
-      // Get all active activities (both OAuth and browser tabs)
+      // Get all activities from unified storage
       const response = await chrome.runtime.sendMessage({
-        type: 'GET_ALL_ACTIVE_ACTIVITIES',
+        type: 'GET_ALL_ACTIVITIES',
       });
 
-      const activities = response.success && response.data ? response.data : [];
+      if (!response.success || !response.data) {
+        console.error('[Popup] Failed to get all activities');
+        return;
+      }
+
+      // Extract my activities from the unified storage format
+      const myActivitiesMap = response.data.myActivities || {};
+      const activities = Object.values(myActivitiesMap).filter((a) => a) as Activity[];
       this._renderMyActivity(activities);
     } catch (error) {
       console.error('[Popup] Failed to load my activity:', error);
