@@ -941,8 +941,9 @@ function _parseActivityEvent(event: NostrEvent) {
   const contentTag = event.tags.find((t) => t[0] === 'content')?.[1] ?? '';
   const urlTag = event.tags.find((t) => t[0] === 'url')?.[1];
   const activityIdTag = event.tags.find((t) => t[0] === 'activity_id')?.[1];
+  const stateTag = event.tags.find((t) => t[0] === 'state')?.[1] as 'playing' | 'paused' | 'stopped' | undefined;
 
-  return {
+  const activity: Activity = {
     service: serviceTag,
     content: contentTag || event.content,
     url: urlTag,
@@ -950,6 +951,12 @@ function _parseActivityEvent(event: NostrEvent) {
     timestamp: event.created_at * 1000,
     metadata: {},
   };
+
+  if (stateTag) {
+    activity.state = stateTag;
+  }
+
+  return activity;
 }
 
 async function _getFriend(friendId?: string): Promise<ExtensionResponse> {

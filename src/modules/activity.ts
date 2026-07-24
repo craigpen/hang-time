@@ -234,6 +234,11 @@ export class ActivityDetector {
       ['activity_id', activityId],
     ];
 
+    // Add state tag if present
+    if (activity.state) {
+      tags.push(['state', activity.state]);
+    }
+
     // Add URL tag before computing event ID
     if (activity.url) {
       tags.push(['url', activity.url]);
