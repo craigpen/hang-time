@@ -808,10 +808,12 @@ export class PopupController {
 
   private _renderMyActivity(activities: Activity[]): void {
     this.userActivities = activities;
-    // Only resize if settings panel is not open
-    if (!this.settingsPanel || this.settingsPanel.style.display === 'none') {
-      this._resizePopupToFitContent();
-    }
+
+    // Re-render the friends list (including "My Activity" section) with updated activities
+    // Get current friends to re-render with sorted My Activity
+    this.refreshFriends().catch((error) => {
+      console.error('[Popup] Failed to re-render after activity update:', error);
+    });
   }
 
   private _createActivityItem(activity: Activity): HTMLElement {
