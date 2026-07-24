@@ -69,7 +69,12 @@ export class ActivityDetector {
         return;
       }
 
-      // Store complete activity state to local storage (keyed by service)
+      // Publish individual activities (relay requirement for PoW)
+      for (const activity of allActivities) {
+        await this._publishActivity(activity);
+      }
+
+      // Also store complete activity state locally for unified storage
       const activitiesByService: Partial<Record<string, any>> = {};
       for (const activity of allActivities) {
         activitiesByService[activity.service] = activity;

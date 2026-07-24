@@ -128,9 +128,14 @@ async function initializeExtension(): Promise<void> {
     console.debug('[Background] Activity detector started');
 
     // Initialize and start activity publisher (publishes to Nostr)
-    activityPublisher = new ActivityPublisher(relayPool, storageManager, identityManager);
-    await activityPublisher.start();
-    console.debug('[Background] Activity publisher started');
+    try {
+      activityPublisher = new ActivityPublisher(relayPool, storageManager, identityManager);
+      console.debug('[Background] ActivityPublisher created');
+      await activityPublisher.start();
+      console.debug('[Background] Activity publisher started');
+    } catch (error) {
+      console.error('[Background] Failed to initialize activity publisher:', error);
+    }
 
     // Subscribe to all friends' activities
     const friendManager = getFriendManager();
