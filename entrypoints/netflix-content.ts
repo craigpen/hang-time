@@ -36,7 +36,11 @@ function isValidTitle(title: string | null | undefined): boolean {
     lower.includes('fullscreen') ||
     lower.includes('settings') ||
     lower.includes('next episode') ||
-    lower.includes('previous episode')
+    lower.includes('previous episode') ||
+    lower.includes('privacy') ||
+    lower.includes('preference') ||
+    lower.includes('modal') ||
+    lower.includes('dialog')
   ) {
     return false;
   }
