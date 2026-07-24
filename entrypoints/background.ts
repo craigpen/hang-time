@@ -42,15 +42,12 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     // Initialize the extension first
     await initializeExtension();
 
-    // First install: generate memorable identifier and open settings
+    // First install: generate memorable identifier
     const profile = await storageManager.getUserProfile();
     if (!profile) {
       await identityManager.generateIdentifier();
       console.log('[Background] Generated user identifier');
     }
-
-    // Open settings page for initial setup
-    chrome.runtime.openOptionsPage();
   } else if (details.reason === 'update') {
     console.log('[Background] Extension updated');
   }
