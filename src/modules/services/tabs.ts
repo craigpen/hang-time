@@ -255,7 +255,7 @@ export class TabService implements IServiceModule {
   async getNetflixTitleFromTab(tabId: number): Promise<string | null> {
     // First try to get from storage (content script should have written it)
     try {
-      const result = await chrome.storage.session.get('netflix_title');
+      const result = await chrome.storage.local.get('netflix_title');
       const storedTitle = result['netflix_title'];
       if (storedTitle && typeof storedTitle === 'string' && storedTitle.length > 0) {
         console.debug('[TabService] Got Netflix title from storage:', storedTitle);

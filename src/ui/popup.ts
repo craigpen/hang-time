@@ -1461,15 +1461,31 @@ export class PopupController {
       return;
     }
 
-    // Check if service is configured
+    // Try to get current activity first (works for browser tabs and OAuth services)
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'GET_CURRENT_ACTIVITY',
+        data: { service },
+      });
+
+      if (response.success && response.data) {
+        const activity = response.data as Activity;
+        statusDiv.textContent = this._truncateActivityContent(activity.content);
+        return;
+      }
+    } catch (error) {
+      // Continue to check configuration status
+    }
+
+    // No current activity - check if service is configured (for OAuth and Steam)
     let isConfigured = false;
     if (service === 'steam') {
       const steamInput = document.getElementById('steam-id-popup-input') as HTMLInputElement;
       const steamId = steamInput?.value?.trim();
       isConfigured = !!steamId;
       console.debug('[Popup] Checking Steam status - steamId:', steamId, 'configured:', isConfigured);
-    } else {
-      // For OAuth services, check if they have a token
+    } else if (!['netflix', 'youtube', 'twitch'].includes(service)) {
+      // For OAuth services (not browser tab services), check if they have a token
       try {
         const authResponse = await chrome.runtime.sendMessage({
           type: 'GET_OAUTH_STATUS',
@@ -1481,26 +1497,14 @@ export class PopupController {
       }
     }
 
-    // Show "Not configured" if enabled but not configured
-    if (!isConfigured) {
+    // Show appropriate status message
+    if (['netflix', 'youtube', 'twitch'].includes(service)) {
+      // Browser tab services with no activity just show "No activity"
+      statusDiv.textContent = 'No activity';
+    } else if (!isConfigured) {
+      // OAuth/Steam services with no token show "Not configured"
       statusDiv.textContent = 'Not configured';
-      return;
-    }
-
-    // Service is enabled and configured - show current activity
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'GET_CURRENT_ACTIVITY',
-        data: { service },
-      });
-
-      if (response.success && response.data) {
-        const activity = response.data as Activity;
-        statusDiv.textContent = this._truncateActivityContent(activity.content);
-      } else {
-        statusDiv.textContent = 'No activity';
-      }
-    } catch (error) {
+    } else {
       statusDiv.textContent = 'No activity';
     }
   }

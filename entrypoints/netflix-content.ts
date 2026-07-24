@@ -1,6 +1,6 @@
 /**
  * Hang Time - Netflix Content Script
- * Extracts and stores Netflix titles in chrome.storage.session
+ * Extracts and stores Netflix titles in chrome.storage.local
  */
 
 const STORAGE_KEY = 'netflix_title';
@@ -21,7 +21,7 @@ function isValidTitle(title: string | null | undefined): boolean {
  */
 async function writeValidTitle(title: string | null): Promise<void> {
   if (isValidTitle(title)) {
-    await chrome.storage.session.set({ [STORAGE_KEY]: title });
+    await chrome.storage.local.set({ [STORAGE_KEY]: title });
     console.debug('[Netflix Content] Stored valid title:', title);
   }
 }
@@ -30,7 +30,7 @@ async function writeValidTitle(title: string | null): Promise<void> {
  * Get stored title from storage
  */
 async function getStoredTitle(): Promise<string | null> {
-  const result = await chrome.storage.session.get(STORAGE_KEY);
+  const result = await chrome.storage.local.get(STORAGE_KEY);
   return result[STORAGE_KEY] || null;
 }
 
