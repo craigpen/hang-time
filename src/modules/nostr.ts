@@ -149,10 +149,13 @@ export class RelayConnection implements IRelayConnection {
 
     try {
       const subscriptionId = `sub_${this.subscriptionId++}`;
+      // Request recent events (last 24 hours) + limit to catch all recent activities
+      const since = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
       const filter = {
         authors: [identifier],
         kinds: [1, 4],
-        limit: 100,
+        since,
+        limit: 1000, // Increased from 100 to catch more recent events
       };
 
       const message = JSON.stringify(['REQ', subscriptionId, filter]);
