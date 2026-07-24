@@ -49,7 +49,7 @@
     },
     {
       "matches": ["https://www.netflix.com/*"],
-      "js": ["netflix-content.js"],
+      "js": ["netflix-content.js", "netflix-debug-comprehensive.js"],
       "run_at": "document_idle"
     }
   ],
