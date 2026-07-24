@@ -520,7 +520,7 @@ export class PopupController {
     buttonsDiv.appendChild(msgBtn);
 
     // Sync button (video/music only)
-    if (['youtube', 'netflix', 'spotify'].includes(activity.service)) {
+    if (['youtube', 'netflix', 'twitch', 'spotify'].includes(activity.service)) {
       const syncBtn = document.createElement('button');
       syncBtn.className = 'activity-action-btn activity-action-sync';
       syncBtn.textContent = '🕐';
@@ -909,7 +909,7 @@ export class PopupController {
     buttonsDiv.appendChild(msgBtn);
 
     // Sync button (video/music only)
-    if (['youtube', 'netflix', 'spotify'].includes(activity.service)) {
+    if (['youtube', 'netflix', 'twitch', 'spotify'].includes(activity.service)) {
       const syncBtn = document.createElement('button');
       syncBtn.className = 'activity-action-btn activity-action-sync';
       syncBtn.textContent = '🕐';
