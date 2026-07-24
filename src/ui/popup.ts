@@ -91,6 +91,24 @@ export class PopupController {
     }
   }
 
+  async refreshAll(): Promise<void> {
+    try {
+      // Refresh My Activity
+      await this._loadMyActivity();
+
+      // Refresh Friends list
+      await this.refreshFriends();
+
+      // Refresh Settings if panel is open
+      if (this.settingsPanel && this.settingsPanel.style.display !== 'none') {
+        await this._loadSettingsPanel();
+      }
+    } catch (error) {
+      console.error('[Popup] Complete refresh failed:', error);
+      this._showError('Failed to refresh');
+    }
+  }
+
   private async _renderFriends(friends: Friend[]): Promise<void> {
     // Don't resize if settings panel is open
     const shouldResize = !this.settingsPanel || this.settingsPanel.style.display === 'none';
@@ -930,11 +948,11 @@ export class PopupController {
   }
 
   private _setupEventListeners(): void {
-    // Manual refresh button
+    // Manual refresh button (both header and settings panel use same function)
     const refreshBtn = document.getElementById('refresh-friends-btn');
     if (refreshBtn) {
       refreshBtn.addEventListener('click', () => {
-        this.refreshFriends().catch((error) => {
+        this.refreshAll().catch((error) => {
           console.error('[Popup] Manual refresh failed:', error);
         });
       });
@@ -971,11 +989,13 @@ export class PopupController {
       });
     }
 
-    // Settings panel refresh button
+    // Settings panel refresh button (same as header refresh - complete refresh)
     const settingsRefreshBtn = document.getElementById('settings-refresh-btn');
     if (settingsRefreshBtn) {
       settingsRefreshBtn.addEventListener('click', () => {
-        this._loadSettingsPanel();
+        this.refreshAll().catch((error) => {
+          console.error('[Popup] Settings panel refresh failed:', error);
+        });
       });
     }
 
