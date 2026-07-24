@@ -4,7 +4,7 @@
 
 export class SettingsController {
   private oauthServices = ['spotify', 'twitch'];
-  private browserTabServices = ['netflix', 'youtube'];
+  private browserTabServices = ['netflix', 'youtube', 'twitch'];
   private allServices = ['spotify', 'twitch', 'steam', 'netflix', 'youtube'];
   private statusRefreshInterval: NodeJS.Timeout | null = null;
 
