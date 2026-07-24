@@ -1,33 +1,72 @@
 /**
  * Hang Time - Netflix Content Script
- * Extracts the currently watching title from Netflix pages
+ * Extracts and stores Netflix titles in chrome.storage.session
  */
 
-// Title cache - keeps most recent extracted title
-let cachedTitle: string | null = null;
-let cacheTimestamp: number = 0;
+const STORAGE_KEY = 'netflix_title';
+
+/**
+ * Check if a title is valid (not empty, not garbage)
+ */
+function isValidTitle(title: string | null | undefined): boolean {
+  if (!title || typeof title !== 'string') return false;
+  if (title.length < 2 || title.length > 300) return false;
+  if (title.toLowerCase().includes('error') || title.toLowerCase().includes('failed')) return false;
+  if (title === 'Netflix' || title === 'Loading' || title === '') return false;
+  return true;
+}
+
+/**
+ * Write title to storage if valid
+ */
+async function writeValidTitle(title: string | null): Promise<void> {
+  if (isValidTitle(title)) {
+    await chrome.storage.session.set({ [STORAGE_KEY]: title });
+    console.debug('[Netflix Content] Stored valid title:', title);
+  }
+}
+
+/**
+ * Get stored title from storage
+ */
+async function getStoredTitle(): Promise<string | null> {
+  const result = await chrome.storage.session.get(STORAGE_KEY);
+  return result[STORAGE_KEY] || null;
+}
 
 // Listen for messages from the background script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GET_NETFLIX_TITLE') {
-    // Return cached title if recent (within 30 seconds)
-    if (cachedTitle && Date.now() - cacheTimestamp < 30000) {
-      console.debug('[Netflix Content] Returning cached title:', cachedTitle);
-      sendResponse({ success: true, data: cachedTitle });
-      return;
-    }
-
-    // Always try fresh extraction on stale cache (in case extension reloaded)
-    console.debug('[Netflix Content] Cache stale or empty, doing fresh extraction');
-    const title = extractNetflixTitle();
-    if (title) {
-      cachedTitle = title;
-      cacheTimestamp = Date.now();
-      console.debug('[Netflix Content] Fresh extraction successful:', title);
-    }
-    sendResponse({ success: true, data: title });
+    handleGetNetflixTitle().then((title) => {
+      sendResponse({ success: true, data: title });
+    });
+    return true; // async response
   }
 });
+
+/**
+ * Handle GET_NETFLIX_TITLE message: try extraction, preserve stored title
+ */
+async function handleGetNetflixTitle(): Promise<string | null> {
+  try {
+    // Try to extract fresh title
+    const freshTitle = extractNetflixTitle();
+
+    if (isValidTitle(freshTitle)) {
+      // Fresh extraction valid - write and return it
+      await writeValidTitle(freshTitle);
+      return freshTitle;
+    } else {
+      // Fresh extraction invalid - return stored title (preserve good data)
+      const storedTitle = await getStoredTitle();
+      return storedTitle;
+    }
+  } catch (error) {
+    console.error('[Netflix Content] Error handling GET_NETFLIX_TITLE:', error);
+    // Return whatever we have stored as fallback
+    return await getStoredTitle();
+  }
+}
 
 /**
  * Try to extract title from the Netflix player iframe
@@ -106,7 +145,6 @@ function extractNetflixTitle(): string | null {
 
       // Split by common Netflix metadata to extract just the title
       // Netflix format: "Title Rated PG-13 Audio description available" or "Title S01E01"
-      // Split by known metadata keywords and take the first segment as title
       const parts = fullText.split(/\s+(?=Rated|Audio|Subtitles|CC|Closed|Available|IMDb|\d+%)/i);
       let title = parts[0].trim();
 
@@ -145,21 +183,15 @@ function extractNetflixTitle(): string | null {
     }
 
     // Method 2: Search for title in any visible text elements (fallback)
-    // Netflix renders the title in the page UI
     const titleSelectors = [
-      // Player controls area
       '[class*="player-title"]',
       '[class*="PlayerTitle"]',
       '[class*="video-title"]',
-      // Content info area
       '[class*="content-title"]',
       '[class*="ContentTitle"]',
-      // Generic heading elements
       'h1:not([class*="logo"])',
-      // Data test IDs Netflix uses
       '[data-testid*="title"]',
       '[data-testid="player-title"]',
-      // Netflix sometimes puts it in specific divs
       'div[class*="Title"]',
     ];
 
@@ -178,8 +210,7 @@ function extractNetflixTitle(): string | null {
       }
     }
 
-    // Method 2: Search all text nodes for likely titles
-    // This is slower but can find titles in nested elements
+    // Method 3: Search all text nodes for likely titles
     const walker = document.createTreeWalker(
       document.body,
       NodeFilter.SHOW_TEXT,
@@ -192,7 +223,6 @@ function extractNetflixTitle(): string | null {
     while ((node = walker.nextNode())) {
       const text = node.textContent?.trim();
       if (text && text.length > 5 && text.length < 200 && !text.includes('\n')) {
-        // Skip common UI text
         if (
           !text.toLowerCase().includes('netflix') &&
           !text.includes('$') &&
@@ -208,13 +238,12 @@ function extractNetflixTitle(): string | null {
       }
     }
 
-    // Return the first reasonable candidate (usually the title)
     if (candidates.length > 0) {
       console.debug('[Netflix Content] Found via text search:', candidates[0]);
       return candidates[0];
     }
 
-    // Method 3: Try getting from window.netflix if available
+    // Method 4: Try getting from window.netflix if available
     if ((window as any).netflix?.reactContext?.pageProps?.currentContent?.title) {
       const title = (window as any).netflix.reactContext.pageProps.currentContent.title;
       console.debug('[Netflix Content] Found in window.netflix:', title);
@@ -230,8 +259,8 @@ function extractNetflixTitle(): string | null {
 }
 
 /**
- * Set up MutationObserver to proactively cache Netflix titles
- * Watches for title elements and updates cache whenever they appear
+ * Set up MutationObserver to proactively update Netflix titles in storage
+ * Only writes if valid and different from stored
  */
 function setupTitleCache(): void {
   try {
@@ -242,13 +271,16 @@ function setupTitleCache(): void {
     }
 
     const iframeDoc = iframe.contentWindow.document;
-    const observer = new MutationObserver(() => {
-      // When DOM changes, try to extract and cache the title
-      const title = extractNetflixTitle();
-      if (title && title !== cachedTitle) {
-        cachedTitle = title;
-        cacheTimestamp = Date.now();
-        console.debug('[Netflix Content] Cache updated via MutationObserver:', title);
+    const observer = new MutationObserver(async () => {
+      // When DOM changes, try to extract and update storage
+      const newTitle = extractNetflixTitle();
+      if (isValidTitle(newTitle)) {
+        const storedTitle = await getStoredTitle();
+        // Only write if different from stored (avoid unnecessary writes)
+        if (newTitle !== storedTitle) {
+          await writeValidTitle(newTitle);
+          console.debug('[Netflix Content] Storage updated via MutationObserver:', newTitle);
+        }
       }
     });
 
@@ -266,5 +298,22 @@ function setupTitleCache(): void {
   }
 }
 
-// Start caching titles when script loads
+/**
+ * On page load, immediately try to extract and store title
+ */
+async function onPageLoad(): Promise<void> {
+  try {
+    console.debug('[Netflix Content] Page loaded, attempting initial title extraction');
+    const title = extractNetflixTitle();
+    if (isValidTitle(title)) {
+      await writeValidTitle(title);
+      console.debug('[Netflix Content] Initial title extracted and stored:', title);
+    }
+  } catch (error) {
+    console.debug('[Netflix Content] Error on page load:', error);
+  }
+}
+
+// Initialize: extract on page load and set up ongoing monitoring
+onPageLoad();
 setupTitleCache();
