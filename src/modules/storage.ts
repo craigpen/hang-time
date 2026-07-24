@@ -108,7 +108,11 @@ export class StorageManager {
 
   async getFriends(): Promise<FriendList> {
     const friends = await this.get<Friend[]>(STORAGE_KEYS.FRIENDS_LIST, []);
-    return friends;
+    // Ensure all friends have current_activities (backward compatibility)
+    return friends.map(friend => ({
+      ...friend,
+      current_activities: friend.current_activities || {},
+    }));
   }
 
   async setFriends(friends: Friend[]): Promise<void> {

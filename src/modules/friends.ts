@@ -66,6 +66,7 @@ export class FriendManager {
       last_seen: Date.now(),
       muted: false,
       hidden_services: [],
+      current_activities: {},
     };
 
     await this.storage.addFriend(friend);
