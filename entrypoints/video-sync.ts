@@ -44,7 +44,7 @@ class VideoSyncContentScript {
     this._setupMessageListener();
   }
 
-  private _connectToExtension(): void {
+  private _connectToExtension(retryCount: number = 0): void {
     try {
       this.port = chrome.runtime.connect({ name: 'video-sync' });
       console.log(`[VideoSync] ✅ Connected to extension on ${this._getService()}`);
@@ -73,13 +73,22 @@ class VideoSyncContentScript {
         console.warn(`[VideoSync] ⚠️  Disconnected from extension on ${this._getService()} (extension reload?), attempting reconnect in 1s...`);
         this.port = null;
         // Attempt to reconnect after a delay
-        setTimeout(() => this._connectToExtension(), 1000);
+        setTimeout(() => this._connectToExtension(0), 1000);
       });
     } catch (error) {
-      console.error(`[VideoSync] ❌ Failed to connect to extension on ${this._getService()}:`, error);
-      // Retry connection after delay
-      console.log('[VideoSync] Retrying connection in 1s...');
-      setTimeout(() => this._connectToExtension(), 1000);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[VideoSync] ❌ Failed to connect to extension on ${this._getService()} (attempt ${retryCount + 1}):`, error);
+
+      // For "Extension context invalidated", use longer delay (extension might be reloading)
+      const delay = errorMsg.includes('Extension context invalidated') ? 2000 : 1000;
+      const maxRetries = 10;
+
+      if (retryCount < maxRetries) {
+        console.log(`[VideoSync] Retrying connection in ${delay}ms... (${retryCount + 1}/${maxRetries})`);
+        setTimeout(() => this._connectToExtension(retryCount + 1), delay);
+      } else {
+        console.error(`[VideoSync] ❌ Failed to connect after ${maxRetries} retries. Giving up.`);
+      }
     }
   }
 

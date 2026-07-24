@@ -148,7 +148,7 @@ function getNetflixVideoPosition(): { currentTime?: number; duration?: number } 
 // Persistent port connection (survives extension reload)
 let port: chrome.runtime.Port | null = null;
 
-function connectToExtension(): void {
+function connectToExtension(retryCount: number = 0): void {
   try {
     port = chrome.runtime.connect({ name: 'netflix-content' });
     console.log('[NetflixContent] ✅ Connected to extension');
@@ -180,12 +180,22 @@ function connectToExtension(): void {
     port.onDisconnect.addListener(() => {
       console.warn('[NetflixContent] ⚠️  Disconnected from extension (extension reload?), attempting reconnect in 1s...');
       port = null;
-      setTimeout(() => connectToExtension(), 1000);
+      setTimeout(() => connectToExtension(0), 1000);
     });
   } catch (error) {
-    console.error('[NetflixContent] ❌ Failed to connect to extension:', error);
-    console.log('[NetflixContent] Retrying connection in 1s...');
-    setTimeout(() => connectToExtension(), 1000);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[NetflixContent] ❌ Failed to connect to extension (attempt ${retryCount + 1}):`, error);
+
+    // For "Extension context invalidated", use longer delay (extension might be reloading)
+    const delay = errorMsg.includes('Extension context invalidated') ? 2000 : 1000;
+    const maxRetries = 10;
+
+    if (retryCount < maxRetries) {
+      console.log(`[NetflixContent] Retrying connection in ${delay}ms... (${retryCount + 1}/${maxRetries})`);
+      setTimeout(() => connectToExtension(retryCount + 1), delay);
+    } else {
+      console.error(`[NetflixContent] ❌ Failed to connect after ${maxRetries} retries. Giving up.`);
+    }
   }
 }
 
