@@ -7,28 +7,17 @@ import {
   Activity,
   ServiceName,
   IServiceModule,
-  NostrEvent,
-  ExtensionResponse,
   ExtensionMessage,
 } from '../types';
-import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
-import { IdentityManager } from './identity';
-import { encryptionManager } from './encryption';
 
 export class ActivityDetector {
   private services: Map<string, IServiceModule> = new Map();
-  private lastPublishedActivity: Activity | null = null;
-  private lastPublishedTime: number = 0;
   private pollInterval: NodeJS.Timeout | null = null;
 
   static readonly POLL_INTERVAL_MS = 5000;
 
-  constructor(
-    private relayPool: RelayPool,
-    private storageManager: StorageManager,
-    private identityManager: IdentityManager
-  ) {
+  constructor(private storageManager: StorageManager) {
     // Services will be registered separately via registerService()
   }
 
@@ -64,27 +53,14 @@ export class ActivityDetector {
       const allActivities = await this.detectAllActiveActivities();
       if (allActivities.length === 0) return;
 
-      // Skip if activities haven't changed
-      if (!this._activitiesChanged(allActivities)) {
-        return;
-      }
-
-      // Publish individual activities (relay requirement for PoW)
-      for (const activity of allActivities) {
-        await this._publishActivity(activity);
-      }
-
-      // Also store complete activity state locally for unified storage
+      // Store detected activities locally (publishing handled by separate publisher)
       const activitiesByService: Partial<Record<string, any>> = {};
       for (const activity of allActivities) {
         activitiesByService[activity.service] = activity;
       }
       await this.storageManager.setMyActivities(activitiesByService);
 
-      this.lastPublishedActivity = allActivities[0];
-      this.lastPublishedTime = Date.now();
-
-      // Store most recent activity locally (for backwards compatibility)
+      // Store most recent activity for backwards compatibility
       await this.storageManager.setCurrentActivity(allActivities[0]);
 
       // Notify popup that activities changed
@@ -194,161 +170,7 @@ export class ActivityDetector {
     return activities;
   }
 
-  private async _publishActivity(activity: Activity): Promise<void> {
-    // Skip temporary guidance activities (e.g., Netflix title not yet captured)
-    if (activity.temporary) {
-      return;
-    }
 
-    // Don't publish fallback/placeholder activities
-    if (activity.content === '(Reload Netflix to identify title)') {
-      return;
-    }
-
-    const pubkey = await this.identityManager.getPubkey();
-    const created_at = Math.floor(Date.now() / 1000);
-    const kind = 1;
-
-    // Ensure content is never empty or a URL
-    const activityContent = (activity.content || '').trim();
-    if (!activityContent || activityContent.includes('http') || activityContent === activity.url) {
-      // Content is empty or invalid - don't publish
-      return;
-    }
-
-    const tags: Array<[string, string]> = [
-      ['service', activity.service],
-      ['content', activityContent],
-      ['activity_id', activity.id],
-    ];
-
-    // Add state tag if present
-    if (activity.state) {
-      tags.push(['state', activity.state]);
-    }
-
-    // Add URL tag before computing event ID
-    if (activity.url) {
-      tags.push(['url', activity.url]);
-    }
-
-    const content = this._buildEventContent(activity);
-
-    // Compute event ID from canonical event format (required by NIP-01)
-    // Must be done AFTER all tags are added
-    const id = await this._computeEventId(pubkey, created_at, kind, tags, content);
-
-    // Sign the event with the user's secret key
-    const secretKey = await this.identityManager.getSecretKey();
-    const sig = encryptionManager.signEvent(id, secretKey);
-
-    const event: NostrEvent = {
-      id,
-      pubkey,
-      created_at,
-      kind,
-      tags,
-      content,
-      sig,
-    };
-
-    await this.relayPool.publish(event);
-  }
-
-  private async _publishCompleteActivityState(allActivities: Activity[]): Promise<void> {
-    try {
-      const pubkey = await this.identityManager.getPubkey();
-      const created_at = Math.floor(Date.now() / 1000);
-      const kind = 1;
-
-      // Create tags with metadata about the state
-      const tags: Array<[string, string]> = [
-        ['type', 'activity-state'],
-        ['count', allActivities.length.toString()],
-        // Add service tags for filtering (friends can query by service)
-        ...allActivities.map(a => ['service', a.service])
-      ];
-
-      // Serialize all activities as JSON in the content field
-      const content = JSON.stringify(allActivities);
-
-      // Compute event ID
-      const id = await this._computeEventId(pubkey, created_at, kind, tags, content);
-
-      // Sign the event
-      const secretKey = await this.identityManager.getSecretKey();
-      const sig = encryptionManager.signEvent(id, secretKey);
-
-      const event: NostrEvent = {
-        id,
-        pubkey,
-        created_at,
-        kind,
-        tags,
-        content,
-        sig,
-      };
-
-      await this.relayPool.publish(event);
-    } catch (error) {
-      console.error('[Activity] Failed to publish complete activity state:', error);
-    }
-  }
-
-  private _buildEventContent(activity: Activity): string {
-    const parts: string[] = [];
-
-    if (activity.metadata?.artist) {
-      parts.push(activity.metadata.artist);
-    }
-
-    parts.push(activity.content);
-
-    return parts.filter((p) => p).join(' - ');
-  }
-
-  private _activitiesChanged(newActivities: Activity[]): boolean {
-    if (!this.lastPublishedActivity) return true;
-
-    // Check if any activity changed
-    for (const newActivity of newActivities) {
-      if (newActivity.service !== this.lastPublishedActivity.service ||
-          newActivity.content !== this.lastPublishedActivity.content ||
-          newActivity.state !== this.lastPublishedActivity.state) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  private _activityChanged(newActivity: Activity): boolean {
-    if (!this.lastPublishedActivity) return true;
-
-    // Check if core content changed
-    if (newActivity.service !== this.lastPublishedActivity.service ||
-        newActivity.content !== this.lastPublishedActivity.content) {
-      return true;
-    }
-
-    // Check state change only if state exists on either activity
-    if (newActivity.state || this.lastPublishedActivity.state) {
-      if (newActivity.state !== this.lastPublishedActivity.state) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  private async _computeEventId(pubkey: string, created_at: number, kind: number, tags: Array<[string, string]>, content: string): Promise<string> {
-    // Nostr event ID = SHA-256 hash of canonical event format (NIP-01)
-    // Canonical format: [0, pubkey, created_at, kind, tags, content]
-    const eventData = [0, pubkey, created_at, kind, tags, content];
-    const canonicalJson = JSON.stringify(eventData);
-    const hash256 = await encryptionManager.sha256(canonicalJson);
-    return hash256.substring(0, 64);
-  }
 
   private async _notifyPopup(message: ExtensionMessage): Promise<void> {
     try {
