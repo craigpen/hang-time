@@ -192,7 +192,7 @@ function connectToExtension(): void {
 // Establish initial connection
 connectToExtension();
 
-// Legacy onMessage listener for compatibility (can be removed after testing)
+// onMessage listener for TabService queries (chrome.tabs.sendMessage)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GET_NETFLIX_TITLE') {
     (async () => {
@@ -208,6 +208,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch (error) {
         const storedTitle = await getStoredTitle();
         sendResponse({ success: true, data: storedTitle });
+      }
+    })();
+    return true;
+  } else if (message.type === 'GET_VIDEO_STATE') {
+    // Handle GET_VIDEO_STATE like video-sync does
+    (async () => {
+      try {
+        const video = document.querySelector('video') as HTMLVideoElement;
+        if (video) {
+          sendResponse({
+            success: true,
+            data: {
+              videoId: null, // Netflix doesn't expose video ID easily
+              currentTime: video.currentTime,
+              duration: video.duration,
+              isPlaying: !video.paused,
+            },
+          });
+        } else {
+          sendResponse({ success: true, data: { currentTime: 0, duration: 0, isPlaying: false } });
+        }
+      } catch (error) {
+        sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
       }
     })();
     return true;

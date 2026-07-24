@@ -39,6 +39,9 @@ class VideoSyncContentScript {
 
     // Establish persistent connection to extension (survives reload)
     this._connectToExtension();
+
+    // Also listen for sendMessage calls from TabService
+    this._setupMessageListener();
   }
 
   private _connectToExtension(): void {
@@ -206,6 +209,19 @@ class VideoSyncContentScript {
 
     // Check for sync every 10 seconds (reduce relay load)
     setInterval(checkSync, 10000);
+  }
+
+  private _setupMessageListener(): void {
+    // Also listen for direct sendMessage calls from TabService
+    chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
+      try {
+        this._handleMessage(message, sendResponse);
+      } catch (error) {
+        console.error('[VideoSync] Error in onMessage listener:', error);
+        sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+      return true; // Will respond asynchronously
+    });
   }
 
   private _syncToPosition(targetTime: number): void {
