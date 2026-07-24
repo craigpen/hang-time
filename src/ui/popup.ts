@@ -8,7 +8,8 @@ import { Friend, Activity, ExtensionResponse } from '../types';
 export class PopupController {
   private friendsList: HTMLElement | null = null;
   private noFriendsPlaceholder: HTMLElement | null = null;
-  private refreshInterval: NodeJS.Timeout | null = null;
+  private myActivityInterval: NodeJS.Timeout | null = null; // My Activity only (3 sec)
+  private fallbackFriendsInterval: NodeJS.Timeout | null = null; // Fallback poll for friends (30 sec)
   private addFriendForm: HTMLElement | null = null;
   private friendIdentifierInput: HTMLInputElement | null = null;
   private friendNicknameInput: HTMLInputElement | null = null;
@@ -21,7 +22,8 @@ export class PopupController {
   private currentServiceActivities: Map<string, Activity | null> = new Map();
   private refreshPaused: boolean = false;
 
-  static readonly REFRESH_INTERVAL_MS = 3000;
+  static readonly MY_ACTIVITY_REFRESH_MS = 3000; // Keep "My Activity" responsive
+  static readonly FALLBACK_FRIENDS_REFRESH_MS = 30000; // Safety net for missed Nostr messages
 
   async init(): Promise<void> {
     console.debug('[Popup] Initializing...');
@@ -45,17 +47,24 @@ export class PopupController {
     await this.refreshFriends();
     await this._loadSettingsPanel();
 
-    // Auto-refresh (skip if paused)
-    this.refreshInterval = setInterval(() => {
+    // Auto-refresh "My Activity" only (every 3 seconds)
+    // Friends refresh only on Nostr notifications or fallback poll
+    this.myActivityInterval = setInterval(() => {
       if (!this.refreshPaused) {
         this._loadMyActivity().catch((error) => {
           console.error('[Popup] Activity refresh failed:', error);
         });
+      }
+    }, PopupController.MY_ACTIVITY_REFRESH_MS);
+
+    // Fallback poll for friends in case Nostr messages are missed (every 30 seconds)
+    this.fallbackFriendsInterval = setInterval(() => {
+      if (!this.refreshPaused) {
         this.refreshFriends().catch((error) => {
-          console.error('[Popup] Friends refresh failed:', error);
+          console.error('[Popup] Fallback friends refresh failed:', error);
         });
       }
-    }, PopupController.REFRESH_INTERVAL_MS);
+    }, PopupController.FALLBACK_FRIENDS_REFRESH_MS);
 
     console.debug('[Popup] Initialization complete');
   }
@@ -912,13 +921,25 @@ export class PopupController {
           }
         }
       } else if (message.type === 'FRIEND_ACTIVITY_CHANGED') {
-        // Friend's activities changed - let next refresh cycle pick it up
-        // No need to redraw on every state change; popup already refreshes every 3 seconds
+        // Friend's activities changed - refresh immediately
+        this.refreshFriends().catch((error) => {
+          console.error('[Popup] Failed to refresh friends after activity change:', error);
+        });
       }
     });
   }
 
   private _setupEventListeners(): void {
+    // Manual refresh button
+    const refreshBtn = document.getElementById('refresh-friends-btn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        this.refreshFriends().catch((error) => {
+          console.error('[Popup] Manual refresh failed:', error);
+        });
+      });
+    }
+
     const settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
@@ -1859,8 +1880,11 @@ export class PopupController {
   }
 
   destroy(): void {
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
+    if (this.myActivityInterval) {
+      clearInterval(this.myActivityInterval);
+    }
+    if (this.fallbackFriendsInterval) {
+      clearInterval(this.fallbackFriendsInterval);
     }
   }
 }
