@@ -23,7 +23,7 @@ export class PopupController {
   private refreshPaused: boolean = false;
 
   static readonly MY_ACTIVITY_REFRESH_MS = 3000; // Keep "My Activity" responsive
-  static readonly FALLBACK_FRIENDS_REFRESH_MS = 30000; // Safety net for missed Nostr messages
+  static readonly FALLBACK_FRIENDS_REFRESH_MS = 15000; // Safety net for missed Nostr messages
 
   async init(): Promise<void> {
     console.debug('[Popup] Initializing...');

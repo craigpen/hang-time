@@ -22,7 +22,6 @@ export class ActivityDetector {
   private lastPublishedTime: number = 0;
   private pollInterval: NodeJS.Timeout | null = null;
 
-  static readonly PUBLISH_RATE_LIMIT_MS = 15000; // nos.lol rate limit: 1 event per ~15 seconds
   static readonly POLL_INTERVAL_MS = 5000;
 
   constructor(
@@ -65,12 +64,8 @@ export class ActivityDetector {
       const allActivities = await this.detectAllActiveActivities();
       if (allActivities.length === 0) return;
 
-      // Skip if activities haven't changed or rate limit not met
+      // Skip if activities haven't changed
       if (!this._activitiesChanged(allActivities)) {
-        return;
-      }
-
-      if (Date.now() - this.lastPublishedTime < ActivityDetector.PUBLISH_RATE_LIMIT_MS) {
         return;
       }
 

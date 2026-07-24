@@ -23,7 +23,6 @@ class VideoSyncContentScript {
   };
 
   private pollInterval: NodeJS.Timeout | null = null;
-  private readonly PUBLISH_INTERVAL_MS = 15000; // Publish every 15 seconds (relay rate limit)
 
   init(): void {
     console.debug('[VideoSync] Content script initialized');
@@ -90,11 +89,6 @@ class VideoSyncContentScript {
           });
           console.debug(`[VideoSync] State change: ${this.state.isPlaying ? 'playing' : 'paused'}`);
         }
-
-        // Publish sync if enough time has passed
-        if (Date.now() - this.state.lastPublished > this.PUBLISH_INTERVAL_MS) {
-          this._publishSync();
-        }
       }
     }, 500);
 
@@ -137,11 +131,6 @@ class VideoSyncContentScript {
           });
           console.debug(`[VideoSync] State change: ${this.state.isPlaying ? 'playing' : 'paused'}`);
         }
-
-        // Publish sync if enough time has passed
-        if (Date.now() - this.state.lastPublished > this.PUBLISH_INTERVAL_MS) {
-          this._publishSync();
-        }
       }
     }, 500);
 
@@ -183,11 +172,6 @@ class VideoSyncContentScript {
             },
           });
           console.debug(`[VideoSync] State change: ${this.state.isPlaying ? 'playing' : 'paused'}`);
-        }
-
-        // Publish sync if enough time has passed
-        if (Date.now() - this.state.lastPublished > this.PUBLISH_INTERVAL_MS) {
-          this._publishSync();
         }
       }
     }, 500);
@@ -238,48 +222,19 @@ class VideoSyncContentScript {
     }
   }
 
-  private _publishSync(): void {
-    if (!this.state.videoId) return;
-
-    try {
-      chrome.runtime.sendMessage(
-        {
-          type: 'PUBLISH_VIDEO_SYNC',
-          data: {
-            videoId: this.state.videoId,
-            currentTime: this.state.currentTime,
-            duration: this.state.duration,
-            isPlaying: this.state.isPlaying,
-            service: this._getService(),
-          },
-        },
-        (response: any) => {
-          if (chrome.runtime.lastError) {
-            console.debug('[VideoSync] Extension context invalidated');
-            return;
-          }
-          if (response?.success) {
-            this.state.lastPublished = Date.now();
-          }
-        }
-      );
-
-      // Also report the current play/pause state for activity detection
-      chrome.runtime.sendMessage({
-        type: 'UPDATE_VIDEO_STATE',
-        data: {
-          service: this._getService(),
-          isPlaying: this.state.isPlaying,
-        },
-      });
-    } catch (error) {
-      console.debug('[VideoSync] Error publishing sync (extension may have reloaded):', error);
-    }
-  }
-
   private _handleMessage(message: any, sendResponse: (response: any) => void): void {
     try {
       switch (message.type) {
+        case 'GET_VIDEO_POSITION':
+          sendResponse({
+            success: true,
+            data: {
+              currentTime: Math.floor(this.state.currentTime),
+              duration: Math.floor(this.state.duration),
+            },
+          });
+          break;
+
         case 'GET_VIDEO_STATE':
           sendResponse({
             success: true,

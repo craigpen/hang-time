@@ -39,6 +39,8 @@ export class TabService implements IServiceModule {
         if (title) {
           // We have a real title - create normal activity
           const netflixId = generateActivityId('netflix', netflixTab.url);
+          // Query video position from content script
+          const videoData = await this.getVideoPositionFromTab(netflixTab.id, 'netflix');
           const netflixActivity: Activity = {
             id: netflixId,
             service: 'netflix',
@@ -46,7 +48,11 @@ export class TabService implements IServiceModule {
             url: netflixTab.url,
             timestamp: Date.now(),
             state: netflixTab.audible ? 'playing' : 'paused',
-            metadata: { lastAccessed: netflixTab.lastAccessed || 0 },
+            metadata: {
+              lastAccessed: netflixTab.lastAccessed || 0,
+              progress: videoData?.currentTime,
+              duration: videoData?.duration,
+            },
           };
           const netflixState = this._getVideoState('netflix');
           if (netflixState !== undefined) {
@@ -65,6 +71,8 @@ export class TabService implements IServiceModule {
         // Ensure content is never a URL - use fallback if title extraction failed
         const finalContent = (title && !title.includes('http')) ? title : 'YouTube Video';
         const youtubeId = generateActivityId('youtube', youtubeTab.url);
+        // Query video position from content script
+        const videoData = await this.getVideoPositionFromTab(youtubeTab.id, 'youtube');
         // Use tab's audible property as initial state guess (if audio playing, likely video is playing)
         const youtubeActivity: Activity = {
           id: youtubeId,
@@ -73,7 +81,11 @@ export class TabService implements IServiceModule {
           url: youtubeTab.url,
           timestamp: Date.now(),
           state: youtubeTab.audible ? 'playing' : 'paused',
-          metadata: { lastAccessed: youtubeTab.lastAccessed || 0 },
+          metadata: {
+            lastAccessed: youtubeTab.lastAccessed || 0,
+            progress: videoData?.currentTime,
+            duration: videoData?.duration,
+          },
         };
         const youtubeState = this._getVideoState('youtube');
         if (youtubeState !== undefined) {
@@ -254,6 +266,28 @@ export class TabService implements IServiceModule {
     title = title.replace(/\s*-\s*Twitch\s*$/i, '').trim();
 
     return title || pageTitle;
+  }
+
+  /**
+   * Get video position (currentTime and duration) from content script
+   * Called during activity detection for all video services
+   */
+  async getVideoPositionFromTab(tabId: number, service: 'netflix' | 'youtube'): Promise<{ currentTime?: number; duration?: number } | null> {
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_VIDEO_POSITION' });
+
+      if (response && response.success && response.data) {
+        return {
+          currentTime: response.data.currentTime,
+          duration: response.data.duration,
+        };
+      }
+    } catch (error) {
+      // Content script not available or error querying position - just continue without it
+      console.debug(`[TabService] Could not get video position for ${service}:`, error);
+    }
+
+    return null;
   }
 
   /**

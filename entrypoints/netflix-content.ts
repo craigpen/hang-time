@@ -119,6 +119,21 @@ function extractNetflixTitle(): string | null {
   }
 }
 
+function getNetflixVideoPosition(): { currentTime?: number; duration?: number } {
+  try {
+    const video = document.querySelector('video') as HTMLVideoElement;
+    if (video) {
+      return {
+        currentTime: Math.floor(video.currentTime),
+        duration: Math.floor(video.duration),
+      };
+    }
+  } catch (error) {
+    console.debug('[Netflix Content] Could not get video position:', error);
+  }
+  return {};
+}
+
 // Listen for messages from background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GET_NETFLIX_TITLE') {
@@ -138,6 +153,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     })();
     return true;
+  } else if (message.type === 'GET_VIDEO_POSITION') {
+    const videoData = getNetflixVideoPosition();
+    sendResponse({ success: true, data: videoData });
+    return false;
   }
 });
 

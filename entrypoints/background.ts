@@ -9,7 +9,6 @@ import { StorageManager, storageManager } from '../src/modules/storage';
 import { IdentityManager, initializeIdentityManager, identityManager } from '../src/modules/identity';
 import { FriendManager, initializeFriendManager, getFriendManager } from '../src/modules/friends';
 import { MessagingManager, initializeMessagingManager, getMessagingManager } from '../src/modules/messaging';
-import { TimeSyncManager, initializeTimeSyncManager, getTimeSyncManager } from '../src/modules/time-sync';
 import { NotificationManager, initializeNotificationManager, getNotificationManager } from '../src/modules/notifications';
 import { JoinHandler } from '../src/modules/join-handler';
 import { ActivityDetector } from '../src/modules/activity';
@@ -107,12 +106,6 @@ async function initializeExtension(): Promise<void> {
     // Initialize messaging manager
     initializeMessagingManager(storageManager, identityManager, relayPool);
     console.debug('[Background] Messaging manager initialized');
-
-    // Initialize time-sync manager
-    initializeTimeSyncManager(relayPool, identityManager);
-    const timeSyncManager = getTimeSyncManager();
-    timeSyncManager.startMonitoring();
-    console.debug('[Background] Time sync manager initialized');
 
     // Initialize notification manager
     initializeNotificationManager(storageManager);
@@ -270,9 +263,6 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
 
     case 'JOIN_ACTIVITY':
       return _joinActivity(message.data?.friendId, message.data?.activity);
-
-    case 'PUBLISH_VIDEO_SYNC':
-      return _publishVideoSync(message.data);
 
     case 'CHECK_VIDEO_SYNC':
       return _checkVideoSync(message.data);
@@ -742,42 +732,11 @@ async function _joinActivity(friendId?: string, activity?: any): Promise<Extensi
   }
 }
 
-async function _publishVideoSync(data?: any): Promise<ExtensionResponse> {
-  if (!data?.videoId || data.currentTime === undefined || data.duration === undefined) {
-    return { success: false, error: 'videoId, currentTime, and duration required' };
-  }
-
-  try {
-    const timeSyncManager = getTimeSyncManager();
-    await timeSyncManager.publishTimeSync(
-      data.videoId,
-      data.currentTime,
-      data.duration,
-      data.isPlaying,
-      data.service
-    );
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to publish video sync' };
-  }
-}
-
 async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
-  if (!data?.friendIdentifier || data.currentTime === undefined) {
-    return { success: false, error: 'friendIdentifier and currentTime required' };
-  }
-
-  try {
-    const timeSyncManager = getTimeSyncManager();
-    const recommendedPosition = timeSyncManager.getRecommendedSyncPosition(
-      data.friendIdentifier,
-      data.currentTime
-    );
-
-    return { success: true, data: { recommendedPosition } };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to check video sync' };
-  }
+  // Note: Video position is now included in activity state (metadata.progress)
+  // Content script has friend activities from Nostr and can extract position directly
+  // This endpoint is kept for compatibility but sync is handled via activity state
+  return { success: true, data: { recommendedPosition: undefined } };
 }
 
 function _updateVideoState(data?: any): ExtensionResponse {
@@ -858,17 +817,8 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
     return;
   }
 
-  // Check if this is a time-sync event
-  const typeTag = event.tags.find((t) => t[0] === 'type')?.[1];
-  if (typeTag === 'time-sync') {
-    // Handle time-sync event
-    const timeSyncManager = getTimeSyncManager();
-    timeSyncManager.handleTimeSyncEvent(event);
-    console.debug(`[Background] Time sync event from ${friendIdentifier.substring(0, 8)}`);
-    return;
-  }
-
   // Check if this is a complete activity state event (all activities at once)
+  const typeTag = event.tags.find((t) => t[0] === 'type')?.[1];
   if (typeTag === 'activity-state') {
     // Parse JSON array of activities
     try {
