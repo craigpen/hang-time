@@ -203,6 +203,14 @@ export class StorageManager {
     await this.set(STORAGE_KEYS.CURRENT_ACTIVITY, activity);
   }
 
+  async getMyActivities(): Promise<Partial<Record<string, Activity>>> {
+    return this.get<Partial<Record<string, Activity>>>(STORAGE_KEYS.MY_ACTIVITIES, {});
+  }
+
+  async setMyActivities(activities: Partial<Record<string, Activity>>): Promise<void> {
+    await this.set(STORAGE_KEYS.MY_ACTIVITIES, activities);
+  }
+
   async getActivityHistory(friendId: string): Promise<Activity[]> {
     const history = await this.get<ActivityHistory>(
       STORAGE_KEYS.ACTIVITY_HISTORY(friendId)

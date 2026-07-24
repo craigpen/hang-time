@@ -200,6 +200,7 @@ export const STORAGE_KEYS = {
   FRIENDS_LIST: 'hang_time_friends',
   OAUTH_TOKENS: 'hang_time_oauth_tokens',
   CURRENT_ACTIVITY: 'hang_time_current_activity',
+  MY_ACTIVITIES: 'hang_time_my_activities',
   SETTINGS: 'hang_time_settings',
   MESSAGES: (friendId: string) => `hang_time_messages_${friendId}`,
   ACTIVITY_HISTORY: (friendId: string) => `hang_time_activity_history_${friendId}`,

@@ -12,6 +12,7 @@ import { MessagingManager, initializeMessagingManager, getMessagingManager } fro
 import { NotificationManager, initializeNotificationManager, getNotificationManager } from '../src/modules/notifications';
 import { JoinHandler } from '../src/modules/join-handler';
 import { ActivityDetector } from '../src/modules/activity';
+import { ActivityPublisher } from '../src/modules/publisher';
 import { TabService } from '../src/modules/services/tabs';
 import { SteamService } from '../src/modules/services/steam';
 import { SpotifyService } from '../src/modules/services/spotify';
@@ -24,6 +25,7 @@ import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } 
 
 let initialized = false;
 let activityDetector: ActivityDetector | null = null;
+let activityPublisher: ActivityPublisher | null = null;
 const activeSubscriptions = new Map<string, void>();
 const videoStates = new Map<string, { isPlaying: boolean; timestamp: number }>();
 
@@ -125,6 +127,11 @@ async function initializeExtension(): Promise<void> {
     await activityDetector.start();
     console.debug('[Background] Activity detector started');
 
+    // Initialize and start activity publisher (publishes to Nostr)
+    activityPublisher = new ActivityPublisher(relayPool, storageManager, identityManager);
+    await activityPublisher.start();
+    console.debug('[Background] Activity publisher started');
+
     // Subscribe to all friends' activities
     const friendManager = getFriendManager();
     const friends = await friendManager.getAllFriends();
@@ -194,6 +201,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
 
     case 'GET_ALL_ACTIVE_ACTIVITIES':
       return _getAllActiveActivities();
+
+    case 'GET_ALL_ACTIVITIES':
+      return _getAllActivities();
 
     case 'GET_BROWSER_ACTIVITIES':
       return _getBrowserActivities();
@@ -321,6 +331,36 @@ async function _getAllActiveActivities(): Promise<ExtensionResponse> {
 
   const activities = await activityDetector.detectAllActiveActivities();
   return { success: true, data: activities };
+}
+
+async function _getAllActivities(): Promise<ExtensionResponse> {
+  try {
+    // Get my activities from storage
+    const myActivities = await storageManager.getMyActivities();
+
+    // Get all friends
+    const friendManager = getFriendManager();
+    const friends = await friendManager.getAllFriends();
+
+    // Build unified response: { myActivities: {...}, friends: [{id, identifier, local_name, current_activities}, ...] }
+    const friendsData = friends.map((friend) => ({
+      id: friend.id,
+      identifier: friend.identifier,
+      local_name: friend.local_name,
+      current_activities: friend.current_activities || {},
+    }));
+
+    return {
+      success: true,
+      data: {
+        myActivities,
+        friends: friendsData,
+      },
+    };
+  } catch (error) {
+    console.error('[Background] Error getting all activities:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get activities' };
+  }
 }
 
 async function _getBrowserActivities(): Promise<ExtensionResponse> {

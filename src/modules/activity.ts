@@ -69,19 +69,23 @@ export class ActivityDetector {
         return;
       }
 
-      // Publish complete activity state as single atomic event
-      await this._publishCompleteActivityState(allActivities);
+      // Store complete activity state to local storage (keyed by service)
+      const activitiesByService: Partial<Record<string, any>> = {};
+      for (const activity of allActivities) {
+        activitiesByService[activity.service] = activity;
+      }
+      await this.storageManager.setMyActivities(activitiesByService);
 
       this.lastPublishedActivity = allActivities[0];
       this.lastPublishedTime = Date.now();
 
-      // Store most recent activity locally
+      // Store most recent activity locally (for backwards compatibility)
       await this.storageManager.setCurrentActivity(allActivities[0]);
 
-      // Notify popup if it's open
+      // Notify popup that activities changed
       await this._notifyPopup({
-        type: 'ACTIVITY_CHANGED',
-        data: { activity: allActivities[0] },
+        type: 'MY_ACTIVITIES_CHANGED',
+        data: { activities: activitiesByService },
       });
     } catch (error) {
       console.error('[Activity] Detection pipeline failed:', error);
