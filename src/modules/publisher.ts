@@ -15,7 +15,6 @@ const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify', 'twitch', 'steam', 'netfl
 export class ActivityPublisher {
   private lastPublishedState: Partial<Record<string, Activity>> = {};
   private publishInterval: NodeJS.Timeout | null = null;
-  private currentServiceIndex: number = 0;
 
   static readonly PUBLISH_INTERVAL_MS = 1000; // One publish per second
 
@@ -26,17 +25,17 @@ export class ActivityPublisher {
   ) {}
 
   async start(): Promise<void> {
-    console.debug('[Publisher] Starting round-robin activity publisher');
+    console.debug('[Publisher] Starting activity publisher (publish all services each cycle)');
 
     try {
-      // Then periodically publish one service per second
+      // Periodically publish all services in parallel
       this.publishInterval = setInterval(() => {
-        this.publishNextService().catch((error) => {
+        this.publishAllServices().catch((error) => {
           console.error('[Publisher] Publish error:', error);
         });
       }, ActivityPublisher.PUBLISH_INTERVAL_MS);
 
-      console.debug('[Publisher] Round-robin publish interval started (1s per service)');
+      console.debug('[Publisher] Publish interval started (all services per cycle)');
     } catch (error) {
       console.error('[Publisher] Failed to start:', error);
       throw error;
@@ -50,32 +49,30 @@ export class ActivityPublisher {
     }
   }
 
-  async publishNextService(): Promise<void> {
+  async publishAllServices(): Promise<void> {
     try {
-      const service = SERVICES_TO_PUBLISH[this.currentServiceIndex];
-      this.currentServiceIndex = (this.currentServiceIndex + 1) % SERVICES_TO_PUBLISH.length;
-
-      // Get current activities from storage
+      // Get current activities from storage once
       const currentActivities = await this.storageManager.getMyActivities();
-      const currentActivity = currentActivities[service];
 
-      // Check if this service's activity changed since last publish
-      const lastPublished = this.lastPublishedState[service];
-      if (this._activityUnchanged(currentActivity, lastPublished)) {
-        return; // No change, skip publish
-      }
+      // Publish all services in parallel
+      const publishPromises = SERVICES_TO_PUBLISH.map(async (service) => {
+        const currentActivity = currentActivities[service];
 
-      // Publish the individual activity
-      if (currentActivity) {
-        await this._publishActivity(currentActivity);
-        this.lastPublishedState[service] = currentActivity;
-        console.debug(`[Publisher] Published ${service}: ${currentActivity.content}`);
-      } else {
-        // Service has no activity, clear from last published state
-        delete this.lastPublishedState[service];
-      }
+        // Publish if activity exists (no "unchanged" check)
+        if (currentActivity) {
+          await this._publishActivity(currentActivity);
+          this.lastPublishedState[service] = currentActivity;
+          console.debug(`[Publisher] Published ${service}: ${currentActivity.content}`);
+        } else {
+          // Service has no activity, clear from last published state
+          delete this.lastPublishedState[service];
+        }
+      });
+
+      // Wait for all publishes to complete
+      await Promise.all(publishPromises);
     } catch (error) {
-      console.error('[Publisher] Failed to publish service:', error);
+      console.error('[Publisher] Failed to publish services:', error);
     }
   }
 
