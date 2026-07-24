@@ -868,25 +868,71 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
     return;
   }
 
-  // Regular activity event
+  // Check if this is a complete activity state event (all activities at once)
+  if (typeTag === 'activity-state') {
+    // Parse JSON array of activities
+    try {
+      const activities = JSON.parse(event.content) as Activity[];
+      const wasActive = Object.keys(friend.current_activities || {}).length > 0;
+
+      // Store all activities atomically
+      const newCurrentActivities: Partial<Record<ServiceName, Activity>> = {};
+      for (const activity of activities) {
+        newCurrentActivities[activity.service] = activity;
+      }
+
+      await storageManager.updateFriend(friend.id, {
+        current_activities: newCurrentActivities,
+        last_seen: Date.now(),
+      });
+
+      // Add all activities to history
+      for (const activity of activities) {
+        await storageManager.addActivityToHistory(friend.id, activity);
+      }
+
+      // Send notification if friend came online (any activities detected)
+      if (!wasActive && activities.length > 0) {
+        try {
+          const notificationManager = getNotificationManager();
+          await notificationManager.notifyFriendOnline(friend.id, friend.local_name, activities[0].content);
+        } catch (error) {
+          console.error('[Background] Failed to send online notification:', error);
+        }
+      }
+
+      // Notify popup of complete state update
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'FRIEND_ACTIVITIES_UPDATED',
+          data: { friendId: friend.id, activities },
+        });
+      } catch (error) {
+        // Popup not open
+      }
+      return;
+    } catch (error) {
+      console.error('[Background] Failed to parse complete activity state:', error);
+      return;
+    }
+  }
+
+  // Single activity event (legacy format or future use)
   const activity = _parseActivityEvent(event);
   const wasActive = Object.keys(friend.current_activities || {}).length > 0;
 
   // Handle stopped activities (removal signal)
   if (activity.state === 'stopped') {
-    console.debug(`[Friend] ${friend.local_name} stopped ${activity.service}`);
     const updatedActivities = { ...friend.current_activities };
     delete updatedActivities[activity.service];
     await storageManager.updateFriend(friend.id, {
       current_activities: updatedActivities,
       last_seen: Date.now(),
     });
-    console.debug(`[Friend] ${friend.local_name} ${activity.service} activity removed`);
     return;
   }
 
-  const oldService = friend.current_activities?.[activity.service];
-  console.debug(`[Friend] Updating ${friend.local_name}: ${activity.service}=${oldService?.content || 'new'} -> ${activity.content}`);
+  // Update single activity
   await storageManager.updateFriend(friend.id, {
     current_activities: {
       ...friend.current_activities,
@@ -894,7 +940,6 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
     },
     last_seen: Date.now(),
   });
-  console.debug(`[Friend] ${friend.local_name} ${activity.service} updated successfully`);
 
   await storageManager.addActivityToHistory(friend.id, activity);
 

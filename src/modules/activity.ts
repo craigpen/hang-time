@@ -74,10 +74,8 @@ export class ActivityDetector {
         return;
       }
 
-      // Publish all detected activities to Nostr
-      for (const activity of allActivities) {
-        await this._publishActivity(activity);
-      }
+      // Publish complete activity state as single atomic event
+      await this._publishCompleteActivityState(allActivities);
 
       this.lastPublishedActivity = allActivities[0];
       this.lastPublishedTime = Date.now();
@@ -251,6 +249,46 @@ export class ActivityDetector {
     };
 
     await this.relayPool.publish(event);
+  }
+
+  private async _publishCompleteActivityState(allActivities: Activity[]): Promise<void> {
+    try {
+      const pubkey = await this.identityManager.getPubkey();
+      const created_at = Math.floor(Date.now() / 1000);
+      const kind = 1;
+
+      // Create tags with metadata about the state
+      const tags: Array<[string, string]> = [
+        ['type', 'activity-state'],
+        ['count', allActivities.length.toString()],
+        // Add service tags for filtering (friends can query by service)
+        ...allActivities.map(a => ['service', a.service])
+      ];
+
+      // Serialize all activities as JSON in the content field
+      const content = JSON.stringify(allActivities);
+
+      // Compute event ID
+      const id = await this._computeEventId(pubkey, created_at, kind, tags, content);
+
+      // Sign the event
+      const secretKey = await this.identityManager.getSecretKey();
+      const sig = encryptionManager.signEvent(id, secretKey);
+
+      const event: NostrEvent = {
+        id,
+        pubkey,
+        created_at,
+        kind,
+        tags,
+        content,
+        sig,
+      };
+
+      await this.relayPool.publish(event);
+    } catch (error) {
+      console.error('[Activity] Failed to publish complete activity state:', error);
+    }
   }
 
   private _buildEventContent(activity: Activity): string {
