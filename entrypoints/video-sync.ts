@@ -9,7 +9,7 @@ interface VideoSyncState {
   duration: number;
   isPlaying: boolean;
   lastPublished: number;
-  lastPlayingState: boolean; // Track previous state to detect changes
+  lastPlayingState: boolean | null; // Track previous state to detect changes
 }
 
 class VideoSyncContentScript {
@@ -19,7 +19,7 @@ class VideoSyncContentScript {
     duration: 0,
     isPlaying: false,
     lastPublished: 0,
-    lastPlayingState: false,
+    lastPlayingState: null, // null means first state detection not yet sent
   };
 
   private pollInterval: NodeJS.Timeout | null = null;
