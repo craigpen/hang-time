@@ -36,7 +36,6 @@ export class ActivityDetector {
 
   registerService(name: string, service: IServiceModule): void {
     this.services.set(name, service);
-    console.debug(`[Activity] Registered service: ${name}`);
   }
 
   getService(name: string): IServiceModule | undefined {
@@ -44,8 +43,6 @@ export class ActivityDetector {
   }
 
   async start(): Promise<void> {
-    console.debug('[Activity] Starting activity detector...');
-
     // Initial detection
     await this.detectAndPublish();
 
@@ -55,8 +52,6 @@ export class ActivityDetector {
         console.error('[Activity] Detection error:', error);
       });
     }, ActivityDetector.POLL_INTERVAL_MS);
-
-    console.debug('[Activity] Detector started');
   }
 
   async stop(): Promise<void> {
@@ -64,7 +59,6 @@ export class ActivityDetector {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
     }
-    console.debug('[Activity] Activity detector stopped');
   }
 
   async detectAndPublish(): Promise<void> {
@@ -135,8 +129,6 @@ export class ActivityDetector {
       youtube: false,
     };
 
-    console.debug('[Activity] Services enabled:', servicesEnabled);
-
     // Check each enabled OAuth service (Spotify, Twitch, Steam)
     const oauthServices: ServiceName[] = ['spotify', 'twitch', 'steam'];
     for (const serviceName of oauthServices) {
@@ -146,10 +138,8 @@ export class ActivityDetector {
       if (!service) continue;
 
       try {
-        console.debug(`[Activity] Checking ${serviceName}...`);
         const activity = await service.getCurrentActivity();
         if (activity) {
-          console.debug(`[Activity] Detected ${serviceName}: ${activity.content}`);
           activities.push(activity);
           seenServices.add(serviceName);
         }
@@ -163,8 +153,6 @@ export class ActivityDetector {
       const tabService = this.services.get('tabs') as any;
       if (tabService) {
         try {
-          console.debug('[Activity] Checking browser tabs...');
-
           // Call getCurrentActivity first to populate the lastDetected map
           await tabService.getCurrentActivity();
 
@@ -172,7 +160,6 @@ export class ActivityDetector {
           if (servicesEnabled.netflix) {
             const netflixActivity = tabService.getDetectedActivity('netflix');
             if (netflixActivity) {
-              console.debug(`[Activity] Detected netflix: ${netflixActivity.content}`);
               activities.push(netflixActivity);
               seenServices.add('netflix');
             }
@@ -182,7 +169,6 @@ export class ActivityDetector {
           if (servicesEnabled.youtube) {
             const youtubeActivity = tabService.getDetectedActivity('youtube');
             if (youtubeActivity) {
-              console.debug(`[Activity] Detected youtube: ${youtubeActivity.content}`);
               activities.push(youtubeActivity);
               seenServices.add('youtube');
             }
@@ -192,7 +178,6 @@ export class ActivityDetector {
           if (servicesEnabled.twitch) {
             const twitchActivity = tabService.getDetectedActivity('twitch');
             if (twitchActivity) {
-              console.debug(`[Activity] Detected twitch: ${twitchActivity.content}`);
               activities.push(twitchActivity);
               seenServices.add('twitch');
             }
@@ -210,14 +195,17 @@ export class ActivityDetector {
       return bTime - aTime;
     });
 
-    console.debug(`[Activity] Detected ${activities.length} active service(s)`);
     return activities;
   }
 
   private async _publishActivity(activity: Activity): Promise<void> {
+    // Skip temporary guidance activities (e.g., Netflix title not yet captured)
+    if (activity.temporary) {
+      return;
+    }
+
     // Don't publish fallback/placeholder activities
     if (activity.content === '(Reload Netflix to identify title)') {
-      console.debug(`[Activity] Skipping publish of placeholder activity: ${activity.content}`);
       return;
     }
 
@@ -265,7 +253,6 @@ export class ActivityDetector {
     };
 
     await this.relayPool.publish(event);
-    console.debug(`[Activity] Published ${activity.service} activity to Nostr with ID: ${activityId}`);
   }
 
   private _buildEventContent(activity: Activity): string {

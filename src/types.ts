@@ -76,6 +76,7 @@ export interface Activity {
   content: string;
   url?: string;
   state?: 'playing' | 'paused' | 'stopped'; // Activity state: playing, paused, or stopped (removal signal)
+  temporary?: boolean; // If true, activity is guidance only and won't publish to Nostr
   timestamp: number;
   metadata: {
     duration?: number;

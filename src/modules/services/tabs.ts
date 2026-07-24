@@ -21,7 +21,6 @@ export class TabService implements IServiceModule {
   async getCurrentActivity(): Promise<Activity | null> {
     try {
       const tabs = await chrome.tabs.query({ windowType: 'normal' });
-      console.debug(`[TabService] Found ${tabs.length} tabs`);
 
       // Detect ALL active services, not just the first one
       const detectedActivities: Activity[] = [];
@@ -35,10 +34,9 @@ export class TabService implements IServiceModule {
         if (!title) {
           title = this._extractNetflixTitle(netflixTab.title || '');
         }
-        console.debug(`[TabService] Detected Netflix: ${title}`);
 
-        // Only create activity if we have a valid title (never create with placeholder/fallback)
         if (title) {
+          // We have a real title - create normal activity
           const netflixActivity: Activity = {
             service: 'netflix',
             content: title,
@@ -52,6 +50,18 @@ export class TabService implements IServiceModule {
             netflixActivity.state = netflixState ? 'playing' : 'paused';
           }
           detectedActivities.push(netflixActivity);
+        } else {
+          // No title yet - create guidance activity (temporary, won't publish to Nostr)
+          const guidanceActivity: Activity = {
+            service: 'netflix',
+            content: 'Reload Netflix and play to capture title',
+            url: netflixTab.url,
+            timestamp: Date.now(),
+            state: 'paused',
+            temporary: true,  // Flag to prevent Nostr publishing
+            metadata: { lastAccessed: netflixTab.lastAccessed || 0 },
+          };
+          detectedActivities.push(guidanceActivity);
         }
       }
 
@@ -59,7 +69,6 @@ export class TabService implements IServiceModule {
       const youtubeTab = this._findMostRecentTabByDomain(tabs, 'youtube');
       if (youtubeTab) {
         const title = this._extractYouTubeTitle(youtubeTab.title || '');
-        console.debug(`[TabService] Detected YouTube: ${title}`);
         // Use tab's audible property as initial state guess (if audio playing, likely video is playing)
         const youtubeActivity: Activity = {
           service: 'youtube',
@@ -80,7 +89,6 @@ export class TabService implements IServiceModule {
       const twitchTab = this._findMostRecentTabByDomain(tabs, 'twitch');
       if (twitchTab) {
         const title = this._extractTwitchTitle(twitchTab.title || '');
-        console.debug(`[TabService] Detected Twitch: ${title}`);
         // Use tab's audible property as initial state guess (if audio playing, likely stream is playing)
         const twitchActivity: Activity = {
           service: 'twitch',
@@ -111,11 +119,9 @@ export class TabService implements IServiceModule {
           return aTime > bTime ? a : b;
         });
 
-        console.debug(`[TabService] Detected ${detectedActivities.length} service(s), returning most recent: ${mostRecent.service}`);
         return mostRecent;
       }
 
-      console.debug('[TabService] No video content found');
       // No video content found
       return null;
     } catch (error) {
@@ -261,11 +267,10 @@ export class TabService implements IServiceModule {
       const result = await chrome.storage.local.get('netflix_title');
       const storedTitle = result['netflix_title'];
       if (storedTitle && typeof storedTitle === 'string' && storedTitle.length > 0) {
-        console.debug('[TabService] Got Netflix title from storage:', storedTitle);
         return storedTitle;
       }
     } catch (error) {
-      console.debug('[TabService] Error reading Netflix title from storage:', error);
+      console.error('[TabService] Error reading Netflix title from storage:', error);
     }
 
     // Storage empty - use aggressive retry to get fresh extraction from content script
@@ -274,23 +279,18 @@ export class TabService implements IServiceModule {
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        console.debug(`[TabService] Requesting fresh Netflix title from tab (attempt ${attempt + 1}/${maxRetries})`);
         const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_NETFLIX_TITLE' });
 
         if (response && response.success && response.data && typeof response.data === 'string' && response.data.length > 0) {
-          console.debug('[TabService] Got valid Netflix title from content script:', response.data);
           return response.data;
         }
 
         // Invalid response, retry if attempts left
         if (attempt < maxRetries - 1) {
           const delay = retryDelays[attempt];
-          console.debug(`[TabService] No valid title in response, retrying in ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       } catch (error) {
-        console.debug(`[TabService] Error on attempt ${attempt + 1}:`, error instanceof Error ? error.message : String(error));
-
         // Retry unless it's the last attempt
         if (attempt < maxRetries - 1) {
           const delay = retryDelays[attempt];
@@ -300,7 +300,6 @@ export class TabService implements IServiceModule {
     }
 
     // All retries exhausted, return null (activity will show without title, but with play/pause state)
-    console.debug('[TabService] Unable to get Netflix title after all retries');
     return null;
   }
 
