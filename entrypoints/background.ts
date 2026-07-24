@@ -256,6 +256,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'AUTHENTICATE_SERVICE':
       return _authenticateService(message.data?.service);
 
+    case 'GET_NETFLIX_EXTRACTION_LOGS':
+      return _getNetflixExtractionLogs();
+
     case 'DISCONNECT_SERVICE':
       return _disconnectService(message.data?.service);
 
@@ -410,6 +413,17 @@ async function _getMessages(friendId?: string): Promise<ExtensionResponse> {
     return { success: true, data: messages };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to get messages' };
+  }
+}
+
+async function _getNetflixExtractionLogs(): Promise<ExtensionResponse> {
+  try {
+    const result = await chrome.storage.local.get('netflix_extraction_logs');
+    const logs = result.netflix_extraction_logs || [];
+    console.debug(`[Background] Retrieved ${logs.length} Netflix extraction logs`);
+    return { success: true, data: logs };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get logs' };
   }
 }
 

@@ -11,8 +11,42 @@ const STORAGE_KEY = 'netflix_title';
 function isValidTitle(title: string | null | undefined): boolean {
   if (!title || typeof title !== 'string') return false;
   if (title.length < 2 || title.length > 300) return false;
-  if (title.toLowerCase().includes('error') || title.toLowerCase().includes('failed')) return false;
-  if (title === 'Netflix' || title === 'Loading' || title === '') return false;
+
+  const lower = title.toLowerCase();
+
+  // Reject error messages
+  if (lower.includes('error') || lower.includes('failed')) return false;
+
+  // Reject common UI/placeholder text
+  if (
+    title === 'Netflix' ||
+    title === 'Loading' ||
+    title === '' ||
+    lower === 'play' ||
+    lower === 'pause' ||
+    lower === 'skip' ||
+    lower === 'replay'
+  ) {
+    return false;
+  }
+
+  // Reject accessibility/metadata text
+  if (
+    lower.includes('audio description') ||
+    lower.includes('closed captions') ||
+    lower.includes('subtitles') ||
+    lower.includes('cc available') ||
+    lower.includes('dubbed') ||
+    lower.includes('original audio') ||
+    lower.includes('volume') ||
+    lower.includes('fullscreen') ||
+    lower.includes('settings') ||
+    lower.includes('next episode') ||
+    lower.includes('previous episode')
+  ) {
+    return false;
+  }
+
   return true;
 }
 
@@ -50,26 +84,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
+ * Log extraction attempt for debugging
+ */
+async function logExtractionAttempt(extracted: string | null, valid: boolean, used: string | null): Promise<void> {
+  try {
+    const logs = await chrome.storage.local.get('netflix_extraction_logs');
+    const history = logs.netflix_extraction_logs || [];
+
+    history.push({
+      timestamp: new Date().toISOString(),
+      extracted,
+      valid,
+      used,
+      url: window.location.href,
+    });
+
+    // Keep only last 20 attempts
+    if (history.length > 20) {
+      history.shift();
+    }
+
+    await chrome.storage.local.set({ netflix_extraction_logs: history });
+  } catch (error) {
+    console.debug('[Netflix Content] Failed to log extraction:', error);
+  }
+}
+
+/**
  * Handle GET_NETFLIX_TITLE message: try extraction, preserve stored title
  */
 async function handleGetNetflixTitle(): Promise<string | null> {
   try {
     // Try to extract fresh title
     const freshTitle = extractNetflixTitle();
+    const isValid = isValidTitle(freshTitle);
 
-    if (isValidTitle(freshTitle)) {
+    if (isValid) {
       // Fresh extraction valid - write and return it
       await writeValidTitle(freshTitle);
+      await logExtractionAttempt(freshTitle, true, freshTitle);
       return freshTitle;
     } else {
       // Fresh extraction invalid - return stored title (preserve good data)
       const storedTitle = await getStoredTitle();
+      await logExtractionAttempt(freshTitle, false, storedTitle);
       return storedTitle;
     }
   } catch (error) {
     console.error('[Netflix Content] Error handling GET_NETFLIX_TITLE:', error);
     // Return whatever we have stored as fallback
-    return await getStoredTitle();
+    const storedTitle = await getStoredTitle();
+    await logExtractionAttempt(null, false, storedTitle);
+    return storedTitle;
   }
 }
 
@@ -141,12 +207,14 @@ function extractNetflixTitle(): string | null {
     // Method 1: Use Netflix's data-uia attribute (most reliable)
     // Netflix marks the video title with data-uia='video-title'
     const titleElements = document.querySelectorAll("[data-uia='video-title']");
+    console.debug(`[Netflix Content] Found ${titleElements.length} elements with data-uia='video-title'`);
+
     for (const titleElement of titleElements) {
       let fullText = titleElement.textContent?.trim() || '';
 
       if (!fullText || fullText.length === 0) continue;
 
-      console.debug('[Netflix Content] Raw text from element:', fullText);
+      console.debug('[Netflix Content] Raw text from video-title element:', fullText, 'length:', fullText.length);
 
       // Split by common Netflix metadata to extract just the title
       // Netflix format: "Title Rated PG-13 Audio description available" or "Title S01E01"
@@ -203,10 +271,12 @@ function extractNetflixTitle(): string | null {
     for (const selector of titleSelectors) {
       try {
         const elements = document.querySelectorAll(selector);
+        console.debug(`[Netflix Content] Selector "${selector}" found ${elements.length} elements`);
+
         for (const el of elements) {
           const text = el.textContent?.trim();
           if (text && text.length > 3 && text.length < 300 && text !== 'Netflix') {
-            console.debug('[Netflix Content] Found title via selector:', selector, '=', text);
+            console.debug('[Netflix Content] Found via selector:', selector, '=', text, 'tagName:', el.tagName, 'className:', el.className);
             return text;
           }
         }
