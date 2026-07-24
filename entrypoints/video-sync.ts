@@ -44,27 +44,30 @@ class VideoSyncContentScript {
   private _connectToExtension(): void {
     try {
       this.port = chrome.runtime.connect({ name: 'video-sync' });
-      console.debug('[VideoSync] Connected to extension');
+      console.log(`[VideoSync] ✅ Connected to extension on ${this._getService()}`);
 
       // Listen for messages on the port
       this.port.onMessage.addListener((message: any) => {
+        console.debug(`[VideoSync] Received query: ${message.type}`);
         this._handleMessage(message, (response: any) => {
           if (this.port) {
             this.port.postMessage({ type: message.type, response });
+            console.debug(`[VideoSync] Responded to ${message.type}`);
           }
         });
       });
 
       // Handle disconnection (e.g., extension reload)
       this.port.onDisconnect.addListener(() => {
-        console.debug('[VideoSync] Disconnected from extension, will reconnect');
+        console.warn(`[VideoSync] ⚠️  Disconnected from extension on ${this._getService()} (extension reload?), attempting reconnect in 1s...`);
         this.port = null;
         // Attempt to reconnect after a delay
         setTimeout(() => this._connectToExtension(), 1000);
       });
     } catch (error) {
-      console.debug('[VideoSync] Failed to connect to extension:', error);
+      console.error(`[VideoSync] ❌ Failed to connect to extension on ${this._getService()}:`, error);
       // Retry connection after delay
+      console.log('[VideoSync] Retrying connection in 1s...');
       setTimeout(() => this._connectToExtension(), 1000);
     }
   }

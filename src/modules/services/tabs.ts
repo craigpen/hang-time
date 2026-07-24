@@ -240,9 +240,11 @@ export class TabService implements IServiceModule {
    */
   async getVideoActivityDataFromTab(tabId: number, service: string): Promise<{ currentTime?: number; duration?: number; isPlaying?: boolean } | null> {
     try {
+      console.debug(`[TabService] Querying ${service} (tab ${tabId}) for video data...`);
       const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_VIDEO_STATE' });
 
       if (response && response.success && response.data) {
+        console.debug(`[TabService] ✅ Got ${service} data: playing=${response.data.isPlaying}, progress=${response.data.currentTime}/${response.data.duration}`);
         return {
           currentTime: response.data.currentTime,
           duration: response.data.duration,
@@ -251,7 +253,7 @@ export class TabService implements IServiceModule {
       }
     } catch (error) {
       // Content script not available or error querying data - just continue without it
-      console.debug(`[TabService] Could not get video data for ${service}:`, error);
+      console.warn(`[TabService] ⚠️  Could not get video data for ${service} (tab ${tabId}):`, error instanceof Error ? error.message : error);
     }
 
     return null;

@@ -50,15 +50,24 @@ export class ActivityDetector {
 
   async detectAndPublish(): Promise<void> {
     try {
+      console.debug('[Activity] Detection cycle starting...');
       const allActivities = await this.detectAllActiveActivities();
-      if (allActivities.length === 0) return;
+
+      if (allActivities.length === 0) {
+        console.debug('[Activity] No active activities detected');
+        return;
+      }
+
+      console.log(`[Activity] 🎬 Detected ${allActivities.length} active service(s): ${allActivities.map(a => a.service).join(', ')}`);
 
       // Store detected activities locally (publishing handled by separate publisher)
       const activitiesByService: Partial<Record<string, any>> = {};
       for (const activity of allActivities) {
         activitiesByService[activity.service] = activity;
+        console.debug(`[Activity]   - ${activity.service}: "${activity.content}" (${activity.state})`);
       }
       await this.storageManager.setMyActivities(activitiesByService);
+      console.debug('[Activity] ✅ Stored in MY_ACTIVITIES');
 
       // Store most recent activity for backwards compatibility
       await this.storageManager.setCurrentActivity(allActivities[0]);
@@ -69,7 +78,7 @@ export class ActivityDetector {
         data: { activities: activitiesByService },
       });
     } catch (error) {
-      console.error('[Activity] Detection pipeline failed:', error);
+      console.error('[Activity] ❌ Detection pipeline failed:', error);
     }
   }
 

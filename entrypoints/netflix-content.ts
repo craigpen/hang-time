@@ -140,22 +140,26 @@ let port: chrome.runtime.Port | null = null;
 function connectToExtension(): void {
   try {
     port = chrome.runtime.connect({ name: 'netflix-content' });
-    console.debug('[NetflixContent] Connected to extension');
+    console.log('[NetflixContent] ✅ Connected to extension');
 
     port.onMessage.addListener((message: any) => {
       if (message.type === 'GET_NETFLIX_TITLE') {
+        console.debug('[NetflixContent] Received GET_NETFLIX_TITLE query');
         (async () => {
           try {
             const freshTitle = extractNetflixTitle();
             if (isValidTitle(freshTitle)) {
               await writeValidTitle(freshTitle);
+              console.debug(`[NetflixContent] Responding with fresh title: "${freshTitle}"`);
               port?.postMessage({ type: 'GET_NETFLIX_TITLE', success: true, data: freshTitle });
             } else {
               const storedTitle = await getStoredTitle();
+              console.debug(`[NetflixContent] Fresh title invalid, using stored: "${storedTitle}"`);
               port?.postMessage({ type: 'GET_NETFLIX_TITLE', success: true, data: storedTitle });
             }
           } catch (error) {
             const storedTitle = await getStoredTitle();
+            console.debug(`[NetflixContent] Error extracting, using stored: "${storedTitle}"`);
             port?.postMessage({ type: 'GET_NETFLIX_TITLE', success: true, data: storedTitle });
           }
         })();
@@ -163,12 +167,13 @@ function connectToExtension(): void {
     });
 
     port.onDisconnect.addListener(() => {
-      console.debug('[NetflixContent] Disconnected from extension, will reconnect');
+      console.warn('[NetflixContent] ⚠️  Disconnected from extension (extension reload?), attempting reconnect in 1s...');
       port = null;
       setTimeout(() => connectToExtension(), 1000);
     });
   } catch (error) {
-    console.debug('[NetflixContent] Failed to connect to extension:', error);
+    console.error('[NetflixContent] ❌ Failed to connect to extension:', error);
+    console.log('[NetflixContent] Retrying connection in 1s...');
     setTimeout(() => connectToExtension(), 1000);
   }
 }
