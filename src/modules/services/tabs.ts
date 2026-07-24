@@ -36,12 +36,13 @@ export class TabService implements IServiceModule {
           title = this._extractNetflixTitle(netflixTab.title || '');
         }
         console.debug(`[TabService] Detected Netflix: ${title}`);
+        // Use tab's audible property as initial state guess (if audio playing, likely video is playing)
         const netflixActivity: Activity = {
           service: 'netflix',
           content: title || '(Reload Netflix to identify title)',
           url: netflixTab.url,
           timestamp: Date.now(),
-          state: 'playing', // default to playing on initial detection
+          state: netflixTab.audible ? 'playing' : 'paused',
           metadata: { title, lastAccessed: netflixTab.lastAccessed || 0 },
         };
         const netflixState = this._getVideoState('netflix');
@@ -56,12 +57,13 @@ export class TabService implements IServiceModule {
       if (youtubeTab) {
         const title = this._extractYouTubeTitle(youtubeTab.title || '');
         console.debug(`[TabService] Detected YouTube: ${title}`);
+        // Use tab's audible property as initial state guess (if audio playing, likely video is playing)
         const youtubeActivity: Activity = {
           service: 'youtube',
           content: title || 'YouTube Video',
           url: youtubeTab.url,
           timestamp: Date.now(),
-          state: 'playing', // default to playing on initial detection
+          state: youtubeTab.audible ? 'playing' : 'paused',
           metadata: { title, lastAccessed: youtubeTab.lastAccessed || 0 },
         };
         const youtubeState = this._getVideoState('youtube');
@@ -76,12 +78,13 @@ export class TabService implements IServiceModule {
       if (twitchTab) {
         const title = this._extractTwitchTitle(twitchTab.title || '');
         console.debug(`[TabService] Detected Twitch: ${title}`);
+        // Use tab's audible property as initial state guess (if audio playing, likely stream is playing)
         const twitchActivity: Activity = {
           service: 'twitch',
           content: title || 'Twitch Stream',
           url: twitchTab.url,
           timestamp: Date.now(),
-          state: 'playing', // default to playing on initial detection
+          state: twitchTab.audible ? 'playing' : 'paused',
           metadata: { title, lastAccessed: twitchTab.lastAccessed || 0 },
         };
         const twitchState = this._getVideoState('twitch');
