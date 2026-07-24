@@ -9,6 +9,7 @@ interface VideoSyncState {
   duration: number;
   isPlaying: boolean;
   lastPublished: number;
+  lastPlayingState: boolean; // Track previous state to detect changes
 }
 
 class VideoSyncContentScript {
@@ -18,6 +19,7 @@ class VideoSyncContentScript {
     duration: 0,
     isPlaying: false,
     lastPublished: 0,
+    lastPlayingState: false,
   };
 
   private pollInterval: NodeJS.Timeout | null = null;
@@ -76,6 +78,19 @@ class VideoSyncContentScript {
         this.state.duration = video.duration;
         this.state.isPlaying = !video.paused;
 
+        // Send UPDATE_VIDEO_STATE immediately if play/pause state changed
+        if (this.state.isPlaying !== this.state.lastPlayingState) {
+          this.state.lastPlayingState = this.state.isPlaying;
+          chrome.runtime.sendMessage({
+            type: 'UPDATE_VIDEO_STATE',
+            data: {
+              service: this._getService(),
+              isPlaying: this.state.isPlaying,
+            },
+          });
+          console.debug(`[VideoSync] State change: ${this.state.isPlaying ? 'playing' : 'paused'}`);
+        }
+
         // Publish sync if enough time has passed
         if (Date.now() - this.state.lastPublished > this.PUBLISH_INTERVAL_MS) {
           this._publishSync();
@@ -110,6 +125,19 @@ class VideoSyncContentScript {
         this.state.duration = video.duration;
         this.state.isPlaying = !video.paused;
 
+        // Send UPDATE_VIDEO_STATE immediately if play/pause state changed
+        if (this.state.isPlaying !== this.state.lastPlayingState) {
+          this.state.lastPlayingState = this.state.isPlaying;
+          chrome.runtime.sendMessage({
+            type: 'UPDATE_VIDEO_STATE',
+            data: {
+              service: this._getService(),
+              isPlaying: this.state.isPlaying,
+            },
+          });
+          console.debug(`[VideoSync] State change: ${this.state.isPlaying ? 'playing' : 'paused'}`);
+        }
+
         // Publish sync if enough time has passed
         if (Date.now() - this.state.lastPublished > this.PUBLISH_INTERVAL_MS) {
           this._publishSync();
@@ -143,6 +171,19 @@ class VideoSyncContentScript {
         this.state.currentTime = video.currentTime;
         this.state.duration = video.duration;
         this.state.isPlaying = !video.paused;
+
+        // Send UPDATE_VIDEO_STATE immediately if play/pause state changed
+        if (this.state.isPlaying !== this.state.lastPlayingState) {
+          this.state.lastPlayingState = this.state.isPlaying;
+          chrome.runtime.sendMessage({
+            type: 'UPDATE_VIDEO_STATE',
+            data: {
+              service: this._getService(),
+              isPlaying: this.state.isPlaying,
+            },
+          });
+          console.debug(`[VideoSync] State change: ${this.state.isPlaying ? 'playing' : 'paused'}`);
+        }
 
         // Publish sync if enough time has passed
         if (Date.now() - this.state.lastPublished > this.PUBLISH_INTERVAL_MS) {

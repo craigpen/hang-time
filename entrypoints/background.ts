@@ -771,6 +771,8 @@ function _updateVideoState(data?: any): ExtensionResponse {
     if (tabService && tabService.setVideoState) {
       tabService.setVideoState(data.service, isPlaying);
     }
+    // Trigger immediate activity detection on state change so play/pause state is published
+    activityDetector.detectAndPublish();
   }
 
   return { success: true };
