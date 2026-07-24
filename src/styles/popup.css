@@ -1198,9 +1198,10 @@ body {
 
 .activity-separator {
   flex-shrink: 0;
-  opacity: 0.5;
-  margin: 0 2px;
+  opacity: 0.8;
+  margin: 0 4px;
   color: inherit;
+  font-weight: bold;
 }
 
 .activity-state-playing {
