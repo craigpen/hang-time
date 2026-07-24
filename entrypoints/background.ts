@@ -875,6 +875,28 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       const activities = JSON.parse(event.content) as Activity[];
       const wasActive = Object.keys(friend.current_activities || {}).length > 0;
 
+      // Detect which activities changed
+      const changedServices = new Set<ServiceName>();
+      for (const activity of activities) {
+        const oldActivity = friend.current_activities?.[activity.service];
+        // Check if activity changed (content, state, or URL)
+        if (!oldActivity ||
+            oldActivity.content !== activity.content ||
+            oldActivity.state !== activity.state ||
+            oldActivity.url !== activity.url) {
+          changedServices.add(activity.service);
+        }
+      }
+
+      // Check for removed activities (services that were active but aren't now)
+      if (friend.current_activities) {
+        for (const service of Object.keys(friend.current_activities) as ServiceName[]) {
+          if (!activities.find(a => a.service === service)) {
+            changedServices.add(service);
+          }
+        }
+      }
+
       // Store all activities atomically
       const newCurrentActivities: Partial<Record<ServiceName, Activity>> = {};
       for (const activity of activities) {
@@ -886,12 +908,14 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         last_seen: Date.now(),
       });
 
-      // Add all activities to history
+      // Add changed activities to history
       for (const activity of activities) {
-        await storageManager.addActivityToHistory(friend.id, activity);
+        if (changedServices.has(activity.service)) {
+          await storageManager.addActivityToHistory(friend.id, activity);
+        }
       }
 
-      // Send notification if friend came online (any activities detected)
+      // Send notification if friend came online (transition from no activities to some)
       if (!wasActive && activities.length > 0) {
         try {
           const notificationManager = getNotificationManager();
@@ -901,14 +925,16 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         }
       }
 
-      // Notify popup of complete state update
-      try {
-        await chrome.runtime.sendMessage({
-          type: 'FRIEND_ACTIVITIES_UPDATED',
-          data: { friendId: friend.id, activities },
-        });
-      } catch (error) {
-        // Popup not open
+      // Only notify popup if something actually changed
+      if (changedServices.size > 0) {
+        try {
+          await chrome.runtime.sendMessage({
+            type: 'FRIEND_ACTIVITY_CHANGED',
+            data: { friendId: friend.id, changedServices: Array.from(changedServices) },
+          });
+        } catch (error) {
+          // Popup not open
+        }
       }
       return;
     } catch (error) {

@@ -911,11 +911,9 @@ export class PopupController {
             }
           }
         }
-      } else if (message.type === 'FRIEND_ACTIVITIES_UPDATED') {
-        // Refresh friends list when friend's complete activity state updates
-        this.refreshFriends().catch((error) => {
-          console.error('[Popup] Failed to refresh friends after activity update:', error);
-        });
+      } else if (message.type === 'FRIEND_ACTIVITY_CHANGED') {
+        // Friend's activities changed - let next refresh cycle pick it up
+        // No need to redraw on every state change; popup already refreshes every 3 seconds
       }
     });
   }
