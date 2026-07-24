@@ -971,9 +971,22 @@ function _parseActivityEvent(event: NostrEvent) {
   const activityIdTag = event.tags.find((t) => t[0] === 'activity_id')?.[1];
   const stateTag = event.tags.find((t) => t[0] === 'state')?.[1] as 'playing' | 'paused' | 'stopped' | undefined;
 
+  // Use content tag, fallback to event.content, but never use URL as content
+  let finalContent = (contentTag || event.content || '').trim();
+
+  // Safety check: if content looks like a URL, use a generic fallback
+  if (finalContent.includes('http') || finalContent.includes('youtube.com') || finalContent.includes('twitch.tv') || finalContent.includes('netflix.com') || finalContent.includes('spotify.com')) {
+    finalContent = `Activity on ${serviceTag}`;
+  }
+
+  // If empty after all that, use fallback
+  if (!finalContent) {
+    finalContent = `Activity on ${serviceTag}`;
+  }
+
   const activity: Activity = {
     service: serviceTag,
-    content: contentTag || event.content,
+    content: finalContent,
     url: urlTag,
     id: activityIdTag,
     timestamp: event.created_at * 1000,

@@ -216,9 +216,16 @@ export class ActivityDetector {
     // Generate stable activity ID (or use existing if already computed)
     const activityId = activity.id || generateActivityId(activity.service, activity.url);
 
+    // Ensure content is never empty or a URL
+    const activityContent = (activity.content || '').trim();
+    if (!activityContent || activityContent.includes('http') || activityContent === activity.url) {
+      // Content is empty or invalid - don't publish
+      return;
+    }
+
     const tags: Array<[string, string]> = [
       ['service', activity.service],
-      ['content', activity.content],
+      ['content', activityContent],
       ['activity_id', activityId],
     ];
 

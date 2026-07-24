@@ -69,10 +69,12 @@ export class TabService implements IServiceModule {
       const youtubeTab = this._findMostRecentTabByDomain(tabs, 'youtube');
       if (youtubeTab) {
         const title = this._extractYouTubeTitle(youtubeTab.title || '');
+        // Ensure content is never a URL - use fallback if title extraction failed
+        const finalContent = (title && !title.includes('http')) ? title : 'YouTube Video';
         // Use tab's audible property as initial state guess (if audio playing, likely video is playing)
         const youtubeActivity: Activity = {
           service: 'youtube',
-          content: title || 'YouTube Video',
+          content: finalContent,
           url: youtubeTab.url,
           timestamp: Date.now(),
           state: youtubeTab.audible ? 'playing' : 'paused',
