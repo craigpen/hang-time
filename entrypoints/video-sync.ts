@@ -199,14 +199,23 @@ class VideoSyncContentScript {
   private _setupSyncListener(): void {
     // Listen for sync requests from extension
     const checkSync = () => {
-      chrome.runtime.sendMessage(
-        { type: 'CHECK_VIDEO_SYNC' },
-        (response: any) => {
-          if (response?.success && response.data?.recommendedPosition !== undefined) {
-            this._syncToPosition(response.data.recommendedPosition);
+      try {
+        chrome.runtime.sendMessage(
+          { type: 'CHECK_VIDEO_SYNC' },
+          (response: any) => {
+            // Check if extension context is still valid
+            if (chrome.runtime.lastError) {
+              console.debug('[VideoSync] Extension context invalidated, stopping sync listener');
+              return;
+            }
+            if (response?.success && response.data?.recommendedPosition !== undefined) {
+              this._syncToPosition(response.data.recommendedPosition);
+            }
           }
-        }
-      );
+        );
+      } catch (error) {
+        console.debug('[VideoSync] Error checking sync (extension may have reloaded):', error);
+      }
     };
 
     // Check for sync every 10 seconds (reduce relay load)
@@ -232,56 +241,69 @@ class VideoSyncContentScript {
   private _publishSync(): void {
     if (!this.state.videoId) return;
 
-    chrome.runtime.sendMessage(
-      {
-        type: 'PUBLISH_VIDEO_SYNC',
-        data: {
-          videoId: this.state.videoId,
-          currentTime: this.state.currentTime,
-          duration: this.state.duration,
-          isPlaying: this.state.isPlaying,
-          service: this._getService(),
-        },
-      },
-      (response: any) => {
-        if (response?.success) {
-          this.state.lastPublished = Date.now();
-        }
-      }
-    );
-
-    // Also report the current play/pause state for activity detection
-    chrome.runtime.sendMessage({
-      type: 'UPDATE_VIDEO_STATE',
-      data: {
-        service: this._getService(),
-        isPlaying: this.state.isPlaying,
-      },
-    });
-  }
-
-  private _handleMessage(message: any, sendResponse: (response: any) => void): void {
-    switch (message.type) {
-      case 'GET_VIDEO_STATE':
-        sendResponse({
-          success: true,
+    try {
+      chrome.runtime.sendMessage(
+        {
+          type: 'PUBLISH_VIDEO_SYNC',
           data: {
             videoId: this.state.videoId,
             currentTime: this.state.currentTime,
             duration: this.state.duration,
             isPlaying: this.state.isPlaying,
+            service: this._getService(),
           },
-        });
-        break;
+        },
+        (response: any) => {
+          if (chrome.runtime.lastError) {
+            console.debug('[VideoSync] Extension context invalidated');
+            return;
+          }
+          if (response?.success) {
+            this.state.lastPublished = Date.now();
+          }
+        }
+      );
 
-      case 'SYNC_VIDEO':
-        this._syncToPosition(message.data?.targetTime);
-        sendResponse({ success: true });
-        break;
+      // Also report the current play/pause state for activity detection
+      chrome.runtime.sendMessage({
+        type: 'UPDATE_VIDEO_STATE',
+        data: {
+          service: this._getService(),
+          isPlaying: this.state.isPlaying,
+        },
+      });
+    } catch (error) {
+      console.debug('[VideoSync] Error publishing sync (extension may have reloaded):', error);
+    }
+  }
 
-      default:
-        // Don't respond to unknown message types - let other content scripts handle them
-        return;
+  private _handleMessage(message: any, sendResponse: (response: any) => void): void {
+    try {
+      switch (message.type) {
+        case 'GET_VIDEO_STATE':
+          sendResponse({
+            success: true,
+            data: {
+              videoId: this.state.videoId,
+              currentTime: this.state.currentTime,
+              duration: this.state.duration,
+              isPlaying: this.state.isPlaying,
+            },
+          });
+          break;
+
+        case 'SYNC_VIDEO':
+          this._syncToPosition(message.data?.targetTime);
+          sendResponse({ success: true });
+          break;
+
+        default:
+          // Don't respond to unknown message types - let other content scripts handle them
+          return;
+      }
+    } catch (error) {
+      console.debug('[VideoSync] Error handling message:', error);
+      sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 
