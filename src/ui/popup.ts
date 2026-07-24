@@ -400,7 +400,7 @@ export class PopupController {
     if (activity.state) {
       const stateIcon = document.createElement('span');
       stateIcon.className = `activity-state-icon activity-state-${activity.state}`;
-      stateIcon.textContent = activity.state === 'playing' ? '▶️' : '⏸️';
+      stateIcon.textContent = activity.state === 'playing' ? '▶' : '⏸';
       stateIcon.title = activity.state === 'playing' ? 'Playing' : 'Paused';
       row.appendChild(stateIcon);
 
@@ -781,7 +781,7 @@ export class PopupController {
     if (activity.state) {
       const stateIcon = document.createElement('span');
       stateIcon.className = `activity-state-icon activity-state-${activity.state}`;
-      stateIcon.textContent = activity.state === 'playing' ? '▶️' : '⏸️';
+      stateIcon.textContent = activity.state === 'playing' ? '▶' : '⏸';
       stateIcon.title = activity.state === 'playing' ? 'Playing' : 'Paused';
       item.appendChild(stateIcon);
 

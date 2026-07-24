@@ -1181,15 +1181,19 @@ body {
 
 .activity-state-icon {
   flex-shrink: 0;
-  font-size: 1em;
+  font-size: 1.2em;
+  font-weight: bold;
   min-width: auto;
+  width: auto;
   text-align: center;
   background-color: transparent !important;
-  border: none;
-  padding: 0;
-  margin: 0;
-  line-height: 1;
-  display: inline;
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+  display: inline !important;
+  -webkit-text-fill-color: inherit;
 }
 
 .activity-separator {
@@ -1200,11 +1204,11 @@ body {
 }
 
 .activity-state-playing {
-  color: #2ecc71 !important; /* Green */
+  color: #2ecc71 !important; /* Green play arrow */
 }
 
 .activity-state-paused {
-  color: #f1c40f !important; /* Yellow */
+  color: #f1c40f !important; /* Yellow pause symbol */
 }
 
 /* Activity action buttons (hidden by default, shown on hover) */
