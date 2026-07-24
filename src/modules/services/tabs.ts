@@ -36,20 +36,23 @@ export class TabService implements IServiceModule {
           title = this._extractNetflixTitle(netflixTab.title || '');
         }
         console.debug(`[TabService] Detected Netflix: ${title}`);
-        // Use tab's audible property as initial state guess (if audio playing, likely video is playing)
-        const netflixActivity: Activity = {
-          service: 'netflix',
-          content: title || 'Netflix',
-          url: netflixTab.url,
-          timestamp: Date.now(),
-          state: netflixTab.audible ? 'playing' : 'paused',
-          metadata: { title, lastAccessed: netflixTab.lastAccessed || 0 },
-        };
-        const netflixState = this._getVideoState('netflix');
-        if (netflixState !== undefined) {
-          netflixActivity.state = netflixState ? 'playing' : 'paused';
+
+        // Only create activity if we have a valid title (never create with placeholder/fallback)
+        if (title) {
+          const netflixActivity: Activity = {
+            service: 'netflix',
+            content: title,
+            url: netflixTab.url,
+            timestamp: Date.now(),
+            state: netflixTab.audible ? 'playing' : 'paused',
+            metadata: { title, lastAccessed: netflixTab.lastAccessed || 0 },
+          };
+          const netflixState = this._getVideoState('netflix');
+          if (netflixState !== undefined) {
+            netflixActivity.state = netflixState ? 'playing' : 'paused';
+          }
+          detectedActivities.push(netflixActivity);
         }
-        detectedActivities.push(netflixActivity);
       }
 
       // Check for YouTube

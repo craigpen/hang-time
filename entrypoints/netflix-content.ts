@@ -17,7 +17,7 @@ function isValidTitle(title: string | null | undefined): boolean {
 }
 
 /**
- * Write title to storage if valid
+ * Write title to storage (only if valid). Ensures storage always contains valid data.
  */
 async function writeValidTitle(title: string | null): Promise<void> {
   if (isValidTitle(title)) {
@@ -27,11 +27,16 @@ async function writeValidTitle(title: string | null): Promise<void> {
 }
 
 /**
- * Get stored title from storage
+ * Get stored title from storage. Always returns valid data or null.
  */
 async function getStoredTitle(): Promise<string | null> {
   const result = await chrome.storage.local.get(STORAGE_KEY);
-  return result[STORAGE_KEY] || null;
+  const stored = result[STORAGE_KEY];
+  // Validate even stored data to ensure it's still good
+  if (isValidTitle(stored)) {
+    return stored;
+  }
+  return null;
 }
 
 // Listen for messages from the background script
