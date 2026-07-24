@@ -134,7 +134,49 @@ function getNetflixVideoPosition(): { currentTime?: number; duration?: number } 
   return {};
 }
 
-// Listen for messages from background
+// Persistent port connection (survives extension reload)
+let port: chrome.runtime.Port | null = null;
+
+function connectToExtension(): void {
+  try {
+    port = chrome.runtime.connect({ name: 'netflix-content' });
+    console.debug('[NetflixContent] Connected to extension');
+
+    port.onMessage.addListener((message: any) => {
+      if (message.type === 'GET_NETFLIX_TITLE') {
+        (async () => {
+          try {
+            const freshTitle = extractNetflixTitle();
+            if (isValidTitle(freshTitle)) {
+              await writeValidTitle(freshTitle);
+              port?.postMessage({ type: 'GET_NETFLIX_TITLE', success: true, data: freshTitle });
+            } else {
+              const storedTitle = await getStoredTitle();
+              port?.postMessage({ type: 'GET_NETFLIX_TITLE', success: true, data: storedTitle });
+            }
+          } catch (error) {
+            const storedTitle = await getStoredTitle();
+            port?.postMessage({ type: 'GET_NETFLIX_TITLE', success: true, data: storedTitle });
+          }
+        })();
+      }
+    });
+
+    port.onDisconnect.addListener(() => {
+      console.debug('[NetflixContent] Disconnected from extension, will reconnect');
+      port = null;
+      setTimeout(() => connectToExtension(), 1000);
+    });
+  } catch (error) {
+    console.debug('[NetflixContent] Failed to connect to extension:', error);
+    setTimeout(() => connectToExtension(), 1000);
+  }
+}
+
+// Establish initial connection
+connectToExtension();
+
+// Legacy onMessage listener for compatibility (can be removed after testing)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GET_NETFLIX_TITLE') {
     (async () => {

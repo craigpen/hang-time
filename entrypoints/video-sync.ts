@@ -19,10 +19,11 @@ class VideoSyncContentScript {
     duration: 0,
     isPlaying: false,
     lastPublished: 0,
-    lastPlayingState: null, // null means first state detection not yet sent
+    lastPlayingState: null,
   };
 
   private pollInterval: NodeJS.Timeout | null = null;
+  private port: chrome.runtime.Port | null = null;
 
   init(): void {
     console.debug('[VideoSync] Content script initialized');
@@ -36,10 +37,36 @@ class VideoSyncContentScript {
       this._setupTwitchMonitoring();
     }
 
-    // Listen for sync requests from extension
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      this._handleMessage(message, sendResponse);
-    });
+    // Establish persistent connection to extension (survives reload)
+    this._connectToExtension();
+  }
+
+  private _connectToExtension(): void {
+    try {
+      this.port = chrome.runtime.connect({ name: 'video-sync' });
+      console.debug('[VideoSync] Connected to extension');
+
+      // Listen for messages on the port
+      this.port.onMessage.addListener((message: any) => {
+        this._handleMessage(message, (response: any) => {
+          if (this.port) {
+            this.port.postMessage({ type: message.type, response });
+          }
+        });
+      });
+
+      // Handle disconnection (e.g., extension reload)
+      this.port.onDisconnect.addListener(() => {
+        console.debug('[VideoSync] Disconnected from extension, will reconnect');
+        this.port = null;
+        // Attempt to reconnect after a delay
+        setTimeout(() => this._connectToExtension(), 1000);
+      });
+    } catch (error) {
+      console.debug('[VideoSync] Failed to connect to extension:', error);
+      // Retry connection after delay
+      setTimeout(() => this._connectToExtension(), 1000);
+    }
   }
 
   private _isYoutubePage(): boolean {
