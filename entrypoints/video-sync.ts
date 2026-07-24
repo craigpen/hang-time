@@ -77,18 +77,6 @@ class VideoSyncContentScript {
         this.state.duration = video.duration;
         this.state.isPlaying = !video.paused;
 
-        // Send UPDATE_VIDEO_STATE immediately if play/pause state changed
-        if (this.state.isPlaying !== this.state.lastPlayingState) {
-          this.state.lastPlayingState = this.state.isPlaying;
-          chrome.runtime.sendMessage({
-            type: 'UPDATE_VIDEO_STATE',
-            data: {
-              service: this._getService(),
-              isPlaying: this.state.isPlaying,
-            },
-          });
-          console.debug(`[VideoSync] State change: ${this.state.isPlaying ? 'playing' : 'paused'}`);
-        }
       }
     }, 500);
 
@@ -119,18 +107,6 @@ class VideoSyncContentScript {
         this.state.duration = video.duration;
         this.state.isPlaying = !video.paused;
 
-        // Send UPDATE_VIDEO_STATE immediately if play/pause state changed
-        if (this.state.isPlaying !== this.state.lastPlayingState) {
-          this.state.lastPlayingState = this.state.isPlaying;
-          chrome.runtime.sendMessage({
-            type: 'UPDATE_VIDEO_STATE',
-            data: {
-              service: this._getService(),
-              isPlaying: this.state.isPlaying,
-            },
-          });
-          console.debug(`[VideoSync] State change: ${this.state.isPlaying ? 'playing' : 'paused'}`);
-        }
       }
     }, 500);
 
@@ -161,18 +137,6 @@ class VideoSyncContentScript {
         this.state.duration = video.duration;
         this.state.isPlaying = !video.paused;
 
-        // Send UPDATE_VIDEO_STATE immediately if play/pause state changed
-        if (this.state.isPlaying !== this.state.lastPlayingState) {
-          this.state.lastPlayingState = this.state.isPlaying;
-          chrome.runtime.sendMessage({
-            type: 'UPDATE_VIDEO_STATE',
-            data: {
-              service: this._getService(),
-              isPlaying: this.state.isPlaying,
-            },
-          });
-          console.debug(`[VideoSync] State change: ${this.state.isPlaying ? 'playing' : 'paused'}`);
-        }
       }
     }, 500);
 

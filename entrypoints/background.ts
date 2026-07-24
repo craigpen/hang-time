@@ -27,7 +27,6 @@ let initialized = false;
 let activityDetector: ActivityDetector | null = null;
 let activityPublisher: ActivityPublisher | null = null;
 const activeSubscriptions = new Map<string, void>();
-const videoStates = new Map<string, { isPlaying: boolean; timestamp: number }>();
 
 // ============================================================================
 // INITIALIZATION
@@ -281,9 +280,6 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
 
     case 'CHECK_VIDEO_SYNC':
       return _checkVideoSync(message.data);
-
-    case 'UPDATE_VIDEO_STATE':
-      return _updateVideoState(message.data);
 
     case 'SEND_INVITE':
       return _sendInvite(message.data?.activity, message.data?.friendId);
@@ -782,30 +778,6 @@ async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
   // Content script has friend activities from Nostr and can extract position directly
   // This endpoint is kept for compatibility but sync is handled via activity state
   return { success: true, data: { recommendedPosition: undefined } };
-}
-
-function _updateVideoState(data?: any): ExtensionResponse {
-  if (!data?.service) {
-    return { success: false, error: 'service required' };
-  }
-
-  const isPlaying = data.isPlaying === true;
-  videoStates.set(data.service, {
-    isPlaying,
-    timestamp: Date.now(),
-  });
-
-  // Also update the TabService instance
-  if (activityDetector) {
-    const tabService = activityDetector.getService('tabs') as any;
-    if (tabService && tabService.setVideoState) {
-      tabService.setVideoState(data.service, isPlaying);
-    }
-    // Trigger immediate activity detection on state change so play/pause state is published
-    activityDetector.detectAndPublish();
-  }
-
-  return { success: true };
 }
 
 // ============================================================================

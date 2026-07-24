@@ -9,7 +9,6 @@ import { generateActivityId } from '../activity-utils';
 
 export class TabService implements IServiceModule {
   private lastDetected: Map<string, Activity> = new Map();
-  private videoStates: Map<string, { isPlaying: boolean; timestamp: number }> = new Map();
 
   constructor(private storage: StorageManager) {}
 
@@ -39,25 +38,21 @@ export class TabService implements IServiceModule {
         if (title) {
           // We have a real title - create normal activity
           const netflixId = generateActivityId('netflix', netflixTab.url);
-          // Query video position from content script
-          const videoData = await this.getVideoPositionFromTab(netflixTab.id, 'netflix');
+          // Query video data from content script
+          const videoData = await this.getVideoActivityDataFromTab(netflixTab.id, 'netflix');
           const netflixActivity: Activity = {
             id: netflixId,
             service: 'netflix',
             content: title,
             url: netflixTab.url,
             timestamp: Date.now(),
-            state: netflixTab.audible ? 'playing' : 'paused',
+            state: videoData?.isPlaying !== undefined ? (videoData.isPlaying ? 'playing' : 'paused') : (netflixTab.audible ? 'playing' : 'paused'),
             metadata: {
               lastAccessed: netflixTab.lastAccessed || 0,
               progress: videoData?.currentTime,
               duration: videoData?.duration,
             },
           };
-          const netflixState = this._getVideoState('netflix');
-          if (netflixState !== undefined) {
-            netflixActivity.state = netflixState ? 'playing' : 'paused';
-          }
           detectedActivities.push(netflixActivity);
         }
         // Don't create guidance activities - skip publishing if no title found
@@ -71,26 +66,21 @@ export class TabService implements IServiceModule {
         // Ensure content is never a URL - use fallback if title extraction failed
         const finalContent = (title && !title.includes('http')) ? title : 'YouTube Video';
         const youtubeId = generateActivityId('youtube', youtubeTab.url);
-        // Query video position from content script
-        const videoData = await this.getVideoPositionFromTab(youtubeTab.id, 'youtube');
-        // Use tab's audible property as initial state guess (if audio playing, likely video is playing)
+        // Query video data from content script
+        const videoData = await this.getVideoActivityDataFromTab(youtubeTab.id, 'youtube');
         const youtubeActivity: Activity = {
           id: youtubeId,
           service: 'youtube',
           content: finalContent,
           url: youtubeTab.url,
           timestamp: Date.now(),
-          state: youtubeTab.audible ? 'playing' : 'paused',
+          state: videoData?.isPlaying !== undefined ? (videoData.isPlaying ? 'playing' : 'paused') : (youtubeTab.audible ? 'playing' : 'paused'),
           metadata: {
             lastAccessed: youtubeTab.lastAccessed || 0,
             progress: videoData?.currentTime,
             duration: videoData?.duration,
           },
         };
-        const youtubeState = this._getVideoState('youtube');
-        if (youtubeState !== undefined) {
-          youtubeActivity.state = youtubeState ? 'playing' : 'paused';
-        }
         detectedActivities.push(youtubeActivity);
       }
 
@@ -100,19 +90,17 @@ export class TabService implements IServiceModule {
         const title = this._extractTwitchTitle(twitchTab.title || '');
         const twitchId = generateActivityId('twitch', twitchTab.url);
         // Use tab's audible property as initial state guess (if audio playing, likely stream is playing)
+        // Query video data from content script for Twitch
+        const videoData = await this.getVideoActivityDataFromTab(twitchTab.id, 'twitch');
         const twitchActivity: Activity = {
           id: twitchId,
           service: 'twitch',
           content: title || 'Twitch Stream',
           url: twitchTab.url,
           timestamp: Date.now(),
-          state: twitchTab.audible ? 'playing' : 'paused',
+          state: videoData?.isPlaying !== undefined ? (videoData.isPlaying ? 'playing' : 'paused') : (twitchTab.audible ? 'playing' : 'paused'),
           metadata: { lastAccessed: twitchTab.lastAccessed || 0 },
         };
-        const twitchState = this._getVideoState('twitch');
-        if (twitchState !== undefined) {
-          twitchActivity.state = twitchState ? 'playing' : 'paused';
-        }
         detectedActivities.push(twitchActivity);
       }
 
@@ -167,28 +155,6 @@ export class TabService implements IServiceModule {
     return this.lastDetected.get(service) || null;
   }
 
-  /**
-   * Update video play/pause state (called by background service worker)
-   */
-  setVideoState(service: string, isPlaying: boolean): void {
-    this.videoStates.set(service, {
-      isPlaying,
-      timestamp: Date.now(),
-    });
-  }
-
-  /**
-   * Get video play/pause state
-   */
-  private _getVideoState(service: string): boolean | undefined {
-    const state = this.videoStates.get(service);
-    if (!state) return undefined;
-    // Use state if it's recent (within 10 seconds)
-    if (Date.now() - state.timestamp < 10000) {
-      return state.isPlaying;
-    }
-    return undefined;
-  }
 
   private _getBaseDomain(url: string): string {
     try {
@@ -269,24 +235,41 @@ export class TabService implements IServiceModule {
   }
 
   /**
-   * Get video position (currentTime and duration) from content script
+   * Get video activity data (position and state) from content script
    * Called during activity detection for all video services
    */
-  async getVideoPositionFromTab(tabId: number, service: 'netflix' | 'youtube'): Promise<{ currentTime?: number; duration?: number } | null> {
+  async getVideoActivityDataFromTab(tabId: number, service: string): Promise<{ currentTime?: number; duration?: number; isPlaying?: boolean } | null> {
     try {
-      const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_VIDEO_POSITION' });
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_VIDEO_STATE' });
 
       if (response && response.success && response.data) {
         return {
           currentTime: response.data.currentTime,
           duration: response.data.duration,
+          isPlaying: response.data.isPlaying,
         };
       }
     } catch (error) {
-      // Content script not available or error querying position - just continue without it
-      console.debug(`[TabService] Could not get video position for ${service}:`, error);
+      // Content script not available or error querying data - just continue without it
+      console.debug(`[TabService] Could not get video data for ${service}:`, error);
     }
 
+    return null;
+  }
+
+  /**
+   * @deprecated Use getVideoActivityDataFromTab instead
+   * Get video position (currentTime and duration) from content script
+   * Called during activity detection for all video services
+   */
+  async getVideoPositionFromTab(tabId: number, service: 'netflix' | 'youtube'): Promise<{ currentTime?: number; duration?: number } | null> {
+    const data = await this.getVideoActivityDataFromTab(tabId, service);
+    if (data) {
+      return {
+        currentTime: data.currentTime,
+        duration: data.duration,
+      };
+    }
     return null;
   }
 
