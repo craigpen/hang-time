@@ -111,12 +111,12 @@ class VideoSyncContentScript {
 
     // Poll for video element and track state
     this.pollInterval = setInterval(() => {
-      const video = document.querySelector('video') as HTMLVideoElement | null;
+      const playingVideo = this._getPlayingVideoElement();
 
-      if (video) {
-        this.state.currentTime = video.currentTime;
-        this.state.duration = video.duration;
-        this.state.isPlaying = !video.paused;
+      if (playingVideo) {
+        this.state.currentTime = playingVideo.currentTime;
+        this.state.duration = playingVideo.duration;
+        this.state.isPlaying = !playingVideo.paused;
 
       }
     }, 500);
@@ -141,12 +141,12 @@ class VideoSyncContentScript {
 
     // Poll for Netflix video element
     this.pollInterval = setInterval(() => {
-      const video = document.querySelector('video') as HTMLVideoElement | null;
+      const playingVideo = this._getPlayingVideoElement();
 
-      if (video) {
-        this.state.currentTime = video.currentTime;
-        this.state.duration = video.duration;
-        this.state.isPlaying = !video.paused;
+      if (playingVideo) {
+        this.state.currentTime = playingVideo.currentTime;
+        this.state.duration = playingVideo.duration;
+        this.state.isPlaying = !playingVideo.paused;
 
       }
     }, 500);
@@ -171,18 +171,41 @@ class VideoSyncContentScript {
 
     // Poll for Twitch video element
     this.pollInterval = setInterval(() => {
-      const video = document.querySelector('video') as HTMLVideoElement | null;
+      const playingVideo = this._getPlayingVideoElement();
 
-      if (video) {
-        this.state.currentTime = video.currentTime;
-        this.state.duration = video.duration;
-        this.state.isPlaying = !video.paused;
+      if (playingVideo) {
+        this.state.currentTime = playingVideo.currentTime;
+        this.state.duration = playingVideo.duration;
+        this.state.isPlaying = !playingVideo.paused;
 
       }
     }, 500);
 
     // Listen for sync events
     this._setupSyncListener();
+  }
+
+  private _getPlayingVideoElement(): HTMLVideoElement | null {
+    // Query all video elements on the page
+    const videos = document.querySelectorAll('video') as NodeListOf<HTMLVideoElement>;
+
+    // Find the video that's currently playing (or has been played recently)
+    for (const video of videos) {
+      // Prefer a video that's currently playing
+      if (!video.paused) {
+        return video;
+      }
+    }
+
+    // If no video is currently playing, return the first one that has content
+    for (const video of videos) {
+      if (video.currentTime > 0 || video.duration > 0) {
+        return video;
+      }
+    }
+
+    // Fallback to first video element if any exist
+    return videos.length > 0 ? videos[0] : null;
   }
 
   private _setupSyncListener(): void {
@@ -225,7 +248,7 @@ class VideoSyncContentScript {
   }
 
   private _syncToPosition(targetTime: number): void {
-    const video = document.querySelector('video') as HTMLVideoElement | null;
+    const video = this._getPlayingVideoElement();
     if (!video) return;
 
     const diff = Math.abs(video.currentTime - targetTime);
