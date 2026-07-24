@@ -15,6 +15,7 @@ import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
 import { encryptionManager } from './encryption';
+import { generateActivityId } from './activity-utils';
 
 export class ActivityDetector {
   private services: Map<string, IServiceModule> = new Map();
@@ -22,7 +23,7 @@ export class ActivityDetector {
   private lastPublishedTime: number = 0;
   private pollInterval: NodeJS.Timeout | null = null;
 
-  static readonly PUBLISH_RATE_LIMIT_MS = 2000;
+  static readonly PUBLISH_RATE_LIMIT_MS = 15000; // nos.lol rate limit: 1 event per ~15 seconds
   static readonly POLL_INTERVAL_MS = 5000;
 
   constructor(
@@ -36,6 +37,10 @@ export class ActivityDetector {
   registerService(name: string, service: IServiceModule): void {
     this.services.set(name, service);
     console.debug(`[Activity] Registered service: ${name}`);
+  }
+
+  getService(name: string): IServiceModule | undefined {
+    return this.services.get(name);
   }
 
   async start(): Promise<void> {
@@ -64,11 +69,11 @@ export class ActivityDetector {
 
   async detectAndPublish(): Promise<void> {
     try {
-      const currentActivity = await this.detectCurrentActivity();
-      if (!currentActivity) return;
+      const allActivities = await this.detectAllActiveActivities();
+      if (allActivities.length === 0) return;
 
-      // Skip if activity hasn't changed or rate limit not met
-      if (!this._activityChanged(currentActivity)) {
+      // Skip if activities haven't changed or rate limit not met
+      if (!this._activitiesChanged(allActivities)) {
         return;
       }
 
@@ -76,17 +81,26 @@ export class ActivityDetector {
         return;
       }
 
-      await this._publishActivity(currentActivity);
-      this.lastPublishedActivity = currentActivity;
+      // Publish all detected activities to Nostr
+      for (const activity of allActivities) {
+        // Generate stable activity ID
+        if (!activity.id) {
+          activity.id = generateActivityId(activity.service, activity.url);
+        }
+
+        await this._publishActivity(activity);
+      }
+
+      this.lastPublishedActivity = allActivities[0];
       this.lastPublishedTime = Date.now();
 
-      // Store current activity
-      await this.storageManager.setCurrentActivity(currentActivity);
+      // Store most recent activity locally
+      await this.storageManager.setCurrentActivity(allActivities[0]);
 
       // Notify popup if it's open
       await this._notifyPopup({
         type: 'ACTIVITY_CHANGED',
-        data: { activity: currentActivity },
+        data: { activity: allActivities[0] },
       });
     } catch (error) {
       console.error('[Activity] Detection pipeline failed:', error);
@@ -99,7 +113,8 @@ export class ActivityDetector {
     if (allActivities.length > 0) {
       return allActivities[0];
     }
-    return { service: 'idle', content: 'Idle', timestamp: Date.now(), metadata: {} };
+    // Don't publish idle - just return null to skip publishing
+    return null;
   }
 
   async detectAllActiveActivities(): Promise<Activity[]> {
@@ -111,12 +126,21 @@ export class ActivityDetector {
     const activities: Activity[] = [];
     const seenServices = new Set<string>();
 
-    console.debug('[Activity] Services enabled:', profile.services_enabled);
+    // Ensure services_enabled exists (defensive check for profiles that might be missing it)
+    const servicesEnabled = profile.services_enabled || {
+      spotify: false,
+      twitch: false,
+      steam: false,
+      netflix: false,
+      youtube: false,
+    };
+
+    console.debug('[Activity] Services enabled:', servicesEnabled);
 
     // Check each enabled OAuth service (Spotify, Twitch, Steam)
     const oauthServices: ServiceName[] = ['spotify', 'twitch', 'steam'];
     for (const serviceName of oauthServices) {
-      if (!profile.services_enabled[serviceName]) continue;
+      if (!servicesEnabled[serviceName]) continue;
 
       const service = this.services.get(serviceName);
       if (!service) continue;
@@ -124,7 +148,7 @@ export class ActivityDetector {
       try {
         console.debug(`[Activity] Checking ${serviceName}...`);
         const activity = await service.getCurrentActivity();
-        if (activity && activity.service !== 'idle') {
+        if (activity) {
           console.debug(`[Activity] Detected ${serviceName}: ${activity.content}`);
           activities.push(activity);
           seenServices.add(serviceName);
@@ -134,8 +158,8 @@ export class ActivityDetector {
       }
     }
 
-    // Check browser tabs (Netflix, YouTube)
-    if (profile.services_enabled.netflix || profile.services_enabled.youtube) {
+    // Check browser tabs (Netflix, YouTube, Twitch)
+    if (servicesEnabled.netflix || servicesEnabled.youtube || servicesEnabled.twitch) {
       const tabService = this.services.get('tabs') as any;
       if (tabService) {
         try {
@@ -145,9 +169,9 @@ export class ActivityDetector {
           await tabService.getCurrentActivity();
 
           // Get Netflix activity
-          if (profile.services_enabled.netflix) {
+          if (servicesEnabled.netflix) {
             const netflixActivity = tabService.getDetectedActivity('netflix');
-            if (netflixActivity && netflixActivity.service !== 'idle') {
+            if (netflixActivity) {
               console.debug(`[Activity] Detected netflix: ${netflixActivity.content}`);
               activities.push(netflixActivity);
               seenServices.add('netflix');
@@ -155,9 +179,9 @@ export class ActivityDetector {
           }
 
           // Get YouTube activity
-          if (profile.services_enabled.youtube) {
+          if (servicesEnabled.youtube) {
             const youtubeActivity = tabService.getDetectedActivity('youtube');
-            if (youtubeActivity && youtubeActivity.service !== 'idle') {
+            if (youtubeActivity) {
               console.debug(`[Activity] Detected youtube: ${youtubeActivity.content}`);
               activities.push(youtubeActivity);
               seenServices.add('youtube');
@@ -169,20 +193,35 @@ export class ActivityDetector {
       }
     }
 
-    // Sort by timestamp, most recent first
-    activities.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    // Sort by last accessed time (for browser tabs) or timestamp (for APIs), most recent first
+    activities.sort((a, b) => {
+      const aTime = (a.metadata?.lastAccessed as number) || a.timestamp || 0;
+      const bTime = (b.metadata?.lastAccessed as number) || b.timestamp || 0;
+      return bTime - aTime;
+    });
 
     console.debug(`[Activity] Detected ${activities.length} active service(s)`);
     return activities;
   }
 
   private async _publishActivity(activity: Activity): Promise<void> {
+    // Don't publish fallback/placeholder activities
+    if (activity.content === '(Reload Netflix to identify title)') {
+      console.debug(`[Activity] Skipping publish of placeholder activity: ${activity.content}`);
+      return;
+    }
+
     const pubkey = await this.identityManager.getPubkey();
     const created_at = Math.floor(Date.now() / 1000);
     const kind = 1;
+
+    // Generate stable activity ID (or use existing if already computed)
+    const activityId = activity.id || generateActivityId(activity.service, activity.url);
+
     const tags: Array<[string, string]> = [
       ['service', activity.service],
       ['content', activity.content],
+      ['activity_id', activityId],
     ];
 
     // Add URL tag before computing event ID
@@ -211,7 +250,7 @@ export class ActivityDetector {
     };
 
     await this.relayPool.publish(event);
-    console.debug(`[Activity] Published ${activity.service} activity to Nostr`);
+    console.debug(`[Activity] Published ${activity.service} activity to Nostr with ID: ${activityId}`);
   }
 
   private _buildEventContent(activity: Activity): string {
@@ -226,13 +265,38 @@ export class ActivityDetector {
     return parts.filter((p) => p).join(' - ');
   }
 
+  private _activitiesChanged(newActivities: Activity[]): boolean {
+    if (!this.lastPublishedActivity) return true;
+
+    // Check if any activity changed
+    for (const newActivity of newActivities) {
+      if (newActivity.service !== this.lastPublishedActivity.service ||
+          newActivity.content !== this.lastPublishedActivity.content ||
+          newActivity.state !== this.lastPublishedActivity.state) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   private _activityChanged(newActivity: Activity): boolean {
     if (!this.lastPublishedActivity) return true;
 
-    return (
-      newActivity.service !== this.lastPublishedActivity.service ||
-      newActivity.content !== this.lastPublishedActivity.content
-    );
+    // Check if core content changed
+    if (newActivity.service !== this.lastPublishedActivity.service ||
+        newActivity.content !== this.lastPublishedActivity.content) {
+      return true;
+    }
+
+    // Check state change only if state exists on either activity
+    if (newActivity.state || this.lastPublishedActivity.state) {
+      if (newActivity.state !== this.lastPublishedActivity.state) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private async _computeEventId(pubkey: string, created_at: number, kind: number, tags: Array<[string, string]>, content: string): Promise<string> {

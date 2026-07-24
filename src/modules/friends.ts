@@ -168,8 +168,10 @@ export class FriendManager {
     }
 
     await this.storage.updateFriend(friendId, {
-      current_activity: activity,
-      current_activity_timestamp: Date.now(),
+      current_activities: {
+        ...friend.current_activities,
+        [activity.service]: activity,
+      },
       last_seen: Date.now(),
     });
 
@@ -185,25 +187,15 @@ export class FriendManager {
   }
 
   /**
-   * Get active friends (with recent activity)
+   * Get friends with published activities
    */
-  async getActiveFriends(maxAgeMs: number = 5 * 60 * 1000): Promise<Friend[]> {
+  async getActiveFriends(): Promise<Friend[]> {
     const friends = await this.getAllFriends();
-    const now = Date.now();
-
     return friends.filter((friend) => {
       // Skip muted friends
       if (friend.muted) return false;
-
-      // Must have activity
-      if (!friend.current_activity) return false;
-
-      // Activity must not be idle
-      if (friend.current_activity.service === 'idle') return false;
-
-      // Activity must be recent
-      const activityAge = now - (friend.current_activity_timestamp ?? 0);
-      return activityAge < maxAgeMs;
+      // Show any friend with any activity
+      return Object.keys(friend.current_activities || {}).length > 0;
     });
   }
 

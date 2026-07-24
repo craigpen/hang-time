@@ -1,215 +1,225 @@
 /**
- * Hang Time - Encrypted Messaging Module
- * Handles encrypted message encryption/decryption via Nostr kind 4 events
+ * Hang Time - Messaging System
+ * Handles sending and receiving encrypted messages via Nostr kind-4
  */
 
-import { Message, NostrEvent } from '../types';
-import { StorageManager } from './storage';
-import { IdentityManager } from './identity';
+import { Activity, NostrEvent, Friend } from '../types';
 import { RelayPool } from './nostr';
+import { IdentityManager } from './identity';
+import { StorageManager } from './storage';
 import { encryptionManager } from './encryption';
-import { secureLog, validateMessage, generateSecureRandom } from './security-utils';
+import { generateActivityId } from './activity-utils';
+
+// Singleton instance with lazy initialization
+let instance: MessagingManager | null = null;
+
+export interface ActivityMessage {
+  type: 'chat' | 'invite' | 'join_accepted' | 'join_declined';
+  activity_id: string;
+  content?: string;
+  timestamp: number;
+}
 
 export class MessagingManager {
   constructor(
-    private storage: StorageManager,
+    private relayPool: RelayPool,
     private identityManager: IdentityManager,
-    private relayPool: RelayPool
+    private storageManager: StorageManager
   ) {}
 
   /**
-   * Send encrypted message to friend
+   * Send an invite message to a friend about an activity
    */
-  async sendMessage(friendId: string, content: string): Promise<Message> {
-    // Validate message content
-    const validation = validateMessage(content);
-    if (!validation.valid) {
-      throw new Error(validation.error);
-    }
-
-    const friend = await this.storage.getFriend(friendId);
-    if (!friend) {
-      throw new Error(`Friend not found: ${friendId}`);
-    }
-
-    const userIdentifier = await this.identityManager.getIdentifier();
-    const timestamp = Date.now();
-
-    const message: Message = {
-      id: this._generateId(),
-      friend_id: friendId,
-      friend_identifier: friend.identifier,
-      sender_identifier: userIdentifier,
-      content,
-      is_outbound: true,
-      timestamp,
-      read: true,
+  async sendInvite(activity: Activity, recipientFriend: Friend): Promise<void> {
+    const message: ActivityMessage = {
+      type: 'invite',
+      activity_id: activity.id || generateActivityId(activity.service, activity.url),
+      timestamp: Date.now(),
     };
 
-    // Store message locally
-    await this.storage.addMessage(friendId, message);
-
-    // Publish encrypted message to Nostr
-    await this._publishMessage(friend.identifier, content);
-
-    secureLog.debug('Messaging', `Message sent to ${friend.local_name}`);
-    return message;
+    await this._sendActivityMessage(recipientFriend, message);
+    console.debug('[Messaging] Sent invite for activity:', activity.service, 'to:', recipientFriend.local_name);
   }
 
   /**
-   * Receive and decrypt message from friend
+   * Send a chat message to a friend about an activity
    */
-  async receiveMessage(
-    friendIdentifier: string,
-    content: string,
-    timestamp: number
-  ): Promise<Message | null> {
-    try {
-      // Find friend by identifier
-      const friends = await this.storage.getFriends();
-      const friend = friends.find((f) => f.identifier === friendIdentifier);
+  async sendChatMessage(activity: Activity, recipientFriend: Friend, content: string): Promise<void> {
+    const message: ActivityMessage = {
+      type: 'chat',
+      activity_id: activity.id || generateActivityId(activity.service, activity.url),
+      content,
+      timestamp: Date.now(),
+    };
 
-      if (!friend) {
-        secureLog.warn('Messaging', 'Message from unknown friend');
-        return null;
+    await this._sendActivityMessage(recipientFriend, message);
+    console.debug('[Messaging] Sent message to:', recipientFriend.local_name);
+  }
+
+  /**
+   * Send join acceptance notification
+   */
+  async sendJoinAccepted(activity: Activity, recipientFriend: Friend): Promise<void> {
+    const message: ActivityMessage = {
+      type: 'join_accepted',
+      activity_id: activity.id || generateActivityId(activity.service, activity.url),
+      timestamp: Date.now(),
+    };
+
+    await this._sendActivityMessage(recipientFriend, message);
+    console.debug('[Messaging] Sent join_accepted for activity:', activity.service);
+  }
+
+  /**
+   * Send join decline notification
+   */
+  async sendJoinDeclined(activity: Activity, recipientFriend: Friend): Promise<void> {
+    const message: ActivityMessage = {
+      type: 'join_declined',
+      activity_id: activity.id || generateActivityId(activity.service, activity.url),
+      timestamp: Date.now(),
+    };
+
+    await this._sendActivityMessage(recipientFriend, message);
+    console.debug('[Messaging] Sent join_declined for activity:', activity.service);
+  }
+
+  /**
+   * Internal: send encrypted activity message via kind-4
+   */
+  private async _sendActivityMessage(recipientFriend: Friend, message: ActivityMessage): Promise<void> {
+    try {
+      const userProfile = await this.storageManager.getUserProfile();
+      if (!userProfile) {
+        throw new Error('User profile not found');
       }
 
-      const userIdentifier = await this.identityManager.getIdentifier();
+      const pubkey = await this.identityManager.getPubkey();
+      const secretKey = await this.identityManager.getSecretKey();
 
-      const message: Message = {
-        id: this._generateId(),
-        friend_id: friend.id,
-        friend_identifier: friendIdentifier,
-        sender_identifier: friendIdentifier,
-        content,
-        is_outbound: false,
-        timestamp,
-        read: false,
-      };
-
-      // Store message locally
-      await this.storage.addMessage(friend.id, message);
-
-      // Mark as read if friend is not muted
-      if (!friend.muted) {
-        await this.markMessageRead(friend.id, message.id);
-      }
-
-      secureLog.debug('Messaging', `Message received from ${friend.local_name}`);
-      return message;
-    } catch (error) {
-      secureLog.error('Messaging', 'Failed to receive message', error);
-      return null;
-    }
-  }
-
-  /**
-   * Mark message as read
-   */
-  async markMessageRead(friendId: string, messageId: string): Promise<void> {
-    const messages = await this.storage.getMessages(friendId);
-    const message = messages.find((m) => m.id === messageId);
-
-    if (message) {
-      message.read = true;
-      await this.storage.addMessage(friendId, message);
-    }
-  }
-
-  /**
-   * Get messages for friend
-   */
-  async getMessages(friendId: string): Promise<Message[]> {
-    return this.storage.getMessages(friendId);
-  }
-
-  /**
-   * Get unread message count
-   */
-  async getUnreadCount(friendId?: string): Promise<number> {
-    if (friendId) {
-      const messages = await this.storage.getMessages(friendId);
-      return messages.filter((m) => !m.read && !m.is_outbound).length;
-    }
-
-    // Count across all friends
-    const friends = await this.storage.getFriends();
-    let total = 0;
-
-    for (const friend of friends) {
-      const messages = await this.storage.getMessages(friend.id);
-      total += messages.filter((m) => !m.read && !m.is_outbound).length;
-    }
-
-    return total;
-  }
-
-  private async _publishMessage(friendIdentifier: string, content: string): Promise<void> {
-    try {
-      const userPubkey = await this.identityManager.getPubkey();
-
-      // Encrypt message using NIP-04
-      // For MVP: derive a consistent hex key from friend identifier
-      const friendKeyHash = encryptionManager.hash(friendIdentifier);
-      // Pad the hash to 64 chars (32 bytes in hex) for box encryption
-      const friendPublicKey = (friendKeyHash + '0'.repeat(64)).substring(0, 64);
-
-      const encryptedContent = encryptionManager.encrypt(content, friendPublicKey);
+      // Serialize message to JSON and encrypt with recipient's pubkey
+      const plaintext = JSON.stringify(message);
+      const encryptedContent = encryptionManager.encrypt(plaintext, recipientFriend.pubkey, secretKey);
 
       const created_at = Math.floor(Date.now() / 1000);
-      const kind = 4;
-      const tags: Array<[string, string]> = [['p', friendIdentifier]];
+      const kind = 4; // Kind 4 = encrypted direct message
 
-      // Compute event ID from canonical event format (required by NIP-01)
-      const id = await this._computeEventId(userPubkey, created_at, kind, tags, encryptedContent);
-
-      // Sign the event with the user's secret key
-      const secretKey = await this.identityManager.getSecretKey();
-      const sig = encryptionManager.signEvent(id, secretKey);
-
-      // Create Nostr kind 4 (encrypted DM) event
+      // Create kind-4 event with recipient tag
       const event: NostrEvent = {
-        id,
-        pubkey: userPubkey,
+        id: '', // Will be computed
+        pubkey,
         created_at,
         kind,
-        tags,
+        tags: [['p', recipientFriend.pubkey]],
         content: encryptedContent,
-        sig,
       };
 
+      // Compute event ID (SHA-256 of canonical JSON)
+      const eventData = [0, pubkey, created_at, kind, event.tags, encryptedContent];
+      const canonicalJson = JSON.stringify(eventData);
+      const eventId = await encryptionManager.sha256(canonicalJson);
+      event.id = eventId.substring(0, 64);
+
+      // Sign event
+      event.sig = encryptionManager.signEvent(event.id, secretKey);
+
+      // Publish to relays
       await this.relayPool.publish(event);
-      secureLog.debug('Messaging', 'Published encrypted message to Nostr (kind 4)');
+
+      // Store in local message history as outbound
+      const localMessage = {
+        id: event.id,
+        friend_id: recipientFriend.id,
+        friend_identifier: recipientFriend.identifier,
+        sender_identifier: userProfile.memorable_identifier,
+        activity_id: message.activity_id,
+        type: message.type as 'chat' | 'invite' | 'join_accepted' | 'join_declined',
+        content: message.content,
+        is_outbound: true,
+        timestamp: message.timestamp,
+        read: true,
+        nostr_event_id: event.id,
+      };
+
+      await this.storageManager.addActivityMessage(recipientFriend.id, message.activity_id, localMessage);
     } catch (error) {
-      secureLog.error('Messaging', 'Failed to publish message', error);
+      console.error('[Messaging] Failed to send message:', error);
       throw error;
     }
   }
 
-  private async _computeEventId(pubkey: string, created_at: number, kind: number, tags: Array<[string, string]>, content: string): Promise<string> {
-    // Nostr event ID = SHA-256 hash of canonical event format (NIP-01)
-    // Canonical format: [0, pubkey, created_at, kind, tags, content]
-    const eventData = [0, pubkey, created_at, kind, tags, content];
-    const canonicalJson = JSON.stringify(eventData);
-    const hash256 = await encryptionManager.sha256(canonicalJson);
-    return hash256.substring(0, 64);
+  /**
+   * Receive and decrypt an incoming kind-4 message
+   * Returns the parsed and stored message, or null if parsing fails
+   */
+  async receiveMessage(friend: Friend, encryptedContent: string, timestamp: number): Promise<any | null> {
+    try {
+      const userProfile = await this.storageManager.getUserProfile();
+      if (!userProfile) {
+        console.warn('[Messaging] User profile not found, cannot decrypt');
+        return null;
+      }
+
+      const secretKey = await this.identityManager.getSecretKey();
+
+      // Decrypt the message with user's secret key
+      const plaintext = encryptionManager.decrypt(encryptedContent, userProfile.pubkey, secretKey);
+
+      // Parse the ActivityMessage structure
+      const message: ActivityMessage = JSON.parse(plaintext);
+
+      // Validate message structure
+      if (!message.type || !message.activity_id) {
+        console.warn('[Messaging] Invalid message structure:', message);
+        return null;
+      }
+
+      // Create message record
+      const storedMessage = {
+        id: `${friend.id}_${timestamp}`,
+        friend_id: friend.id,
+        friend_identifier: friend.identifier,
+        sender_identifier: friend.identifier,
+        activity_id: message.activity_id,
+        type: message.type as 'chat' | 'invite' | 'join_accepted' | 'join_declined',
+        content: message.content,
+        is_outbound: false,
+        timestamp: message.timestamp || timestamp,
+        read: false,
+      };
+
+      // Store in IndexedDB
+      await this.storageManager.addActivityMessage(friend.id, message.activity_id, storedMessage);
+
+      console.debug('[Messaging] Received message from:', friend.identifier, 'type:', message.type);
+      return storedMessage;
+    } catch (error) {
+      console.error('[Messaging] Failed to receive/decrypt message:', error);
+      return null;
+    }
   }
 }
 
-// Singleton instance with lazy initialization
-let messagingManager: MessagingManager | null = null;
+// ============================================================================
+// SINGLETON PATTERN
+// ============================================================================
 
 export function initializeMessagingManager(
-  storage: StorageManager,
-  identity: IdentityManager,
+  storageManager: StorageManager,
+  identityManager: IdentityManager,
   relayPool: RelayPool
 ): void {
-  messagingManager = new MessagingManager(storage, identity, relayPool);
+  if (instance) {
+    console.debug('[Messaging] Already initialized');
+    return;
+  }
+  instance = new MessagingManager(relayPool, identityManager, storageManager);
+  console.debug('[Messaging] Initialized');
 }
 
 export function getMessagingManager(): MessagingManager {
-  if (!messagingManager) {
-    throw new Error('MessagingManager not initialized');
+  if (!instance) {
+    throw new Error('MessagingManager not initialized. Call initializeMessagingManager first.');
   }
-  return messagingManager;
+  return instance;
 }

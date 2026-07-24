@@ -293,6 +293,18 @@ See **PHASES.md** for detailed phase breakdown, deliverables, and success criter
 **Performance:** ✅ No blocking operations
 **Tests:** ✅ 29/29 passing (0 failures)
 
+### Post-MVP Enhancements
+
+**Future Features to Consider:**
+- [ ] Steam game discovery: Analyze friend groups to identify common games and suggest playing together
+- [ ] Discord integration: Show Discord server/channel activity
+- [ ] Console game detection: PS5, Xbox game activity
+- [ ] Firefox support (planned post-MVP)
+- [ ] P2P audio via WebRTC
+- [ ] Advanced analytics and activity trends
+- [ ] Mobile app companion
+- [ ] Browse together mode (collaborative web browsing)
+
 ### References
 
 - **MVP Spec**: Hang Time MVP.txt.txt (in root)

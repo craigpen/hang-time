@@ -28,7 +28,7 @@ export interface UserProfile {
   };
 }
 
-export type ServiceName = 'spotify' | 'twitch' | 'steam' | 'netflix' | 'youtube' | 'idle';
+export type ServiceName = 'spotify' | 'twitch' | 'steam' | 'netflix' | 'youtube';
 
 // ============================================================================
 // OAUTH & TOKENS
@@ -61,8 +61,7 @@ export interface Friend {
   last_seen: number;
   muted: boolean;
   hidden_services: ServiceName[];
-  current_activity?: Activity;
-  current_activity_timestamp?: number;
+  current_activities: Partial<Record<ServiceName, Activity>>;
 }
 
 export interface FriendList extends Array<Friend> {}
@@ -72,9 +71,11 @@ export interface FriendList extends Array<Friend> {}
 // ============================================================================
 
 export interface Activity {
+  id?: string; // Stable activity ID (SHA256 of service + extracted ID)
   service: ServiceName;
   content: string;
   url?: string;
+  state?: 'playing' | 'paused' | 'stopped'; // Activity state: playing, paused, or stopped (removal signal)
   timestamp: number;
   metadata: {
     duration?: number;
@@ -100,7 +101,9 @@ export interface Message {
   friend_id: string;
   friend_identifier: string;
   sender_identifier: string;
-  content: string;
+  activity_id: string; // Activity this message is about
+  type: 'chat' | 'invite' | 'join_accepted' | 'join_declined'; // Message type
+  content?: string; // Optional for invite/join messages
   is_outbound: boolean;
   timestamp: number;
   read: boolean;

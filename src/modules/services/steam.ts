@@ -21,23 +21,19 @@ export class SteamService implements IServiceModule {
 
   async getCurrentActivity(): Promise<Activity | null> {
     const profile = await this.storage.getUserProfile();
-    if (!profile) return null;
+    if (!profile || !profile.steam_id) {
+      console.debug('[Steam] Steam ID not configured');
+      return null;
+    }
 
-    // For MVP, Steam requires user to provide their Steam ID
-    // This is typically fetched from user settings
-    // For now, return null - user must configure Steam ID in settings
-    console.debug('[Steam] Steam ID required in settings');
-    return null;
+    return this._getCurrentlyPlayingGame(profile.steam_id);
   }
 
   async hasToken(): Promise<boolean> {
     // Steam uses public API, no token needed
-    // But we need to check if user has configured their Steam ID
+    // Check if user has configured their Steam ID
     const profile = await this.storage.getUserProfile();
-    if (!profile) return false;
-
-    // TODO: Check if Steam ID is configured in user profile
-    return false;
+    return profile?.steam_id ? true : false;
   }
 
   async clearToken(): Promise<void> {
@@ -63,8 +59,8 @@ export class SteamService implements IServiceModule {
   private async _getCurrentlyPlayingGame(steamId: string): Promise<Activity | null> {
     try {
       const url = `${SteamService.API_BASE}/ISteamUser/GetPlayerSummaries/v0002/`;
+      // Try with API key first if available, otherwise without
       const params = new URLSearchParams({
-        key: 'YOUR_STEAM_API_KEY', // TODO: Get from configuration
         steamids: steamId,
       });
 
@@ -78,21 +74,26 @@ export class SteamService implements IServiceModule {
       const player = data.response?.players?.[0];
 
       if (!player) {
-        return { service: 'idle', content: 'Idle', timestamp: Date.now(), metadata: {} };
+        console.debug('[Steam] Player not found');
+        return null;
       }
 
       // Check if player is currently playing a game
       if (!player.gameid) {
-        return { service: 'idle', content: 'Idle', timestamp: Date.now(), metadata: {} };
+        console.debug('[Steam] No game currently playing');
+        return null;
       }
+
+      const gameName = player.gameextrainfo || `Game (${player.gameid})`;
+      console.debug('[Steam] Currently playing:', gameName);
 
       return {
         service: 'steam',
-        content: player.gameextrainfo || `Game ID: ${player.gameid}`,
+        content: gameName,
         url: `steam://run/${player.gameid}`,
         timestamp: Date.now(),
         metadata: {
-          title: player.gameextrainfo,
+          title: gameName,
           steamId: player.steamid,
         },
       };

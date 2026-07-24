@@ -8,60 +8,21 @@
   <link rel="stylesheet" href="styles/theme.css">
 </head>
 <body>
-  <div class="popup-container">
+  <div id="popup-container" class="popup-container">
     <header class="popup-header">
       <h1>Hang Time</h1>
       <button id="settings-btn" class="btn-settings" title="Settings">⚙️</button>
     </header>
 
-    <!-- Activity List -->
-    <div id="activity-list" class="activity-list">
-      <!-- My Activity (always expanded) -->
-      <div class="activity-item my-activity-item expanded">
-        <div class="activity-header">
-          <span class="activity-label">My Activity</span>
-          <div class="activity-buttons">
-            <button id="refresh-activity-btn" class="btn-icon" title="Refresh">🔄</button>
-            <button id="copy-id-btn" class="btn-copy-id" title="Copy identifier">📋</button>
-          </div>
-        </div>
-        <div class="activity-content">
-          <div id="my-activity-list" class="activity-items">
-            <!-- Activities populated by JS -->
-          </div>
-          <div id="my-id-display" class="my-id-display"></div>
-        </div>
-      </div>
-
-      <!-- Show Inactive Friends Toggle -->
-      <div class="toggle-section">
-        <label class="toggle-label">
-          <input type="checkbox" id="show-inactive-checkbox">
-          <span>Show inactive friends</span>
-        </label>
-      </div>
-
-      <!-- Friends List -->
-      <div id="friends-container" class="friends-container">
-        <!-- Friends populated by JS -->
-      </div>
-
-      <!-- Empty State -->
-      <div id="no-friends" class="empty-state" style="display: none;">
-        <p>No friends online right now</p>
-        <button id="add-friend-btn-empty" class="btn-primary">Add a Friend</button>
-      </div>
+    <!-- Collapsible Friends List -->
+    <div id="friends-list" class="friends-list">
+      <!-- Friends populated by JS -->
     </div>
 
-    <!-- Add Friend Form -->
-    <div id="add-friend-form" class="add-friend-form" style="display: none;">
-      <h3>Add a Friend</h3>
-      <input type="text" id="friend-identifier" placeholder="Friend's memorable identifier" />
-      <input type="text" id="friend-nickname" placeholder="Your nickname for them" />
-      <div class="form-buttons">
-        <button id="friend-submit-btn" class="btn-primary">Add Friend</button>
-        <button id="friend-cancel-btn" class="btn-secondary">Cancel</button>
-      </div>
+    <!-- Empty State -->
+    <div id="no-friends" class="empty-state" style="display: none;">
+      <p>No friends online right now</p>
+      <button id="add-friend-btn-empty" class="btn-primary">Add a Friend</button>
     </div>
 
     <!-- Footer -->
@@ -69,6 +30,17 @@
       <div class="footer-links">
         Support me: <a href="https://ko-fi.com/craigpen" target="_blank">Ko-Fi</a> | <a href="https://buymeacoffee.com/craigpen" target="_blank">Buy Me a Coffee</a>
       </div>
+    </div>
+  </div>
+
+  <!-- Add Friend Form -->
+  <div id="add-friend-form" class="add-friend-form" style="display: none;">
+    <h3>Add a Friend</h3>
+    <input type="text" id="friend-identifier" placeholder="Friend's memorable identifier" />
+    <input type="text" id="friend-nickname" placeholder="Your nickname for them" />
+    <div class="form-buttons">
+      <button id="friend-submit-btn" class="btn-primary">Add Friend</button>
+      <button id="friend-cancel-btn" class="btn-secondary">Cancel</button>
     </div>
   </div>
 
@@ -101,23 +73,27 @@
       <!-- Browser Tabs Detection -->
       <div class="settings-section">
         <h3>Browser Tabs Detection</h3>
-        <div class="service-item">
-          <div class="service-header">
-            <label class="checkbox-label">
-              <input type="checkbox" id="service-netflix-popup" data-service="netflix">
-              <span>🎬 Netflix</span>
-            </label>
+        <div class="service-row">
+          <input type="checkbox" id="service-netflix-popup" data-service="netflix" class="service-toggle">
+          <div class="service-col1">
+            <img src="public/icons/netflix.png" alt="Netflix" class="service-icon">
+            <span class="service-name">Netflix</span>
           </div>
-          <div class="service-status" id="status-netflix-popup">Idle</div>
+          <div class="service-col2">
+            <div class="service-status" id="status-netflix-popup">Idle</div>
+          </div>
+          <div class="service-col3"></div>
         </div>
-        <div class="service-item">
-          <div class="service-header">
-            <label class="checkbox-label">
-              <input type="checkbox" id="service-youtube-popup" data-service="youtube">
-              <span>📹 YouTube</span>
-            </label>
+        <div class="service-row">
+          <input type="checkbox" id="service-youtube-popup" data-service="youtube" class="service-toggle">
+          <div class="service-col1">
+            <img src="public/icons/youtube.png" alt="YouTube" class="service-icon">
+            <span class="service-name">YouTube</span>
           </div>
-          <div class="service-status" id="status-youtube-popup">Idle</div>
+          <div class="service-col2">
+            <div class="service-status" id="status-youtube-popup">Idle</div>
+          </div>
+          <div class="service-col3"></div>
         </div>
       </div>
 
@@ -125,31 +101,50 @@
       <div class="settings-section">
         <h3>Service Integrations</h3>
 
-        <div class="service-item">
-          <div class="service-header">
-            <span>🎵 Spotify</span>
+        <div class="service-row">
+          <input type="checkbox" id="service-spotify-enabled" class="service-enable-toggle" data-service="spotify" checked>
+          <div class="service-col1">
+            <img src="public/icons/spotify.png" alt="Spotify" class="service-icon">
+            <span class="service-name">Spotify</span>
           </div>
-          <div id="spotify-auth-popup-container" class="auth-buttons"></div>
-          <div class="service-status" id="status-spotify-popup">Not Connected</div>
+          <div class="service-col2">
+            <div class="service-status" id="status-spotify-popup">Not Connected</div>
+          </div>
+          <div class="service-col3">
+            <div id="spotify-auth-popup-container" class="service-actions"></div>
+          </div>
         </div>
 
-        <div class="service-item">
-          <div class="service-header">
-            <span>📺 Twitch</span>
+        <div class="service-row">
+          <input type="checkbox" id="service-twitch-enabled" class="service-enable-toggle" data-service="twitch" checked>
+          <div class="service-col1">
+            <img src="public/icons/twitch.png" alt="Twitch" class="service-icon">
+            <span class="service-name">Twitch</span>
           </div>
-          <div id="twitch-auth-popup-container" class="auth-buttons"></div>
-          <div class="service-status" id="status-twitch-popup">Not Connected</div>
+          <div class="service-col2">
+            <div class="service-status" id="status-twitch-popup">Not Connected</div>
+          </div>
+          <div class="service-col3">
+            <div id="twitch-auth-popup-container" class="service-actions"></div>
+          </div>
         </div>
 
-        <div class="service-item">
-          <div class="service-header">
-            <span>🎮 Steam</span>
+        <div class="service-row">
+          <input type="checkbox" id="service-steam-enabled" class="service-enable-toggle" data-service="steam" checked>
+          <div class="service-col1">
+            <img src="public/icons/steam.png" alt="Steam" class="service-icon">
+            <span class="service-name">Steam</span>
           </div>
-          <div class="steam-input-group">
-            <input type="text" id="steam-id-popup-input" placeholder="Enter Steam ID" class="form-input">
-            <button id="steam-verify-popup-btn" class="btn-verify">Verify</button>
+          <div class="service-col2">
+            <div class="service-status" id="status-steam-popup">Not Configured</div>
           </div>
-          <div class="service-status" id="status-steam-popup">Not Configured</div>
+          <div class="service-col3">
+            <div class="steam-input-group">
+              <input type="text" id="steam-id-popup-input" placeholder="Steam ID" class="steam-id-input">
+              <button id="steam-edit-popup-btn" class="btn-steam-edit" style="display: none;">✎</button>
+              <button id="steam-verify-popup-btn" class="btn-verify" style="display: none;">✓</button>
+            </div>
+          </div>
         </div>
       </div>
 

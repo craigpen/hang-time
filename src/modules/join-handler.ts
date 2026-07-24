@@ -13,7 +13,7 @@ export class JoinHandler {
    * Join friend's activity
    */
   async joinActivity(friendId: string, activity: Activity): Promise<void> {
-    if (!activity || activity.service === 'idle') {
+    if (!activity) {
       throw new Error('No active content to join');
     }
 

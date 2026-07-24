@@ -52,7 +52,7 @@ export class SpotifyService implements IServiceModule {
 
       // No track currently playing
       if (!data.item) {
-        return { service: 'idle', content: 'Idle', timestamp: Date.now(), metadata: {} };
+        return null;
       }
 
       const track = data.item;
@@ -63,6 +63,7 @@ export class SpotifyService implements IServiceModule {
         content: `${track.name}`,
         url: track.external_urls?.spotify,
         timestamp: Date.now(),
+        state: data.is_playing ? 'playing' : 'paused',
         metadata: {
           title: track.name,
           artist,

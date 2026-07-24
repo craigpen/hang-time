@@ -26,6 +26,7 @@ import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } 
 let initialized = false;
 let activityDetector: ActivityDetector | null = null;
 const activeSubscriptions = new Map<string, void>();
+const videoStates = new Map<string, { isPlaying: boolean; timestamp: number }>();
 
 // ============================================================================
 // INITIALIZATION
@@ -199,7 +200,7 @@ chrome.runtime.onMessage.addListener(
 async function _handleMessage(message: ExtensionMessage): Promise<ExtensionResponse> {
   switch (message.type) {
     case 'GET_CURRENT_ACTIVITY':
-      return _getCurrentActivity();
+      return _getCurrentActivity(message.data?.service);
 
     case 'GET_ALL_ACTIVE_ACTIVITIES':
       return _getAllActiveActivities();
@@ -213,6 +214,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'GET_ALL_FRIENDS':
       return _getAllFriends();
 
+    case 'GET_FRIEND':
+      return _getFriend(message.data?.id);
+
     case 'GET_FRIEND_ACTIVITY_HISTORY':
       return _getFriendActivityHistory(message.data?.friendId);
 
@@ -221,6 +225,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
 
     case 'GET_MESSAGES':
       return _getMessages(message.data?.friendId);
+
+    case 'GET_ACTIVITY_MESSAGES':
+      return _getActivityMessages(message.data?.friendId, message.data?.activityId);
 
     case 'ADD_FRIEND':
       return _addFriend(message.data?.identifier, message.data?.localName);
@@ -232,7 +239,7 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
       return _renameFriend(message.data?.friendId, message.data?.newName);
 
     case 'SEND_MESSAGE':
-      return _sendMessage(message.data?.friendId, message.data?.content);
+      return _sendMessage(message.data?.activity, message.data?.friendId, message.data?.content);
 
     case 'TOGGLE_SERVICE':
       return _toggleService(message.data?.service, message.data?.enabled);
@@ -267,6 +274,15 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'CHECK_VIDEO_SYNC':
       return _checkVideoSync(message.data);
 
+    case 'UPDATE_VIDEO_STATE':
+      return _updateVideoState(message.data);
+
+    case 'SEND_INVITE':
+      return _sendInvite(message.data?.activity, message.data?.friendId);
+
+    case 'SEND_JOIN_NOTIFICATION':
+      return _sendJoinNotification(message.data?.activity, message.data?.friendId, message.data?.accepted);
+
     default:
       return {
         success: false,
@@ -279,11 +295,28 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
 // MESSAGE HANDLERS
 // ============================================================================
 
-async function _getCurrentActivity(): Promise<ExtensionResponse> {
+async function _getCurrentActivity(service?: string): Promise<ExtensionResponse> {
   if (!activityDetector) {
     return { success: false, error: 'Activity detector not initialized' };
   }
 
+  // If a specific service is requested, get activity from that service
+  if (service) {
+    try {
+      const serviceModule = activityDetector['services']?.get(service);
+      if (serviceModule) {
+        const activity = await serviceModule.getCurrentActivity();
+        return { success: true, data: activity };
+      } else {
+        return { success: false, error: `Service not found: ${service}` };
+      }
+    } catch (error) {
+      console.error(`[Background] Error getting ${service} activity:`, error);
+      return { success: false, error: `Failed to get ${service} activity` };
+    }
+  }
+
+  // Otherwise get the overall current activity
   const activity = await activityDetector.detectCurrentActivity();
   return { success: true, data: activity };
 }
@@ -299,10 +332,17 @@ async function _getAllActiveActivities(): Promise<ExtensionResponse> {
 
 async function _getBrowserActivities(): Promise<ExtensionResponse> {
   // Get the TabService and retrieve detected activities for Netflix and YouTube separately
-  const tabService = activityDetector.services?.get('tabs') as any;
+  if (!activityDetector) {
+    return { success: true, data: { netflix: null, youtube: null } };
+  }
+
+  const tabService = activityDetector.getService('tabs') as any;
   if (!tabService) {
     return { success: true, data: { netflix: null, youtube: null } };
   }
+
+  // Call getCurrentActivity first to populate the lastDetected map
+  await tabService.getCurrentActivity();
 
   return {
     success: true,
@@ -316,7 +356,14 @@ async function _getBrowserActivities(): Promise<ExtensionResponse> {
 async function _getActiveFriends(): Promise<ExtensionResponse> {
   try {
     const friendManager = getFriendManager();
+    const allFriends = await friendManager.getAllFriends();
+    console.debug(`[Friend] Total friends: ${allFriends.length}`);
+    for (const f of allFriends) {
+      const services = Object.keys(f.current_activities || {});
+      console.debug(`[Friend] ${f.local_name}: activities=${services.join(',') || 'none'}`);
+    }
     const activeFriends = await friendManager.getActiveFriends();
+    console.debug(`[Friend] Active friends after filter: ${activeFriends.length}`);
     return { success: true, data: activeFriends };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to get active friends' };
@@ -339,6 +386,7 @@ async function _getFriendActivityHistory(friendId?: string): Promise<ExtensionRe
   }
 
   try {
+    const friendManager = getFriendManager();
     const history = await friendManager.getActivityHistory(friendId);
     return { success: true, data: history };
   } catch (error) {
@@ -360,11 +408,23 @@ async function _getMessages(friendId?: string): Promise<ExtensionResponse> {
   }
 
   try {
-    const messagingManager = getMessagingManager();
-    const messages = await messagingManager.getMessages(friendId);
+    const messages = await storageManager.getMessages(friendId);
     return { success: true, data: messages };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to get messages' };
+  }
+}
+
+async function _getActivityMessages(friendId?: string, activityId?: string): Promise<ExtensionResponse> {
+  if (!friendId || !activityId) {
+    return { success: false, error: 'friendId and activityId required' };
+  }
+
+  try {
+    const messages = await storageManager.getActivityMessages(friendId, activityId);
+    return { success: true, data: messages };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get activity messages' };
   }
 }
 
@@ -417,16 +477,27 @@ async function _renameFriend(friendId?: string, newName?: string): Promise<Exten
   }
 }
 
-async function _sendMessage(friendId?: string, content?: string): Promise<ExtensionResponse> {
-  if (!friendId || !content) {
-    return { success: false, error: 'friendId and content required' };
+async function _sendMessage(activity?: any, friendId?: string, content?: string): Promise<ExtensionResponse> {
+  if (!activity || !friendId || !content) {
+    return { success: false, error: 'activity, friendId and content required' };
   }
 
   try {
+    console.debug('[Background] Sending message:', { activity, friendId, content });
     const messagingManager = getMessagingManager();
-    const message = await messagingManager.sendMessage(friendId, content);
-    return { success: true, data: message };
+    const friendManager = getFriendManager();
+    const friend = await friendManager.getFriend(friendId);
+    if (!friend) {
+      console.error('[Background] Friend not found:', friendId);
+      return { success: false, error: 'Friend not found' };
+    }
+
+    console.debug('[Background] Friend found, sending via messaging manager');
+    await messagingManager.sendChatMessage(activity, friend, content);
+    console.debug('[Background] Message sent successfully');
+    return { success: true };
   } catch (error) {
+    console.error('[Background] Error sending message:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Failed to send message' };
   }
 }
@@ -683,6 +754,28 @@ async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
   }
 }
 
+function _updateVideoState(data?: any): ExtensionResponse {
+  if (!data?.service) {
+    return { success: false, error: 'service required' };
+  }
+
+  const isPlaying = data.isPlaying === true;
+  videoStates.set(data.service, {
+    isPlaying,
+    timestamp: Date.now(),
+  });
+
+  // Also update the TabService instance
+  if (activityDetector) {
+    const tabService = activityDetector.getService('tabs') as any;
+    if (tabService && tabService.setVideoState) {
+      tabService.setVideoState(data.service, isPlaying);
+    }
+  }
+
+  return { success: true };
+}
+
 // ============================================================================
 // NOSTR INTEGRATION
 // ============================================================================
@@ -706,19 +799,27 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
   }
 
   relayPool.subscribe(pubkey, async (event: NostrEvent) => {
-    console.debug(`[Background] Event from ${friendIdentifier} (kind ${event.kind})`);
+    console.debug(`[Friend] Event from ${friendIdentifier} (kind ${event.kind})`);
+    console.debug(`[Friend] Details - pubkey: ${event.pubkey.substring(0, 8)}..., tags: ${JSON.stringify(event.tags.slice(0, 3))}`);
 
-    if (event.kind === 1) {
-      // Activity event
-      await _handleActivityEvent(friendIdentifier, event);
-    } else if (event.kind === 4) {
-      // Chat message
-      await _handleMessageEvent(friendIdentifier, event);
+    try {
+      if (event.kind === 1) {
+        // Activity event
+        await _handleActivityEvent(friendIdentifier, event);
+      } else if (event.kind === 4) {
+        // Chat message
+        console.debug(`[Message] Handling incoming kind-4`);
+        await _handleMessageEvent(friendIdentifier, event);
+      } else {
+        console.debug(`[Friend] Ignoring event with kind ${event.kind}`);
+      }
+    } catch (error) {
+      console.error(`[Friend] Error handling event for ${friendIdentifier}:`, error);
     }
   });
 
   activeSubscriptions.set(pubkey, undefined);
-  console.debug(`[Background] Subscribed to friend: ${friendIdentifier} (pubkey: ${pubkey})`);
+  console.debug(`[Friend] Subscribed to: ${friendIdentifier} (pubkey: ${pubkey})`);
 }
 
 async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {
@@ -741,18 +842,36 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
 
   // Regular activity event
   const activity = _parseActivityEvent(event);
-  const wasActive = friend.current_activity?.service !== 'idle';
+  const wasActive = Object.keys(friend.current_activities || {}).length > 0;
 
+  // Handle stopped activities (removal signal)
+  if (activity.state === 'stopped') {
+    console.debug(`[Friend] ${friend.local_name} stopped ${activity.service}`);
+    const updatedActivities = { ...friend.current_activities };
+    delete updatedActivities[activity.service];
+    await storageManager.updateFriend(friend.id, {
+      current_activities: updatedActivities,
+      last_seen: Date.now(),
+    });
+    console.debug(`[Friend] ${friend.local_name} ${activity.service} activity removed`);
+    return;
+  }
+
+  const oldService = friend.current_activities?.[activity.service];
+  console.debug(`[Friend] Updating ${friend.local_name}: ${activity.service}=${oldService?.content || 'new'} -> ${activity.content}`);
   await storageManager.updateFriend(friend.id, {
-    current_activity: activity,
-    current_activity_timestamp: Date.now(),
+    current_activities: {
+      ...friend.current_activities,
+      [activity.service]: activity,
+    },
     last_seen: Date.now(),
   });
+  console.debug(`[Friend] ${friend.local_name} ${activity.service} updated successfully`);
 
   await storageManager.addActivityToHistory(friend.id, activity);
 
-  // Send notification if friend came online
-  if (!wasActive && activity.service !== 'idle') {
+  // Send notification if friend came online (any new activity)
+  if (!wasActive) {
     try {
       const notificationManager = getNotificationManager();
       await notificationManager.notifyFriendOnline(friend.id, friend.local_name, activity.content);
@@ -774,37 +893,46 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
 
 async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {
   try {
+    const friends = await storageManager.getFriends();
+    const friend = friends.find((f) => f.identifier === friendIdentifier);
+
+    if (!friend) {
+      console.warn('[Message] Friend not found for message:', friendIdentifier);
+      return;
+    }
+
     const messagingManager = getMessagingManager();
     const timestamp = event.created_at * 1000;
 
-    const message = await messagingManager.receiveMessage(friendIdentifier, event.content, timestamp);
+    const message = await messagingManager.receiveMessage(friend, event.content, timestamp);
 
     if (message) {
-      // Send notification for new message
+      // Send notification based on message type
       try {
-        const friends = await storageManager.getFriends();
-        const friend = friends.find((f) => f.identifier === friendIdentifier);
-
-        if (friend) {
-          const notificationManager = getNotificationManager();
-          await notificationManager.notifyNewMessage(friend.id, friend.local_name, event.content);
+        const notificationManager = getNotificationManager();
+        if (message.type === 'invite') {
+          await notificationManager.notifyNewMessage(friend.id, friend.local_name, `invited you to join`);
+        } else if (message.type === 'join_accepted') {
+          await notificationManager.notifyNewMessage(friend.id, friend.local_name, `joined your activity`);
+        } else if (message.type === 'chat') {
+          await notificationManager.notifyNewMessage(friend.id, friend.local_name, message.content || 'sent a message');
         }
       } catch (error) {
-        console.error('[Background] Failed to send message notification:', error);
+        console.error('[Message] Failed to send message notification:', error);
       }
 
       // Notify popup about new message
       try {
         await chrome.runtime.sendMessage({
           type: 'NEW_MESSAGE',
-          data: { message },
+          data: { message, friendId: friend.id, activityId: message.activity_id },
         });
       } catch (error) {
         // Popup not open
       }
     }
   } catch (error) {
-    console.error('[Background] Failed to handle message event:', error);
+    console.error('[Message] Failed to handle message event:', error);
   }
 }
 
@@ -812,14 +940,80 @@ function _parseActivityEvent(event: NostrEvent) {
   const serviceTag = event.tags.find((t) => t[0] === 'service')?.[1] ?? 'idle';
   const contentTag = event.tags.find((t) => t[0] === 'content')?.[1] ?? '';
   const urlTag = event.tags.find((t) => t[0] === 'url')?.[1];
+  const activityIdTag = event.tags.find((t) => t[0] === 'activity_id')?.[1];
 
   return {
     service: serviceTag,
     content: contentTag || event.content,
     url: urlTag,
+    id: activityIdTag,
     timestamp: event.created_at * 1000,
     metadata: {},
   };
+}
+
+async function _getFriend(friendId?: string): Promise<ExtensionResponse> {
+  if (!friendId) {
+    return { success: false, error: 'Friend ID required' };
+  }
+
+  try {
+    const friendManager = getFriendManager();
+    const friend = await friendManager.getFriend(friendId);
+    if (!friend) {
+      return { success: false, error: `Friend not found: ${friendId}` };
+    }
+    return { success: true, data: friend };
+  } catch (error) {
+    console.error('[Background] Error getting friend:', error);
+    return { success: false, error: 'Failed to get friend' };
+  }
+}
+
+async function _sendInvite(activity?: any, friendId?: string): Promise<ExtensionResponse> {
+  if (!activity || !friendId) {
+    return { success: false, error: 'Activity and friendId required' };
+  }
+
+  try {
+    const friendManager = getFriendManager();
+    const friend = await friendManager.getFriend(friendId);
+    if (!friend) {
+      return { success: false, error: `Friend not found: ${friendId}` };
+    }
+
+    const messagingManager = getMessagingManager();
+    await messagingManager.sendInvite(activity, friend);
+    return { success: true };
+  } catch (error) {
+    console.error('[Background] Error sending invite:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to send invite' };
+  }
+}
+
+async function _sendJoinNotification(activity?: any, friendId?: string, accepted?: boolean): Promise<ExtensionResponse> {
+  if (!activity || !friendId) {
+    return { success: false, error: 'Activity and friendId required' };
+  }
+
+  try {
+    const friendManager = getFriendManager();
+    const friend = await friendManager.getFriend(friendId);
+    if (!friend) {
+      return { success: false, error: `Friend not found: ${friendId}` };
+    }
+
+    const messagingManager = getMessagingManager();
+    if (accepted) {
+      await messagingManager.sendJoinAccepted(activity, friend);
+    } else {
+      await messagingManager.sendJoinDeclined(activity, friend);
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('[Background] Error sending join notification:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to send notification' };
+  }
 }
 
 // ============================================================================

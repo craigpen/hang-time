@@ -21,7 +21,7 @@ class VideoSyncContentScript {
   };
 
   private pollInterval: NodeJS.Timeout | null = null;
-  private readonly PUBLISH_INTERVAL_MS = 5000; // Publish every 5 seconds
+  private readonly PUBLISH_INTERVAL_MS = 15000; // Publish every 15 seconds (relay rate limit)
 
   init(): void {
     console.debug('[VideoSync] Content script initialized');
@@ -31,6 +31,8 @@ class VideoSyncContentScript {
       this._setupYoutubeMonitoring();
     } else if (this._isNetflixPage()) {
       this._setupNetflixMonitoring();
+    } else if (this._isTwitchPage()) {
+      this._setupTwitchMonitoring();
     }
 
     // Listen for sync requests from extension
@@ -45,6 +47,10 @@ class VideoSyncContentScript {
 
   private _isNetflixPage(): boolean {
     return /netflix\.com/.test(window.location.hostname);
+  }
+
+  private _isTwitchPage(): boolean {
+    return /twitch\.tv/.test(window.location.hostname);
   }
 
   private _setupYoutubeMonitoring(): void {
@@ -115,6 +121,40 @@ class VideoSyncContentScript {
     this._setupSyncListener();
   }
 
+  private _setupTwitchMonitoring(): void {
+    console.debug('[VideoSync] Setting up Twitch monitoring');
+
+    // Twitch channel name is in URL
+    const match = window.location.pathname.match(/^\/([a-z0-9_]+)/i);
+    const channelName = match?.[1];
+
+    if (!channelName) {
+      console.warn('[VideoSync] Could not extract Twitch channel name');
+      return;
+    }
+
+    this.state.videoId = channelName;
+
+    // Poll for Twitch video element
+    this.pollInterval = setInterval(() => {
+      const video = document.querySelector('video') as HTMLVideoElement | null;
+
+      if (video) {
+        this.state.currentTime = video.currentTime;
+        this.state.duration = video.duration;
+        this.state.isPlaying = !video.paused;
+
+        // Publish sync if enough time has passed
+        if (Date.now() - this.state.lastPublished > this.PUBLISH_INTERVAL_MS) {
+          this._publishSync();
+        }
+      }
+    }, 500);
+
+    // Listen for sync events
+    this._setupSyncListener();
+  }
+
   private _setupSyncListener(): void {
     // Listen for sync requests from extension
     const checkSync = () => {
@@ -128,8 +168,8 @@ class VideoSyncContentScript {
       );
     };
 
-    // Check for sync every 2 seconds
-    setInterval(checkSync, 2000);
+    // Check for sync every 10 seconds (reduce relay load)
+    setInterval(checkSync, 10000);
   }
 
   private _syncToPosition(targetTime: number): void {
@@ -168,6 +208,15 @@ class VideoSyncContentScript {
         }
       }
     );
+
+    // Also report the current play/pause state for activity detection
+    chrome.runtime.sendMessage({
+      type: 'UPDATE_VIDEO_STATE',
+      data: {
+        service: this._getService(),
+        isPlaying: this.state.isPlaying,
+      },
+    });
   }
 
   private _handleMessage(message: any, sendResponse: (response: any) => void): void {
@@ -190,7 +239,8 @@ class VideoSyncContentScript {
         break;
 
       default:
-        sendResponse({ success: false, error: 'Unknown message type' });
+        // Don't respond to unknown message types - let other content scripts handle them
+        return;
     }
   }
 
@@ -219,6 +269,7 @@ class VideoSyncContentScript {
   private _getService(): string {
     if (this._isYoutubePage()) return 'youtube';
     if (this._isNetflixPage()) return 'netflix';
+    if (this._isTwitchPage()) return 'twitch';
     return 'unknown';
   }
 

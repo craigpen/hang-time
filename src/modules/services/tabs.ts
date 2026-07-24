@@ -8,13 +8,14 @@ import { StorageManager } from '../storage';
 
 export class TabService implements IServiceModule {
   private lastDetected: Map<string, Activity> = new Map();
+  private videoStates: Map<string, { isPlaying: boolean; timestamp: number }> = new Map();
 
   constructor(private storage: StorageManager) {}
 
   async isEnabled(): Promise<boolean> {
     const profile = await this.storage.getUserProfile();
     if (!profile) return false;
-    return profile.services_enabled.netflix || profile.services_enabled.youtube;
+    return profile.services_enabled.netflix || profile.services_enabled.youtube || profile.services_enabled.twitch;
   }
 
   async getCurrentActivity(): Promise<Activity | null> {
@@ -27,16 +28,26 @@ export class TabService implements IServiceModule {
 
       // Check for Netflix
       const netflixTab = this._findMostRecentTabByDomain(tabs, 'netflix');
-      if (netflixTab) {
-        const title = this._extractNetflixTitle(netflixTab.title || '');
+      if (netflixTab && netflixTab.id) {
+        // Try to get the actual title from the Netflix page via content script
+        let title = await this.getNetflixTitleFromTab(netflixTab.id);
+        // Fall back to parsing page title if content script fails
+        if (!title) {
+          title = this._extractNetflixTitle(netflixTab.title || '');
+        }
         console.debug(`[TabService] Detected Netflix: ${title}`);
-        detectedActivities.push({
+        const netflixActivity: Activity = {
           service: 'netflix',
-          content: title || 'Netflix Content',
+          content: title || '(Reload Netflix to identify title)',
           url: netflixTab.url,
           timestamp: Date.now(),
           metadata: { title, lastAccessed: netflixTab.lastAccessed || 0 },
-        });
+        };
+        const netflixState = this._getVideoState('netflix');
+        if (netflixState !== undefined) {
+          netflixActivity.state = netflixState ? 'playing' : 'paused';
+        }
+        detectedActivities.push(netflixActivity);
       }
 
       // Check for YouTube
@@ -44,13 +55,37 @@ export class TabService implements IServiceModule {
       if (youtubeTab) {
         const title = this._extractYouTubeTitle(youtubeTab.title || '');
         console.debug(`[TabService] Detected YouTube: ${title}`);
-        detectedActivities.push({
+        const youtubeActivity: Activity = {
           service: 'youtube',
           content: title || 'YouTube Video',
           url: youtubeTab.url,
           timestamp: Date.now(),
           metadata: { title, lastAccessed: youtubeTab.lastAccessed || 0 },
-        });
+        };
+        const youtubeState = this._getVideoState('youtube');
+        if (youtubeState !== undefined) {
+          youtubeActivity.state = youtubeState ? 'playing' : 'paused';
+        }
+        detectedActivities.push(youtubeActivity);
+      }
+
+      // Check for Twitch
+      const twitchTab = this._findMostRecentTabByDomain(tabs, 'twitch');
+      if (twitchTab) {
+        const title = this._extractTwitchTitle(twitchTab.title || '');
+        console.debug(`[TabService] Detected Twitch: ${title}`);
+        const twitchActivity: Activity = {
+          service: 'twitch',
+          content: title || 'Twitch Stream',
+          url: twitchTab.url,
+          timestamp: Date.now(),
+          metadata: { title, lastAccessed: twitchTab.lastAccessed || 0 },
+        };
+        const twitchState = this._getVideoState('twitch');
+        if (twitchState !== undefined) {
+          twitchActivity.state = twitchState ? 'playing' : 'paused';
+        }
+        detectedActivities.push(twitchActivity);
       }
 
       // Store all detected services for later retrieval
@@ -73,7 +108,7 @@ export class TabService implements IServiceModule {
 
       console.debug('[TabService] No video content found');
       // No video content found
-      return { service: 'idle', content: 'Idle', timestamp: Date.now(), metadata: {} };
+      return null;
     } catch (error) {
       console.error('[TabService] Failed to query tabs:', error);
       return null;
@@ -102,8 +137,31 @@ export class TabService implements IServiceModule {
    * Get the last detected activity for a specific service
    * Called by settings UI to display each service's status separately
    */
-  getDetectedActivity(service: 'netflix' | 'youtube'): Activity | null {
+  getDetectedActivity(service: 'netflix' | 'youtube' | 'twitch'): Activity | null {
     return this.lastDetected.get(service) || null;
+  }
+
+  /**
+   * Update video play/pause state (called by background service worker)
+   */
+  setVideoState(service: string, isPlaying: boolean): void {
+    this.videoStates.set(service, {
+      isPlaying,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * Get video play/pause state
+   */
+  private _getVideoState(service: string): boolean | undefined {
+    const state = this.videoStates.get(service);
+    if (!state) return undefined;
+    // Use state if it's recent (within 10 seconds)
+    if (Date.now() - state.timestamp < 10000) {
+      return state.isPlaying;
+    }
+    return undefined;
   }
 
   private _getBaseDomain(url: string): string {
@@ -131,6 +189,9 @@ export class TabService implements IServiceModule {
       if (domain === 'netflix') {
         return baseDomain === 'netflix.com';
       }
+      if (domain === 'twitch') {
+        return baseDomain === 'twitch.tv';
+      }
       return false;
     });
 
@@ -143,9 +204,16 @@ export class TabService implements IServiceModule {
   }
 
   private _extractYouTubeTitle(pageTitle: string): string {
-    // Format: "Video Title - YouTube"
-    const match = pageTitle.match(/^(.+?)\s*-\s*YouTube/);
-    return match ? match[1].trim() : pageTitle;
+    // Format: "Video Title - YouTube" or "(123) Video Title - YouTube"
+    let title = pageTitle;
+
+    // Remove " - YouTube" suffix
+    title = title.replace(/\s*-\s*YouTube\s*$/i, '').trim();
+
+    // Remove leading numbers in parentheses like "(162)"
+    title = title.replace(/^\(\d+\)\s*/, '').trim();
+
+    return title || pageTitle;
   }
 
   private _isNetflixContent(url: string): boolean {
@@ -153,14 +221,44 @@ export class TabService implements IServiceModule {
   }
 
   private _extractNetflixTitle(pageTitle: string): string {
-    // Netflix titles are usually just the show/movie name in tab title
-    // Remove common suffixes
+    // Try to get title from the Netflix page content
+    // Fall back to parsing page title if that fails
+    // This will be enhanced by the netflix-content.js content script
     const cleaned = pageTitle
       .replace(/\s*Netflix\s*$/, '')
       .replace(/\s*-\s*Netflix\s*$/, '')
       .trim();
 
-    return cleaned || pageTitle;
+    return cleaned;
+  }
+
+  private _extractTwitchTitle(pageTitle: string): string {
+    // Format: "channel_name - Twitch" or "channel_name playing game - Twitch"
+    let title = pageTitle;
+
+    // Remove " - Twitch" suffix
+    title = title.replace(/\s*-\s*Twitch\s*$/i, '').trim();
+
+    return title || pageTitle;
+  }
+
+  /**
+   * Get Netflix title from content script via message passing
+   * Called when we detect a Netflix tab
+   */
+  async getNetflixTitleFromTab(tabId: number): Promise<string | null> {
+    try {
+      console.debug('[TabService] Sending GET_NETFLIX_TITLE message to tab:', tabId);
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_NETFLIX_TITLE' });
+      console.debug('[TabService] Got response:', response);
+      if (response && response.success && response.data) {
+        console.debug('[TabService] Netflix title from content script:', response.data);
+        return response.data;
+      }
+    } catch (error) {
+      console.debug('[TabService] Error sending message to Netflix tab:', error instanceof Error ? error.message : String(error), error);
+    }
+    return null;
   }
 
   private _getMostRecentTab(tabs: chrome.tabs.Tab[]): chrome.tabs.Tab {

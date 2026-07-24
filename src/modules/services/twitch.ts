@@ -53,7 +53,7 @@ export class TwitchService implements IServiceModule {
       const userId = userData.data?.[0]?.id;
 
       if (!userId) {
-        return { service: 'idle', content: 'Idle', timestamp: Date.now(), metadata: {} };
+        return null;
       }
 
       // Check if user is streaming
@@ -73,7 +73,7 @@ export class TwitchService implements IServiceModule {
       const stream = streamData.data?.[0];
 
       if (!stream || !stream.is_live) {
-        return { service: 'idle', content: 'Idle', timestamp: Date.now(), metadata: {} };
+        return null;
       }
 
       return {

@@ -79,8 +79,9 @@ describe('Integration Tests', () => {
       // Step 3: Get active friends
       const friendWithActivity: Friend = {
         ...addedFriend,
-        current_activity: activity,
-        current_activity_timestamp: now,
+        current_activities: {
+          [activity.service]: activity,
+        },
       };
 
       mockStorage.getFriends.mockResolvedValueOnce([friendWithActivity]);
@@ -101,13 +102,14 @@ describe('Integration Tests', () => {
         last_seen: now,
         muted: false,
         hidden_services: [],
-        current_activity: {
-          service: 'spotify',
-          content: 'Song',
-          timestamp: now,
-          metadata: {},
+        current_activities: {
+          spotify: {
+            service: 'spotify',
+            content: 'Song',
+            timestamp: now,
+            metadata: {},
+          },
         },
-        current_activity_timestamp: now,
       };
 
       const idleFriend: Friend = {
@@ -118,13 +120,7 @@ describe('Integration Tests', () => {
         last_seen: now,
         muted: false,
         hidden_services: [],
-        current_activity: {
-          service: 'idle',
-          content: 'Idle',
-          timestamp: now,
-          metadata: {},
-        },
-        current_activity_timestamp: now,
+        current_activities: {},
       };
 
       mockStorage.getFriends.mockResolvedValueOnce([activeFriend, idleFriend]);
@@ -147,13 +143,14 @@ describe('Integration Tests', () => {
         last_seen: now,
         muted: true, // Muted
         hidden_services: [],
-        current_activity: {
-          service: 'spotify',
-          content: 'Song',
-          timestamp: now,
-          metadata: {},
+        current_activities: {
+          spotify: {
+            service: 'spotify',
+            content: 'Song',
+            timestamp: now,
+            metadata: {},
+          },
         },
-        current_activity_timestamp: now,
       };
 
       mockStorage.getFriends.mockResolvedValueOnce([activeFriend]);

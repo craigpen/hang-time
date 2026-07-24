@@ -159,6 +159,17 @@ export class SettingsController {
 
   private async _loadServiceStatus(): Promise<void> {
     try {
+      // Get user profile to check enabled/disabled states
+      const profileResponse = await chrome.runtime.sendMessage({
+        type: 'GET_USER_IDENTIFIER',
+      });
+
+      const profile = profileResponse.success && profileResponse.data ? profileResponse.data : null;
+      if (!profile) {
+        console.warn('[Settings] Could not load profile for service status');
+        return;
+      }
+
       // Get browser activities (Netflix and YouTube shown separately)
       const browserActivitiesResponse = await chrome.runtime.sendMessage({
         type: 'GET_BROWSER_ACTIVITIES',
@@ -168,17 +179,26 @@ export class SettingsController {
         ? browserActivitiesResponse.data
         : { netflix: null, youtube: null };
 
-      // Update browser tab service status
+      // Update browser tab service status (Netflix/YouTube)
       for (const service of this.browserTabServices) {
         const statusDiv = document.getElementById(`status-${service}`);
         if (statusDiv) {
-          const serviceActivity = browserActivities[service as keyof typeof browserActivities];
-          if (serviceActivity && serviceActivity.service !== 'idle') {
-            statusDiv.innerHTML = `<span class="status-indicator">●</span> ${this._escapeHtml(this._truncateContent(serviceActivity.content))}`;
-            statusDiv.className = 'service-status-text active';
+          const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? false;
+
+          if (!isEnabled) {
+            // Disabled state
+            statusDiv.textContent = 'Disabled';
+            statusDiv.className = 'service-status-text disabled';
           } else {
-            statusDiv.innerHTML = '<span class="status-indicator-idle">○</span> Not active';
-            statusDiv.className = 'service-status-text';
+            // Enabled state - show content title
+            const serviceActivity = browserActivities[service as keyof typeof browserActivities];
+            if (serviceActivity) {
+              statusDiv.textContent = this._escapeHtml(this._truncateContent(serviceActivity.content));
+              statusDiv.className = 'service-status-text active';
+            } else {
+              statusDiv.textContent = this._escapeHtml(this._truncateContent(serviceActivity?.content || 'Not active'));
+              statusDiv.className = 'service-status-text';
+            }
           }
         }
       }
@@ -190,56 +210,99 @@ export class SettingsController {
 
       const activity = currentActivity.success && currentActivity.data ? currentActivity.data : null;
 
-      // Update OAuth service status
+      // Update Spotify status
       const spotifyStatusDiv = document.getElementById('status-spotify');
       if (spotifyStatusDiv) {
+        const spotifyEnabled = profile.services_enabled?.spotify ?? false;
         const spotifyAuth = await chrome.runtime.sendMessage({
           type: 'GET_OAUTH_STATUS',
           data: { service: 'spotify' },
         });
-        if (spotifyAuth.success && spotifyAuth.data?.hasToken) {
-          if (activity && activity.service === 'spotify' && activity.service !== 'idle') {
-            spotifyStatusDiv.textContent = `Playing: ${this._truncateContent(activity.content)}`;
-            spotifyStatusDiv.className = 'service-status status-active';
-          } else {
-            spotifyStatusDiv.textContent = 'Connected';
-            spotifyStatusDiv.className = 'service-status status-idle';
-          }
+        const spotifyConfigured = spotifyAuth.success && spotifyAuth.data?.hasToken;
+
+        let spotifyMessage = '';
+        let spotifyClass = '';
+
+        if (!spotifyEnabled) {
+          spotifyMessage = 'Disabled';
+          spotifyClass = 'service-status disabled';
+        } else if (!spotifyConfigured) {
+          spotifyMessage = 'Not configured';
+          spotifyClass = 'service-status not-configured';
         } else {
-          spotifyStatusDiv.textContent = 'Not Connected';
-          spotifyStatusDiv.className = 'service-status status-error';
+          // Enabled + Configured
+          if (activity && activity.service === 'spotify') {
+            spotifyMessage = this._truncateContent(activity.content);
+            spotifyClass = 'service-status status-active';
+          } else {
+            spotifyMessage = this._truncateContent(activity?.content || 'No activity');
+            spotifyClass = 'service-status status-idle';
+          }
         }
+        spotifyStatusDiv.textContent = spotifyMessage;
+        spotifyStatusDiv.className = spotifyClass;
       }
 
+      // Update Twitch status
       const twitchStatusDiv = document.getElementById('status-twitch');
       if (twitchStatusDiv) {
+        const twitchEnabled = profile.services_enabled?.twitch ?? false;
         const twitchAuth = await chrome.runtime.sendMessage({
           type: 'GET_OAUTH_STATUS',
           data: { service: 'twitch' },
         });
-        if (twitchAuth.success && twitchAuth.data?.hasToken) {
-          if (activity && activity.service === 'twitch' && activity.service !== 'idle') {
-            twitchStatusDiv.textContent = `Streaming: ${this._truncateContent(activity.content)}`;
-            twitchStatusDiv.className = 'service-status status-active';
-          } else {
-            twitchStatusDiv.textContent = 'Connected';
-            twitchStatusDiv.className = 'service-status status-idle';
-          }
+        const twitchConfigured = twitchAuth.success && twitchAuth.data?.hasToken;
+
+        let twitchMessage = '';
+        let twitchClass = '';
+
+        if (!twitchEnabled) {
+          twitchMessage = 'Disabled';
+          twitchClass = 'service-status disabled';
+        } else if (!twitchConfigured) {
+          twitchMessage = 'Not configured';
+          twitchClass = 'service-status not-configured';
         } else {
-          twitchStatusDiv.textContent = 'Not Connected';
-          twitchStatusDiv.className = 'service-status status-error';
+          // Enabled + Configured
+          if (activity && activity.service === 'twitch') {
+            twitchMessage = this._truncateContent(activity.content);
+            twitchClass = 'service-status status-active';
+          } else {
+            twitchMessage = this._truncateContent(activity?.content || 'No activity');
+            twitchClass = 'service-status status-idle';
+          }
         }
+        twitchStatusDiv.textContent = twitchMessage;
+        twitchStatusDiv.className = twitchClass;
       }
 
+      // Update Steam status
       const steamStatusDiv = document.getElementById('status-steam');
       if (steamStatusDiv) {
-        if (activity && activity.service === 'steam' && activity.service !== 'idle') {
-          steamStatusDiv.textContent = `Playing: ${this._truncateContent(activity.content)}`;
-          steamStatusDiv.className = 'service-status status-active';
+        const steamEnabled = profile.services_enabled?.steam ?? false;
+        const steamConfigured = !!profile.steam_id;
+
+        let steamMessage = '';
+        let steamClass = '';
+
+        if (!steamEnabled) {
+          steamMessage = 'Disabled';
+          steamClass = 'service-status disabled';
+        } else if (!steamConfigured) {
+          steamMessage = 'Not configured';
+          steamClass = 'service-status not-configured';
         } else {
-          steamStatusDiv.textContent = 'Not Configured';
-          steamStatusDiv.className = 'service-status status-idle';
+          // Enabled + Configured
+          if (activity && activity.service === 'steam') {
+            steamMessage = this._truncateContent(activity.content);
+            steamClass = 'service-status status-active';
+          } else {
+            steamMessage = this._truncateContent(activity?.content || 'No activity');
+            steamClass = 'service-status status-idle';
+          }
         }
+        steamStatusDiv.textContent = steamMessage;
+        steamStatusDiv.className = steamClass;
       }
     } catch (error) {
       console.error('[Settings] Failed to load service status:', error);
