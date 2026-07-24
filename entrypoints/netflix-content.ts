@@ -230,12 +230,15 @@ function extractNetflixTitle(): string | null {
 /**
  * Set up MutationObserver to proactively cache Netflix titles
  * Watches for title elements and updates cache whenever they appear
+ * Retries if iframe doesn't exist yet
  */
 function setupTitleCache(): void {
   try {
     const iframe = document.querySelector('iframe');
     if (!iframe || !iframe.contentWindow) {
-      console.debug('[Netflix Content] No iframe found for MutationObserver');
+      console.debug('[Netflix Content] Iframe not ready yet, will retry in 500ms');
+      // Retry after iframe loads
+      setTimeout(() => setupTitleCache(), 500);
       return;
     }
 
