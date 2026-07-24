@@ -17,11 +17,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
 
-    // Fall back to request-time search if cache is stale
+    // Always try fresh extraction on stale cache (in case extension reloaded)
+    console.debug('[Netflix Content] Cache stale or empty, doing fresh extraction');
     const title = extractNetflixTitle();
     if (title) {
       cachedTitle = title;
       cacheTimestamp = Date.now();
+      console.debug('[Netflix Content] Fresh extraction successful:', title);
     }
     sendResponse({ success: true, data: title });
   }
@@ -230,15 +232,12 @@ function extractNetflixTitle(): string | null {
 /**
  * Set up MutationObserver to proactively cache Netflix titles
  * Watches for title elements and updates cache whenever they appear
- * Retries if iframe doesn't exist yet
  */
 function setupTitleCache(): void {
   try {
     const iframe = document.querySelector('iframe');
     if (!iframe || !iframe.contentWindow) {
-      console.debug('[Netflix Content] Iframe not ready yet, will retry in 500ms');
-      // Retry after iframe loads
-      setTimeout(() => setupTitleCache(), 500);
+      console.debug('[Netflix Content] No iframe found for MutationObserver (will use on-demand extraction)');
       return;
     }
 
