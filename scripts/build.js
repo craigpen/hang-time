@@ -32,7 +32,6 @@ const BUILD_CONFIG = {
 const ENTRYPOINTS = {
   background: 'entrypoints/background.ts',
   popup: 'src/ui/popup.ts',
-  settings: 'src/ui/settings.ts',
   'oauth-handler': 'entrypoints/oauth-handler.ts',
   'video-sync': 'entrypoints/video-sync.ts',
   'netflix-content': 'entrypoints/netflix-content.ts',
@@ -41,7 +40,6 @@ const ENTRYPOINTS = {
 const STATIC_FILES = [
   { src: 'manifest.json', dest: 'manifest.json' },
   { src: 'src/popup.html', dest: 'popup.html' },
-  { src: 'src/settings.html', dest: 'settings.html' },
   { src: 'src/oauth-handler.html', dest: 'oauth-handler.html' },
   { src: 'src/styles', dest: 'styles' },
   { src: 'public', dest: 'public' },
