@@ -43,6 +43,7 @@ export class PopupController {
 
     this._setupEventListeners();
     this._setupMessageListener();
+    this._setupStorageListener();
     await this._loadMyActivity();
     await this.refreshFriends();
     await this._loadSettingsPanel();
@@ -956,6 +957,20 @@ export class PopupController {
         // Friend's activities changed - refresh immediately
         this.refreshFriends().catch((error) => {
           console.error('[Popup] Failed to refresh friends after activity change:', error);
+        });
+      }
+    });
+  }
+
+  private _setupStorageListener(): void {
+    // Listen for MY_ACTIVITIES changes in storage
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'local') return;
+
+      if (changes.my_activities) {
+        console.debug('[Popup] MY_ACTIVITIES changed, refreshing...');
+        this._loadMyActivity().catch((error) => {
+          console.error('[Popup] Failed to refresh after storage change:', error);
         });
       }
     });
