@@ -35,6 +35,7 @@ const ENTRYPOINTS = {
   'oauth-handler': 'entrypoints/oauth-handler.ts',
   'video-sync': 'entrypoints/video-sync.ts',
   'netflix-content': 'entrypoints/netflix-content.ts',
+  'netflix-debug-comprehensive': 'entrypoints/netflix-debug-comprehensive.ts',
 };
 
 const STATIC_FILES = [
