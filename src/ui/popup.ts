@@ -423,6 +423,13 @@ export class PopupController {
     const row = document.createElement('div');
     row.className = 'activity-item-row';
 
+    // Apply progress bar background if we have progress data (videos/audio with duration)
+    if (activity.metadata?.progress !== undefined && activity.metadata?.duration && activity.metadata.duration > 0) {
+      const progressPercent = Math.min(100, (activity.metadata.progress / activity.metadata.duration) * 100);
+      // Subtle gradient: light blue-grey accent fading to transparent
+      row.style.background = `linear-gradient(to right, rgba(100, 150, 200, 0.15) 0%, rgba(100, 150, 200, 0.15) ${progressPercent}%, transparent ${progressPercent}%, transparent 100%)`;
+    }
+
     // State indicator (on the left) - FIRST
     if (activity.state) {
       const stateIcon = document.createElement('span');
