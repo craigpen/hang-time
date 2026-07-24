@@ -255,14 +255,16 @@ function extractNetflixTitle(): string | null {
       }
     }
 
-    // Method 2: Search for title in any visible text elements (fallback)
+    // Method 2: Search for title in structured elements (heading tags are most reliable)
     const titleSelectors = [
+      'h2',  // Netflix uses h2 for titles
+      'h1:not([class*="logo"])',
+      'h3',
       '[class*="player-title"]',
       '[class*="PlayerTitle"]',
       '[class*="video-title"]',
       '[class*="content-title"]',
       '[class*="ContentTitle"]',
-      'h1:not([class*="logo"])',
       '[data-testid*="title"]',
       '[data-testid="player-title"]',
       'div[class*="Title"]',
@@ -275,7 +277,19 @@ function extractNetflixTitle(): string | null {
 
         for (const el of elements) {
           const text = el.textContent?.trim();
-          if (text && text.length > 3 && text.length < 300 && text !== 'Netflix') {
+          if (!text || text.length < 3 || text.length > 300) continue;
+          if (text === 'Netflix') continue;
+
+          const textLower = text.toLowerCase();
+
+          // For heading tags, be less restrictive (they're likely titles)
+          if (['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(el.tagName)) {
+            console.debug('[Netflix Content] Found via heading selector:', selector, '=', text, 'tagName:', el.tagName);
+            return text;
+          }
+
+          // For other elements, only return if it doesn't look like metadata
+          if (!textLower.includes('audio') && !textLower.includes('caption') && !textLower.includes('subtitle')) {
             console.debug('[Netflix Content] Found via selector:', selector, '=', text, 'tagName:', el.tagName, 'className:', el.className);
             return text;
           }
