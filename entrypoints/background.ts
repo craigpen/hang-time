@@ -114,7 +114,7 @@ async function initializeExtension(): Promise<void> {
     console.debug('[Background] Notification manager initialized');
 
     // Initialize activity detector
-    activityDetector = new ActivityDetector(relayPool, storageManager, identityManager);
+    activityDetector = new ActivityDetector(storageManager);
 
     // Register all service modules
     activityDetector.registerService('spotify', new SpotifyService(storageManager));
