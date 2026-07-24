@@ -169,8 +169,16 @@ export class ActivityDetector {
       }
     }
 
-    // Sort by last accessed time (for browser tabs) or timestamp (for APIs), most recent first
+    // Sort: playing first, then by last accessed time (for browser tabs) or timestamp (for APIs)
     activities.sort((a, b) => {
+      // Prioritize playing activities
+      const aPlaying = a.state === 'playing' ? 1 : 0;
+      const bPlaying = b.state === 'playing' ? 1 : 0;
+      if (aPlaying !== bPlaying) {
+        return bPlaying - aPlaying; // playing (1) comes before paused (0)
+      }
+
+      // Then sort by last accessed time
       const aTime = (a.metadata?.lastAccessed as number) || a.timestamp || 0;
       const bTime = (b.metadata?.lastAccessed as number) || b.timestamp || 0;
       return bTime - aTime;
