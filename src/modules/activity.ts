@@ -64,7 +64,7 @@ export class ActivityDetector {
       const activitiesByService: Partial<Record<string, any>> = {};
       for (const activity of allActivities) {
         activitiesByService[activity.service] = activity;
-        console.debug(`[Activity]   - ${activity.service}: "${activity.content}" (${activity.state})`);
+        console.debug(`[Activity]   - ${activity.service}: "${activity.content}" (audio: ${activity.audio})`);
       }
       await this.storageManager.setMyActivities(activitiesByService);
       console.debug('[Activity] ✅ Stored in MY_ACTIVITIES');
@@ -169,13 +169,13 @@ export class ActivityDetector {
       }
     }
 
-    // Sort: playing first, then by last accessed time (for browser tabs) or timestamp (for APIs)
+    // Sort: audio on first, then by last accessed time (for browser tabs) or timestamp (for APIs)
     activities.sort((a, b) => {
-      // Prioritize playing activities
-      const aPlaying = a.state === 'playing' ? 1 : 0;
-      const bPlaying = b.state === 'playing' ? 1 : 0;
-      if (aPlaying !== bPlaying) {
-        return bPlaying - aPlaying; // playing (1) comes before paused (0)
+      // Prioritize activities with audio
+      const aAudio = a.audio === 'on' ? 1 : 0;
+      const bAudio = b.audio === 'on' ? 1 : 0;
+      if (aAudio !== bAudio) {
+        return bAudio - aAudio; // on (1) comes before off (0)
       }
 
       // Then sort by last accessed time

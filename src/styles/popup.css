@@ -1179,21 +1179,16 @@ body {
   flex: 1;
 }
 
-.activity-state-icon {
+.activity-audio-icon {
   flex-shrink: 0;
-  font-size: 1.2em;
-  font-weight: bold;
-  min-width: auto;
-  width: auto;
-  text-align: center;
-  background-color: transparent !important;
-  background: none !important;
-  border: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  line-height: 1 !important;
-  display: inline !important;
-  -webkit-text-fill-color: inherit;
+  font-size: 1.3em;
+  line-height: 1;
+  height: 1.3em;
+  width: 1.3em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
 }
 
 .activity-separator {
@@ -1204,12 +1199,12 @@ body {
   font-weight: bold;
 }
 
-.activity-state-playing {
-  color: #2ecc71 !important; /* Green play arrow */
+.activity-audio-on {
+  color: #2ecc71; /* Green speaker icon */
 }
 
-.activity-state-paused {
-  color: #f1c40f !important; /* Yellow pause symbol */
+.activity-audio-off {
+  color: #999999; /* Gray muted icon */
 }
 
 /* Activity action buttons (hidden by default, shown on hover) */

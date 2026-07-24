@@ -432,12 +432,12 @@ export class PopupController {
     }
 
     // State indicator (on the left) - FIRST
-    if (activity.state) {
-      const stateIcon = document.createElement('span');
-      stateIcon.className = `activity-state-icon activity-state-${activity.state}`;
-      stateIcon.textContent = activity.state === 'playing' ? '▶' : '⏸';
-      stateIcon.title = activity.state === 'playing' ? 'Playing' : 'Paused';
-      row.appendChild(stateIcon);
+    if (activity.audio) {
+      const audioIcon = document.createElement('span');
+      audioIcon.className = `activity-audio-icon activity-audio-${activity.audio}`;
+      audioIcon.textContent = activity.audio === 'on' ? '🔊' : '🔇';
+      audioIcon.title = activity.audio === 'on' ? 'Audio On' : 'Audio Off';
+      row.appendChild(audioIcon);
 
       // Pipe separator
       const separator = document.createElement('span');
@@ -807,21 +807,22 @@ export class PopupController {
   }
 
   private _renderMyActivity(activities: Activity[]): void {
-    // Sort activities: playing first, then by lastAccessed
+    // Sort activities: audio_on first, then by most recent accessed
     const sorted = [...activities].sort((a, b) => {
-      // Prioritize playing activities
-      const aPlaying = a.state === 'playing' ? 1 : 0;
-      const bPlaying = b.state === 'playing' ? 1 : 0;
-      if (aPlaying !== bPlaying) {
-        return bPlaying - aPlaying; // playing (1) comes before paused (0)
+      // Prioritize activities with audio
+      const aAudio = a.audio === 'on' ? 1 : 0;
+      const bAudio = b.audio === 'on' ? 1 : 0;
+      if (aAudio !== bAudio) {
+        return bAudio - aAudio; // audio_on (1) comes before audio_off (0)
       }
 
-      // Then sort by last accessed time
+      // Then sort by most recent (last accessed time)
       const aTime = (a.metadata?.lastAccessed as number) || a.timestamp || 0;
       const bTime = (b.metadata?.lastAccessed as number) || b.timestamp || 0;
       return bTime - aTime;
     });
 
+    console.debug('[Popup] My Activity sorted order:', sorted.map(a => `${a.service}(audio:${a.audio})`).join(' → '));
     this.userActivities = sorted;
 
     // Re-render the friends list (including "My Activity" section) with updated activities
@@ -838,11 +839,11 @@ export class PopupController {
 
     // State indicator (on the left) - FIRST
     if (activity.state) {
-      const stateIcon = document.createElement('span');
-      stateIcon.className = `activity-state-icon activity-state-${activity.state}`;
-      stateIcon.textContent = activity.state === 'playing' ? '▶' : '⏸';
-      stateIcon.title = activity.state === 'playing' ? 'Playing' : 'Paused';
-      item.appendChild(stateIcon);
+      const audioIcon = document.createElement('span');
+      audioIcon.className = `activity-audio-icon activity-audio-${activity.audio}`;
+      audioIcon.textContent = activity.audio === 'on' ? '🔊' : '🔇';
+      audioIcon.title = activity.audio === 'on' ? 'Audio On' : 'Audio Off';
+      item.appendChild(audioIcon);
 
       // Pipe separator
       const separator = document.createElement('span');

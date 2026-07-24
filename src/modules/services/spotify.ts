@@ -63,7 +63,7 @@ export class SpotifyService implements IServiceModule {
         content: `${track.name}`,
         url: track.external_urls?.spotify,
         timestamp: Date.now(),
-        state: data.is_playing ? 'playing' : 'paused',
+        audio: data.is_playing ? 'on' : 'off',
         metadata: {
           title: track.name,
           artist,

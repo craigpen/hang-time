@@ -97,6 +97,8 @@ export class RelayConnection implements IRelayConnection {
   }
 
   async publish(event: NostrEvent): Promise<void> {
+    console.debug(`[Nostr] Publish check for ${this.url}: isConnected=${this.isConnected}, ws=${this.ws ? 'exists' : 'null'}, ws.readyState=${this.ws?.readyState}`);
+
     if (!this.isConnected || !this.ws) {
       throw new NostrError(`Relay ${this.url} is not connected`, { url: this.url });
     }

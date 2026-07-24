@@ -38,19 +38,16 @@ export class TabService implements IServiceModule {
         if (title) {
           // We have a real title - create normal activity
           const netflixId = generateActivityId('netflix', netflixTab.url);
-          // Query video data from content script
-          const videoData = await this.getVideoActivityDataFromTab(netflixTab.id, 'netflix');
+          // Netflix uses proprietary player, so skip video element query and use tab.audible
           const netflixActivity: Activity = {
             id: netflixId,
             service: 'netflix',
             content: title,
             url: netflixTab.url,
             timestamp: Date.now(),
-            state: videoData?.isPlaying !== undefined ? (videoData.isPlaying ? 'playing' : 'paused') : (netflixTab.audible ? 'playing' : 'paused'),
+            audio: netflixTab.audible ? 'on' : 'off',
             metadata: {
               lastAccessed: netflixTab.lastAccessed || 0,
-              progress: videoData?.currentTime,
-              duration: videoData?.duration,
             },
           };
           detectedActivities.push(netflixActivity);
@@ -74,7 +71,7 @@ export class TabService implements IServiceModule {
           content: finalContent,
           url: youtubeTab.url,
           timestamp: Date.now(),
-          state: videoData?.isPlaying !== undefined ? (videoData.isPlaying ? 'playing' : 'paused') : (youtubeTab.audible ? 'playing' : 'paused'),
+          audio: youtubeTab.audible ? 'on' : 'off',
           metadata: {
             lastAccessed: youtubeTab.lastAccessed || 0,
             progress: videoData?.currentTime,
@@ -98,7 +95,7 @@ export class TabService implements IServiceModule {
           content: title || 'Twitch Stream',
           url: twitchTab.url,
           timestamp: Date.now(),
-          state: videoData?.isPlaying !== undefined ? (videoData.isPlaying ? 'playing' : 'paused') : (twitchTab.audible ? 'playing' : 'paused'),
+          audio: twitchTab.audible ? 'on' : 'off',
           metadata: { lastAccessed: twitchTab.lastAccessed || 0 },
         };
         detectedActivities.push(twitchActivity);
@@ -322,7 +319,15 @@ export class TabService implements IServiceModule {
   }
 
   private _getMostRecentTab(tabs: chrome.tabs.Tab[]): chrome.tabs.Tab {
-    // Find the tab with the most recent lastAccessed timestamp
+    // Prioritize audible tabs (actively playing audio, including PiP)
+    const audibleTab = tabs.find(tab => tab.audible);
+    if (audibleTab) return audibleTab;
+
+    // Then active tab
+    const activeTab = tabs.find(tab => tab.active);
+    if (activeTab) return activeTab;
+
+    // Fall back to most recent by lastAccessed
     return tabs.reduce((most, current) => {
       const currentTime = current.lastAccessed || 0;
       const mostTime = most.lastAccessed || 0;

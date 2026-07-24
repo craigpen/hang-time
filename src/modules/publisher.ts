@@ -1,7 +1,7 @@
 /**
  * Hang Time - Activity Publisher
- * Publishes local activity state to Nostr using round-robin per-service publishing
- * One atomic publish per second, cycling through services
+ * Publishes local activity state to Nostr using time-based scheduling
+ * 5 publishes per 60 seconds: changed services at 12s, 24s, 36s, 48s + full refresh at 60s
  */
 
 import { Activity, NostrEvent, ServiceName } from '../types';
@@ -15,8 +15,10 @@ const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify', 'twitch', 'steam', 'netfl
 export class ActivityPublisher {
   private lastPublishedState: Partial<Record<string, Activity>> = {};
   private publishInterval: NodeJS.Timeout | null = null;
+  private publishCount = 0; // Increments every 12s, 5th publish (index 4) is full refresh
 
-  static readonly PUBLISH_INTERVAL_MS = 1000; // One publish per second
+  static readonly PUBLISH_INTERVAL_MS = 12000; // Publish every 12 seconds (5 per 60s)
+  static readonly FULL_REFRESH_CYCLE = 5; // Every 5th publish is a full refresh
 
   constructor(
     private relayPool: RelayPool,
@@ -25,17 +27,17 @@ export class ActivityPublisher {
   ) {}
 
   async start(): Promise<void> {
-    console.debug('[Publisher] Starting activity publisher (publish all services each cycle)');
+    console.debug('[Publisher] Starting activity publisher (5 publishes per 60s)');
 
     try {
-      // Periodically publish all services in parallel
+      // Publish every 12 seconds: changed services at 12s/24s/36s/48s, full refresh at 60s
       this.publishInterval = setInterval(() => {
-        this.publishAllServices().catch((error) => {
-          console.error('[Publisher] Publish error:', error);
+        this.publishCycle().catch((error) => {
+          console.error('[Publisher] Publish cycle error:', error);
         });
       }, ActivityPublisher.PUBLISH_INTERVAL_MS);
 
-      console.debug('[Publisher] Publish interval started (all services per cycle)');
+      console.debug('[Publisher] Publish interval started (every 12 seconds)');
     } catch (error) {
       console.error('[Publisher] Failed to start:', error);
       throw error;
@@ -49,30 +51,112 @@ export class ActivityPublisher {
     }
   }
 
-  async publishAllServices(): Promise<void> {
+  async publishCycle(): Promise<void> {
     try {
-      // Get current activities from storage once
       const currentActivities = await this.storageManager.getMyActivities();
+      const isFullRefreshCycle = this.publishCount % ActivityPublisher.FULL_REFRESH_CYCLE === (ActivityPublisher.FULL_REFRESH_CYCLE - 1);
 
-      // Publish all services in parallel
-      const publishPromises = SERVICES_TO_PUBLISH.map(async (service) => {
-        const currentActivity = currentActivities[service];
-
-        // Publish if activity exists (no "unchanged" check)
-        if (currentActivity) {
-          await this._publishActivity(currentActivity);
-          this.lastPublishedState[service] = currentActivity;
-          console.debug(`[Publisher] Published ${service}: ${currentActivity.content}`);
-        } else {
-          // Service has no activity, clear from last published state
-          delete this.lastPublishedState[service];
+      if (isFullRefreshCycle) {
+        // Full refresh: publish all active services
+        console.debug('[Publisher] Full refresh cycle (60s)');
+        await this._publishServices(currentActivities, 'all');
+        this.lastPublishedState = { ...currentActivities };
+      } else {
+        // Changed services only: publish only what changed since last publish
+        const changedServices: Partial<Record<string, Activity>> = {};
+        for (const service of SERVICES_TO_PUBLISH) {
+          if (!this._activityUnchanged(currentActivities[service], this.lastPublishedState[service])) {
+            changedServices[service] = currentActivities[service];
+          }
         }
-      });
 
-      // Wait for all publishes to complete
-      await Promise.all(publishPromises);
+        if (Object.keys(changedServices).length > 0) {
+          console.debug(`[Publisher] Changed services: ${Object.keys(changedServices).join(', ')}`);
+          await this._publishServices(changedServices, 'changed');
+          // Update last published state with what we just published
+          this.lastPublishedState = { ...this.lastPublishedState, ...changedServices };
+        } else {
+          console.debug('[Publisher] No changes to publish');
+        }
+      }
+
+      this.publishCount++;
     } catch (error) {
-      console.error('[Publisher] Failed to publish services:', error);
+      console.error('[Publisher] Failed to publish cycle:', error);
+    }
+  }
+
+  private async _publishServices(
+    activities: Partial<Record<string, Activity>>,
+    mode: 'changed' | 'all'
+  ): Promise<void> {
+    const servicesToPublish = mode === 'all'
+      ? SERVICES_TO_PUBLISH.filter(s => activities[s])
+      : Object.keys(activities) as ServiceName[];
+
+    // Collect activities to bundle
+    const activitiesToPublish: Activity[] = servicesToPublish
+      .map(service => activities[service])
+      .filter((a): a is Activity => !!a);
+
+    if (activitiesToPublish.length === 0) {
+      console.debug('[Publisher] No activities to publish');
+      return;
+    }
+
+    console.debug('[Publisher] Activities to publish:', activitiesToPublish.map(a => ({ service: a.service, audio: a.audio })));
+
+    // Publish all as one bundled event
+    await this._publishBundledActivities(activitiesToPublish, mode);
+  }
+
+  private async _publishBundledActivities(activities: Activity[], mode: 'changed' | 'all'): Promise<void> {
+    try {
+      const pubkey = await this.identityManager.getPubkey();
+      const created_at = Math.floor(Date.now() / 1000);
+      const kind = 1;
+
+      // Create tags
+      const tags: Array<[string, string]> = [
+        ['type', 'activity-state'],
+        ['mode', mode],
+        ['count', activities.length.toString()],
+      ];
+
+      // Add service tags for each activity
+      for (const activity of activities) {
+        tags.push(['service', activity.service]);
+      }
+
+      // Serialize activities as JSON array in content
+      const content = JSON.stringify(activities);
+
+      // Compute event ID
+      const id = await this._computeEventId(pubkey, created_at, kind, tags, content);
+
+      // Sign the event
+      const secretKey = await this.identityManager.getSecretKey();
+      const sig = encryptionManager.signEvent(id, secretKey);
+
+      const event: NostrEvent = {
+        id,
+        pubkey,
+        created_at,
+        kind,
+        tags,
+        content,
+        sig,
+      };
+
+      // Log event details
+      const eventJson = JSON.stringify(event);
+      console.debug(`[Publisher] Bundled event (${mode}): ${activities.length} services, size=${eventJson.length}b`);
+      console.debug(`[Publisher] Services: ${activities.map(a => `${a.service}(audio:${a.audio})`).join(', ')}`);
+
+      await this.relayPool.publish(event);
+      console.debug(`[Publisher] ✅ Published bundled event with ${activities.length} services`);
+    } catch (error) {
+      console.error('[Publisher] Failed to publish bundled activities:', error);
     }
   }
 
@@ -159,7 +243,7 @@ export class ActivityPublisher {
     // Compare key fields
     return (
       current.content === last.content &&
-      current.state === last.state &&
+      current.audio === last.audio &&
       current.url === last.url &&
       current.metadata?.progress === last.metadata?.progress
     );

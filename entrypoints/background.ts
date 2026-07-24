@@ -886,10 +886,10 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       const changedServices = new Set<ServiceName>();
       for (const activity of activities) {
         const oldActivity = friend.current_activities?.[activity.service];
-        // Check if activity changed (content, state, or URL)
+        // Check if activity changed (content, audio, or URL)
         if (!oldActivity ||
             oldActivity.content !== activity.content ||
-            oldActivity.state !== activity.state ||
+            oldActivity.audio !== activity.audio ||
             oldActivity.url !== activity.url) {
           changedServices.add(activity.service);
         }
@@ -1047,7 +1047,7 @@ function _parseActivityEvent(event: NostrEvent) {
   const contentTag = event.tags.find((t) => t[0] === 'content')?.[1] ?? '';
   const urlTag = event.tags.find((t) => t[0] === 'url')?.[1];
   const activityIdTag = event.tags.find((t) => t[0] === 'activity_id')?.[1];
-  const stateTag = event.tags.find((t) => t[0] === 'state')?.[1] as 'playing' | 'paused' | 'stopped' | undefined;
+  const audioTag = event.tags.find((t) => t[0] === 'audio')?.[1] as 'on' | 'off' | undefined;
 
   // Use content tag, fallback to event.content, but never use URL as content
   let finalContent = (contentTag || event.content || '').trim();
@@ -1068,12 +1068,9 @@ function _parseActivityEvent(event: NostrEvent) {
     url: urlTag,
     id: activityIdTag,
     timestamp: event.created_at * 1000,
+    audio: audioTag ?? 'off',
     metadata: {},
   };
-
-  if (stateTag) {
-    activity.state = stateTag;
-  }
 
   return activity;
 }

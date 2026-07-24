@@ -75,7 +75,7 @@ export interface Activity {
   service: ServiceName;
   content: string; // The title/name of what's playing (single source of truth)
   url?: string; // Direct link to the content
-  state?: 'playing' | 'paused' | 'stopped'; // Activity state
+  audio: 'on' | 'off'; // Audio state detected from tab.audible
   timestamp: number; // When activity was detected
   metadata: {
     lastAccessed?: number; // Browser tab's lastAccessed time (for sorting order on remote side)
