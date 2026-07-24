@@ -49,18 +49,29 @@ function isValidTitle(title: string | null | undefined): boolean {
 }
 
 async function writeValidTitle(title: string | null): Promise<void> {
-  if (isValidTitle(title)) {
-    await chrome.storage.local.set({ [STORAGE_KEY]: title });
+  try {
+    if (isValidTitle(title)) {
+      await chrome.storage.local.set({ [STORAGE_KEY]: title });
+    }
+  } catch (error) {
+    console.error('[NetflixContent] Failed to write title to storage:', error instanceof Error ? error.message : error);
+    // Extension context invalidated - will reconnect automatically
   }
 }
 
 async function getStoredTitle(): Promise<string | null> {
-  const result = await chrome.storage.local.get(STORAGE_KEY);
-  const stored = result[STORAGE_KEY];
-  if (isValidTitle(stored)) {
-    return stored;
+  try {
+    const result = await chrome.storage.local.get(STORAGE_KEY);
+    const stored = result[STORAGE_KEY];
+    if (isValidTitle(stored)) {
+      return stored;
+    }
+    return null;
+  } catch (error) {
+    console.error('[NetflixContent] Failed to read title from storage:', error instanceof Error ? error.message : error);
+    // Extension context invalidated - will reconnect automatically
+    return null;
   }
-  return null;
 }
 
 function extractNetflixTitle(): string | null {

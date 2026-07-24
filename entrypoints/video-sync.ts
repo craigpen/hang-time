@@ -48,13 +48,21 @@ class VideoSyncContentScript {
 
       // Listen for messages on the port
       this.port.onMessage.addListener((message: any) => {
-        console.debug(`[VideoSync] Received query: ${message.type}`);
-        this._handleMessage(message, (response: any) => {
-          if (this.port) {
-            this.port.postMessage({ type: message.type, response });
-            console.debug(`[VideoSync] Responded to ${message.type}`);
-          }
-        });
+        try {
+          console.debug(`[VideoSync] Received query: ${message.type}`);
+          this._handleMessage(message, (response: any) => {
+            try {
+              if (this.port) {
+                this.port.postMessage({ type: message.type, response });
+                console.debug(`[VideoSync] Responded to ${message.type}`);
+              }
+            } catch (error) {
+              console.error(`[VideoSync] Failed to send response:`, error instanceof Error ? error.message : error);
+            }
+          });
+        } catch (error) {
+          console.error(`[VideoSync] Error handling message:`, error instanceof Error ? error.message : error);
+        }
       });
 
       // Handle disconnection (e.g., extension reload)
