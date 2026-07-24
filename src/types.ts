@@ -71,19 +71,18 @@ export interface FriendList extends Array<Friend> {}
 // ============================================================================
 
 export interface Activity {
-  id?: string; // Stable activity ID (SHA256 of service + extracted ID)
+  id: string; // Stable activity ID (deterministic hash of service + content URL) - generated at detection
   service: ServiceName;
-  content: string;
-  url?: string;
-  state?: 'playing' | 'paused' | 'stopped'; // Activity state: playing, paused, or stopped (removal signal)
-  temporary?: boolean; // If true, activity is guidance only and won't publish to Nostr
-  timestamp: number;
+  content: string; // The title/name of what's playing (single source of truth)
+  url?: string; // Direct link to the content
+  state?: 'playing' | 'paused' | 'stopped'; // Activity state
+  timestamp: number; // When activity was detected
   metadata: {
-    duration?: number;
-    progress?: number;
-    artist?: string;
-    title?: string;
-    thumbnailUrl?: string;
+    lastAccessed?: number; // Browser tab's lastAccessed time (for sorting order on remote side)
+    progress?: number; // Current position in video (seconds)
+    duration?: number; // Total length of video/content (seconds)
+    artist?: string; // For music: artist name
+    thumbnailUrl?: string; // Image/thumbnail URL (for display)
   };
 }
 

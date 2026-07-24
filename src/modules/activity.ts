@@ -15,7 +15,6 @@ import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
 import { encryptionManager } from './encryption';
-import { generateActivityId } from './activity-utils';
 
 export class ActivityDetector {
   private services: Map<string, IServiceModule> = new Map();
@@ -77,11 +76,6 @@ export class ActivityDetector {
 
       // Publish all detected activities to Nostr
       for (const activity of allActivities) {
-        // Generate stable activity ID
-        if (!activity.id) {
-          activity.id = generateActivityId(activity.service, activity.url);
-        }
-
         await this._publishActivity(activity);
       }
 
@@ -213,9 +207,6 @@ export class ActivityDetector {
     const created_at = Math.floor(Date.now() / 1000);
     const kind = 1;
 
-    // Generate stable activity ID (or use existing if already computed)
-    const activityId = activity.id || generateActivityId(activity.service, activity.url);
-
     // Ensure content is never empty or a URL
     const activityContent = (activity.content || '').trim();
     if (!activityContent || activityContent.includes('http') || activityContent === activity.url) {
@@ -226,7 +217,7 @@ export class ActivityDetector {
     const tags: Array<[string, string]> = [
       ['service', activity.service],
       ['content', activityContent],
-      ['activity_id', activityId],
+      ['activity_id', activity.id],
     ];
 
     // Add state tag if present

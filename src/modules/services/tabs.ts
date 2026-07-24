@@ -5,6 +5,7 @@
 
 import { Activity, IServiceModule } from '../../types';
 import { StorageManager } from '../storage';
+import { generateActivityId } from '../activity-utils';
 
 export class TabService implements IServiceModule {
   private lastDetected: Map<string, Activity> = new Map();
@@ -37,32 +38,24 @@ export class TabService implements IServiceModule {
 
         if (title) {
           // We have a real title - create normal activity
+          const netflixId = generateActivityId('netflix', netflixTab.url);
           const netflixActivity: Activity = {
+            id: netflixId,
             service: 'netflix',
             content: title,
             url: netflixTab.url,
             timestamp: Date.now(),
             state: netflixTab.audible ? 'playing' : 'paused',
-            metadata: { title, lastAccessed: netflixTab.lastAccessed || 0 },
+            metadata: { lastAccessed: netflixTab.lastAccessed || 0 },
           };
           const netflixState = this._getVideoState('netflix');
           if (netflixState !== undefined) {
             netflixActivity.state = netflixState ? 'playing' : 'paused';
           }
           detectedActivities.push(netflixActivity);
-        } else {
-          // No title yet - create guidance activity (temporary, won't publish to Nostr)
-          const guidanceActivity: Activity = {
-            service: 'netflix',
-            content: 'Reload Netflix and play to capture title',
-            url: netflixTab.url,
-            timestamp: Date.now(),
-            state: 'paused',
-            temporary: true,  // Flag to prevent Nostr publishing
-            metadata: { lastAccessed: netflixTab.lastAccessed || 0 },
-          };
-          detectedActivities.push(guidanceActivity);
         }
+        // Don't create guidance activities - skip publishing if no title found
+        // Friends will see no Netflix activity rather than a confusing message
       }
 
       // Check for YouTube
@@ -71,14 +64,16 @@ export class TabService implements IServiceModule {
         const title = this._extractYouTubeTitle(youtubeTab.title || '');
         // Ensure content is never a URL - use fallback if title extraction failed
         const finalContent = (title && !title.includes('http')) ? title : 'YouTube Video';
+        const youtubeId = generateActivityId('youtube', youtubeTab.url);
         // Use tab's audible property as initial state guess (if audio playing, likely video is playing)
         const youtubeActivity: Activity = {
+          id: youtubeId,
           service: 'youtube',
           content: finalContent,
           url: youtubeTab.url,
           timestamp: Date.now(),
           state: youtubeTab.audible ? 'playing' : 'paused',
-          metadata: { title, lastAccessed: youtubeTab.lastAccessed || 0 },
+          metadata: { lastAccessed: youtubeTab.lastAccessed || 0 },
         };
         const youtubeState = this._getVideoState('youtube');
         if (youtubeState !== undefined) {
@@ -91,14 +86,16 @@ export class TabService implements IServiceModule {
       const twitchTab = this._findMostRecentTabByDomain(tabs, 'twitch');
       if (twitchTab) {
         const title = this._extractTwitchTitle(twitchTab.title || '');
+        const twitchId = generateActivityId('twitch', twitchTab.url);
         // Use tab's audible property as initial state guess (if audio playing, likely stream is playing)
         const twitchActivity: Activity = {
+          id: twitchId,
           service: 'twitch',
           content: title || 'Twitch Stream',
           url: twitchTab.url,
           timestamp: Date.now(),
           state: twitchTab.audible ? 'playing' : 'paused',
-          metadata: { title, lastAccessed: twitchTab.lastAccessed || 0 },
+          metadata: { lastAccessed: twitchTab.lastAccessed || 0 },
         };
         const twitchState = this._getVideoState('twitch');
         if (twitchState !== undefined) {
