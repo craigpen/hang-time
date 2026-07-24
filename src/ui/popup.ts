@@ -494,8 +494,6 @@ export class PopupController {
       buttonsDiv.appendChild(syncBtn);
     }
 
-    row.appendChild(faviconDiv);
-    row.appendChild(contentDiv);
     row.appendChild(buttonsDiv);
 
     return row;
