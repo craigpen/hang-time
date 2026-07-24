@@ -161,6 +161,46 @@ async function initializeExtension(): Promise<void> {
 // ============================================================================
 
 /**
+ * Port connection handler for content scripts (persistent connections)
+ * Allows content scripts to reconnect after extension reload
+ */
+chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
+  console.log(`[Background] 🔌 Port connected: ${port.name}`);
+
+  // Handle messages coming through the port
+  port.onMessage.addListener(async (message: any) => {
+    try {
+      if (!message || !message.type) {
+        port.postMessage({ success: false, error: 'Invalid message format' });
+        return;
+      }
+
+      console.debug(`[Background] Port message: ${message.type} (from ${port.name})`);
+
+      // Ensure initialized
+      if (!initialized) {
+        await initializeExtension();
+      }
+
+      // Route through main message handler
+      const response: ExtensionResponse = await _handleMessage(message as ExtensionMessage);
+      port.postMessage(response);
+    } catch (error) {
+      console.error(`[Background] Port handler error:`, error);
+      port.postMessage({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  // Handle disconnection
+  port.onDisconnect.addListener(() => {
+    console.log(`[Background] 🔌 Port disconnected: ${port.name}`);
+  });
+});
+
+/**
  * Message handler for popup ↔ background communication
  */
 chrome.runtime.onMessage.addListener(
