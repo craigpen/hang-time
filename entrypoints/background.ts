@@ -259,6 +259,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'GET_NETFLIX_EXTRACTION_LOGS':
       return _getNetflixExtractionLogs();
 
+    case 'GET_NETFLIX_DEBUG_CAPTURES':
+      return _getNetflixDebugCaptures();
+
     case 'DISCONNECT_SERVICE':
       return _disconnectService(message.data?.service);
 
@@ -424,6 +427,17 @@ async function _getNetflixExtractionLogs(): Promise<ExtensionResponse> {
     return { success: true, data: logs };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to get logs' };
+  }
+}
+
+async function _getNetflixDebugCaptures(): Promise<ExtensionResponse> {
+  try {
+    const result = await chrome.storage.local.get('netflix_debug_captures');
+    const captures = result.netflix_debug_captures || [];
+    console.debug(`[Background] Retrieved ${captures.length} Netflix debug captures`);
+    return { success: true, data: captures };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get captures' };
   }
 }
 

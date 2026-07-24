@@ -196,10 +196,15 @@ window.addEventListener('load', () => {
 // Capture immediately
 captureEverything('immediate');
 
-// Auto-dump captures to console every 5 seconds
-setInterval(() => {
+// Auto-save captures to storage every 5 seconds
+setInterval(async () => {
   if (debugCaptures.length > 0) {
-    console.log('[NETFLIX_DEBUG_DATA_AUTO_DUMP]', JSON.stringify(debugCaptures, null, 2));
+    try {
+      await chrome.storage.local.set({ netflix_debug_captures: debugCaptures });
+      console.log(`[NETFLIX_DEBUG] Saved ${debugCaptures.length} captures to storage`);
+    } catch (error) {
+      console.error('[NETFLIX_DEBUG] Failed to save to storage:', error);
+    }
   }
 }, 5000);
 
