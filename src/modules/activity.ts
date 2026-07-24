@@ -187,6 +187,16 @@ export class ActivityDetector {
               seenServices.add('youtube');
             }
           }
+
+          // Get Twitch activity
+          if (servicesEnabled.twitch) {
+            const twitchActivity = tabService.getDetectedActivity('twitch');
+            if (twitchActivity) {
+              console.debug(`[Activity] Detected twitch: ${twitchActivity.content}`);
+              activities.push(twitchActivity);
+              seenServices.add('twitch');
+            }
+          }
         } catch (error) {
           console.error('[Activity] ERROR detecting browser tabs:', error);
         }
