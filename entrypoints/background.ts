@@ -328,14 +328,14 @@ async function _getAllActiveActivities(): Promise<ExtensionResponse> {
 }
 
 async function _getBrowserActivities(): Promise<ExtensionResponse> {
-  // Get the TabService and retrieve detected activities for Netflix and YouTube separately
+  // Get the TabService and retrieve detected activities for Netflix, YouTube, and Twitch.tv separately
   if (!activityDetector) {
-    return { success: true, data: { netflix: null, youtube: null } };
+    return { success: true, data: { netflix: null, youtube: null, twitch: null } };
   }
 
   const tabService = activityDetector.getService('tabs') as any;
   if (!tabService) {
-    return { success: true, data: { netflix: null, youtube: null } };
+    return { success: true, data: { netflix: null, youtube: null, twitch: null } };
   }
 
   // Call getCurrentActivity first to populate the lastDetected map
@@ -346,6 +346,7 @@ async function _getBrowserActivities(): Promise<ExtensionResponse> {
     data: {
       netflix: tabService.getDetectedActivity?.('netflix') || null,
       youtube: tabService.getDetectedActivity?.('youtube') || null,
+      twitch: tabService.getDetectedActivity?.('twitch') || null,
     },
   };
 }

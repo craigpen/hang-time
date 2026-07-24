@@ -1248,9 +1248,9 @@ export class PopupController {
         type: 'GET_BROWSER_ACTIVITIES',
       });
 
-      const browserActivities = response.success && response.data ? response.data : { netflix: null, youtube: null };
+      const browserActivities = response.success && response.data ? response.data : { netflix: null, youtube: null, twitch: null };
 
-      for (const service of ['netflix', 'youtube']) {
+      for (const service of ['netflix', 'youtube', 'twitch']) {
         const statusDiv = document.getElementById(`status-${service}-popup`);
         if (statusDiv && profile) {
           const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? false;
