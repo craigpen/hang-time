@@ -1,20 +1,23 @@
 /**
  * Hang Time - Activity Publisher
- * Publishes local activity state to Nostr
- * Separates detection (local storage) from publishing concerns
+ * Publishes local activity state to Nostr using round-robin per-service publishing
+ * One atomic publish per second, cycling through services
  */
 
-import { Activity, NostrEvent } from '../types';
+import { Activity, NostrEvent, ServiceName } from '../types';
 import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
 import { encryptionManager } from './encryption';
 
-export class ActivityPublisher {
-  private lastPublishedState: Partial<Record<string, Activity>> | null = null;
-  private publishInterval: NodeJS.Timeout | null = null;
+const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify', 'twitch', 'steam', 'netflix', 'youtube'];
 
-  static readonly PUBLISH_INTERVAL_MS = 5000; // Match detection cycle
+export class ActivityPublisher {
+  private lastPublishedState: Partial<Record<string, Activity>> = {};
+  private publishInterval: NodeJS.Timeout | null = null;
+  private currentServiceIndex: number = 0;
+
+  static readonly PUBLISH_INTERVAL_MS = 1000; // One publish per second
 
   constructor(
     private relayPool: RelayPool,
@@ -23,22 +26,17 @@ export class ActivityPublisher {
   ) {}
 
   async start(): Promise<void> {
-    console.debug('[Publisher] Starting activity publisher');
+    console.debug('[Publisher] Starting round-robin activity publisher');
 
     try {
-      // Publish immediately
-      console.debug('[Publisher] Initial publish attempt');
-      await this.publishIfChanged();
-      console.debug('[Publisher] Initial publish complete');
-
-      // Then periodically check and publish
+      // Then periodically publish one service per second
       this.publishInterval = setInterval(() => {
-        this.publishIfChanged().catch((error) => {
+        this.publishNextService().catch((error) => {
           console.error('[Publisher] Publish error:', error);
         });
       }, ActivityPublisher.PUBLISH_INTERVAL_MS);
 
-      console.debug('[Publisher] Publish interval started');
+      console.debug('[Publisher] Round-robin publish interval started (1s per service)');
     } catch (error) {
       console.error('[Publisher] Failed to start:', error);
       throw error;
@@ -52,54 +50,76 @@ export class ActivityPublisher {
     }
   }
 
-  async publishIfChanged(): Promise<void> {
+  async publishNextService(): Promise<void> {
     try {
+      const service = SERVICES_TO_PUBLISH[this.currentServiceIndex];
+      this.currentServiceIndex = (this.currentServiceIndex + 1) % SERVICES_TO_PUBLISH.length;
+
+      // Get current activities from storage
       const currentActivities = await this.storageManager.getMyActivities();
+      const currentActivity = currentActivities[service];
 
-      // Check if state changed
-      if (!this._activitiesChanged(currentActivities)) {
-        return;
+      // Check if this service's activity changed since last publish
+      const lastPublished = this.lastPublishedState[service];
+      if (this._activityUnchanged(currentActivity, lastPublished)) {
+        return; // No change, skip publish
       }
 
-      // Convert to array for publishing
-      const activitiesArray = Object.values(currentActivities).filter((a) => a) as Activity[];
-      if (activitiesArray.length === 0) {
-        return;
+      // Publish the individual activity
+      if (currentActivity) {
+        await this._publishActivity(currentActivity);
+        this.lastPublishedState[service] = currentActivity;
+        console.debug(`[Publisher] Published ${service}: ${currentActivity.content}`);
+      } else {
+        // Service has no activity, clear from last published state
+        delete this.lastPublishedState[service];
       }
-
-      // Publish complete activity state
-      await this._publishCompleteActivityState(activitiesArray);
-      this.lastPublishedState = currentActivities;
-
-      console.debug(`[Publisher] Published ${activitiesArray.length} activities`);
     } catch (error) {
-      console.error('[Publisher] Failed to publish:', error);
+      console.error('[Publisher] Failed to publish service:', error);
     }
   }
 
-  private async _publishCompleteActivityState(allActivities: Activity[]): Promise<void> {
+  private async _publishActivity(activity: Activity): Promise<void> {
     try {
+      // Skip temporary guidance activities
+      if (activity.temporary) {
+        return;
+      }
+
+      // Don't publish fallback/placeholder activities
+      if (activity.content === '(Reload Netflix to identify title)') {
+        return;
+      }
+
       const pubkey = await this.identityManager.getPubkey();
       const created_at = Math.floor(Date.now() / 1000);
       const kind = 1;
 
-      // Create tags with metadata about the state
-      let tags: Array<[string, string]> = [
-        ['type', 'activity-state'],
-        ['count', allActivities.length.toString()],
-        // Add service tags for filtering (friends can query by service)
-        ...allActivities.map((a) => ['service', a.service]),
+      // Ensure content is valid
+      const activityContent = (activity.content || '').trim();
+      if (!activityContent || activityContent.includes('http') || activityContent === activity.url) {
+        return;
+      }
+
+      const tags: Array<[string, string]> = [
+        ['service', activity.service],
+        ['content', activityContent],
+        ['activity_id', activity.id],
       ];
 
-      // Serialize all activities as JSON in the content field
-      const content = JSON.stringify(allActivities);
+      // Add state tag if present
+      if (activity.state) {
+        tags.push(['state', activity.state]);
+      }
 
-      // Compute PoW to meet nos.lol requirements (28 bits)
-      console.debug('[Publisher] Computing PoW for large event...');
-      const nonce = await this._computePoW(pubkey, created_at, kind, tags, content, 28);
-      tags = [...tags, ['nonce', nonce.toString()]];
+      // Add URL tag
+      if (activity.url) {
+        tags.push(['url', activity.url]);
+      }
 
-      // Compute event ID with nonce
+      const content = this._buildEventContent(activity);
+
+      // Compute event ID
       const id = await this._computeEventId(pubkey, created_at, kind, tags, content);
 
       // Sign the event
@@ -118,92 +138,34 @@ export class ActivityPublisher {
 
       await this.relayPool.publish(event);
     } catch (error) {
-      console.error('[Publisher] Failed to publish complete activity state:', error);
+      console.error('[Publisher] Failed to publish activity:', error);
     }
   }
 
-  private _activitiesChanged(newActivities: Partial<Record<string, Activity>>): boolean {
-    if (!this.lastPublishedState) return true;
+  private _buildEventContent(activity: Activity): string {
+    const parts: string[] = [];
 
-    // Check if any service's activity changed
-    const services = new Set([
-      ...Object.keys(newActivities),
-      ...Object.keys(this.lastPublishedState),
-    ]);
-
-    for (const service of services) {
-      const oldActivity = this.lastPublishedState[service];
-      const newActivity = newActivities[service];
-
-      // Check if activity was added, removed, or changed
-      if (!oldActivity && newActivity) return true; // Added
-      if (oldActivity && !newActivity) return true; // Removed
-      if (oldActivity && newActivity) {
-        if (
-          oldActivity.content !== newActivity.content ||
-          oldActivity.state !== newActivity.state ||
-          oldActivity.url !== newActivity.url ||
-          oldActivity.metadata?.progress !== newActivity.metadata?.progress
-        ) {
-          return true; // Changed
-        }
-      }
+    if (activity.metadata?.artist) {
+      parts.push(activity.metadata.artist);
     }
 
-    return false;
+    parts.push(activity.content);
+
+    return parts.filter((p) => p).join(' - ');
   }
 
-  private async _computePoW(
-    pubkey: string,
-    created_at: number,
-    kind: number,
-    tags: Array<[string, string]>,
-    content: string,
-    targetBits: number = 28
-  ): Promise<number> {
-    let nonce = 0;
-    const maxAttempts = 1000000; // Prevent infinite loops
+  private _activityUnchanged(current: Activity | undefined, last: Activity | undefined): boolean {
+    // If either is undefined, they're different
+    if (!current && !last) return true; // Both empty = unchanged
+    if (!current || !last) return false; // One empty, one not = changed
 
-    while (nonce < maxAttempts) {
-      const tagsWithNonce = [...tags, ['nonce', nonce.toString()]];
-      const eventData = [0, pubkey, created_at, kind, tagsWithNonce, content];
-      const canonicalJson = JSON.stringify(eventData);
-      const hash = await encryptionManager.sha256(canonicalJson);
-
-      // Count leading zero bits
-      let leadingZeros = 0;
-      for (let i = 0; i < hash.length; i += 2) {
-        const byte = parseInt(hash.substring(i, i + 2), 16);
-        if (byte === 0) {
-          leadingZeros += 8;
-        } else {
-          // Count zero bits in this byte
-          for (let bit = 7; bit >= 0; bit--) {
-            if ((byte & (1 << bit)) === 0) {
-              leadingZeros++;
-            } else {
-              break;
-            }
-          }
-          break;
-        }
-      }
-
-      if (leadingZeros >= targetBits) {
-        console.debug(`[Publisher] Found PoW nonce: ${nonce} with ${leadingZeros} bits`);
-        return nonce;
-      }
-
-      nonce++;
-
-      // Log progress every 1000 attempts
-      if (nonce % 1000 === 0) {
-        console.debug(`[Publisher] PoW search in progress: ${nonce} attempts, best so far: ${leadingZeros} bits`);
-      }
-    }
-
-    console.warn(`[Publisher] Failed to find ${targetBits}-bit PoW within ${maxAttempts} attempts`);
-    return nonce;
+    // Compare key fields
+    return (
+      current.content === last.content &&
+      current.state === last.state &&
+      current.url === last.url &&
+      current.metadata?.progress === last.metadata?.progress
+    );
   }
 
   private async _computeEventId(
