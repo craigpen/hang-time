@@ -41,6 +41,7 @@ export class TabService implements IServiceModule {
           content: title || '(Reload Netflix to identify title)',
           url: netflixTab.url,
           timestamp: Date.now(),
+          state: 'playing', // default to playing on initial detection
           metadata: { title, lastAccessed: netflixTab.lastAccessed || 0 },
         };
         const netflixState = this._getVideoState('netflix');
@@ -60,6 +61,7 @@ export class TabService implements IServiceModule {
           content: title || 'YouTube Video',
           url: youtubeTab.url,
           timestamp: Date.now(),
+          state: 'playing', // default to playing on initial detection
           metadata: { title, lastAccessed: youtubeTab.lastAccessed || 0 },
         };
         const youtubeState = this._getVideoState('youtube');
@@ -79,6 +81,7 @@ export class TabService implements IServiceModule {
           content: title || 'Twitch Stream',
           url: twitchTab.url,
           timestamp: Date.now(),
+          state: 'playing', // default to playing on initial detection
           metadata: { title, lastAccessed: twitchTab.lastAccessed || 0 },
         };
         const twitchState = this._getVideoState('twitch');
