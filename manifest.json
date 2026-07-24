@@ -44,7 +44,7 @@
   "options_page": "settings.html",
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/*", "https://youtu.be/*", "https://www.netflix.com/*"],
+      "matches": ["https://www.youtube.com/*", "https://youtu.be/*", "https://www.netflix.com/*", "https://www.twitch.tv/*"],
       "js": ["video-sync.js"],
       "run_at": "document_start"
     },
