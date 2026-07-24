@@ -236,21 +236,31 @@ export class TabService implements IServiceModule {
    * Called during activity detection for all video services
    */
   async getVideoActivityDataFromTab(tabId: number, service: string): Promise<{ currentTime?: number; duration?: number; isPlaying?: boolean } | null> {
-    try {
-      console.debug(`[TabService] Querying ${service} (tab ${tabId}) for video data...`);
-      const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_VIDEO_STATE' });
+    const maxRetries = 3;
+    const retryDelays = [100, 200, 300]; // ms
 
-      if (response && response.success && response.data) {
-        console.debug(`[TabService] ✅ Got ${service} data: playing=${response.data.isPlaying}, progress=${response.data.currentTime}/${response.data.duration}`);
-        return {
-          currentTime: response.data.currentTime,
-          duration: response.data.duration,
-          isPlaying: response.data.isPlaying,
-        };
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_VIDEO_STATE' });
+
+        if (response && response.success && response.data) {
+          return {
+            currentTime: response.data.currentTime,
+            duration: response.data.duration,
+            isPlaying: response.data.isPlaying,
+          };
+        }
+
+        // Invalid response, retry if attempts left
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+        }
+      } catch (error) {
+        // Retry unless it's the last attempt
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+        }
       }
-    } catch (error) {
-      // Content script not available or error querying data - just continue without it
-      console.warn(`[TabService] ⚠️  Could not get video data for ${service} (tab ${tabId}):`, error instanceof Error ? error.message : error);
     }
 
     return null;
