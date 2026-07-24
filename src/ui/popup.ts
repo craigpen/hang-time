@@ -807,7 +807,22 @@ export class PopupController {
   }
 
   private _renderMyActivity(activities: Activity[]): void {
-    this.userActivities = activities;
+    // Sort activities: playing first, then by lastAccessed
+    const sorted = [...activities].sort((a, b) => {
+      // Prioritize playing activities
+      const aPlaying = a.state === 'playing' ? 1 : 0;
+      const bPlaying = b.state === 'playing' ? 1 : 0;
+      if (aPlaying !== bPlaying) {
+        return bPlaying - aPlaying; // playing (1) comes before paused (0)
+      }
+
+      // Then sort by last accessed time
+      const aTime = (a.metadata?.lastAccessed as number) || a.timestamp || 0;
+      const bTime = (b.metadata?.lastAccessed as number) || b.timestamp || 0;
+      return bTime - aTime;
+    });
+
+    this.userActivities = sorted;
 
     // Re-render the friends list (including "My Activity" section) with updated activities
     // Get current friends to re-render with sorted My Activity
