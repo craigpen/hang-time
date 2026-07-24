@@ -196,18 +196,12 @@ window.addEventListener('load', () => {
 // Capture immediately
 captureEverything('immediate');
 
-// Expose functions to window so page can call them directly
-(window as any).__netflixDebug = {
-  capture: (state: string) => {
-    captureEverything(state);
-    console.log(`[NETFLIX_DEBUG] Captured state: ${state}`);
-  },
-  dumpAll: () => {
-    console.log('[NETFLIX_DEBUG_DATA]', JSON.stringify(debugCaptures, null, 2));
-    console.log(`[NETFLIX_DEBUG] Dumped ${debugCaptures.length} captures`);
-  },
-  getCaptureCount: () => debugCaptures.length,
-};
+// Auto-dump captures to console every 5 seconds
+setInterval(() => {
+  if (debugCaptures.length > 0) {
+    console.log('[NETFLIX_DEBUG_DATA_AUTO_DUMP]', JSON.stringify(debugCaptures, null, 2));
+  }
+}, 5000);
 
 // Listen for manual capture and retrieval
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
