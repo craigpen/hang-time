@@ -15,7 +15,7 @@ export class ActivityDetector {
   private services: Map<string, IServiceModule> = new Map();
   private pollInterval: NodeJS.Timeout | null = null;
 
-  static readonly POLL_INTERVAL_MS = 5000;
+  static readonly POLL_INTERVAL_MS = 500;
 
   constructor(private storageManager: StorageManager) {
     // Services will be registered separately via registerService()
