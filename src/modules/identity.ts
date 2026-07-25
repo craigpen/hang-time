@@ -115,6 +115,7 @@ export class IdentityManager {
         retry_backoff_ms: 1000,
         compression: false,
         verbose_logging: false,
+        delta_publishing: false,
       },
     };
 

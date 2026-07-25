@@ -14,6 +14,7 @@ const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify', 'twitch', 'steam', 'netfl
 
 export class ActivityPublisher {
   private lastPublishedState: Partial<Record<string, Activity>> = {};
+  private lastPublishedFields: Map<string, Record<string, any>> = new Map(); // For delta publishing: service -> {field: value}
   private publishInterval: NodeJS.Timeout | null = null;
   private publishCount = 0; // Increments every 12s, 5th publish (index 4) is full refresh
   private publishRateMs = 12000; // Default: publish every 12 seconds
@@ -110,32 +111,45 @@ export class ActivityPublisher {
         return;
       }
 
-      const isFullRefreshCycle = this.publishCount % ActivityPublisher.FULL_REFRESH_CYCLE === (ActivityPublisher.FULL_REFRESH_CYCLE - 1);
+      // If delta publishing, only publish changed fields (no full refresh)
+      if (config.delta_publishing) {
+        const changedActivities = await this._getActivityDeltas(currentActivities);
 
-      // Determine if we should do a full refresh based on scope config
-      const doFullRefresh = config.scope === 'all' || isFullRefreshCycle;
-
-      if (doFullRefresh) {
-        // Full refresh: publish all active services
-        console.debug('[Publisher] Full refresh cycle');
-        await this._publishServices(currentActivities, config.size === 'atomic' ? 'atomic' : 'all', config);
-        this.lastPublishedState = { ...currentActivities };
-      } else {
-        // Changed services only: publish only what changed since last publish
-        const changedServices: Partial<Record<string, Activity>> = {};
-        for (const service of SERVICES_TO_PUBLISH) {
-          if (!this._activityUnchanged(currentActivities[service], this.lastPublishedState[service])) {
-            changedServices[service] = currentActivities[service];
-          }
-        }
-
-        if (Object.keys(changedServices).length > 0) {
-          console.debug(`[Publisher] Changed services: ${Object.keys(changedServices).join(', ')}`);
-          await this._publishServices(changedServices, 'changed', config);
-          // Update last published state with what we just published
-          this.lastPublishedState = { ...this.lastPublishedState, ...changedServices };
+        if (changedActivities.length > 0) {
+          console.debug(`[Publisher] Delta mode: ${changedActivities.length} services with changes`);
+          await this._publishServices(changedActivities, 'changed', config);
         } else {
-          console.debug('[Publisher] No changes to publish');
+          console.debug('[Publisher] Delta mode: no field changes to publish');
+        }
+      } else {
+        // Standard mode: full publish cycles
+        const isFullRefreshCycle = this.publishCount % ActivityPublisher.FULL_REFRESH_CYCLE === (ActivityPublisher.FULL_REFRESH_CYCLE - 1);
+
+        // Determine if we should do a full refresh based on scope config
+        const doFullRefresh = config.scope === 'all' || isFullRefreshCycle;
+
+        if (doFullRefresh) {
+          // Full refresh: publish all active services
+          console.debug('[Publisher] Full refresh cycle');
+          await this._publishServices(currentActivities, config.size === 'atomic' ? 'atomic' : 'all', config);
+          this.lastPublishedState = { ...currentActivities };
+        } else {
+          // Changed services only: publish only what changed since last publish
+          const changedServices: Partial<Record<string, Activity>> = {};
+          for (const service of SERVICES_TO_PUBLISH) {
+            if (!this._activityUnchanged(currentActivities[service], this.lastPublishedState[service])) {
+              changedServices[service] = currentActivities[service];
+            }
+          }
+
+          if (Object.keys(changedServices).length > 0) {
+            console.debug(`[Publisher] Changed services: ${Object.keys(changedServices).join(', ')}`);
+            await this._publishServices(changedServices, 'changed', config);
+            // Update last published state with what we just published
+            this.lastPublishedState = { ...this.lastPublishedState, ...changedServices };
+          } else {
+            console.debug('[Publisher] No changes to publish');
+          }
         }
       }
 
@@ -143,6 +157,43 @@ export class ActivityPublisher {
     } catch (error) {
       console.error('[Publisher] Failed to publish cycle:', error);
     }
+  }
+
+  private async _getActivityDeltas(currentActivities: Partial<Record<string, Activity>>): Promise<Activity[]> {
+    const deltas: Activity[] = [];
+
+    for (const service of SERVICES_TO_PUBLISH) {
+      const current = currentActivities[service];
+      if (!current) continue;
+
+      const lastFields = this.lastPublishedFields.get(service) || {};
+      const changedFields: Record<string, any> = { service, id: current.id }; // Always include service and id
+      let hasChanges = false;
+
+      // Check each field for changes
+      const fieldsToCheck = ['content', 'url', 'audio', 'timestamp', 'metadata'];
+      for (const field of fieldsToCheck) {
+        const currentValue = (current as any)[field];
+        const lastValue = lastFields[field];
+
+        if (JSON.stringify(currentValue) !== JSON.stringify(lastValue)) {
+          changedFields[field] = currentValue;
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges) {
+        deltas.push(changedFields as Activity);
+        // Update tracked state
+        const newTrackedFields: Record<string, any> = { ...lastFields };
+        for (const field of fieldsToCheck) {
+          newTrackedFields[field] = (current as any)[field];
+        }
+        this.lastPublishedFields.set(service, newTrackedFields);
+      }
+    }
+
+    return deltas;
   }
 
   private async _publishServices(

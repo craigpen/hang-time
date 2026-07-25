@@ -42,6 +42,7 @@ export interface UserProfile {
     retry_backoff_ms: number;
     compression: boolean;
     verbose_logging: boolean;
+    delta_publishing: boolean;
   };
 }
 

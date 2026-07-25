@@ -1271,6 +1271,7 @@ export class PopupController {
         retry_backoff_ms: 1000,
         compression: false,
         verbose_logging: false,
+        delta_publishing: false,
       };
 
       // Basic settings
@@ -1292,6 +1293,9 @@ export class PopupController {
 
       const pubCompression = document.getElementById('pub-compression-popup') as HTMLInputElement;
       if (pubCompression) pubCompression.checked = pubConfig.compression ?? false;
+
+      const pubDelta = document.getElementById('pub-delta-popup') as HTMLInputElement;
+      if (pubDelta) pubDelta.checked = pubConfig.delta_publishing ?? false;
 
       const pubVerbose = document.getElementById('pub-verbose-popup') as HTMLInputElement;
       if (pubVerbose) pubVerbose.checked = pubConfig.verbose_logging ?? false;
@@ -1497,6 +1501,7 @@ export class PopupController {
     const pubRate = document.getElementById('pub-rate-popup') as HTMLInputElement;
     const pubFilterIdle = document.getElementById('pub-filter-idle-popup') as HTMLInputElement;
     const pubCompression = document.getElementById('pub-compression-popup') as HTMLInputElement;
+    const pubDelta = document.getElementById('pub-delta-popup') as HTMLInputElement;
     const pubVerbose = document.getElementById('pub-verbose-popup') as HTMLInputElement;
     const pubRetry = document.getElementById('pub-retry-popup') as HTMLInputElement;
 
@@ -1506,6 +1511,7 @@ export class PopupController {
     if (pubRate) pubRate.addEventListener('change', () => this._saveSettingsPanel());
     if (pubFilterIdle) pubFilterIdle.addEventListener('change', () => this._saveSettingsPanel());
     if (pubCompression) pubCompression.addEventListener('change', () => this._saveSettingsPanel());
+    if (pubDelta) pubDelta.addEventListener('change', () => this._saveSettingsPanel());
     if (pubVerbose) pubVerbose.addEventListener('change', () => this._saveSettingsPanel());
     if (pubRetry) pubRetry.addEventListener('change', () => this._saveSettingsPanel());
 
@@ -1711,6 +1717,7 @@ export class PopupController {
       const pubRate = parseInt((document.getElementById('pub-rate-popup') as HTMLInputElement)?.value ?? '12000', 10);
       const pubFilterIdle = (document.getElementById('pub-filter-idle-popup') as HTMLInputElement)?.checked ?? false;
       const pubCompression = (document.getElementById('pub-compression-popup') as HTMLInputElement)?.checked ?? false;
+      const pubDelta = (document.getElementById('pub-delta-popup') as HTMLInputElement)?.checked ?? false;
       const pubVerbose = (document.getElementById('pub-verbose-popup') as HTMLInputElement)?.checked ?? false;
       const pubRetry = parseInt((document.getElementById('pub-retry-popup') as HTMLInputElement)?.value ?? '1000', 10);
 
@@ -1741,6 +1748,7 @@ export class PopupController {
             filter_idle: pubFilterIdle,
             compression: pubCompression,
             verbose_logging: pubVerbose,
+            delta_publishing: pubDelta,
             retry_backoff_ms: pubRetry,
             relays,
           },
