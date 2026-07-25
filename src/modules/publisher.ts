@@ -83,12 +83,29 @@ export class ActivityPublisher {
         verbose_logging: false,
       };
 
+      // Log active config
+      const activeSettings = [];
+      if (config.filter_idle) activeSettings.push('filter_idle');
+      if (config.compression) activeSettings.push('compression');
+      if (config.verbose_logging) activeSettings.push('verbose_logging');
+      if (config.retry_backoff_ms !== 1000) activeSettings.push(`retry_backoff=${config.retry_backoff_ms}ms`);
+      const selectedRelays = Object.entries(config.relays)
+        .filter(([, enabled]) => enabled)
+        .map(([url]) => url.split('/')[2]);
+      if (selectedRelays.length > 0 && selectedRelays.length < 5) {
+        activeSettings.push(`relays=[${selectedRelays.join(',')}]`);
+      }
+
+      if (activeSettings.length > 0) {
+        console.log(`[Publisher] ⚙️ Config: size=${config.size}, scope=${config.scope}, rate=${config.rate_ms}ms | Active: ${activeSettings.join(', ')}`);
+      }
+
       const currentActivities = await this.storageManager.getMyActivities();
 
       // Check if all activities are idle (audio:off) and filter is enabled
       const allIdle = Object.values(currentActivities).every(a => !a || a.audio === 'off');
       if (config.filter_idle && allIdle) {
-        console.debug('[Publisher] Skipping publish - all services idle (filter_idle enabled)');
+        console.log('[Publisher] ⏭️  Skipping publish - all services idle (filter_idle=on)');
         this.publishCount++;
         return;
       }
@@ -153,7 +170,8 @@ export class ActivityPublisher {
     if (mode === 'atomic') {
       // With compression, batch services into groups; without, individual events
       if (config?.compression) {
-        const batchSize = Math.ceil(activitiesToPublish.length / 2); // Batch into 2 groups (or 1 if only 1-2 services)
+        const batchSize = Math.ceil(activitiesToPublish.length / 2);
+        console.log(`[Publisher] 📦 Compression enabled: batching ${activitiesToPublish.length} services into ${Math.ceil(activitiesToPublish.length / batchSize)} events`);
         for (let i = 0; i < activitiesToPublish.length; i += batchSize) {
           const batch = activitiesToPublish.slice(i, i + batchSize);
           await this._publishBundledActivities(batch, 'compressed', config);

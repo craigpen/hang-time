@@ -363,9 +363,15 @@ export class RelayPool {
       try {
         // Filter relays: connected + selected in config
         let relays = Array.from(this.relays.values()).filter((r) => r.isConnected);
+        const allConnected = relays.map(r => r.url);
 
         if (config?.relays && typeof config.relays === 'object') {
           relays = relays.filter((r) => config.relays[r.url] !== false);
+          const selectedUrls = relays.map(r => r.url);
+          const disabled = allConnected.filter(u => !selectedUrls.includes(u));
+          if (disabled.length > 0) {
+            console.debug(`[Nostr] Config: Relays - using ${selectedUrls.length}/${allConnected.length} (disabled: ${disabled.map(u => u.split('/')[2]).join(',')})`);
+          }
         }
 
         if (relays.length === 0) {
@@ -386,7 +392,7 @@ export class RelayPool {
           const powError = errors.some((e) => e.includes('pow:'));
           if (powError && attempt < maxRetries - 1) {
             const backoff = (config?.retry_backoff_ms || 1000) * Math.pow(2, attempt);
-            console.warn(`[Nostr] PoW required, retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries})`);
+            console.log(`[Nostr] 🔄 Config: Retry backoff - PoW detected, retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries})`);
             await new Promise((resolve) => setTimeout(resolve, backoff));
             continue;
           }
@@ -400,7 +406,7 @@ export class RelayPool {
         lastError = error as Error;
         if (attempt < maxRetries - 1) {
           const backoff = (config?.retry_backoff_ms || 1000) * Math.pow(2, attempt);
-          console.warn(`[Nostr] Publish attempt ${attempt + 1} failed, retrying in ${backoff}ms`);
+          console.warn(`[Nostr] 🔄 Config: Retry backoff - Publish failed, retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries})`);
           await new Promise((resolve) => setTimeout(resolve, backoff));
         }
       }
