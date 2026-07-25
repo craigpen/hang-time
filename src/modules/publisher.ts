@@ -71,9 +71,28 @@ export class ActivityPublisher {
   async publishCycle(): Promise<void> {
     try {
       const profile = await this.storageManager.getUserProfile();
-      const config = profile?.publisher_config || { enabled: true, size: 'full', scope: 'updates', rate_ms: 12000 };
+      const config = profile?.publisher_config || {
+        enabled: true,
+        size: 'full',
+        scope: 'updates',
+        rate_ms: 12000,
+        filter_idle: false,
+        relays: {},
+        retry_backoff_ms: 1000,
+        compression: false,
+        verbose_logging: false,
+      };
 
       const currentActivities = await this.storageManager.getMyActivities();
+
+      // Check if all activities are idle (audio:off) and filter is enabled
+      const allIdle = Object.values(currentActivities).every(a => !a || a.audio === 'off');
+      if (config.filter_idle && allIdle) {
+        console.debug('[Publisher] Skipping publish - all services idle (filter_idle enabled)');
+        this.publishCount++;
+        return;
+      }
+
       const isFullRefreshCycle = this.publishCount % ActivityPublisher.FULL_REFRESH_CYCLE === (ActivityPublisher.FULL_REFRESH_CYCLE - 1);
 
       // Determine if we should do a full refresh based on scope config
@@ -82,7 +101,7 @@ export class ActivityPublisher {
       if (doFullRefresh) {
         // Full refresh: publish all active services
         console.debug('[Publisher] Full refresh cycle');
-        await this._publishServices(currentActivities, config.size === 'atomic' ? 'atomic' : 'all');
+        await this._publishServices(currentActivities, config.size === 'atomic' ? 'atomic' : 'all', config);
         this.lastPublishedState = { ...currentActivities };
       } else {
         // Changed services only: publish only what changed since last publish
@@ -95,7 +114,7 @@ export class ActivityPublisher {
 
         if (Object.keys(changedServices).length > 0) {
           console.debug(`[Publisher] Changed services: ${Object.keys(changedServices).join(', ')}`);
-          await this._publishServices(changedServices, 'changed');
+          await this._publishServices(changedServices, 'changed', config);
           // Update last published state with what we just published
           this.lastPublishedState = { ...this.lastPublishedState, ...changedServices };
         } else {
@@ -111,7 +130,8 @@ export class ActivityPublisher {
 
   private async _publishServices(
     activities: Partial<Record<string, Activity>>,
-    mode: 'changed' | 'all' | 'atomic'
+    mode: 'changed' | 'all' | 'atomic',
+    config?: any
   ): Promise<void> {
     const servicesToPublish = mode === 'all' || mode === 'atomic'
       ? SERVICES_TO_PUBLISH.filter(s => activities[s])
@@ -131,15 +151,24 @@ export class ActivityPublisher {
 
     // Publish as individual events (atomic) or bundled (full)
     if (mode === 'atomic') {
-      for (const activity of activitiesToPublish) {
-        await this._publishActivity(activity);
+      // With compression, batch services into groups; without, individual events
+      if (config?.compression) {
+        const batchSize = Math.ceil(activitiesToPublish.length / 2); // Batch into 2 groups (or 1 if only 1-2 services)
+        for (let i = 0; i < activitiesToPublish.length; i += batchSize) {
+          const batch = activitiesToPublish.slice(i, i + batchSize);
+          await this._publishBundledActivities(batch, 'compressed', config);
+        }
+      } else {
+        for (const activity of activitiesToPublish) {
+          await this._publishActivity(activity);
+        }
       }
     } else {
-      await this._publishBundledActivities(activitiesToPublish, mode);
+      await this._publishBundledActivities(activitiesToPublish, mode, config);
     }
   }
 
-  private async _publishBundledActivities(activities: Activity[], mode: 'changed' | 'all'): Promise<void> {
+  private async _publishBundledActivities(activities: Activity[], mode: 'changed' | 'all' | 'compressed', config?: any): Promise<void> {
     try {
       const pubkey = await this.identityManager.getPubkey();
       const created_at = Math.floor(Date.now() / 1000);
@@ -148,7 +177,7 @@ export class ActivityPublisher {
       // Create tags
       const tags: Array<[string, string]> = [
         ['type', 'activity-state'],
-        ['mode', mode],
+        ['mode', mode === 'compressed' ? 'atomic' : mode],
         ['count', activities.length.toString()],
       ];
 
@@ -182,7 +211,12 @@ export class ActivityPublisher {
       console.debug(`[Publisher] Bundled event (${mode}): ${activities.length} services, size=${eventJson.length}b`);
       console.debug(`[Publisher] Services: ${activities.map(a => `${a.service}(audio:${a.audio})`).join(', ')}`);
 
-      await this.relayPool.publish(event);
+      // Verbose logging: log raw event JSON
+      if (config?.verbose_logging) {
+        console.log(`[Publisher] 📋 Event JSON: ${eventJson}`);
+      }
+
+      await this.relayPool.publish(event, config);
       console.debug(`[Publisher] ✅ Published bundled event with ${activities.length} services`);
     } catch (error) {
       console.error('[Publisher] Failed to publish bundled activities:', error);

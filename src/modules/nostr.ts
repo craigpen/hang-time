@@ -355,23 +355,58 @@ export class RelayPool {
     console.debug(`[Nostr] Successfully connected to ${connectedCount} relay(s)`);
   }
 
-  async publish(event: NostrEvent): Promise<void> {
-    const relays = Array.from(this.relays.values()).filter((r) => r.isConnected);
+  async publish(event: NostrEvent, config?: any): Promise<void> {
+    const maxRetries = 3;
+    let lastError: Error | null = null;
 
-    if (relays.length === 0) {
-      throw new NostrError('No connected relays available for publishing');
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // Filter relays: connected + selected in config
+        let relays = Array.from(this.relays.values()).filter((r) => r.isConnected);
+
+        if (config?.relays && typeof config.relays === 'object') {
+          relays = relays.filter((r) => config.relays[r.url] !== false);
+        }
+
+        if (relays.length === 0) {
+          throw new NostrError('No connected relays available for publishing');
+        }
+
+        // Publish to all relays, wait for at least one success
+        const publishPromises = relays.map((relay) => relay.publish(event));
+        const results = await Promise.allSettled(publishPromises);
+
+        const successful = results.filter((r) => r.status === 'fulfilled').length;
+        if (successful === 0) {
+          // All relays rejected - check if it's PoW and retry
+          const errors = results
+            .filter((r) => r.status === 'rejected')
+            .map((r) => (r as PromiseRejectedResult).reason?.message || String((r as PromiseRejectedResult).reason));
+
+          const powError = errors.some((e) => e.includes('pow:'));
+          if (powError && attempt < maxRetries - 1) {
+            const backoff = (config?.retry_backoff_ms || 1000) * Math.pow(2, attempt);
+            console.warn(`[Nostr] PoW required, retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries})`);
+            await new Promise((resolve) => setTimeout(resolve, backoff));
+            continue;
+          }
+
+          throw new NostrError('Failed to publish to any relay');
+        }
+
+        console.debug(`[Nostr] Event published to ${successful}/${relays.length} relays`);
+        return; // Success
+      } catch (error) {
+        lastError = error as Error;
+        if (attempt < maxRetries - 1) {
+          const backoff = (config?.retry_backoff_ms || 1000) * Math.pow(2, attempt);
+          console.warn(`[Nostr] Publish attempt ${attempt + 1} failed, retrying in ${backoff}ms`);
+          await new Promise((resolve) => setTimeout(resolve, backoff));
+        }
+      }
     }
 
-    // Publish to all relays, wait for at least one success
-    const publishPromises = relays.map((relay) => relay.publish(event));
-    const results = await Promise.allSettled(publishPromises);
-
-    const successful = results.filter((r) => r.status === 'fulfilled').length;
-    if (successful === 0) {
-      throw new NostrError('Failed to publish to any relay');
-    }
-
-    console.debug(`[Nostr] Event published to ${successful}/${relays.length} relays`);
+    throw lastError || new NostrError('Failed to publish after retries');
   }
 
   subscribe(identifier: string, callback: (event: NostrEvent) => Promise<void>): void {
