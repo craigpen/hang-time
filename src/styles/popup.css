@@ -645,6 +645,37 @@ body {
   border-color: var(--accent-primary);
 }
 
+.settings-subsection {
+  margin-top: 1.2em;
+  padding-top: 1em;
+  border-top: 1px solid var(--border-color);
+}
+
+.settings-subsection h4 {
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  margin: 0 0 0.8em 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.relay-selection {
+  margin-top: 1em;
+}
+
+.relay-selection span {
+  display: block;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  margin-bottom: 0.5em;
+}
+
+.checkbox-inline {
+  display: inline-flex;
+  margin-right: 1.2em;
+  margin-bottom: 0.5em;
+}
+
 .identifier-group {
   display: flex;
   align-items: center;

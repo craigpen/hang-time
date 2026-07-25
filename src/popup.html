@@ -182,6 +182,8 @@
       <!-- Publishing Config (Debug) -->
       <div class="settings-section">
         <h3>Publishing (Debug)</h3>
+
+        <!-- Basic Settings -->
         <label class="checkbox-label">
           <input type="checkbox" id="pub-enabled-popup" checked>
           <span>Enable Publishing</span>
@@ -204,6 +206,55 @@
           <span>Rate (ms)</span>
           <input type="number" id="pub-rate-popup" min="1000" step="1000" value="12000">
         </label>
+
+        <!-- Advanced Settings -->
+        <div class="settings-subsection">
+          <h4>Advanced</h4>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="pub-filter-idle-popup">
+            <span>Filter Idle (skip if all audio:off)</span>
+          </label>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="pub-compression-popup">
+            <span>Compression (batch services)</span>
+          </label>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="pub-verbose-popup">
+            <span>Verbose Logging (show event JSON)</span>
+          </label>
+
+          <label class="label-with-input">
+            <span>Retry Backoff (ms)</span>
+            <input type="number" id="pub-retry-popup" min="100" step="100" value="1000">
+          </label>
+
+          <div class="relay-selection">
+            <span>Relays to Use</span>
+            <label class="checkbox-label checkbox-inline">
+              <input type="checkbox" id="relay-nos-lol-popup" data-relay="nos.lol" checked>
+              <span>nos.lol</span>
+            </label>
+            <label class="checkbox-label checkbox-inline">
+              <input type="checkbox" id="relay-damus-popup" data-relay="relay.damus.io" checked>
+              <span>relay.damus.io</span>
+            </label>
+            <label class="checkbox-label checkbox-inline">
+              <input type="checkbox" id="relay-snort-popup" data-relay="relay.snort.social" checked>
+              <span>relay.snort.social</span>
+            </label>
+            <label class="checkbox-label checkbox-inline">
+              <input type="checkbox" id="relay-mom-popup" data-relay="nostr.mom" checked>
+              <span>nostr.mom</span>
+            </label>
+            <label class="checkbox-label checkbox-inline">
+              <input type="checkbox" id="relay-mostr-popup" data-relay="relay.mostr.pub" checked>
+              <span>relay.mostr.pub</span>
+            </label>
+          </div>
+        </div>
       </div>
 
       <!-- Theme -->

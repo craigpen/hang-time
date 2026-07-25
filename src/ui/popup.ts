@@ -1261,7 +1261,19 @@ export class PopupController {
       }
 
       // Load publisher config
-      const pubConfig = profile.publisher_config || { enabled: true, size: 'full', scope: 'updates', rate_ms: 12000 };
+      const pubConfig = profile.publisher_config || {
+        enabled: true,
+        size: 'full',
+        scope: 'updates',
+        rate_ms: 12000,
+        filter_idle: false,
+        relays: { 'nos.lol': true, 'relay.damus.io': true, 'relay.snort.social': true, 'nostr.mom': true, 'relay.mostr.pub': true },
+        retry_backoff_ms: 1000,
+        compression: false,
+        verbose_logging: false,
+      };
+
+      // Basic settings
       const pubEnabled = document.getElementById('pub-enabled-popup') as HTMLInputElement;
       if (pubEnabled) pubEnabled.checked = pubConfig.enabled ?? true;
 
@@ -1273,6 +1285,27 @@ export class PopupController {
 
       const pubRate = document.getElementById('pub-rate-popup') as HTMLInputElement;
       if (pubRate) pubRate.value = (pubConfig.rate_ms ?? 12000).toString();
+
+      // Advanced settings
+      const pubFilterIdle = document.getElementById('pub-filter-idle-popup') as HTMLInputElement;
+      if (pubFilterIdle) pubFilterIdle.checked = pubConfig.filter_idle ?? false;
+
+      const pubCompression = document.getElementById('pub-compression-popup') as HTMLInputElement;
+      if (pubCompression) pubCompression.checked = pubConfig.compression ?? false;
+
+      const pubVerbose = document.getElementById('pub-verbose-popup') as HTMLInputElement;
+      if (pubVerbose) pubVerbose.checked = pubConfig.verbose_logging ?? false;
+
+      const pubRetry = document.getElementById('pub-retry-popup') as HTMLInputElement;
+      if (pubRetry) pubRetry.value = (pubConfig.retry_backoff_ms ?? 1000).toString();
+
+      // Relay selection
+      document.querySelectorAll('input[data-relay]').forEach((checkbox) => {
+        if (checkbox instanceof HTMLInputElement) {
+          const relay = checkbox.dataset.relay as keyof typeof pubConfig.relays;
+          checkbox.checked = pubConfig.relays?.[relay] ?? true;
+        }
+      });
 
       // Load OAuth status
       await this._loadOAuthStatusInPanel();
@@ -1462,11 +1495,24 @@ export class PopupController {
     const pubSize = document.getElementById('pub-size-popup') as HTMLSelectElement;
     const pubScope = document.getElementById('pub-scope-popup') as HTMLSelectElement;
     const pubRate = document.getElementById('pub-rate-popup') as HTMLInputElement;
+    const pubFilterIdle = document.getElementById('pub-filter-idle-popup') as HTMLInputElement;
+    const pubCompression = document.getElementById('pub-compression-popup') as HTMLInputElement;
+    const pubVerbose = document.getElementById('pub-verbose-popup') as HTMLInputElement;
+    const pubRetry = document.getElementById('pub-retry-popup') as HTMLInputElement;
 
     if (pubEnabled) pubEnabled.addEventListener('change', () => this._saveSettingsPanel());
     if (pubSize) pubSize.addEventListener('change', () => this._saveSettingsPanel());
     if (pubScope) pubScope.addEventListener('change', () => this._saveSettingsPanel());
     if (pubRate) pubRate.addEventListener('change', () => this._saveSettingsPanel());
+    if (pubFilterIdle) pubFilterIdle.addEventListener('change', () => this._saveSettingsPanel());
+    if (pubCompression) pubCompression.addEventListener('change', () => this._saveSettingsPanel());
+    if (pubVerbose) pubVerbose.addEventListener('change', () => this._saveSettingsPanel());
+    if (pubRetry) pubRetry.addEventListener('change', () => this._saveSettingsPanel());
+
+    // Relay checkboxes
+    document.querySelectorAll('input[data-relay]').forEach((checkbox) => {
+      checkbox.addEventListener('change', () => this._saveSettingsPanel());
+    });
   }
 
   private async _authenticateServicePopup(service: string): Promise<void> {
@@ -1663,6 +1709,18 @@ export class PopupController {
       const pubSize = (document.getElementById('pub-size-popup') as HTMLSelectElement)?.value ?? 'full';
       const pubScope = (document.getElementById('pub-scope-popup') as HTMLSelectElement)?.value ?? 'updates';
       const pubRate = parseInt((document.getElementById('pub-rate-popup') as HTMLInputElement)?.value ?? '12000', 10);
+      const pubFilterIdle = (document.getElementById('pub-filter-idle-popup') as HTMLInputElement)?.checked ?? false;
+      const pubCompression = (document.getElementById('pub-compression-popup') as HTMLInputElement)?.checked ?? false;
+      const pubVerbose = (document.getElementById('pub-verbose-popup') as HTMLInputElement)?.checked ?? false;
+      const pubRetry = parseInt((document.getElementById('pub-retry-popup') as HTMLInputElement)?.value ?? '1000', 10);
+
+      // Collect relay selections
+      const relays: Record<string, boolean> = {};
+      document.querySelectorAll('input[data-relay]').forEach((checkbox) => {
+        if (checkbox instanceof HTMLInputElement && checkbox.dataset.relay) {
+          relays[checkbox.dataset.relay] = checkbox.checked;
+        }
+      });
 
       await chrome.runtime.sendMessage({
         type: 'SAVE_SETTINGS',
@@ -1680,6 +1738,11 @@ export class PopupController {
             size: pubSize,
             scope: pubScope,
             rate_ms: pubRate,
+            filter_idle: pubFilterIdle,
+            compression: pubCompression,
+            verbose_logging: pubVerbose,
+            retry_backoff_ms: pubRetry,
+            relays,
           },
         },
       });

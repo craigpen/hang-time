@@ -31,6 +31,17 @@ export interface UserProfile {
     size: 'atomic' | 'full';
     scope: 'updates' | 'all';
     rate_ms: number;
+    filter_idle: boolean;
+    relays: {
+      'nos.lol': boolean;
+      'relay.damus.io': boolean;
+      'relay.snort.social': boolean;
+      'nostr.mom': boolean;
+      'relay.mostr.pub': boolean;
+    };
+    retry_backoff_ms: number;
+    compression: boolean;
+    verbose_logging: boolean;
   };
 }
 
