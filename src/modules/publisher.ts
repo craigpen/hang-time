@@ -226,12 +226,27 @@ export class ActivityPublisher {
 
       // Log event details
       const eventJson = JSON.stringify(event);
-      console.debug(`[Publisher] Bundled event (${mode}): ${activities.length} services, size=${eventJson.length}b`);
+      const eventSize = eventJson.length;
+      console.debug(`[Publisher] Bundled event (${mode}): ${activities.length} services, size=${eventSize}b`);
       console.debug(`[Publisher] Services: ${activities.map(a => `${a.service}(audio:${a.audio})`).join(', ')}`);
+
+      // Show which settings are being used for this publish
+      const settingsUsed = [];
+      if (mode === 'compressed') settingsUsed.push('compression=on');
+      if (config?.verbose_logging) settingsUsed.push('verbose_logging=on');
+      if (config?.filter_idle) settingsUsed.push('filter_idle=on');
+      if (config?.retry_backoff_ms) settingsUsed.push(`retry_backoff=${config.retry_backoff_ms}ms`);
+      if (config?.relays) {
+        const enabledRelays = Object.entries(config.relays).filter(([, e]) => e).length;
+        const totalRelays = Object.keys(config.relays).length;
+        if (enabledRelays < totalRelays) settingsUsed.push(`relays=${enabledRelays}/${totalRelays}`);
+      }
+
+      console.log(`[Publisher] 📤 Publish [${mode}] size=${eventSize}b | Settings: ${settingsUsed.length > 0 ? settingsUsed.join(', ') : 'default'}`);
 
       // Verbose logging: log raw event JSON
       if (config?.verbose_logging) {
-        console.log(`[Publisher] 📋 Event JSON: ${eventJson}`);
+        console.log(`[Publisher] 📋 Verbose: Event JSON=${eventJson}`);
       }
 
       await this.relayPool.publish(event, config);
@@ -297,6 +312,10 @@ export class ActivityPublisher {
         content,
         sig,
       };
+
+      const eventJson = JSON.stringify(event);
+      const eventSize = eventJson.length;
+      console.log(`[Publisher] 📤 Publish [atomic] ${activity.service} size=${eventSize}b | Settings: atomic=on`);
 
       await this.relayPool.publish(event);
     } catch (error) {
