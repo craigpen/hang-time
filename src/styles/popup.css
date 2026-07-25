@@ -613,6 +613,38 @@ body {
   border-color: var(--accent-primary);
 }
 
+.label-with-input {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  margin-bottom: 0.8em;
+}
+
+.label-with-input span {
+  flex-shrink: 0;
+}
+
+.label-with-input input,
+.label-with-input select {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 0.9em;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.label-with-input input:focus,
+.label-with-input select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
 .identifier-group {
   display: flex;
   align-items: center;

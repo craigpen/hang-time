@@ -656,6 +656,9 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
     if (data.steam_id !== undefined) {
       profile.steam_id = data.steam_id;
     }
+    if (data.publisher_config !== undefined) {
+      profile.publisher_config = data.publisher_config;
+    }
 
     console.debug('[Background] Saving settings - profile.steam_id after update:', profile.steam_id);
 

@@ -1260,6 +1260,20 @@ export class PopupController {
         notifJoinSuggestion.checked = profile.notification_preferences.join_suggestion ?? false;
       }
 
+      // Load publisher config
+      const pubConfig = profile.publisher_config || { enabled: true, size: 'full', scope: 'updates', rate_ms: 12000 };
+      const pubEnabled = document.getElementById('pub-enabled-popup') as HTMLInputElement;
+      if (pubEnabled) pubEnabled.checked = pubConfig.enabled ?? true;
+
+      const pubSize = document.getElementById('pub-size-popup') as HTMLSelectElement;
+      if (pubSize) pubSize.value = pubConfig.size ?? 'full';
+
+      const pubScope = document.getElementById('pub-scope-popup') as HTMLSelectElement;
+      if (pubScope) pubScope.value = pubConfig.scope ?? 'updates';
+
+      const pubRate = document.getElementById('pub-rate-popup') as HTMLInputElement;
+      if (pubRate) pubRate.value = (pubConfig.rate_ms ?? 12000).toString();
+
       // Load OAuth status
       await this._loadOAuthStatusInPanel();
 
@@ -1442,6 +1456,17 @@ export class PopupController {
     document.querySelectorAll('input[id*="notif-"][id*="-popup"]').forEach((checkbox) => {
       checkbox.addEventListener('change', () => this._saveSettingsPanel());
     });
+
+    // Publisher config controls
+    const pubEnabled = document.getElementById('pub-enabled-popup') as HTMLInputElement;
+    const pubSize = document.getElementById('pub-size-popup') as HTMLSelectElement;
+    const pubScope = document.getElementById('pub-scope-popup') as HTMLSelectElement;
+    const pubRate = document.getElementById('pub-rate-popup') as HTMLInputElement;
+
+    if (pubEnabled) pubEnabled.addEventListener('change', () => this._saveSettingsPanel());
+    if (pubSize) pubSize.addEventListener('change', () => this._saveSettingsPanel());
+    if (pubScope) pubScope.addEventListener('change', () => this._saveSettingsPanel());
+    if (pubRate) pubRate.addEventListener('change', () => this._saveSettingsPanel());
   }
 
   private async _authenticateServicePopup(service: string): Promise<void> {
@@ -1633,6 +1658,12 @@ export class PopupController {
       const notifNewMessage = (document.getElementById('notif-new-message-popup') as HTMLInputElement)?.checked ?? true;
       const notifJoinSuggestion = (document.getElementById('notif-join-suggestion-popup') as HTMLInputElement)?.checked ?? false;
 
+      // Collect publisher config
+      const pubEnabled = (document.getElementById('pub-enabled-popup') as HTMLInputElement)?.checked ?? true;
+      const pubSize = (document.getElementById('pub-size-popup') as HTMLSelectElement)?.value ?? 'full';
+      const pubScope = (document.getElementById('pub-scope-popup') as HTMLSelectElement)?.value ?? 'updates';
+      const pubRate = parseInt((document.getElementById('pub-rate-popup') as HTMLInputElement)?.value ?? '12000', 10);
+
       await chrome.runtime.sendMessage({
         type: 'SAVE_SETTINGS',
         data: {
@@ -1643,6 +1674,12 @@ export class PopupController {
             friend_online: notifFriendOnline,
             new_message: notifNewMessage,
             join_suggestion: notifJoinSuggestion,
+          },
+          publisher_config: {
+            enabled: pubEnabled,
+            size: pubSize,
+            scope: pubScope,
+            rate_ms: pubRate,
           },
         },
       });

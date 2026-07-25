@@ -16,8 +16,9 @@ export class ActivityPublisher {
   private lastPublishedState: Partial<Record<string, Activity>> = {};
   private publishInterval: NodeJS.Timeout | null = null;
   private publishCount = 0; // Increments every 12s, 5th publish (index 4) is full refresh
+  private publishRateMs = 12000; // Default: publish every 12 seconds
 
-  static readonly PUBLISH_INTERVAL_MS = 12000; // Publish every 12 seconds (5 per 60s)
+  static readonly PUBLISH_INTERVAL_MS = 12000; // Default: publish every 12 seconds (5 per 60s)
   static readonly FULL_REFRESH_CYCLE = 5; // Every 5th publish is a full refresh
 
   constructor(
@@ -26,18 +27,34 @@ export class ActivityPublisher {
     private identityManager: IdentityManager
   ) {}
 
+  private async _loadConfig(): Promise<void> {
+    const profile = await this.storageManager.getUserProfile();
+    if (profile?.publisher_config) {
+      this.publishRateMs = profile.publisher_config.rate_ms || 12000;
+    }
+  }
+
   async start(): Promise<void> {
-    console.debug('[Publisher] Starting activity publisher (5 publishes per 60s)');
+    await this._loadConfig();
+
+    const profile = await this.storageManager.getUserProfile();
+    const config = profile?.publisher_config;
+
+    if (config && !config.enabled) {
+      console.debug('[Publisher] Publishing is disabled in config');
+      return;
+    }
+
+    console.debug(`[Publisher] Starting activity publisher (rate: ${this.publishRateMs}ms, size: ${config?.size || 'full'}, scope: ${config?.scope || 'updates'})`);
 
     try {
-      // Publish every 12 seconds: changed services at 12s/24s/36s/48s, full refresh at 60s
       this.publishInterval = setInterval(() => {
         this.publishCycle().catch((error) => {
           console.error('[Publisher] Publish cycle error:', error);
         });
-      }, ActivityPublisher.PUBLISH_INTERVAL_MS);
+      }, this.publishRateMs);
 
-      console.debug('[Publisher] Publish interval started (every 12 seconds)');
+      console.debug(`[Publisher] Publish interval started (every ${this.publishRateMs}ms)`);
     } catch (error) {
       console.error('[Publisher] Failed to start:', error);
       throw error;
@@ -53,13 +70,19 @@ export class ActivityPublisher {
 
   async publishCycle(): Promise<void> {
     try {
+      const profile = await this.storageManager.getUserProfile();
+      const config = profile?.publisher_config || { enabled: true, size: 'full', scope: 'updates', rate_ms: 12000 };
+
       const currentActivities = await this.storageManager.getMyActivities();
       const isFullRefreshCycle = this.publishCount % ActivityPublisher.FULL_REFRESH_CYCLE === (ActivityPublisher.FULL_REFRESH_CYCLE - 1);
 
-      if (isFullRefreshCycle) {
+      // Determine if we should do a full refresh based on scope config
+      const doFullRefresh = config.scope === 'all' || isFullRefreshCycle;
+
+      if (doFullRefresh) {
         // Full refresh: publish all active services
-        console.debug('[Publisher] Full refresh cycle (60s)');
-        await this._publishServices(currentActivities, 'all');
+        console.debug('[Publisher] Full refresh cycle');
+        await this._publishServices(currentActivities, config.size === 'atomic' ? 'atomic' : 'all');
         this.lastPublishedState = { ...currentActivities };
       } else {
         // Changed services only: publish only what changed since last publish
@@ -88,9 +111,9 @@ export class ActivityPublisher {
 
   private async _publishServices(
     activities: Partial<Record<string, Activity>>,
-    mode: 'changed' | 'all'
+    mode: 'changed' | 'all' | 'atomic'
   ): Promise<void> {
-    const servicesToPublish = mode === 'all'
+    const servicesToPublish = mode === 'all' || mode === 'atomic'
       ? SERVICES_TO_PUBLISH.filter(s => activities[s])
       : Object.keys(activities) as ServiceName[];
 
@@ -106,8 +129,14 @@ export class ActivityPublisher {
 
     console.debug('[Publisher] Activities to publish:', activitiesToPublish.map(a => ({ service: a.service, audio: a.audio })));
 
-    // Publish all as one bundled event
-    await this._publishBundledActivities(activitiesToPublish, mode);
+    // Publish as individual events (atomic) or bundled (full)
+    if (mode === 'atomic') {
+      for (const activity of activitiesToPublish) {
+        await this._publishActivity(activity);
+      }
+    } else {
+      await this._publishBundledActivities(activitiesToPublish, mode);
+    }
   }
 
   private async _publishBundledActivities(activities: Activity[], mode: 'changed' | 'all'): Promise<void> {

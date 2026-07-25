@@ -26,6 +26,12 @@ export interface UserProfile {
     new_message: boolean;
     join_suggestion: boolean;
   };
+  publisher_config?: {
+    enabled: boolean;
+    size: 'atomic' | 'full';
+    scope: 'updates' | 'all';
+    rate_ms: number;
+  };
 }
 
 export type ServiceName = 'spotify' | 'twitch' | 'steam' | 'netflix' | 'youtube';

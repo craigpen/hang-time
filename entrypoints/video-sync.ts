@@ -246,6 +246,7 @@ class VideoSyncContentScript {
   private _setupMessageListener(): void {
     // Also listen for direct sendMessage calls from TabService
     chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
+      console.debug(`[VideoSync] onMessage received: ${message?.type} from ${sender?.url || 'unknown'}`);
       try {
         this._handleMessage(message, sendResponse);
       } catch (error) {
@@ -276,6 +277,7 @@ class VideoSyncContentScript {
     try {
       switch (message.type) {
         case 'GET_VIDEO_POSITION':
+          console.debug('[VideoSync] Responding to GET_VIDEO_POSITION');
           sendResponse({
             success: true,
             data: {
@@ -286,6 +288,7 @@ class VideoSyncContentScript {
           break;
 
         case 'GET_VIDEO_STATE':
+          console.debug('[VideoSync] Responding to GET_VIDEO_STATE');
           sendResponse({
             success: true,
             data: {
@@ -298,16 +301,18 @@ class VideoSyncContentScript {
           break;
 
         case 'SYNC_VIDEO':
+          console.debug('[VideoSync] Responding to SYNC_VIDEO');
           this._syncToPosition(message.data?.targetTime);
           sendResponse({ success: true });
           break;
 
         default:
+          console.debug(`[VideoSync] Ignoring unknown message type: ${message.type}`);
           // Don't respond to unknown message types - let other content scripts handle them
           return;
       }
     } catch (error) {
-      console.debug('[VideoSync] Error handling message:', error);
+      console.error('[VideoSync] Error handling message:', error);
       sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }

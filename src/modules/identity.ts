@@ -99,6 +99,12 @@ export class IdentityManager {
         new_message: true,
         join_suggestion: false,
       },
+      publisher_config: {
+        enabled: true,
+        size: 'full',
+        scope: 'updates',
+        rate_ms: 12000,
+      },
     };
 
     await this.storage.setUserProfile(profile);

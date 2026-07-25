@@ -179,6 +179,33 @@
         </label>
       </div>
 
+      <!-- Publishing Config (Debug) -->
+      <div class="settings-section">
+        <h3>Publishing (Debug)</h3>
+        <label class="checkbox-label">
+          <input type="checkbox" id="pub-enabled-popup" checked>
+          <span>Enable Publishing</span>
+        </label>
+        <label class="label-with-input">
+          <span>Size</span>
+          <select id="pub-size-popup">
+            <option value="full">Full (Bundled)</option>
+            <option value="atomic">Atomic (Individual)</option>
+          </select>
+        </label>
+        <label class="label-with-input">
+          <span>Scope</span>
+          <select id="pub-scope-popup">
+            <option value="updates">Updates Only</option>
+            <option value="all">All Services</option>
+          </select>
+        </label>
+        <label class="label-with-input">
+          <span>Rate (ms)</span>
+          <input type="number" id="pub-rate-popup" min="1000" step="1000" value="12000">
+        </label>
+      </div>
+
       <!-- Theme -->
       <div class="settings-section">
         <h3>Theme</h3>
