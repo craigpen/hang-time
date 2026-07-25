@@ -366,11 +366,20 @@ export class RelayPool {
         const allConnected = relays.map(r => r.url);
 
         if (config?.relays && typeof config.relays === 'object') {
-          relays = relays.filter((r) => config.relays[r.url] !== false);
+          relays = relays.filter((r) => {
+            // Extract domain from relay URL (e.g., "wss://nos.lol/" -> "nos.lol")
+            try {
+              const relayUrl = new URL(r.url);
+              const domain = relayUrl.hostname;
+              return config.relays[domain] !== false;
+            } catch {
+              return true; // If URL parse fails, include relay
+            }
+          });
           const selectedUrls = relays.map(r => r.url);
           const disabled = allConnected.filter(u => !selectedUrls.includes(u));
           if (disabled.length > 0) {
-            console.debug(`[Nostr] Config: Relays - using ${selectedUrls.length}/${allConnected.length} (disabled: ${disabled.map(u => u.split('/')[2]).join(',')})`);
+            console.log(`[Nostr] 🔄 Config: Relay selection - using ${selectedUrls.length}/${allConnected.length} relays (disabled: ${disabled.map(u => new URL(u).hostname).join(', ')})`);
           }
         }
 

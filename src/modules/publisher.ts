@@ -368,7 +368,10 @@ export class ActivityPublisher {
       const eventSize = eventJson.length;
       console.log(`[Publisher] 📤 Publish [atomic] ${activity.service} size=${eventSize}b | Settings: atomic=on`);
 
-      await this.relayPool.publish(event);
+      // Load config for relay selection and retry settings
+      const profile = await this.storageManager.getUserProfile();
+      const config = profile?.publisher_config;
+      await this.relayPool.publish(event, config);
     } catch (error) {
       console.error('[Publisher] Failed to publish activity:', error);
     }
