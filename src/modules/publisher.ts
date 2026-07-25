@@ -78,10 +78,17 @@ export class ActivityPublisher {
         scope: 'updates',
         rate_ms: 12000,
         filter_idle: false,
-        relays: {},
+        relays: {
+          'nos.lol': true,
+          'relay.damus.io': true,
+          'relay.snort.social': true,
+          'nostr.mom': true,
+          'relay.mostr.pub': true,
+        },
         retry_backoff_ms: 1000,
         compression: false,
         verbose_logging: false,
+        delta_publishing: false,
       };
 
       // Log active config

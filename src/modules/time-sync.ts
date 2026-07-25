@@ -6,6 +6,7 @@
 import { NostrEvent } from '../types';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
+import { StorageManager } from './storage';
 import { encryptionManager } from './encryption';
 
 export interface TimeSyncEvent {
@@ -27,7 +28,8 @@ export class TimeSyncManager {
 
   constructor(
     private relayPool: RelayPool,
-    private identityManager: IdentityManager
+    private identityManager: IdentityManager,
+    private storageManager: StorageManager
   ) {}
 
   /**
@@ -71,7 +73,9 @@ export class TimeSyncManager {
         sig,
       };
 
-      await this.relayPool.publish(event);
+      const profile = await this.storageManager.getUserProfile();
+      const config = profile?.publisher_config;
+      await this.relayPool.publish(event, config);
       console.debug(`[TimeSync] Published sync for ${videoId} at ${this._formatTime(currentTime)}`);
     } catch (error) {
       console.error('[TimeSync] Failed to publish time-sync:', error);
@@ -201,8 +205,8 @@ export class TimeSyncManager {
 // Singleton instance with lazy initialization
 let timeSyncManager: TimeSyncManager | null = null;
 
-export function initializeTimeSyncManager(relayPool: RelayPool, identity: IdentityManager): void {
-  timeSyncManager = new TimeSyncManager(relayPool, identity);
+export function initializeTimeSyncManager(relayPool: RelayPool, identity: IdentityManager, storage: StorageManager): void {
+  timeSyncManager = new TimeSyncManager(relayPool, identity, storage);
 }
 
 export function getTimeSyncManager(): TimeSyncManager {

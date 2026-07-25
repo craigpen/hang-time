@@ -123,8 +123,9 @@ export class MessagingManager {
       // Sign event
       event.sig = encryptionManager.signEvent(event.id, secretKey);
 
-      // Publish to relays
-      await this.relayPool.publish(event);
+      // Publish to relays with config
+      const publishConfig = userProfile.publisher_config;
+      await this.relayPool.publish(event, publishConfig);
 
       // Store in local message history as outbound
       const localMessage = {
