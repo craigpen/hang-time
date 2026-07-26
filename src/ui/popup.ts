@@ -325,44 +325,28 @@ export class PopupController {
     wrapper.appendChild(row);
 
     // TODO: Re-enable messaging after core join/invite is working
-    // Message container (scrollable messages + reply field)
-    // Disabled for now - focus on core join/invite functionality
-    const messageContainer = document.createElement('div');
-    messageContainer.className = 'activity-message-container';
-    messageContainer.style.display = 'none'; // Always hidden for now
-
-    // Messages list
-    const messageList = document.createElement('div');
-    messageList.className = 'activity-message-list';
-    messageContainer.appendChild(messageList);
-
-    // Reply field (only show for friends' activities, not for own)
-    if (friendId && friendId !== 'self') {
-      const replyField = document.createElement('input');
-      replyField.className = 'activity-message-input';
-      replyField.type = 'text';
-      replyField.placeholder = 'Reply...';
-      replyField.addEventListener('keypress', (e: KeyboardEvent) => {
-        if (e.key === 'Enter' && replyField.value.trim()) {
-          this._sendActivityMessage(activity, friendId, replyField.value.trim());
-          replyField.value = '';
-          // Resume refresh after a short delay so message can be loaded and displayed
-          setTimeout(() => {
-            this.refreshPaused = false;
-          }, 1500);
-        }
-      });
-      messageContainer.appendChild(replyField);
-    }
-
-    wrapper.appendChild(messageContainer);
-
-    // TODO: Re-enable messaging after core join/invite is working
-    // Load messages for this activity from the friend
-    // Disabled for now - focus on core join/invite functionality
-    // if (friendId && friendId !== 'self' && activity.id) {
-    //   this._loadActivityMessages(friendId, activity.id, messageList, messageContainer);
+    // Message container disabled for now - focus on core join/invite functionality
+    // const messageContainer = document.createElement('div');
+    // messageContainer.className = 'activity-message-container';
+    // messageContainer.style.display = 'none';
+    // const messageList = document.createElement('div');
+    // messageList.className = 'activity-message-list';
+    // messageContainer.appendChild(messageList);
+    // if (friendId && friendId !== 'self') {
+    //   const replyField = document.createElement('input');
+    //   replyField.className = 'activity-message-input';
+    //   replyField.type = 'text';
+    //   replyField.placeholder = 'Reply...';
+    //   replyField.addEventListener('keypress', (e: KeyboardEvent) => {
+    //     if (e.key === 'Enter' && replyField.value.trim()) {
+    //       this._sendActivityMessage(activity, friendId, replyField.value.trim());
+    //       replyField.value = '';
+    //       setTimeout(() => { this.refreshPaused = false; }, 1500);
+    //     }
+    //   });
+    //   messageContainer.appendChild(replyField);
     // }
+    // wrapper.appendChild(messageContainer);
 
     return wrapper;
   }
