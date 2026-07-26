@@ -125,6 +125,7 @@ export class MessagingManager {
 
       // Publish to relays with config
       const publishConfig = userProfile.publisher_config;
+      console.log(`[Messaging] 📤 Publishing kind-4 ${message.type} to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);
       await this.relayPool.publish(event, publishConfig);
 
       // Store in local message history as outbound
