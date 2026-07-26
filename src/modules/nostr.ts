@@ -409,7 +409,7 @@ export class RelayPool {
           throw new NostrError('Failed to publish to any relay');
         }
 
-        console.debug(`[Nostr] Event published to ${successful}/${relays.length} relays`);
+        console.debug(`[Nostr] kind-${event.kind} published to ${successful}/${relays.length} relays`);
         return; // Success
       } catch (error) {
         lastError = error as Error;
