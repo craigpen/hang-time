@@ -132,18 +132,6 @@ export class NotificationManager {
     }
   }
 
-  /**
-   * Clear cooldown for a friend
-   */
-  clearCooldown(friendId: string, type: string = 'all'): void {
-    if (type === 'all') {
-      this.lastNotificationTime.delete(`online_${friendId}`);
-      this.lastNotificationTime.delete(`message_${friendId}`);
-      this.lastNotificationTime.delete(`join_${friendId}`);
-    } else {
-      this.lastNotificationTime.delete(`${type}_${friendId}`);
-    }
-  }
 }
 
 // Singleton instance

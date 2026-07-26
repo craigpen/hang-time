@@ -970,24 +970,34 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       const notificationManager = getNotificationManager();
       console.log(`[Background] 🔔 Invite: Firing notification for ${friend.local_name}`);
       await notificationManager.notifyPersistent(
-        `${friend.local_name} invited you to ${service}`,
-        'Click the join button in the popup to accept or decline'
+        `${friend.local_name} invited you to watch ${service} together`,
+        'Click the green envelope in Hang Time popup. Click Accept to watch together, or Decline to skip.'
       );
       await markInviteNotified(event.id);
       console.log(`[Background] ✅ Invite: Notification fired for ${friend.local_name}`);
 
-      // Notify popup about pending invite
+      // Store pending invite in persistent storage
       if (activityId) {
+        console.debug(`[Background] 🔔 Invite: Storing pending invite - activityId: ${activityId}, friendId: ${friend.id}`);
+        const result = await chrome.storage.local.get('pending_invites');
+        const pendingInvites = result.pending_invites || {};
+        pendingInvites[activityId] = friend.id;
+        await chrome.storage.local.set({ pending_invites: pendingInvites });
+
+        // Also try to notify popup if it's open
         try {
           await chrome.runtime.sendMessage({
             type: 'INVITE_RECEIVED',
             data: { activityId, friendId: friend.id },
-          }).catch(() => {
-            // Popup not open, that's fine
+          }).catch((error) => {
+            // Popup not open, that's fine - it will load from storage
+            console.debug('[Background] Popup not open, stored invite in storage:', error?.message);
           });
         } catch (error) {
-          console.debug('[Background] Could not notify popup (not open):', error);
+          console.debug('[Background] Could not notify popup (not open), stored in storage:', error instanceof Error ? error.message : error);
         }
+      } else {
+        console.debug('[Background] 🔔 Invite: No activityId found in tags');
       }
     }
     return;
