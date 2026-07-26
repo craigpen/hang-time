@@ -1913,6 +1913,8 @@ export class PopupController {
     inviteBtn.disabled = true; // Disabled by default
     inviteBtn.addEventListener('click', async () => {
       if (selectedFriends.size > 0) {
+        inviteBtn.disabled = true;
+        inviteBtn.textContent = 'Sending...';
         await this._sendInvitesToFriends(activity, Array.from(selectedFriends));
         modal.remove();
       }
