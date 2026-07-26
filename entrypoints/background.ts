@@ -966,6 +966,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       }
 
       const service = event.tags.find((t) => t[0] === 'service')?.[1] || 'an activity';
+      const activityId = event.tags.find((t) => t[0] === 'activity_id')?.[1];
       const notificationManager = getNotificationManager();
       console.log(`[Background] 🔔 Invite: Firing notification for ${friend.local_name}`);
       await notificationManager.notifyPersistent(
@@ -974,6 +975,20 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       );
       await markInviteNotified(event.id);
       console.log(`[Background] ✅ Invite: Notification fired for ${friend.local_name}`);
+
+      // Notify popup about pending invite
+      if (activityId) {
+        try {
+          await chrome.runtime.sendMessage({
+            type: 'INVITE_RECEIVED',
+            data: { activityId, friendId: friend.id },
+          }).catch(() => {
+            // Popup not open, that's fine
+          });
+        } catch (error) {
+          console.debug('[Background] Could not notify popup (not open):', error);
+        }
+      }
     }
     return;
   }

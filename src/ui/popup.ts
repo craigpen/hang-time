@@ -56,6 +56,7 @@ export class PopupController {
   private serviceIntegrationEnabled: Map<string, boolean> = new Map();
   private currentServiceActivities: Map<string, Activity | null> = new Map();
   private refreshPaused: boolean = false;
+  private pendingInvitesByActivity: Map<string, string> = new Map(); // activityId -> friendId with pending invite
 
   static readonly MY_ACTIVITY_REFRESH_MS = 3000; // Keep "My Activity" responsive
   static readonly FALLBACK_FRIENDS_REFRESH_MS = 15000; // Safety net for missed Nostr messages
@@ -507,63 +508,44 @@ export class PopupController {
     buttonsDiv.className = 'activity-actions';
 
     const isSelfActivity = friendId === 'self';
+    const hasPendingInvite = activity.id && this.pendingInvitesByActivity.has(activity.id);
 
-    // First button - Join/Invite
+    // First button - Invite (for self) or Join/Accept (for friends)
     const firstBtn = document.createElement('button');
     firstBtn.className = 'activity-action-btn activity-action-join';
-    firstBtn.textContent = isSelfActivity ? '📤' : '▶';
-    firstBtn.title = isSelfActivity ? 'Invite friends' : 'Join activity';
+
+    if (isSelfActivity) {
+      // Thin gray envelope for inviting friends
+      firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
+        <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+        <path d="M 2 6 L 12 13 L 22 6"></path>
+      </svg>`;
+      firstBtn.style.color = '#999';
+      firstBtn.title = 'Invite friends';
+    } else if (hasPendingInvite) {
+      // Bold green envelope for accepting invite
+      firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
+        <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+        <path d="M 2 6 L 12 13 L 22 6"></path>
+      </svg>`;
+      firstBtn.style.color = '#4CAF50';
+      firstBtn.title = 'Accept or decline invite';
+    } else {
+      // Play arrow for joining normally
+      firstBtn.textContent = '▶';
+      firstBtn.title = 'Join activity';
+    }
+
     firstBtn.addEventListener('click', () => {
       if (isSelfActivity) {
         this._inviteToActivity(activity);
+      } else if (hasPendingInvite) {
+        this._showAcceptInviteModal(activity, friendId!);
       } else {
         this._joinActivity(activity, friendId);
       }
     });
     buttonsDiv.appendChild(firstBtn);
-
-    // TODO: Re-enable messaging after core join/invite is working
-    // Message button
-    // const msgBtn = document.createElement('button');
-    // msgBtn.className = 'activity-action-btn activity-action-message';
-    // msgBtn.textContent = '💬';
-    // msgBtn.title = 'Send message';
-    // msgBtn.addEventListener('click', () => {
-    //   // Toggle message container visibility
-    //   const wrapper = row.closest('.activity-item-wrapper');
-    //   if (wrapper) {
-    //     const messageContainer = wrapper.querySelector('.activity-message-container') as HTMLElement;
-    //     if (messageContainer) {
-    //       const isShowing = messageContainer.style.display === 'none';
-    //       messageContainer.style.display = isShowing ? 'block' : 'none';
-    //       // Pause refresh while message box is open
-    //       this.refreshPaused = isShowing;
-    //       // Focus the input if showing
-    //       if (isShowing) {
-    //         const input = messageContainer.querySelector('.activity-message-input') as HTMLInputElement;
-    //         if (input) input.focus();
-    //         // Reload messages when opening
-    //         if (friendId && activity.id) {
-    //           const messageList = messageContainer.querySelector('.activity-message-list') as HTMLElement;
-    //           if (messageList) {
-    //             this._loadActivityMessages(friendId, activity.id, messageList, messageContainer);
-    //           }
-    //         }
-    //       }
-    //     }
-    //   }
-    // });
-    // buttonsDiv.appendChild(msgBtn);
-
-    // Sync button (video/music only)
-    if (['youtube', 'netflix', 'twitch', 'spotify'].includes(activity.service)) {
-      const syncBtn = document.createElement('button');
-      syncBtn.className = 'activity-action-btn activity-action-sync';
-      syncBtn.textContent = '🕐';
-      syncBtn.title = 'Sync playback';
-      syncBtn.addEventListener('click', () => this._syncActivity(activity, friendId));
-      buttonsDiv.appendChild(syncBtn);
-    }
 
     // Separator before action buttons
     const actionSeparator = document.createElement('span');
@@ -1018,6 +1000,15 @@ export class PopupController {
         this.refreshFriends().catch((error) => {
           console.error('[Popup] Failed to refresh friends after activity change:', error);
         });
+      } else if (message.type === 'INVITE_RECEIVED') {
+        // Mark activity as having pending invite
+        const { activityId, friendId } = message.data;
+        if (activityId && friendId) {
+          this.pendingInvitesByActivity.set(activityId, friendId);
+          this.refreshFriends().catch((error) => {
+            console.error('[Popup] Failed to refresh after invite:', error);
+          });
+        }
       }
     });
   }
@@ -1957,6 +1948,78 @@ export class PopupController {
 
     modal.appendChild(modalContent);
     document.body.appendChild(modal);
+  }
+
+  private _showAcceptInviteModal(activity: Activity, friendId: string): void {
+    // Create modal overlay
+    const modal = document.createElement('div');
+    modal.className = 'invite-modal-overlay';
+
+    const modalContent = document.createElement('div');
+    modalContent.className = 'invite-modal-content';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'invite-modal-header';
+    const title = document.createElement('h3');
+    title.textContent = `${this._truncateActivityContent(activity.content)}`;
+    const subtitle = document.createElement('p');
+    subtitle.style.fontSize = '0.9em';
+    subtitle.style.color = 'var(--text-tertiary)';
+    subtitle.style.margin = '0';
+    subtitle.textContent = `Join this ${activity.service} activity?`;
+    header.appendChild(title);
+    header.appendChild(subtitle);
+    modalContent.appendChild(header);
+
+    // Buttons
+    const buttons = document.createElement('div');
+    buttons.className = 'invite-modal-buttons';
+
+    const declineBtn = document.createElement('button');
+    declineBtn.className = 'btn-secondary';
+    declineBtn.textContent = 'Decline';
+    declineBtn.addEventListener('click', async () => {
+      // Decline: revert button to join
+      if (activity.id) {
+        this.pendingInvitesByActivity.delete(activity.id);
+      }
+      modal.remove();
+      await this.refreshFriends();
+    });
+
+    const acceptBtn = document.createElement('button');
+    acceptBtn.className = 'btn-primary';
+    acceptBtn.textContent = 'Accept & Join';
+    acceptBtn.addEventListener('click', async () => {
+      acceptBtn.disabled = true;
+      acceptBtn.textContent = 'Opening...';
+
+      // Accept: open activity and mark as joined
+      await this._joinActivity(activity, friendId);
+
+      // Clear pending invite
+      if (activity.id) {
+        this.pendingInvitesByActivity.delete(activity.id);
+      }
+
+      modal.remove();
+      await this.refreshFriends();
+    });
+
+    buttons.appendChild(declineBtn);
+    buttons.appendChild(acceptBtn);
+    modalContent.appendChild(buttons);
+
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+
+    // Close on backdrop click
+    modal.addEventListener('click', (e: MouseEvent) => {
+      if (e.target === modal) {
+        modal.remove();
+      }
+    });
   }
 
   private async _sendInvitesToFriends(activity: Activity, friendIds: string[]): Promise<void> {

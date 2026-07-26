@@ -1355,17 +1355,13 @@ body {
   }
 }
 
-/* Activity action buttons (hidden by default, shown on hover) */
+/* Activity action buttons (always visible) */
 .activity-actions {
   display: flex;
   gap: 2px;
   margin-left: auto;
   padding-right: 0;
   flex-shrink: 0;
-  visibility: hidden;
-}
-
-.activity-item-row:hover .activity-actions {
   visibility: visible;
 }
 
@@ -1410,6 +1406,12 @@ body {
 
 .activity-action-sync:hover {
   color: #FF9800;
+}
+
+.envelope-icon {
+  width: 18px;
+  height: 18px;
+  display: inline;
 }
 
 /* Activity wrapper with messages */
