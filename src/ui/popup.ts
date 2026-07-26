@@ -216,6 +216,7 @@ export class PopupController {
             const messageList = existingWrapper.querySelector('.activity-message-list') as HTMLElement;
             const messageContainer = existingWrapper.querySelector('.activity-message-container') as HTMLElement;
             if (messageList && messageContainer) {
+              messageList.innerHTML = ''; // Clear old messages before reloading
               this._loadActivityMessages(friendId, activity.id, messageList, messageContainer);
             }
           }
