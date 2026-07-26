@@ -950,9 +950,25 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
     return;
   }
 
-  // Check if this is a complete activity state event (all activities at once)
+  // Check for notification events (invites, etc.)
+  const isNotificationTag = event.tags.find((t) => t[0] === 'is_notification')?.[1];
+  const isActivityTag = event.tags.find((t) => t[0] === 'is_activity')?.[1];
   const typeTag = event.tags.find((t) => t[0] === 'type')?.[1];
-  if (typeTag === 'activity-state') {
+
+  if (isNotificationTag === 'true') {
+    // Handle notification event
+    console.debug(`[Background] Received invite notification from ${friend.local_name}`);
+    if (typeTag === 'invite') {
+      const service = event.tags.find((t) => t[0] === 'service')?.[1] || 'an activity';
+      const notificationManager = getNotificationManager();
+      console.log(`[Background] 🔔 Invite: Firing notification for ${friend.local_name}`);
+      await notificationManager.notify(`${friend.local_name} invited you`, `Join them on ${service}`);
+      console.log(`[Background] ✅ Invite: Notification fired for ${friend.local_name}`);
+    }
+    return;
+  }
+
+  if (isActivityTag === 'true' && typeTag === 'activity-state') {
     // Parse JSON array of activities
     try {
       const activities = JSON.parse(event.content) as Activity[];

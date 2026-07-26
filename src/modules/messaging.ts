@@ -28,17 +28,44 @@ export class MessagingManager {
   ) {}
 
   /**
-   * Send an invite message to a friend about an activity
+   * Send an invite notification to a friend about an activity (kind-1, unencrypted)
    */
   async sendInvite(activity: Activity, recipientFriend: Friend): Promise<void> {
-    const message: ActivityMessage = {
-      type: 'invite',
-      activity_id: activity.id || generateActivityId(activity.service, activity.url),
-      timestamp: Date.now(),
+    const userProfile = await this.storageManager.getUserProfile();
+    if (!userProfile) {
+      throw new Error('User profile not found');
+    }
+
+    const pubkey = await this.identityManager.getPubkey();
+    const created_at = Math.floor(Date.now() / 1000);
+
+    // Create kind-1 notification event
+    const event: NostrEvent = {
+      id: '',
+      pubkey,
+      created_at,
+      kind: 1,
+      tags: [
+        ['is_notification', 'true'],
+        ['type', 'invite'],
+        ['activity_id', activity.id || generateActivityId(activity.service, activity.url)],
+        ['recipient', recipientFriend.pubkey],
+        ['service', activity.service],
+        ['url', activity.url],
+      ],
+      content: `Inviting ${recipientFriend.local_name} to join ${activity.service}`,
     };
 
-    await this._sendActivityMessage(recipientFriend, message);
-    console.debug('[Messaging] Sent invite for activity:', activity.service, 'to:', recipientFriend.local_name);
+    // Compute event ID and sign
+    const eventData = [0, pubkey, created_at, 1, event.tags, event.content];
+    const canonicalJson = JSON.stringify(eventData);
+    const eventId = await encryptionManager.sha256(canonicalJson);
+    event.id = eventId.substring(0, 64);
+    event.sig = encryptionManager.signEvent(event.id, await this.identityManager.getSecretKey());
+
+    // Publish to relays
+    console.log(`[Messaging] 📤 Publishing kind-1 invite to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);
+    await this.relayPool.publish(event, userProfile.publisher_config);
   }
 
   /**

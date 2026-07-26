@@ -12,9 +12,6 @@ export interface NotificationSettings {
 }
 
 export class NotificationManager {
-  private lastNotificationTime = new Map<string, number>();
-  private readonly NOTIFICATION_COOLDOWN_MS = 30000; // Don't notify same friend within 30s
-
   constructor(private storage: StorageManager) {}
 
   /**
@@ -27,12 +24,6 @@ export class NotificationManager {
         return;
       }
 
-      // Check cooldown
-      const lastTime = this.lastNotificationTime.get(`online_${friendId}`) || 0;
-      if (Date.now() - lastTime < this.NOTIFICATION_COOLDOWN_MS) {
-        return;
-      }
-
       chrome.notifications.create(`friend_online_${friendId}`, {
         type: 'basic',
         iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
@@ -42,7 +33,6 @@ export class NotificationManager {
         requireInteraction: true,
       });
 
-      this.lastNotificationTime.set(`online_${friendId}`, Date.now());
       console.debug('[Notifications] Friend online notification sent for', friendName);
     } catch (error) {
       console.error('[Notifications] Failed to send friend online notification:', error);
@@ -54,17 +44,15 @@ export class NotificationManager {
    */
   async notifyNewMessage(friendId: string, friendName: string, messagePreview: string): Promise<void> {
     try {
+      console.log(`[Notifications] notifyNewMessage called for ${friendName}`);
       const settings = await this.storage.getSettings();
+      console.log(`[Notifications] new_message setting:`, settings.notification_preferences?.new_message);
       if (!settings.notification_preferences?.new_message) {
+        console.log(`[Notifications] new_message disabled, returning`);
         return;
       }
 
-      // Check cooldown
-      const lastTime = this.lastNotificationTime.get(`message_${friendId}`) || 0;
-      if (Date.now() - lastTime < this.NOTIFICATION_COOLDOWN_MS) {
-        return;
-      }
-
+      console.log(`[Notifications] Creating notification with ID: new_message_${friendId}`);
       chrome.notifications.create(`new_message_${friendId}`, {
         type: 'basic',
         iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
@@ -74,7 +62,6 @@ export class NotificationManager {
         requireInteraction: false,
       });
 
-      this.lastNotificationTime.set(`message_${friendId}`, Date.now());
       console.debug('[Notifications] New message notification sent for', friendName);
     } catch (error) {
       console.error('[Notifications] Failed to send message notification:', error);
@@ -91,12 +78,6 @@ export class NotificationManager {
         return;
       }
 
-      // Check cooldown
-      const lastTime = this.lastNotificationTime.get(`join_${friendId}`) || 0;
-      if (Date.now() - lastTime < this.NOTIFICATION_COOLDOWN_MS) {
-        return;
-      }
-
       chrome.notifications.create(`join_suggestion_${friendId}`, {
         type: 'basic',
         iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
@@ -107,7 +88,6 @@ export class NotificationManager {
         buttons: [{ title: 'Join Now' }, { title: 'Dismiss' }],
       });
 
-      this.lastNotificationTime.set(`join_${friendId}`, Date.now());
       console.debug('[Notifications] Join suggestion sent for', friendName);
     } catch (error) {
       console.error('[Notifications] Failed to send join suggestion:', error);

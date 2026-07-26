@@ -284,6 +284,7 @@ export class ActivityPublisher {
 
       // Create tags
       const tags: Array<[string, string]> = [
+        ['is_activity', 'true'],
         ['type', 'activity-state'],
         ['mode', mode === 'compressed' ? 'atomic' : mode],
         ['count', activities.length.toString()],
