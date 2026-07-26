@@ -1898,6 +1898,27 @@ export class PopupController {
 
     const selectedFriends = new Set<string>();
 
+    // Create buttons first so we can update them from checkbox changes
+    const buttons = document.createElement('div');
+    buttons.className = 'invite-modal-buttons';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn-secondary';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => modal.remove());
+
+    const inviteBtn = document.createElement('button');
+    inviteBtn.className = 'btn-primary';
+    inviteBtn.textContent = 'Invite';
+    inviteBtn.disabled = true; // Disabled by default
+    inviteBtn.addEventListener('click', async () => {
+      if (selectedFriends.size > 0) {
+        await this._sendInvitesToFriends(activity, Array.from(selectedFriends));
+        modal.remove();
+      }
+    });
+
+    // Create friend checkboxes
     for (const friend of friends) {
       const friendCheckbox = document.createElement('label');
       friendCheckbox.className = 'invite-friend-item';
@@ -1911,6 +1932,8 @@ export class PopupController {
         } else {
           selectedFriends.delete(friend.id);
         }
+        // Enable invite button when at least one friend is selected
+        inviteBtn.disabled = selectedFriends.size === 0;
       });
 
       const nameSpan = document.createElement('span');
@@ -1923,26 +1946,8 @@ export class PopupController {
 
     modalContent.appendChild(friendsList);
 
-    // Buttons
-    const buttons = document.createElement('div');
-    buttons.className = 'invite-modal-buttons';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'btn-secondary';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.addEventListener('click', () => modal.remove());
-
-    const inviteBtn = document.createElement('button');
-    inviteBtn.className = 'btn-primary';
-    inviteBtn.textContent = 'Invite';
-    inviteBtn.addEventListener('click', async () => {
-      if (selectedFriends.size > 0) {
-        await this._sendInvitesToFriends(activity, Array.from(selectedFriends));
-        modal.remove();
-      } else {
-        this._showError('Please select at least one friend');
-      }
-    });
+    buttons.appendChild(cancelBtn);
+    buttons.appendChild(inviteBtn);
 
     buttons.appendChild(cancelBtn);
     buttons.appendChild(inviteBtn);

@@ -1797,8 +1797,13 @@ body {
   color: var(--text-on-accent);
 }
 
-.invite-modal-buttons .btn-primary:hover {
+.invite-modal-buttons .btn-primary:hover:not(:disabled) {
   opacity: 0.9;
+}
+
+.invite-modal-buttons .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .invite-modal-buttons .btn-secondary {
