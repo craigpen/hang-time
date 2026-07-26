@@ -7,6 +7,7 @@ import { Activity, IServiceModule, OAuthToken } from '../../types';
 import { StorageManager } from '../storage';
 import { configManager } from '../config';
 import { generateSecureRandom, secureLog, validateOAuthToken } from '../security-utils';
+import { generateActivityId } from '../activity-utils';
 
 export class SpotifyService implements IServiceModule {
   private static readonly API_BASE = 'https://api.spotify.com/v1';
@@ -59,11 +60,13 @@ export class SpotifyService implements IServiceModule {
       const artist = track.artists?.[0]?.name || 'Unknown Artist';
 
       return {
+        id: generateActivityId('spotify', track.external_urls?.spotify),
         service: 'spotify',
         content: `${track.name}`,
         url: track.external_urls?.spotify,
-        timestamp: Date.now(),
+        state: data.is_playing ? 'playing' : 'paused',
         audio: data.is_playing ? 'on' : 'off',
+        timestamp: Date.now(),
         metadata: {
           title: track.name,
           artist,

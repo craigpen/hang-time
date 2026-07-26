@@ -108,10 +108,18 @@ export class StorageManager {
 
   async getFriends(): Promise<FriendList> {
     const friends = await this.get<Friend[]>(STORAGE_KEYS.FRIENDS_LIST, []);
-    // Ensure all friends have current_activities (backward compatibility)
+    // Ensure all activities have required properties (backward compatibility)
     return friends.map(friend => ({
       ...friend,
-      current_activities: friend.current_activities || {},
+      current_activities: Object.fromEntries(
+        Object.entries(friend.current_activities || {}).map(([service, activity]) => [
+          service,
+          activity ? {
+            state: activity.state || 'paused',
+            ...activity,
+          } : null,
+        ]).filter(([, a]) => a)
+      ) as Partial<Record<any, any>>,
     }));
   }
 

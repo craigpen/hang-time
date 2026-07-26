@@ -38,16 +38,22 @@ export class TabService implements IServiceModule {
         if (title) {
           // We have a real title - create normal activity
           const netflixId = generateActivityId('netflix', netflixTab.url);
-          // Netflix uses proprietary player, so skip video element query and use tab.audible
+          // Query video data from content script for progress
+          const videoData = await this.getVideoActivityDataFromTab(netflixTab.id, 'netflix');
+          // Preserve previous progress data if current query fails
+          const lastNetflixActivity = this.lastDetected.get('netflix');
           const netflixActivity: Activity = {
             id: netflixId,
             service: 'netflix',
             content: title,
             url: netflixTab.url,
-            timestamp: Date.now(),
+            state: netflixTab.audible ? 'playing' : 'paused',
             audio: netflixTab.audible ? 'on' : 'off',
+            timestamp: Date.now(),
             metadata: {
               lastAccessed: netflixTab.lastAccessed || 0,
+              progress: videoData?.currentTime ?? lastNetflixActivity?.metadata?.progress,
+              duration: videoData?.duration ?? lastNetflixActivity?.metadata?.duration,
             },
           };
           detectedActivities.push(netflixActivity);
@@ -65,17 +71,20 @@ export class TabService implements IServiceModule {
         const youtubeId = generateActivityId('youtube', youtubeTab.url);
         // Query video data from content script
         const videoData = await this.getVideoActivityDataFromTab(youtubeTab.id, 'youtube');
+        // Preserve previous progress data if current query fails
+        const lastYoutubeActivity = this.lastDetected.get('youtube');
         const youtubeActivity: Activity = {
           id: youtubeId,
           service: 'youtube',
           content: finalContent,
           url: youtubeTab.url,
-          timestamp: Date.now(),
+          state: youtubeTab.audible ? 'playing' : 'paused',
           audio: youtubeTab.audible ? 'on' : 'off',
+          timestamp: Date.now(),
           metadata: {
             lastAccessed: youtubeTab.lastAccessed || 0,
-            progress: videoData?.currentTime,
-            duration: videoData?.duration,
+            progress: videoData?.currentTime ?? lastYoutubeActivity?.metadata?.progress,
+            duration: videoData?.duration ?? lastYoutubeActivity?.metadata?.duration,
           },
         };
         detectedActivities.push(youtubeActivity);
@@ -89,14 +98,21 @@ export class TabService implements IServiceModule {
         // Use tab's audible property as initial state guess (if audio playing, likely stream is playing)
         // Query video data from content script for Twitch
         const videoData = await this.getVideoActivityDataFromTab(twitchTab.id, 'twitch');
+        // Preserve previous progress data if current query fails
+        const lastTwitchActivity = this.lastDetected.get('twitch');
         const twitchActivity: Activity = {
           id: twitchId,
           service: 'twitch',
           content: title || 'Twitch Stream',
           url: twitchTab.url,
-          timestamp: Date.now(),
+          state: twitchTab.audible ? 'playing' : 'paused',
           audio: twitchTab.audible ? 'on' : 'off',
-          metadata: { lastAccessed: twitchTab.lastAccessed || 0 },
+          timestamp: Date.now(),
+          metadata: {
+            lastAccessed: twitchTab.lastAccessed || 0,
+            progress: videoData?.currentTime ?? lastTwitchActivity?.metadata?.progress,
+            duration: videoData?.duration ?? lastTwitchActivity?.metadata?.duration,
+          },
         };
         detectedActivities.push(twitchActivity);
       }

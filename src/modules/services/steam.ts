@@ -5,6 +5,7 @@
 
 import { Activity, IServiceModule } from '../../types';
 import { StorageManager } from '../storage';
+import { generateActivityId } from '../activity-utils';
 
 export class SteamService implements IServiceModule {
   private static readonly API_BASE = 'https://api.steampowered.com';
@@ -88,9 +89,12 @@ export class SteamService implements IServiceModule {
       console.debug('[Steam] Currently playing:', gameName);
 
       return {
+        id: generateActivityId('steam', player.gameid.toString()),
         service: 'steam',
         content: gameName,
         url: `steam://run/${player.gameid}`,
+        state: 'playing',
+        audio: 'on',
         timestamp: Date.now(),
         metadata: {
           title: gameName,

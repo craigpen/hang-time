@@ -7,6 +7,7 @@ import { Activity, IServiceModule, OAuthToken } from '../../types';
 import { StorageManager } from '../storage';
 import { configManager } from '../config';
 import { generateSecureRandom, secureLog, validateOAuthToken } from '../security-utils';
+import { generateActivityId } from '../activity-utils';
 
 export class TwitchService implements IServiceModule {
   private static readonly API_BASE = 'https://api.twitch.tv/helix';
@@ -77,9 +78,12 @@ export class TwitchService implements IServiceModule {
       }
 
       return {
+        id: generateActivityId('twitch', `${stream.user_name}/${stream.game_name}`),
         service: 'twitch',
         content: stream.title || stream.game_name || 'Twitch Stream',
         url: `https://twitch.tv/${stream.user_name}`,
+        state: 'playing',
+        audio: 'on',
         timestamp: Date.now(),
         metadata: {
           title: stream.title,
