@@ -17,15 +17,21 @@
       </div>
     </header>
 
-    <!-- Collapsible Friends List -->
+    <!-- Friends List -->
     <div id="friends-list" class="friends-list">
+      <!-- Friends Section Header -->
+      <div class="friends-header">
+        <h2>Friend Activity</h2>
+        <div class="friends-header-actions">
+          <button id="show-inactive-btn" class="btn-icon-small btn-toggle-inactive" title="Toggle offline friends">●</button>
+          <button id="add-friend-btn" class="btn-icon-small btn-add-friend" title="Add a friend">✚</button>
+        </div>
+      </div>
+      <!-- No friends placeholder -->
+      <div id="no-friends" class="no-friends-placeholder" style="display: none;">
+        <p>No friends yet. Add one to get started!</p>
+      </div>
       <!-- Friends populated by JS -->
-    </div>
-
-    <!-- Empty State -->
-    <div id="no-friends" class="empty-state" style="display: none;">
-      <p>No friends online right now</p>
-      <button id="add-friend-btn-empty" class="btn-primary">Add a Friend</button>
     </div>
 
     <!-- Footer -->

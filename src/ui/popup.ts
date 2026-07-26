@@ -424,20 +424,30 @@ export class PopupController {
     const row = document.createElement('div');
     row.className = 'activity-item-row';
 
-    // Apply progress bar background if we have progress data (videos/audio with duration)
+    // Set progress bar positioning via CSS variables (will calculate position after render)
     if (activity.metadata?.progress !== undefined && activity.metadata?.duration && activity.metadata.duration > 0) {
       const progressPercent = Math.min(100, (activity.metadata.progress / activity.metadata.duration) * 100);
-      // Subtle gradient: light blue-grey accent fading to transparent
-      row.style.background = `linear-gradient(to right, rgba(100, 150, 200, 0.15) 0%, rgba(100, 150, 200, 0.15) ${progressPercent}%, transparent ${progressPercent}%, transparent 100%)`;
+      row.style.setProperty('--progress-percent', `${progressPercent}%`);
+
+      // Defer calculation until after layout
+      requestAnimationFrame(() => {
+        const separator = row.querySelector('.activity-separator') as HTMLElement;
+        if (separator) {
+          const rect = separator.getBoundingClientRect();
+          const rowRect = row.getBoundingClientRect();
+          const separatorEnd = rect.right - rowRect.left;
+          row.style.setProperty('--progress-start', `${separatorEnd}px`);
+        }
+      });
     }
 
     // State indicator (on the left) - FIRST
-    if (activity.audio) {
-      const audioIcon = document.createElement('span');
-      audioIcon.className = `activity-audio-icon activity-audio-${activity.audio}`;
-      audioIcon.textContent = activity.audio === 'on' ? '🔊' : '🔇';
-      audioIcon.title = activity.audio === 'on' ? 'Audio On' : 'Audio Off';
-      row.appendChild(audioIcon);
+    if (activity.state) {
+      const stateIcon = document.createElement('span');
+      stateIcon.className = `activity-state-icon activity-state-${activity.state}`;
+      stateIcon.textContent = activity.state === 'playing' ? '▶' : '⏸';
+      stateIcon.title = activity.state === 'playing' ? 'Playing' : 'Paused';
+      row.appendChild(stateIcon);
 
       // Pipe separator
       const separator = document.createElement('span');
@@ -528,6 +538,12 @@ export class PopupController {
       syncBtn.addEventListener('click', () => this._syncActivity(activity, friendId));
       buttonsDiv.appendChild(syncBtn);
     }
+
+    // Separator before action buttons
+    const actionSeparator = document.createElement('span');
+    actionSeparator.className = 'activity-separator';
+    actionSeparator.textContent = ' | ';
+    row.appendChild(actionSeparator);
 
     row.appendChild(buttonsDiv);
 
