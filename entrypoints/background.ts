@@ -168,6 +168,9 @@ async function initializeExtension(): Promise<void> {
       }
     }
 
+    // Subscribe to incoming kind 4 (encrypted DM) messages
+    await _subscribeToIncomingMessages();
+
     console.log('[Background] Initialization complete');
     initialized = true;
   } catch (error) {
@@ -846,6 +849,53 @@ async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
 // ============================================================================
 // NOSTR INTEGRATION
 // ============================================================================
+
+/**
+ * Subscribe to incoming encrypted messages (kind 4) sent to the user
+ * Note: Uses a dedicated subscription identifier to listen for all kind 4 events
+ * Filtering for recipient happens in the callback
+ */
+async function _subscribeToIncomingMessages(): Promise<void> {
+  try {
+    const userPubkey = await identityManager.getPubkey();
+    const incomingMessagesId = `incoming-messages-${userPubkey}`;
+
+    // Subscribe to all events with this identifier
+    // The relay will send us events and we filter for kind 4 where we're the recipient
+    relayPool.subscribe(incomingMessagesId, async (event: NostrEvent) => {
+      // Filter for kind 4 (encrypted DMs) only
+      if (event.kind !== 4) {
+        return;
+      }
+
+      // Check if user is tagged as recipient (p tag)
+      const recipientTag = event.tags.find((t) => t[0] === 'p');
+      if (!recipientTag || recipientTag[1] !== userPubkey) {
+        return;
+      }
+
+      console.debug(`[Message] Received kind-4 message from ${event.pubkey.substring(0, 8)}...`);
+
+      try {
+        // Find which friend this is from
+        const friends = await storageManager.getFriends();
+        const sender = friends.find((f) => f.pubkey === event.pubkey);
+
+        if (sender) {
+          await _handleMessageEvent(sender.identifier, event);
+        } else {
+          console.debug(`[Message] Message from unknown sender: ${event.pubkey.substring(0, 8)}...`);
+        }
+      } catch (error) {
+        console.error(`[Message] Error handling incoming message:`, error);
+      }
+    });
+
+    console.debug(`[Message] Subscribed to incoming kind-4 messages for user ${userPubkey.substring(0, 8)}...`);
+  } catch (error) {
+    console.error(`[Message] Failed to subscribe to incoming messages:`, error);
+  }
+}
 
 /**
  * Subscribe to friend's activity and messages
