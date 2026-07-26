@@ -1218,6 +1218,19 @@ body {
   padding: 4px 0;
   font-size: 0.95em;
   color: var(--text-secondary);
+  position: relative;
+  --progress-start: 0px;
+  --progress-percent: 0%;
+}
+
+.activity-item-row::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: var(--progress-start);
+  width: var(--progress-percent);
+  height: 2px;
+  background-color: rgba(255, 100, 100, 0.6);
 }
 
 .activity-badge {
@@ -1242,15 +1255,21 @@ body {
   flex: 1;
 }
 
-.activity-audio-icon {
+.activity-state-icon {
   flex-shrink: 0;
-  font-size: 1.3em;
-  line-height: 1;
-  height: 1.3em;
-  width: 1.3em;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 1.2em;
+  font-weight: bold;
+  min-width: auto;
+  width: auto;
+  text-align: center;
+  background-color: transparent !important;
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+  display: inline !important;
+  -webkit-text-fill-color: inherit;
   user-select: none;
 }
 
@@ -1262,12 +1281,18 @@ body {
   font-weight: bold;
 }
 
-.activity-audio-on {
-  color: #2ecc71; /* Green speaker icon */
+.activity-state-playing {
+  color: #2ecc71 !important; /* Green play arrow */
 }
 
-.activity-audio-off {
-  color: #999999; /* Gray muted icon */
+.activity-state-paused {
+  color: #f1c40f !important; /* Yellow pause symbol */
+}
+
+@media (prefers-color-scheme: dark) {
+  .activity-state-paused {
+    color: #cccccc !important; /* Light gray pause symbol in dark mode */
+  }
 }
 
 /* Activity action buttons (hidden by default, shown on hover) */
@@ -1485,6 +1510,30 @@ body {
   gap: 0;
   flex: 1;
   overflow-y: auto;
+}
+
+.friends-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  gap: 8px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.friends-header h2 {
+  margin: 0;
+  padding: 0;
+  font-size: 1em;
+  color: var(--text-primary);
+}
+
+.friends-header-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .friend-item {
