@@ -1114,6 +1114,20 @@ export class PopupController {
       });
     }
 
+    // Test notification button
+    const testNotificationBtn = document.getElementById('test-notification-btn');
+    if (testNotificationBtn) {
+      testNotificationBtn.addEventListener('click', async () => {
+        try {
+          await chrome.runtime.sendMessage({ type: 'TEST_NOTIFICATION' });
+          toastManager.show('Test notification sent!');
+        } catch (error) {
+          console.error('[Popup] Test notification error:', error);
+          toastManager.show('Test notification failed');
+        }
+      });
+    }
+
     // Settings panel service toggles
     document.querySelectorAll('input[data-service]').forEach((toggle) => {
       if (toggle.id.endsWith('-popup')) {

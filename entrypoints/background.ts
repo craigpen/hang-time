@@ -350,6 +350,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'SEND_JOIN_NOTIFICATION':
       return _sendJoinNotification(message.data?.activity, message.data?.friendId, message.data?.accepted);
 
+    case 'TEST_NOTIFICATION':
+      return _sendTestNotification();
+
     default:
       return {
         success: false,
@@ -1215,6 +1218,17 @@ async function _sendInvite(activity?: any, friendId?: string): Promise<Extension
   } catch (error) {
     console.error('[Background] Error sending invite:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Failed to send invite' };
+  }
+}
+
+async function _sendTestNotification(): Promise<ExtensionResponse> {
+  try {
+    const notificationManager = getNotificationManager();
+    await notificationManager.notify('Test Notification', 'If you see this, notifications are working!');
+    return { success: true };
+  } catch (error) {
+    console.error('[Background] Test notification error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to send test notification' };
   }
 }
 
