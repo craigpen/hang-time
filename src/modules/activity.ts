@@ -63,6 +63,11 @@ export class ActivityDetector {
       // Store detected activities locally (publishing handled by separate publisher)
       const activitiesByService: Partial<Record<string, any>> = {};
       for (const activity of allActivities) {
+        // Defensive: ensure all activities have required content field
+        if (!activity.content) {
+          console.warn(`[Activity] WARNING: Activity for ${activity.service} has no content, using fallback`);
+          activity.content = `Activity on ${activity.service}`;
+        }
         activitiesByService[activity.service] = activity;
         console.debug(`[Activity]   - ${activity.service}: "${activity.content}" (audio: ${activity.audio})`);
       }
