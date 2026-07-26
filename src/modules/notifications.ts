@@ -114,6 +114,25 @@ export class NotificationManager {
   }
 
   /**
+   * Persistent notification (requires user interaction to dismiss)
+   */
+  async notifyPersistent(title: string, message: string, iconUrl?: string): Promise<void> {
+    try {
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: iconUrl || chrome.runtime.getURL('public/icons/icon48.png'),
+        title,
+        message,
+        requireInteraction: true,
+      });
+
+      console.debug('[Notifications] Sent persistent notification:', title);
+    } catch (error) {
+      console.error('[Notifications] Failed to send persistent notification:', error);
+    }
+  }
+
+  /**
    * Clear cooldown for a friend
    */
   clearCooldown(friendId: string, type: string = 'all'): void {

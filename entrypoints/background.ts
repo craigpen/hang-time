@@ -968,7 +968,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       const service = event.tags.find((t) => t[0] === 'service')?.[1] || 'an activity';
       const notificationManager = getNotificationManager();
       console.log(`[Background] 🔔 Invite: Firing notification for ${friend.local_name}`);
-      await notificationManager.notify(`${friend.local_name} invited you`, `Join them on ${service}`);
+      await notificationManager.notifyPersistent(`${friend.local_name} invited you`, `Join them on ${service}`);
       await markInviteNotified(event.id);
       console.log(`[Background] ✅ Invite: Notification fired for ${friend.local_name}`);
     }
