@@ -966,9 +966,30 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       }
 
       const service = event.tags.find((t) => t[0] === 'service')?.[1] || 'an activity';
-      const notificationManager = getNotificationManager();
+      const url = event.tags.find((t) => t[0] === 'url')?.[1];
+      const activityId = event.tags.find((t) => t[0] === 'activity_id')?.[1];
+
+      // Create a mock activity object for later use
+      const activity: Activity = {
+        id: activityId || '',
+        service: (service as ServiceName) || 'unknown',
+        content: '',
+        audio: 'off',
+        url: url || '',
+      };
+
+      const notificationId = `invite_${friend.id}_${activityId}`;
+      inviteData.set(notificationId, { url: url || '', friendId: friend.id, activity });
+
       console.log(`[Background] 🔔 Invite: Firing notification for ${friend.local_name}`);
-      await notificationManager.notify(`${friend.local_name} invited you`, `Join them on ${service}`);
+      chrome.notifications.create(notificationId, {
+        type: 'basic',
+        iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
+        title: `${friend.local_name} invited you`,
+        message: `Join them on ${service}`,
+        requireInteraction: false,
+      });
+
       await markInviteNotified(event.id);
       console.log(`[Background] ✅ Invite: Notification fired for ${friend.local_name}`);
     }
@@ -1281,10 +1302,11 @@ async function _sendJoinNotification(activity?: any, friendId?: string, accepted
 }
 
 // ============================================================================
-// NOTIFICATION DEDUPLICATION
+// NOTIFICATION DEDUPLICATION & INVITE TRACKING
 // ============================================================================
 
 const notifiedInviteIds = new Map<string, number>(); // eventId -> timestamp
+const inviteData = new Map<string, { url: string; friendId: string; activity: Activity }>(); // notificationId -> data
 
 async function initializeNotificationDedup(): Promise<void> {
   const stored = await chrome.storage.local.get('notified_invite_ids');
@@ -1315,6 +1337,54 @@ async function markInviteNotified(eventId: string): Promise<void> {
   // Persist to storage
   const entries = Object.fromEntries(notifiedInviteIds);
   await chrome.storage.local.set({ notified_invite_ids: entries });
+}
+
+// ============================================================================
+// NOTIFICATION CLICK HANDLER
+// ============================================================================
+
+chrome.notifications.onClicked.addListener((notificationId) => {
+  if (notificationId.startsWith('invite_')) {
+    const data = inviteData.get(notificationId);
+    if (!data) return;
+
+    // Ask user to accept or reject
+    const accepted = confirm(`Accept invite to join ${data.activity.service}?`);
+
+    if (accepted && data.url) {
+      // Open the URL
+      chrome.tabs.create({ url: data.url });
+      console.log(`[Background] 📍 Opening ${data.url}`);
+
+      // Send acceptance notification back to sender
+      _sendJoinResponse(data.friendId, data.activity, true);
+    } else if (!accepted) {
+      // Send rejection notification back to sender
+      _sendJoinResponse(data.friendId, data.activity, false);
+    }
+
+    chrome.notifications.clear(notificationId);
+    inviteData.delete(notificationId);
+  }
+});
+
+async function _sendJoinResponse(friendId: string, activity: Activity, accepted: boolean): Promise<void> {
+  try {
+    const friends = await storageManager.getFriends();
+    const friend = friends.find((f) => f.id === friendId);
+    if (!friend) return;
+
+    const messagingManager = getMessagingManager();
+    if (accepted) {
+      await messagingManager.sendJoinAccepted(activity, friend);
+      console.log(`[Background] ✅ Sent join_accepted to ${friend.local_name}`);
+    } else {
+      await messagingManager.sendJoinDeclined(activity, friend);
+      console.log(`[Background] ❌ Sent join_declined to ${friend.local_name}`);
+    }
+  } catch (error) {
+    console.error('[Background] Error sending join response:', error);
+  }
 }
 
 // ============================================================================
