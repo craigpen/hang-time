@@ -970,8 +970,8 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       const notificationManager = getNotificationManager();
       console.log(`[Background] 🔔 Invite: Firing notification for ${friend.local_name}`);
       await notificationManager.notifyPersistent(
-        `${friend.local_name} invited you to watch ${service} together`,
-        'Click the green envelope in Hang Time popup. Click Accept to watch together, or Decline to skip.'
+        `Want to watch ${service} with ${friend.local_name}?`,
+        'Click the green invite envelope in the Hang Time popup. Accept to watch together, or Decline to skip.'
       );
       await markInviteNotified(event.id);
       console.log(`[Background] ✅ Invite: Notification fired for ${friend.local_name}`);
