@@ -959,10 +959,9 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
     // Handle notification event
     console.debug(`[Background] Received invite notification from ${friend.local_name}`);
     if (typeTag === 'invite') {
-      // Only notify for recent invites (within last 60 seconds) to avoid duplicate notifications on reload
-      const now = Math.floor(Date.now() / 1000);
-      if (now - event.created_at > 60) {
-        console.debug(`[Background] Invite from ${friend.local_name} is old (${now - event.created_at}s), skipping notification`);
+      // Check if we've already notified for this invite
+      if (hasNotifiedForInvite(event.id)) {
+        console.debug(`[Background] Already notified for invite ${event.id.substring(0, 8)}..., skipping`);
         return;
       }
 
@@ -970,6 +969,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       const notificationManager = getNotificationManager();
       console.log(`[Background] 🔔 Invite: Firing notification for ${friend.local_name}`);
       await notificationManager.notify(`${friend.local_name} invited you`, `Join them on ${service}`);
+      await markInviteNotified(event.id);
       console.log(`[Background] ✅ Invite: Notification fired for ${friend.local_name}`);
     }
     return;
@@ -1281,6 +1281,43 @@ async function _sendJoinNotification(activity?: any, friendId?: string, accepted
 }
 
 // ============================================================================
+// NOTIFICATION DEDUPLICATION
+// ============================================================================
+
+const notifiedInviteIds = new Map<string, number>(); // eventId -> timestamp
+
+async function initializeNotificationDedup(): Promise<void> {
+  const stored = await chrome.storage.local.get('notified_invite_ids');
+  if (stored.notified_invite_ids) {
+    const entries = Object.entries(stored.notified_invite_ids) as [string, number][];
+    const now = Date.now();
+    const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
+
+    for (const [eventId, timestamp] of entries) {
+      // Only keep recent entries (last 7 days)
+      if (timestamp > oneWeekAgo) {
+        notifiedInviteIds.set(eventId, timestamp);
+      }
+    }
+
+    console.log(`[Background] Loaded ${notifiedInviteIds.size} cached notification IDs`);
+  }
+}
+
+function hasNotifiedForInvite(eventId: string): boolean {
+  return notifiedInviteIds.has(eventId);
+}
+
+async function markInviteNotified(eventId: string): Promise<void> {
+  const now = Date.now();
+  notifiedInviteIds.set(eventId, now);
+
+  // Persist to storage
+  const entries = Object.fromEntries(notifiedInviteIds);
+  await chrome.storage.local.set({ notified_invite_ids: entries });
+}
+
+// ============================================================================
 // STARTUP
 // ============================================================================
 
@@ -1289,6 +1326,7 @@ console.log('[Background] Service worker loaded');
 // Initialize on startup
 (async () => {
   try {
+    await initializeNotificationDedup();
     await initializeExtension();
   } catch (error) {
     console.error('[Background] Failed to initialize:', error);
