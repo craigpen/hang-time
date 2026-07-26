@@ -247,11 +247,20 @@ export class PopupController {
           const activityWrapper = this._createActivityItemWithMessages(activity, friendId);
           activitiesContainer.appendChild(activityWrapper);
         } else {
-          // Even for existing activities, reload messages in case new ones arrived
+          // For existing activities, recreate the row to check for pending invite status changes
           const existingWrapper = Array.from(oldActivities).find(
             (el) => (el as HTMLElement).dataset.activityId === activityId
           ) as HTMLElement | undefined;
           if (existingWrapper && activity.id && friendId) {
+            // Remove the old activity row and recreate it to reflect pending invite status
+            const oldRow = existingWrapper.querySelector('.activity-item-row') as HTMLElement;
+            if (oldRow) {
+              oldRow.remove();
+              const newRow = this._createActivityRow(activity, friendId);
+              existingWrapper.insertBefore(newRow, existingWrapper.firstChild);
+            }
+
+            // Reload messages in case new ones arrived
             const messageList = existingWrapper.querySelector('.activity-message-list') as HTMLElement;
             const messageContainer = existingWrapper.querySelector('.activity-message-container') as HTMLElement;
             if (messageList && messageContainer) {
@@ -509,6 +518,9 @@ export class PopupController {
 
     const isSelfActivity = friendId === 'self';
     const hasPendingInvite = activity.id && this.pendingInvitesByActivity.has(activity.id);
+    if (activity.id && !isSelfActivity) {
+      console.debug('[Popup] Activity:', activity.service, 'id:', activity.id, 'pending:', hasPendingInvite, 'map:', Array.from(this.pendingInvitesByActivity.keys()));
+    }
 
     // First button - Invite (for self) or Join/Accept (for friends)
     const firstBtn = document.createElement('button');
@@ -1004,7 +1016,9 @@ export class PopupController {
         // Mark activity as having pending invite
         const { activityId, friendId } = message.data;
         if (activityId && friendId) {
+          console.debug('[Popup] Received invite for activity:', activityId, 'from friend:', friendId);
           this.pendingInvitesByActivity.set(activityId, friendId);
+          console.debug('[Popup] Pending invites map:', Array.from(this.pendingInvitesByActivity.entries()));
           this.refreshFriends().catch((error) => {
             console.error('[Popup] Failed to refresh after invite:', error);
           });
