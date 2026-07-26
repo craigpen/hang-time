@@ -44,15 +44,15 @@ export class NotificationManager {
    */
   async notifyNewMessage(friendId: string, friendName: string, messagePreview: string): Promise<void> {
     try {
-      console.log(`[Notifications] notifyNewMessage called for ${friendName}`);
+      console.debug(`[Notifications] notifyNewMessage called for ${friendName}`);
       const settings = await this.storage.getSettings();
-      console.log(`[Notifications] new_message setting:`, settings.notification_preferences?.new_message);
+      console.debug(`[Notifications] new_message setting:`, settings.notification_preferences?.new_message);
       if (!settings.notification_preferences?.new_message) {
-        console.log(`[Notifications] new_message disabled, returning`);
+        console.debug(`[Notifications] new_message disabled, returning`);
         return;
       }
 
-      console.log(`[Notifications] Creating notification with ID: new_message_${friendId}`);
+      console.debug(`[Notifications] Creating notification with ID: new_message_${friendId}`);
       chrome.notifications.create(`new_message_${friendId}`, {
         type: 'basic',
         iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),

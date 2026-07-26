@@ -83,6 +83,7 @@ export class PopupController {
     this._setupEventListeners();
     this._setupMessageListener();
     this._setupStorageListener();
+    await this._loadPendingInvites();
     await this._loadMyActivity();
     await this.refreshFriends();
     await this._loadSettingsPanel();
@@ -372,30 +373,6 @@ export class PopupController {
     const row = this._createActivityRow(activity, friendId);
     wrapper.appendChild(row);
 
-    // TODO: Re-enable messaging after core join/invite is working
-    // Message container disabled for now - focus on core join/invite functionality
-    // const messageContainer = document.createElement('div');
-    // messageContainer.className = 'activity-message-container';
-    // messageContainer.style.display = 'none';
-    // const messageList = document.createElement('div');
-    // messageList.className = 'activity-message-list';
-    // messageContainer.appendChild(messageList);
-    // if (friendId && friendId !== 'self') {
-    //   const replyField = document.createElement('input');
-    //   replyField.className = 'activity-message-input';
-    //   replyField.type = 'text';
-    //   replyField.placeholder = 'Reply...';
-    //   replyField.addEventListener('keypress', (e: KeyboardEvent) => {
-    //     if (e.key === 'Enter' && replyField.value.trim()) {
-    //       this._sendActivityMessage(activity, friendId, replyField.value.trim());
-    //       replyField.value = '';
-    //       setTimeout(() => { this.refreshPaused = false; }, 1500);
-    //     }
-    //   });
-    //   messageContainer.appendChild(replyField);
-    // }
-    // wrapper.appendChild(messageContainer);
-
     return wrapper;
   }
 
@@ -549,9 +526,20 @@ export class PopupController {
     }
 
     firstBtn.addEventListener('click', () => {
+      const currentHasPending = activity.id ? this.pendingInvitesByActivity.has(activity.id) : false;
+      console.debug('[Popup] Button clicked:', {
+        service: activity.service,
+        activityId: activity.id,
+        isSelfActivity,
+        hasPendingInvite,
+        currentHasPending,
+        mapKeys: Array.from(this.pendingInvitesByActivity.keys()),
+      });
+
       if (isSelfActivity) {
         this._inviteToActivity(activity);
-      } else if (hasPendingInvite) {
+      } else if (currentHasPending) {
+        console.debug('[Popup] Showing accept invite modal for:', friendId);
         this._showAcceptInviteModal(activity, friendId!);
       } else {
         this._joinActivity(activity, friendId);
@@ -807,6 +795,20 @@ export class PopupController {
 
     const diffDays = Math.floor(diffHours / 24);
     return `${diffDays}d ago`;
+  }
+
+  private async _loadPendingInvites(): Promise<void> {
+    try {
+      const result = await chrome.storage.local.get('pending_invites');
+      const pendingInvites = result.pending_invites || {};
+      this.pendingInvitesByActivity.clear();
+      for (const [activityId, friendId] of Object.entries(pendingInvites)) {
+        this.pendingInvitesByActivity.set(activityId as string, friendId as string);
+      }
+      console.debug('[Popup] Loaded pending invites from storage:', Array.from(this.pendingInvitesByActivity.entries()));
+    } catch (error) {
+      console.error('[Popup] Failed to load pending invites:', error);
+    }
   }
 
   private async _loadMyActivity(): Promise<void> {
@@ -1168,10 +1170,10 @@ export class PopupController {
       copyIdBtn.addEventListener('click', () => this._handleCopyId());
     }
 
-    // Add friend button from empty state
-    const addFriendBtnEmpty = document.getElementById('add-friend-btn-empty');
-    if (addFriendBtnEmpty) {
-      addFriendBtnEmpty.addEventListener('click', () => this._showAddFriendForm());
+    // Add friend button
+    const addFriendBtn = document.getElementById('add-friend-btn');
+    if (addFriendBtn) {
+      addFriendBtn.addEventListener('click', () => this._showAddFriendForm());
     }
 
     // Form submit button
@@ -1965,6 +1967,13 @@ export class PopupController {
   }
 
   private _showAcceptInviteModal(activity: Activity, friendId: string): void {
+    console.debug('[Popup] _showAcceptInviteModal called:', {
+      activityId: activity.id,
+      service: activity.service,
+      content: activity.content,
+      friendId,
+    });
+
     // Create modal overlay
     const modal = document.createElement('div');
     modal.className = 'invite-modal-overlay';
@@ -1997,6 +2006,11 @@ export class PopupController {
       // Decline: revert button to join
       if (activity.id) {
         this.pendingInvitesByActivity.delete(activity.id);
+        // Also remove from persistent storage
+        const result = await chrome.storage.local.get('pending_invites');
+        const pendingInvites = result.pending_invites || {};
+        delete pendingInvites[activity.id];
+        await chrome.storage.local.set({ pending_invites: pendingInvites });
       }
       modal.remove();
       await this.refreshFriends();
@@ -2012,9 +2026,14 @@ export class PopupController {
       // Accept: open activity and mark as joined
       await this._joinActivity(activity, friendId);
 
-      // Clear pending invite
+      // Clear pending invite from memory and storage
       if (activity.id) {
         this.pendingInvitesByActivity.delete(activity.id);
+        // Also remove from persistent storage
+        const result = await chrome.storage.local.get('pending_invites');
+        const pendingInvites = result.pending_invites || {};
+        delete pendingInvites[activity.id];
+        await chrome.storage.local.set({ pending_invites: pendingInvites });
       }
 
       modal.remove();
