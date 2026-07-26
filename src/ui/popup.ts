@@ -324,11 +324,12 @@ export class PopupController {
     const row = this._createActivityRow(activity, friendId);
     wrapper.appendChild(row);
 
+    // TODO: Re-enable messaging after core join/invite is working
     // Message container (scrollable messages + reply field)
-    // Only show if there are messages or user clicks message button
+    // Disabled for now - focus on core join/invite functionality
     const messageContainer = document.createElement('div');
     messageContainer.className = 'activity-message-container';
-    messageContainer.style.display = 'none'; // Hidden by default
+    messageContainer.style.display = 'none'; // Always hidden for now
 
     // Messages list
     const messageList = document.createElement('div');
@@ -498,37 +499,38 @@ export class PopupController {
     });
     buttonsDiv.appendChild(firstBtn);
 
+    // TODO: Re-enable messaging after core join/invite is working
     // Message button
-    const msgBtn = document.createElement('button');
-    msgBtn.className = 'activity-action-btn activity-action-message';
-    msgBtn.textContent = '💬';
-    msgBtn.title = 'Send message';
-    msgBtn.addEventListener('click', () => {
-      // Toggle message container visibility
-      const wrapper = row.closest('.activity-item-wrapper');
-      if (wrapper) {
-        const messageContainer = wrapper.querySelector('.activity-message-container') as HTMLElement;
-        if (messageContainer) {
-          const isShowing = messageContainer.style.display === 'none';
-          messageContainer.style.display = isShowing ? 'block' : 'none';
-          // Pause refresh while message box is open
-          this.refreshPaused = isShowing;
-          // Focus the input if showing
-          if (isShowing) {
-            const input = messageContainer.querySelector('.activity-message-input') as HTMLInputElement;
-            if (input) input.focus();
-            // Reload messages when opening
-            if (friendId && activity.id) {
-              const messageList = messageContainer.querySelector('.activity-message-list') as HTMLElement;
-              if (messageList) {
-                this._loadActivityMessages(friendId, activity.id, messageList, messageContainer);
-              }
-            }
-          }
-        }
-      }
-    });
-    buttonsDiv.appendChild(msgBtn);
+    // const msgBtn = document.createElement('button');
+    // msgBtn.className = 'activity-action-btn activity-action-message';
+    // msgBtn.textContent = '💬';
+    // msgBtn.title = 'Send message';
+    // msgBtn.addEventListener('click', () => {
+    //   // Toggle message container visibility
+    //   const wrapper = row.closest('.activity-item-wrapper');
+    //   if (wrapper) {
+    //     const messageContainer = wrapper.querySelector('.activity-message-container') as HTMLElement;
+    //     if (messageContainer) {
+    //       const isShowing = messageContainer.style.display === 'none';
+    //       messageContainer.style.display = isShowing ? 'block' : 'none';
+    //       // Pause refresh while message box is open
+    //       this.refreshPaused = isShowing;
+    //       // Focus the input if showing
+    //       if (isShowing) {
+    //         const input = messageContainer.querySelector('.activity-message-input') as HTMLInputElement;
+    //         if (input) input.focus();
+    //         // Reload messages when opening
+    //         if (friendId && activity.id) {
+    //           const messageList = messageContainer.querySelector('.activity-message-list') as HTMLElement;
+    //           if (messageList) {
+    //             this._loadActivityMessages(friendId, activity.id, messageList, messageContainer);
+    //           }
+    //         }
+    //       }
+    //     }
+    //   }
+    // });
+    // buttonsDiv.appendChild(msgBtn);
 
     // Sync button (video/music only)
     if (['youtube', 'netflix', 'twitch', 'spotify'].includes(activity.service)) {
