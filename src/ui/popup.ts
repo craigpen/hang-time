@@ -357,11 +357,12 @@ export class PopupController {
 
     wrapper.appendChild(messageContainer);
 
+    // TODO: Re-enable messaging after core join/invite is working
     // Load messages for this activity from the friend
-    // If messages exist, show the container
-    if (friendId && friendId !== 'self' && activity.id) {
-      this._loadActivityMessages(friendId, activity.id, messageList, messageContainer);
-    }
+    // Disabled for now - focus on core join/invite functionality
+    // if (friendId && friendId !== 'self' && activity.id) {
+    //   this._loadActivityMessages(friendId, activity.id, messageList, messageContainer);
+    // }
 
     return wrapper;
   }
