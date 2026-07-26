@@ -35,7 +35,7 @@ export class NotificationManager {
 
       chrome.notifications.create(`friend_online_${friendId}`, {
         type: 'basic',
-        iconUrl: chrome.runtime.getURL('public/icon-48.png'),
+        iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
         title: `${friendName} is online`,
         message: `Now playing: ${activity}`,
         contextMessage: 'Click to join',
@@ -67,7 +67,7 @@ export class NotificationManager {
 
       chrome.notifications.create(`new_message_${friendId}`, {
         type: 'basic',
-        iconUrl: chrome.runtime.getURL('public/icon-48.png'),
+        iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
         title: `Message from ${friendName}`,
         message: messagePreview.length > 50 ? messagePreview.substring(0, 50) + '...' : messagePreview,
         contextMessage: 'Click to reply',
@@ -99,7 +99,7 @@ export class NotificationManager {
 
       chrome.notifications.create(`join_suggestion_${friendId}`, {
         type: 'basic',
-        iconUrl: chrome.runtime.getURL('public/icon-48.png'),
+        iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
         title: `Join ${friendName}?`,
         message: `${friendName} is watching: ${activity}`,
         contextMessage: 'Click to join',
@@ -121,7 +121,7 @@ export class NotificationManager {
     try {
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: iconUrl || chrome.runtime.getURL('public/icon-48.png'),
+        iconUrl: iconUrl || chrome.runtime.getURL('public/icons/icon48.png'),
         title,
         message,
         requireInteraction: false,
