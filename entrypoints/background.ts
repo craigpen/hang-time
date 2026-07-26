@@ -959,6 +959,13 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
     // Handle notification event
     console.debug(`[Background] Received invite notification from ${friend.local_name}`);
     if (typeTag === 'invite') {
+      // Only notify for recent invites (within last 60 seconds) to avoid duplicate notifications on reload
+      const now = Math.floor(Date.now() / 1000);
+      if (now - event.created_at > 60) {
+        console.debug(`[Background] Invite from ${friend.local_name} is old (${now - event.created_at}s), skipping notification`);
+        return;
+      }
+
       const service = event.tags.find((t) => t[0] === 'service')?.[1] || 'an activity';
       const notificationManager = getNotificationManager();
       console.log(`[Background] 🔔 Invite: Firing notification for ${friend.local_name}`);
