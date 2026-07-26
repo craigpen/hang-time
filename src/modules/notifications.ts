@@ -39,7 +39,7 @@ export class NotificationManager {
         title: `${friendName} is online`,
         message: `Now playing: ${activity}`,
         contextMessage: 'Click to join',
-        requireInteraction: false,
+        requireInteraction: true,
       });
 
       this.lastNotificationTime.set(`online_${friendId}`, Date.now());
