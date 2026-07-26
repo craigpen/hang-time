@@ -94,8 +94,28 @@ async function initializeExtension(): Promise<void> {
     // Initialize Nostr relay pool (required for messaging and activity sync)
     try {
       console.debug(`[Background] Connecting to Nostr relays...`);
-      const settings = await storageManager.getSettings();
-      const relayUrls = settings.relay_urls || RelayPool.DEFAULT_RELAYS;
+      // Load relay configuration from user profile
+      const profile = await storageManager.getUserProfile();
+      let relayUrls: string[] = RelayPool.DEFAULT_RELAYS;
+
+      if (profile && profile.publisher_config && profile.publisher_config.relays) {
+        // Filter to only enabled relays
+        const enabledRelays = Object.entries(profile.publisher_config.relays)
+          .filter(([, enabled]) => enabled)
+          .map(([domain]) => {
+            // Convert domain to full relay URL
+            if (domain.startsWith('wss://') || domain.startsWith('ws://')) {
+              return domain;
+            }
+            return `wss://${domain}/`;
+          });
+
+        if (enabledRelays.length > 0) {
+          relayUrls = enabledRelays;
+          console.debug(`[Background] Using configured relays from publisher_config (${enabledRelays.length} relays)`);
+        }
+      }
+
       console.debug(`[Background] Relay URLs: ${JSON.stringify(relayUrls)}`);
       await relayPool.connect(relayUrls);
       console.debug(`[Background] Connected to Nostr (${relayPool.getConnectedRelayCount()} relays)`);
@@ -883,6 +903,13 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
     // Parse JSON array of activities
     try {
       const activities = JSON.parse(event.content) as Activity[];
+      console.log('[Background] Received activities from Nostr:', activities.map(a => ({
+        service: a.service,
+        content: a.content,
+        audio: a.audio,
+        id: a.id,
+        url: a.url,
+      })));
       const wasActive = Object.keys(friend.current_activities || {}).length > 0;
 
       // Detect which activities changed
@@ -907,10 +934,34 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         }
       }
 
-      // Store all activities atomically
+      // Store all activities atomically, merging with existing to preserve fields from delta publishing
       const newCurrentActivities: Partial<Record<ServiceName, Activity>> = {};
       for (const activity of activities) {
-        newCurrentActivities[activity.service] = activity;
+        const existingActivity = friend.current_activities?.[activity.service];
+
+        // Check if new activity is incomplete (missing content) and we have a complete version
+        const isIncomplete = !activity.content && existingActivity?.content;
+
+        if (isIncomplete) {
+          // Don't overwrite complete activity with incomplete delta - just update specific fields
+          newCurrentActivities[activity.service] = {
+            ...existingActivity,
+            ...activity,
+            // Preserve content from existing activity if new one is missing it
+            content: existingActivity.content,
+            id: activity.id || existingActivity?.id,
+            service: activity.service,
+          };
+        } else {
+          // Normal merge for complete activities
+          newCurrentActivities[activity.service] = {
+            ...existingActivity,
+            ...activity,
+            id: activity.id || existingActivity?.id,
+            service: activity.service,
+            content: activity.content || existingActivity?.content,
+          };
+        }
       }
 
       await storageManager.updateFriend(friend.id, {

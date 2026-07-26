@@ -110,6 +110,13 @@ export class ActivityPublisher {
 
       const currentActivities = await this.storageManager.getMyActivities();
 
+      // Debug: log what we're about to publish
+      Object.entries(currentActivities).forEach(([service, activity]) => {
+        if (activity && !activity.content) {
+          console.warn(`[Publisher] ⚠️ Activity for ${service} has NO content!`, activity);
+        }
+      });
+
       // Check if all activities are idle (audio:off) and filter is enabled
       const allIdle = Object.values(currentActivities).every(a => !a || a.audio === 'off');
       if (config.filter_idle && allIdle) {
@@ -174,7 +181,14 @@ export class ActivityPublisher {
       if (!current) continue;
 
       const lastFields = this.lastPublishedFields.get(service) || {};
-      const changedFields: Record<string, any> = { service, id: current.id }; // Always include service and id
+      // Always include required fields for complete Activity object
+      // Defensive: ensure content is never undefined (fallback to service name if missing)
+      const changedFields: Record<string, any> = {
+        service,
+        id: current.id,
+        content: current.content || `Activity on ${current.service}`,
+        audio: current.audio || 'off',
+      };
       let hasChanges = false;
 
       // Check each field for changes
@@ -184,12 +198,30 @@ export class ActivityPublisher {
         const lastValue = lastFields[field];
 
         if (JSON.stringify(currentValue) !== JSON.stringify(lastValue)) {
-          changedFields[field] = currentValue;
+          // For required fields (content, audio), never set to undefined - use existing value or fallback
+          if (field === 'content' && !currentValue) {
+            changedFields[field] = changedFields[field]; // Keep defensive fallback from line 181
+          } else if (field === 'audio' && !currentValue) {
+            changedFields[field] = changedFields[field]; // Keep defensive fallback from line 182
+          } else {
+            changedFields[field] = currentValue;
+          }
           hasChanges = true;
         }
       }
 
       if (hasChanges) {
+        // Ensure url and timestamp are also included
+        if (current.url) changedFields.url = current.url;
+        if (current.timestamp) changedFields.timestamp = current.timestamp;
+        console.log(`[Publisher] Delta for ${service}:`, {
+          service: changedFields.service,
+          id: changedFields.id,
+          content: changedFields.content,
+          audio: changedFields.audio,
+          url: changedFields.url,
+          state: changedFields.state,
+        });
         deltas.push(changedFields as Activity);
         // Update tracked state
         const newTrackedFields: Record<string, any> = { ...lastFields };
