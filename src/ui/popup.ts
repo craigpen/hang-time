@@ -1810,32 +1810,121 @@ export class PopupController {
   }
 
   private async _inviteToActivity(activity: Activity): Promise<void> {
-    console.debug('[Popup] Opening invite dialog for:', activity.service);
-    // TODO: Show friend selector modal to invite multiple friends
-    // For now, show temporary dialog
-    const friendName = prompt('Enter friend name to invite:');
-    if (friendName) {
-      // Get all friends to find matching one
-      try {
-        const friendsResponse = await chrome.runtime.sendMessage({
-          type: 'GET_ALL_FRIENDS',
-        });
-        if (friendsResponse.success && friendsResponse.data) {
-          const friends = friendsResponse.data as Friend[];
-          const friend = friends.find((f) => f.local_name.toLowerCase() === friendName.toLowerCase());
-          if (friend) {
-            await chrome.runtime.sendMessage({
-              type: 'SEND_INVITE',
-              data: { activity, friendId: friend.id },
-            });
-            console.debug('[Popup] Sent invite to:', friendName);
-          } else {
-            alert('Friend not found');
-          }
-        }
-      } catch (error) {
-        console.error('[Popup] Failed to send invite:', error);
+    console.debug('[Popup] Opening invite modal for:', activity.service);
+    try {
+      const friendsResponse = await chrome.runtime.sendMessage({
+        type: 'GET_ALL_ACTIVITIES',
+      });
+
+      if (!friendsResponse.success || !friendsResponse.data) {
+        this._showError('Failed to load friends');
+        return;
       }
+
+      const friends = (friendsResponse.data.friends || []) as Friend[];
+      const activeFriends = friends.filter((f) => Object.keys(f.current_activities || {}).length > 0);
+
+      if (activeFriends.length === 0) {
+        this._showError('No active friends to invite');
+        return;
+      }
+
+      this._showInviteModal(activity, activeFriends);
+    } catch (error) {
+      console.error('[Popup] Failed to open invite modal:', error);
+      this._showError('Failed to open invite modal');
+    }
+  }
+
+  private _showInviteModal(activity: Activity, friends: Friend[]): void {
+    // Create modal overlay
+    const modal = document.createElement('div');
+    modal.className = 'invite-modal-overlay';
+
+    const modalContent = document.createElement('div');
+    modalContent.className = 'invite-modal-content';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'invite-modal-header';
+    const title = document.createElement('h3');
+    title.textContent = `Invite friends to ${activity.service}`;
+    header.appendChild(title);
+    modalContent.appendChild(header);
+
+    // Friends list with checkboxes
+    const friendsList = document.createElement('div');
+    friendsList.className = 'invite-friends-list';
+
+    const selectedFriends = new Set<string>();
+
+    for (const friend of friends) {
+      const friendCheckbox = document.createElement('label');
+      friendCheckbox.className = 'invite-friend-item';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = friend.id;
+      checkbox.addEventListener('change', (e) => {
+        if ((e.target as HTMLInputElement).checked) {
+          selectedFriends.add(friend.id);
+        } else {
+          selectedFriends.delete(friend.id);
+        }
+      });
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = friend.local_name;
+
+      friendCheckbox.appendChild(checkbox);
+      friendCheckbox.appendChild(nameSpan);
+      friendsList.appendChild(friendCheckbox);
+    }
+
+    modalContent.appendChild(friendsList);
+
+    // Buttons
+    const buttons = document.createElement('div');
+    buttons.className = 'invite-modal-buttons';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn-secondary';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => modal.remove());
+
+    const inviteBtn = document.createElement('button');
+    inviteBtn.className = 'btn-primary';
+    inviteBtn.textContent = 'Invite';
+    inviteBtn.addEventListener('click', async () => {
+      if (selectedFriends.size > 0) {
+        await this._sendInvitesToFriends(activity, Array.from(selectedFriends));
+        modal.remove();
+      } else {
+        this._showError('Please select at least one friend');
+      }
+    });
+
+    buttons.appendChild(cancelBtn);
+    buttons.appendChild(inviteBtn);
+    modalContent.appendChild(buttons);
+
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+  }
+
+  private async _sendInvitesToFriends(activity: Activity, friendIds: string[]): Promise<void> {
+    try {
+      for (const friendId of friendIds) {
+        await chrome.runtime.sendMessage({
+          type: 'SEND_INVITE',
+          data: { activity, friendId },
+        });
+      }
+      console.debug('[Popup] Sent invites to', friendIds.length, 'friends');
+      this._showError(`Invited ${friendIds.length} friend${friendIds.length > 1 ? 's' : ''}`);
+    } catch (error) {
+      console.error('[Popup] Failed to send invites:', error);
+      this._showError('Failed to send invites');
     }
   }
 
