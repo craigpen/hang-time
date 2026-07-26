@@ -1947,10 +1947,11 @@ export class PopupController {
         });
       }
       console.debug('[Popup] Sent invites to', friendIds.length, 'friends');
-      this._showError(`Invited ${friendIds.length} friend${friendIds.length > 1 ? 's' : ''}`);
+      const message = `Invited ${friendIds.length} friend${friendIds.length > 1 ? 's' : ''}`;
+      toastManager.show(message);
     } catch (error) {
       console.error('[Popup] Failed to send invites:', error);
-      this._showError('Failed to send invites');
+      toastManager.show('Failed to send invites');
     }
   }
 
