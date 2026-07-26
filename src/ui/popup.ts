@@ -5,6 +5,41 @@
 
 import { Friend, Activity, ExtensionResponse } from '../types';
 
+/**
+ * Simple toast notification manager
+ */
+class ToastManager {
+  private container: HTMLElement | null = null;
+
+  init(): void {
+    this.container = document.getElementById('toast-container');
+  }
+
+  show(message: string, options?: { duration?: number; onClick?: () => void }): void {
+    if (!this.container) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+
+    if (options?.onClick) {
+      toast.style.cursor = 'pointer';
+      toast.addEventListener('click', options.onClick);
+    }
+
+    this.container.appendChild(toast);
+
+    // Auto-remove after duration
+    const duration = options?.duration || 4000;
+    setTimeout(() => {
+      toast.classList.add('toast-hide');
+      setTimeout(() => toast.remove(), 300);
+    }, duration);
+  }
+}
+
+const toastManager = new ToastManager();
+
 export class PopupController {
   private friendsList: HTMLElement | null = null;
   private noFriendsPlaceholder: HTMLElement | null = null;
@@ -27,6 +62,9 @@ export class PopupController {
 
   async init(): Promise<void> {
     console.debug('[Popup] Initializing...');
+
+    // Initialize toast manager
+    toastManager.init();
 
     this.friendsList = document.getElementById('friends-list');
     this.noFriendsPlaceholder = document.getElementById('no-friends');
