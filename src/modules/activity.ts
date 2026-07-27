@@ -15,6 +15,7 @@ import { getActivityDatastore } from './activity-datastore';
 export class ActivityDetector {
   private services: Map<string, IServiceModule> = new Map();
   private pollInterval: NodeJS.Timeout | null = null;
+  private lastPublishedActivities: Activity[] = []; // Track for deduplication
 
   static readonly POLL_INTERVAL_MS = 500;
 
@@ -87,6 +88,25 @@ export class ActivityDetector {
         return;
       }
 
+      // Deduplication: only notify/store if activity IDs changed
+      const newActivityIds = new Set(validatedActivities.map(a => a.id));
+      const lastActivityIds = new Set(this.lastPublishedActivities.map(a => a.id));
+
+      // Check if the set of activity IDs actually changed
+      const activityIdsChanged =
+        newActivityIds.size !== lastActivityIds.size ||
+        Array.from(newActivityIds).some(id => !lastActivityIds.has(id));
+
+      if (!activityIdsChanged) {
+        // Same activities, only state/audio might have changed (oscillation)
+        console.debug('[Activity] ℹ️  Activity IDs unchanged (state-only change, skipping notification)');
+        // Still publish to Nostr via Publisher (which is rate-limited anyway)
+        await this.storageManager.setMyActivities(activitiesByService);
+        return;
+      }
+
+      // Meaningful change: activity IDs changed, notify popup
+      console.debug('[Activity] Activity IDs changed, notifying popup');
       await this.storageManager.setMyActivities(activitiesByService);
       console.debug('[Activity] ✅ Stored in MY_ACTIVITIES');
 
@@ -98,6 +118,9 @@ export class ActivityDetector {
         type: 'MY_ACTIVITIES_CHANGED',
         data: { activities: activitiesByService },
       });
+
+      // Update last published for next comparison
+      this.lastPublishedActivities = validatedActivities;
     } catch (error) {
       console.error('[Activity] ❌ Detection pipeline failed:', error);
     }
