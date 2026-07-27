@@ -1255,13 +1255,13 @@ export class PopupController {
       const health = await this.storage.getContentScriptHealth();
 
       // Create a map of service -> health entry for quick lookup
-      const healthMap = new Map<'netflix' | 'youtube' | 'twitch', any>();
+      const healthMap = new Map<'netflix-tab' | 'youtube-tab' | 'twitch-tab', any>();
       for (const entry of health) {
         healthMap.set(entry.service, entry);
       }
 
       // Update status display for each browser tabs service
-      const services: Array<'netflix' | 'youtube' | 'twitch'> = ['netflix', 'youtube', 'twitch'];
+      const services: Array<'netflix-tab' | 'youtube-tab' | 'twitch-tab'> = ['netflix-tab', 'youtube-tab', 'twitch-tab'];
       for (const service of services) {
         const statusEl = document.getElementById(`status-${service}-popup`);
         if (!statusEl) continue;
@@ -1317,7 +1317,7 @@ export class PopupController {
     try {
       const metrics = await this.storage.getVideoDataMetrics();
 
-      const services: Array<'netflix' | 'youtube' | 'twitch'> = ['netflix', 'youtube', 'twitch'];
+      const services: Array<'netflix-tab' | 'youtube-tab' | 'twitch-tab'> = ['netflix-tab', 'youtube-tab', 'twitch-tab'];
       for (const service of services) {
         const metricsEl = document.getElementById(`metrics-${service}-popup`);
         const resetBtn = document.getElementById(`reset-metrics-${service}`);
