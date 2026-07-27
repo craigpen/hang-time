@@ -16,6 +16,15 @@ import {
 } from './activity-validation';
 
 /**
+ * Activity with optional corruption warnings
+ */
+export interface ActivityWithWarning {
+  activity: Activity;
+  corrupted: boolean;
+  issues: string[];
+}
+
+/**
  * Comprehensive report of activity integrity issues
  */
 export interface CorruptionReport {
@@ -115,6 +124,7 @@ export class ActivityDatastore {
   /**
    * Get a single activity by ID
    * Returns null if not found
+   * Detects corruption but returns activity anyway
    */
   async getActivity(id: string): Promise<Activity | null> {
     const result = await this.storage.getValue('activities');
@@ -138,7 +148,25 @@ export class ActivityDatastore {
   }
 
   /**
-   * Get all activities
+   * Get a single activity with corruption details
+   * Returns the activity plus corruption status and issues
+   */
+  async getActivityWithWarning(id: string): Promise<ActivityWithWarning | null> {
+    const activity = await this.getActivity(id);
+    if (!activity) {
+      return null;
+    }
+
+    const issues = detectCorruption(activity);
+    return {
+      activity,
+      corrupted: issues.length > 0,
+      issues,
+    };
+  }
+
+  /**
+   * Get all activities with corruption detection
    */
   async getAllActivities(): Promise<Activity[]> {
     const result = await this.storage.getValue('activities');
@@ -147,11 +175,47 @@ export class ActivityDatastore {
   }
 
   /**
+   * Get all activities with corruption warnings
+   */
+  async getAllActivitiesWithWarnings(): Promise<ActivityWithWarning[]> {
+    const all = await this.getAllActivities();
+    return all.map((activity) => ({
+      activity,
+      corrupted: detectCorruption(activity).length > 0,
+      issues: detectCorruption(activity),
+    }));
+  }
+
+  /**
    * Get activities for a specific service
    */
   async getActivitiesByService(service: string): Promise<Activity[]> {
     const all = await this.getAllActivities();
     return all.filter((a) => a.service === service);
+  }
+
+  /**
+   * Get activities for a specific service with corruption warnings
+   */
+  async getActivitiesByServiceWithWarnings(service: string): Promise<ActivityWithWarning[]> {
+    const all = await this.getAllActivitiesWithWarnings();
+    return all.filter((a) => a.activity.service === service);
+  }
+
+  /**
+   * Count total activities
+   */
+  async countActivities(): Promise<number> {
+    const all = await this.getAllActivities();
+    return all.length;
+  }
+
+  /**
+   * Count corrupted activities
+   */
+  async countCorruptedActivities(): Promise<number> {
+    const all = await this.getAllActivitiesWithWarnings();
+    return all.filter((a) => a.corrupted).length;
   }
 
   /**
@@ -168,18 +232,17 @@ export class ActivityDatastore {
 
   /**
    * Validate all stored activities and report issues
-   * Does not modify data
+   * Does not modify data, only reports corruption
    */
   async validateAll(): Promise<CorruptionReport> {
     console.debug('[ActivityDatastore] Running integrity check...');
 
-    const all = await this.getAllActivities();
+    const allWithWarnings = await this.getAllActivitiesWithWarnings();
     const corrupted: CorruptionReport['corruptedActivities'] = [];
     let totalIssues = 0;
 
-    for (const activity of all) {
-      const issues = detectCorruption(activity);
-      if (issues.length > 0) {
+    for (const { activity, corrupted: isCorrupted, issues } of allWithWarnings) {
+      if (isCorrupted) {
         corrupted.push({
           id: activity.id,
           service: activity.service,
@@ -195,7 +258,7 @@ export class ActivityDatastore {
     const ghosts: CorruptionReport['ghostActivities'] = [];
 
     const report: CorruptionReport = {
-      totalActivities: all.length,
+      totalActivities: allWithWarnings.length,
       corruptedActivities: corrupted,
       ghostActivities: ghosts,
       summary: {
@@ -207,6 +270,17 @@ export class ActivityDatastore {
 
     console.debug('[ActivityDatastore] Validation complete:', report.summary);
     return report;
+  }
+
+  /**
+   * Get a human-readable summary of data integrity
+   */
+  async getSummary(): Promise<string> {
+    const total = await this.countActivities();
+    const corrupted = await this.countCorruptedActivities();
+    const clean = total - corrupted;
+
+    return `Activities: ${total} total, ${clean} clean, ${corrupted} corrupted`;
   }
 
   /**
