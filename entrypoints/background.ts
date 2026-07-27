@@ -176,12 +176,52 @@ async function initializeExtension(): Promise<void> {
     // Subscribe to incoming kind 4 (encrypted DM) messages
     await _subscribeToIncomingMessages();
 
+    // Run initial integrity check
+    try {
+      const datastore = getActivityDatastore();
+      const summary = await datastore.getSummary();
+      console.log('[Background] Activity integrity:', summary);
+    } catch (error) {
+      console.warn('[Background] Could not run initial integrity check:', error);
+    }
+
     console.log('[Background] Initialization complete');
     initialized = true;
+
+    // Start periodic integrity checks and cleanup
+    _startPeriodicCleanup();
   } catch (error) {
     console.error('[Background] Initialization failed:', error);
     throw error;
   }
+}
+
+/**
+ * Periodic cleanup: Run integrity checks and remove corrupted/ghost activities
+ * Runs every 5 minutes to catch any data corruption that slips through validation
+ */
+function _startPeriodicCleanup(): void {
+  const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+  setInterval(async () => {
+    try {
+      const datastore = getActivityDatastore();
+      const { corruptedRemoved, ghostsRemoved } = await datastore.cleanup();
+
+      if (corruptedRemoved > 0 || ghostsRemoved > 0) {
+        console.log('[Background] 🧹 Cleanup cycle complete:', {
+          corruptedRemoved,
+          ghostsRemoved,
+        });
+      } else {
+        console.debug('[Background] Cleanup cycle: no issues found');
+      }
+    } catch (error) {
+      console.error('[Background] Cleanup cycle failed:', error);
+    }
+  }, CLEANUP_INTERVAL_MS);
+
+  console.debug('[Background] Periodic cleanup started (every 5 minutes)');
 }
 
 // ============================================================================
