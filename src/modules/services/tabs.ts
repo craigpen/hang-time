@@ -42,18 +42,15 @@ export class TabService implements IServiceModule {
           const videoData = await this.getVideoActivityDataFromTab(netflixTab.id, 'netflix');
           // Preserve previous data if current query fails
           const lastNetflixActivity = this.lastDetected.get('netflix');
-          // Use content script's isPlaying state, fall back to audio, preserve previous if unavailable
+          // Use content script's isPlaying state only, preserve previous if unavailable
+          // (tab.audible is unreliable - removed fallback to prevent oscillation)
           let state = lastNetflixActivity?.state || 'paused';
           if (videoData?.isPlaying !== undefined) {
             state = videoData.isPlaying ? 'playing' : 'paused';
-          } else if (netflixTab.audible !== undefined) {
-            state = netflixTab.audible ? 'playing' : 'paused';
           }
           let audio = lastNetflixActivity?.audio || 'off';
           if (videoData?.isPlaying !== undefined) {
             audio = videoData.isPlaying ? 'on' : 'off';
-          } else if (netflixTab.audible !== undefined) {
-            audio = netflixTab.audible ? 'on' : 'off';
           }
           const netflixActivity: Activity = {
             id: netflixId,
@@ -86,18 +83,15 @@ export class TabService implements IServiceModule {
         const videoData = await this.getVideoActivityDataFromTab(youtubeTab.id, 'youtube');
         // Preserve previous data if current query fails
         const lastYoutubeActivity = this.lastDetected.get('youtube');
-        // Use content script's isPlaying state, fall back to audio, preserve previous if unavailable
+        // Use content script's isPlaying state only, preserve previous if unavailable
+        // (tab.audible is unreliable - removed fallback to prevent oscillation)
         let state = lastYoutubeActivity?.state || 'paused';
         if (videoData?.isPlaying !== undefined) {
           state = videoData.isPlaying ? 'playing' : 'paused';
-        } else if (youtubeTab.audible !== undefined) {
-          state = youtubeTab.audible ? 'playing' : 'paused';
         }
         let audio = lastYoutubeActivity?.audio || 'off';
         if (videoData?.isPlaying !== undefined) {
           audio = videoData.isPlaying ? 'on' : 'off';
-        } else if (youtubeTab.audible !== undefined) {
-          audio = youtubeTab.audible ? 'on' : 'off';
         }
         const youtubeActivity: Activity = {
           id: youtubeId,
@@ -125,18 +119,15 @@ export class TabService implements IServiceModule {
         const videoData = await this.getVideoActivityDataFromTab(twitchTab.id, 'twitch');
         // Preserve previous data if current query fails
         const lastTwitchActivity = this.lastDetected.get('twitch');
-        // Use content script's isPlaying state, fall back to audio, preserve previous if unavailable
+        // Use content script's isPlaying state only, preserve previous if unavailable
+        // (tab.audible is unreliable - removed fallback to prevent oscillation)
         let state = lastTwitchActivity?.state || 'paused';
         if (videoData?.isPlaying !== undefined) {
           state = videoData.isPlaying ? 'playing' : 'paused';
-        } else if (twitchTab.audible !== undefined) {
-          state = twitchTab.audible ? 'playing' : 'paused';
         }
         let audio = lastTwitchActivity?.audio || 'off';
         if (videoData?.isPlaying !== undefined) {
           audio = videoData.isPlaying ? 'on' : 'off';
-        } else if (twitchTab.audible !== undefined) {
-          audio = twitchTab.audible ? 'on' : 'off';
         }
         const twitchActivity: Activity = {
           id: twitchId,
