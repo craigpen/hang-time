@@ -1320,7 +1320,7 @@ export class PopupController {
       const services: Array<'netflix-tab' | 'youtube-tab' | 'twitch-tab'> = ['netflix-tab', 'youtube-tab', 'twitch-tab'];
       for (const service of services) {
         const metricsEl = document.getElementById(`metrics-${service}-popup`);
-        const resetBtn = document.getElementById(`reset-metrics-${service}`);
+        const resetBtn = document.getElementById(`reset-metrics-${service.replace('-tab', '')}-tab`);
 
         if (!metricsEl || !resetBtn) continue;
 
@@ -1387,9 +1387,18 @@ export class PopupController {
         discordInput.value = profile.discord_info;
       }
 
-      // Load service toggles
-      const services = ['netflix', 'youtube', 'spotify', 'twitch', 'steam'];
-      for (const service of services) {
+      // Load service toggles for browser tabs
+      const tabServices = ['netflix-tab', 'youtube-tab', 'twitch-tab'];
+      for (const service of tabServices) {
+        const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
+        if (toggle && profile.services_enabled) {
+          toggle.checked = profile.services_enabled[service as keyof typeof profile.services_enabled] ?? false;
+        }
+      }
+
+      // Load service toggles for OAuth integrations
+      const oauthServices = ['spotify', 'twitch-api', 'steam-api', 'discord-api'];
+      for (const service of oauthServices) {
         const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
         if (toggle && profile.services_enabled) {
           toggle.checked = profile.services_enabled[service as keyof typeof profile.services_enabled] ?? false;
@@ -1574,10 +1583,10 @@ export class PopupController {
         type: 'GET_BROWSER_ACTIVITIES',
       });
 
-      const browserActivities = response.success && response.data ? response.data : { netflix: null, youtube: null, twitch: null };
+      const browserActivities = response.success && response.data ? response.data : { 'netflix-tab': null, 'youtube-tab': null, 'twitch-tab': null };
 
-      for (const service of ['netflix', 'youtube', 'twitch']) {
-        const statusDiv = document.getElementById(`status-${service}-popup`);
+      for (const service of ['netflix-tab', 'youtube-tab', 'twitch-tab']) {
+        const statusDiv = document.getElementById(`status-${service.replace('-tab', '')}-popup`);
         if (statusDiv && profile) {
           const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? false;
 
