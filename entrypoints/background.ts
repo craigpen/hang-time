@@ -563,8 +563,7 @@ async function _getMessages(friendId?: string): Promise<ExtensionResponse> {
 
 async function _getNetflixExtractionLogs(): Promise<ExtensionResponse> {
   try {
-    const result = await chrome.storage.local.get('netflix_extraction_logs');
-    const logs = result.netflix_extraction_logs || [];
+    const logs = await storageManager.getNetflixExtractionLogs();
     console.debug(`[Background] Retrieved ${logs.length} Netflix extraction logs`);
     return { success: true, data: logs };
   } catch (error) {
@@ -574,8 +573,7 @@ async function _getNetflixExtractionLogs(): Promise<ExtensionResponse> {
 
 async function _getNetflixDebugCaptures(): Promise<ExtensionResponse> {
   try {
-    const result = await chrome.storage.local.get('netflix_debug_captures');
-    const captures = result.netflix_debug_captures || [];
+    const captures = await storageManager.getNetflixDebugCaptures();
     console.debug(`[Background] Retrieved ${captures.length} Netflix debug captures`);
     return { success: true, data: captures };
   } catch (error) {
@@ -1024,10 +1022,9 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       // Store pending invite in persistent storage
       if (activityId) {
         console.debug(`[Background] 🔔 Invite: Storing pending invite - activityId: ${activityId}, friendId: ${friend.id}`);
-        const result = await chrome.storage.local.get('pending_invites');
-        const pendingInvites = result.pending_invites || {};
+        const pendingInvites = await storageManager.getPendingInvites();
         pendingInvites[activityId] = friend.id;
-        await chrome.storage.local.set({ pending_invites: pendingInvites });
+        await storageManager.setPendingInvites(pendingInvites);
 
         // Also try to notify popup if it's open
         try {
@@ -1360,19 +1357,18 @@ async function _sendJoinNotification(activity?: any, friendId?: string, accepted
 const notifiedInviteIds = new Map<string, number>(); // eventId -> timestamp
 
 async function initializeNotificationDedup(): Promise<void> {
-  const stored = await chrome.storage.local.get('notified_invite_ids');
-  if (stored.notified_invite_ids) {
-    const entries = Object.entries(stored.notified_invite_ids) as [string, number][];
-    const now = Date.now();
-    const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
+  const stored = await storageManager.getNotifiedInviteIds();
+  const now = Date.now();
+  const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
 
-    for (const [eventId, timestamp] of entries) {
-      // Only keep recent entries (last 7 days)
-      if (timestamp > oneWeekAgo) {
-        notifiedInviteIds.set(eventId, timestamp);
-      }
+  for (const [eventId, timestamp] of stored) {
+    // Only keep recent entries (last 7 days)
+    if (timestamp > oneWeekAgo) {
+      notifiedInviteIds.set(eventId, timestamp);
     }
+  }
 
+  if (stored.size > 0) {
     console.log(`[Background] Loaded ${notifiedInviteIds.size} cached notification IDs`);
   }
 }
@@ -1386,8 +1382,7 @@ async function markInviteNotified(eventId: string): Promise<void> {
   notifiedInviteIds.set(eventId, now);
 
   // Persist to storage
-  const entries = Object.fromEntries(notifiedInviteIds);
-  await chrome.storage.local.set({ notified_invite_ids: entries });
+  await storageManager.setNotifiedInviteIds(notifiedInviteIds);
 }
 
 // ============================================================================

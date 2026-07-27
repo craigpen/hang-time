@@ -369,6 +369,116 @@ export class StorageManager {
   }
 
   // ============================================================================
+  // INVITES & NOTIFICATIONS
+  // ============================================================================
+
+  /**
+   * Get pending invites: Map of activityId -> friendId
+   */
+  async getPendingInvites(): Promise<Record<string, string>> {
+    return this.get<Record<string, string>>('pending_invites', {});
+  }
+
+  /**
+   * Set pending invites
+   */
+  async setPendingInvites(invites: Record<string, string>): Promise<void> {
+    await this.set('pending_invites', invites);
+  }
+
+  /**
+   * Get notified invite IDs with timestamps (for deduplication)
+   * Returns Map<eventId, timestamp>
+   */
+  async getNotifiedInviteIds(): Promise<Map<string, number>> {
+    const stored = await this.get<Record<string, number>>('notified_invite_ids', {});
+    return new Map(Object.entries(stored));
+  }
+
+  /**
+   * Set notified invite IDs with timestamps
+   */
+  async setNotifiedInviteIds(ids: Map<string, number>): Promise<void> {
+    const obj = Object.fromEntries(ids);
+    await this.set('notified_invite_ids', obj);
+  }
+
+  // ============================================================================
+  // OAUTH & CONFIG
+  // ============================================================================
+
+  /**
+   * Get OAuth configuration
+   */
+  async getOAuthConfig(): Promise<Record<string, unknown>> {
+    return this.get<Record<string, unknown>>('oauth_config', {});
+  }
+
+  /**
+   * Set OAuth configuration
+   */
+  async setOAuthConfig(config: Record<string, unknown>): Promise<void> {
+    await this.set('oauth_config', config);
+  }
+
+  // ============================================================================
+  // CONTENT EXTRACTION
+  // ============================================================================
+
+  /**
+   * Get Netflix title from content script extraction
+   */
+  async getNetflixTitle(): Promise<string | null> {
+    const title = await this.get<string>('netflix_title');
+    return title ?? null;
+  }
+
+  /**
+   * Set Netflix title from content script
+   */
+  async setNetflixTitle(title: string): Promise<void> {
+    await this.set('netflix_title', title);
+  }
+
+  // ============================================================================
+  // DEBUG & LOGGING
+  // ============================================================================
+
+  /**
+   * Get Netflix extraction logs (debug only)
+   */
+  async getNetflixExtractionLogs(): Promise<string[]> {
+    return this.get<string[]>('netflix_extraction_logs', []);
+  }
+
+  /**
+   * Add Netflix extraction log (debug only)
+   */
+  async addNetflixExtractionLog(log: string): Promise<void> {
+    const logs = await this.getNetflixExtractionLogs();
+    logs.push(log);
+    // Keep only last 100 logs
+    if (logs.length > 100) {
+      logs.shift();
+    }
+    await this.set('netflix_extraction_logs', logs);
+  }
+
+  /**
+   * Get Netflix debug captures (debug only)
+   */
+  async getNetflixDebugCaptures(): Promise<unknown[]> {
+    return this.get<unknown[]>('netflix_debug_captures', []);
+  }
+
+  /**
+   * Set Netflix debug captures (debug only)
+   */
+  async setNetflixDebugCaptures(captures: unknown[]): Promise<void> {
+    await this.set('netflix_debug_captures', captures);
+  }
+
+  // ============================================================================
   // BATCH OPERATIONS
   // ============================================================================
 
