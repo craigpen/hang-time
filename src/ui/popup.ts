@@ -1888,10 +1888,17 @@ export class PopupController {
 
       console.debug('[Popup] Saving settings - discord:', discordInput, 'steam_id:', steamIdInput);
 
-      // Collect service toggles
+      // Collect service toggles for browser tabs
       const servicesEnabled: Record<string, boolean> = {};
-      const services = ['netflix', 'youtube', 'spotify', 'twitch', 'steam'];
-      for (const service of services) {
+      const tabServices = ['netflix-tab', 'youtube-tab', 'twitch-tab'];
+      for (const service of tabServices) {
+        const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
+        servicesEnabled[service] = toggle?.checked ?? false;
+      }
+
+      // Collect service toggles for OAuth integrations
+      const oauthServices = ['spotify', 'twitch-api', 'steam-api', 'discord-api'];
+      for (const service of oauthServices) {
         const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
         servicesEnabled[service] = toggle?.checked ?? false;
       }
