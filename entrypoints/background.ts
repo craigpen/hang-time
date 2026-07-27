@@ -1123,6 +1123,9 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         last_seen: Date.now(),
       });
 
+      // Clean up orphaned invites: if friend no longer has an activity, remove the invite for it
+      await cleanupOrphanedInvites(friend.id, newCurrentActivities);
+
       // Add changed activities to history
       for (const activity of activities) {
         if (changedServices.has(activity.service)) {
@@ -1410,6 +1413,40 @@ async function markInviteNotified(eventId: string): Promise<void> {
 
   // Persist to storage
   await storageManager.setNotifiedInviteIds(notifiedInviteIds);
+}
+
+/**
+ * Clean up invites for activities the friend is no longer doing
+ * If a friend stops watching something, any pending invite for that activity expires
+ */
+async function cleanupOrphanedInvites(
+  friendId: string,
+  currentActivities: Partial<Record<ServiceName, Activity>>
+): Promise<void> {
+  const pendingInvites = await storageManager.getPendingInvites();
+  let removed = 0;
+
+  for (const [activityId, inviteData] of Object.entries(pendingInvites)) {
+    // Only check invites for this friend
+    if (inviteData.friendId !== friendId) {
+      continue;
+    }
+
+    // Check if friend still has this activity
+    const friendHasActivity = Object.values(currentActivities).some(a => a?.id === activityId);
+
+    if (!friendHasActivity) {
+      // Friend no longer has this activity, remove the invite
+      delete pendingInvites[activityId];
+      removed++;
+      console.debug(`[Background] Removed orphaned invite for activity ${activityId}`);
+    }
+  }
+
+  if (removed > 0) {
+    await storageManager.setPendingInvites(pendingInvites);
+    console.debug(`[Background] Cleaned up ${removed} orphaned invite(s) for friend ${friendId}`);
+  }
 }
 
 // ============================================================================
