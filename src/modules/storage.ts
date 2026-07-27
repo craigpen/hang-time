@@ -451,17 +451,63 @@ export class StorageManager {
 
   /**
    * Get Netflix title from content script extraction
+   * Returns null if title is missing or stale (>24 hours old)
    */
   async getNetflixTitle(): Promise<string | null> {
-    const title = await this.get<string>('netflix_title');
-    return title ?? null;
+    const data = await this.get<any>('netflix_title_data');
+    if (!data || !data.value) {
+      return null;
+    }
+
+    // Check staleness: if > 24 hours old, consider expired
+    const ageMs = Date.now() - (data.extractedAt || 0);
+    const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+    if (ageMs > MAX_AGE_MS) {
+      console.warn(`[Storage] Netflix title is stale (${Math.floor(ageMs / 60000)}m old), clearing`);
+      await this.set('netflix_title_data', null);
+      return null;
+    }
+
+    return data.value;
   }
 
   /**
-   * Set Netflix title from content script
+   * Set Netflix title from content script (internal use only)
+   * Content script should call this directly with full metadata
    */
   async setNetflixTitle(title: string): Promise<void> {
+    // Backwards compatibility for direct calls without metadata
+    // Content script should use direct storage instead
     await this.set('netflix_title', title);
+  }
+
+  /**
+   * Clear Netflix title (used for cleanup/expiration)
+   */
+  async clearNetflixTitle(): Promise<void> {
+    await this.set('netflix_title_data', null);
+  }
+
+  /**
+   * Remove stale Netflix titles (older than 24 hours)
+   * Returns count of items cleaned
+   */
+  async removeStaleNetflixTitle(): Promise<number> {
+    const data = await this.get<any>('netflix_title_data');
+    if (!data || !data.value) {
+      return 0;
+    }
+
+    const ageMs = Date.now() - (data.extractedAt || 0);
+    const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+    if (ageMs > MAX_AGE_MS) {
+      await this.clearNetflixTitle();
+      return 1;
+    }
+
+    return 0;
   }
 
   // ============================================================================

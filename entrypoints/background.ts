@@ -198,7 +198,7 @@ async function initializeExtension(): Promise<void> {
 
 /**
  * Periodic cleanup: Run integrity checks and remove corrupted/ghost activities
- * Also removes expired invites (older than 2 hours)
+ * Also removes expired invites (older than 2 hours) and stale Netflix titles (older than 24 hours)
  * Runs every 5 minutes to catch any data corruption that slips through validation
  */
 function _startPeriodicCleanup(): void {
@@ -212,11 +212,15 @@ function _startPeriodicCleanup(): void {
       // Also remove expired invites (2+ hours old)
       const expiredInvites = await storageManager.removeExpiredInvites();
 
-      if (corruptedRemoved > 0 || ghostsRemoved > 0 || expiredInvites > 0) {
+      // Remove stale Netflix titles (24+ hours old)
+      const staleNetflixTitles = await storageManager.removeStaleNetflixTitle();
+
+      if (corruptedRemoved > 0 || ghostsRemoved > 0 || expiredInvites > 0 || staleNetflixTitles > 0) {
         console.log('[Background] 🧹 Cleanup cycle complete:', {
           corruptedRemoved,
           ghostsRemoved,
           expiredInvites,
+          staleNetflixTitles,
         });
       } else {
         console.debug('[Background] Cleanup cycle: no issues found');

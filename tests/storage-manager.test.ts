@@ -177,27 +177,90 @@ describe('StorageManager - New Methods', () => {
       expect(title).toBeNull();
     });
 
-    it('stores and retrieves Netflix title', async () => {
+    it('stores and retrieves Netflix title with metadata', async () => {
       const testTitle = 'The Crown - Season 5';
+      const now = Date.now();
 
-      await storage.setNetflixTitle(testTitle);
+      // Simulate content script storage with provenance data
+      await mockStorage.set('netflix_title_data', {
+        value: testTitle,
+        extractedAt: now,
+        source: 'h2-tag',
+        confidence: 'high',
+      });
+
       const retrieved = await storage.getNetflixTitle();
-
       expect(retrieved).toBe(testTitle);
     });
 
-    it('handles empty string', async () => {
-      await storage.setNetflixTitle('');
+    it('returns null for stale titles (>24 hours old)', async () => {
+      const now = Date.now();
+      const oneDayMs = 24 * 60 * 60 * 1000;
+
+      // Store title from yesterday
+      mockStorage.set('netflix_title_data', {
+        value: 'Old Show',
+        extractedAt: now - oneDayMs - 1000, // older than 24 hours
+        source: 'h2-tag',
+        confidence: 'high',
+      });
+
       const retrieved = await storage.getNetflixTitle();
-      expect(retrieved).toBe('');
+      expect(retrieved).toBeNull();
+
+      // Should have been cleared
+      const cleared = mockStorage.get('netflix_title_data');
+      expect(cleared).toBeNull();
     });
 
-    it('overwrites existing title', async () => {
-      await storage.setNetflixTitle('Title 1');
-      await storage.setNetflixTitle('Title 2');
-      const retrieved = await storage.getNetflixTitle();
+    it('keeps fresh titles (< 24 hours old)', async () => {
+      const now = Date.now();
+      const testTitle = 'Fresh Show';
 
-      expect(retrieved).toBe('Title 2');
+      mockStorage.set('netflix_title_data', {
+        value: testTitle,
+        extractedAt: now - 60000, // 1 minute old
+        source: 'h2-tag',
+        confidence: 'high',
+      });
+
+      const retrieved = await storage.getNetflixTitle();
+      expect(retrieved).toBe(testTitle);
+    });
+
+    it('removeStaleNetflixTitle clears old titles', async () => {
+      const now = Date.now();
+      const oneDayMs = 24 * 60 * 60 * 1000;
+
+      mockStorage.set('netflix_title_data', {
+        value: 'Stale Title',
+        extractedAt: now - oneDayMs - 1000,
+        source: 'fallback',
+        confidence: 'low',
+      });
+
+      const removed = await storage.removeStaleNetflixTitle();
+      expect(removed).toBe(1);
+
+      const cleared = mockStorage.get('netflix_title_data');
+      expect(cleared).toBeNull();
+    });
+
+    it('removeStaleNetflixTitle returns 0 for fresh titles', async () => {
+      const now = Date.now();
+
+      mockStorage.set('netflix_title_data', {
+        value: 'Fresh Title',
+        extractedAt: now,
+        source: 'h2-tag',
+        confidence: 'high',
+      });
+
+      const removed = await storage.removeStaleNetflixTitle();
+      expect(removed).toBe(0);
+
+      const data = mockStorage.get('netflix_title_data');
+      expect(data).toBeDefined();
     });
   });
 
