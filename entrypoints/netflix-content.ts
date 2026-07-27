@@ -7,9 +7,25 @@ const STORAGE_KEY = 'netflix_title';
 
 function isValidTitle(title: string | null | undefined): boolean {
   if (!title || typeof title !== 'string') return false;
-  if (title.length < 2 || title.length > 300) return false;
+  if (title.length < 2 || title.length > 200) return false;
 
   const lower = title.toLowerCase();
+
+  // Contamination detection (matches activity-validation.ts)
+  if (title.includes('•')) {
+    console.debug('[NetflixContent] Rejected title (contains bullet):', title);
+    return false;
+  }
+
+  if (title.includes('invited you to')) {
+    console.debug('[NetflixContent] Rejected title (contains notification fragment):', title);
+    return false;
+  }
+
+  if (/[\x00-\x1F\x7F]/.test(title)) {
+    console.debug('[NetflixContent] Rejected title (contains control characters):', title);
+    return false;
+  }
 
   if (lower.includes('error') || lower.includes('failed')) return false;
 
