@@ -68,8 +68,7 @@ export class ActivityDatastore {
    * Get provenance for an activity ID
    */
   private async getProvenance(id: string): Promise<ActivityProvenance> {
-    const result = await this.storage.getValue(PROVENANCE_STORAGE_KEY);
-    const map = result || {};
+    const map = await this.storage.get<Record<string, ActivityProvenance>>(PROVENANCE_STORAGE_KEY, {});
     return map[id] || 'LOCAL_TAB';
   }
 
@@ -77,10 +76,9 @@ export class ActivityDatastore {
    * Store provenance for an activity ID
    */
   private async setProvenance(id: string, provenance: ActivityProvenance): Promise<void> {
-    const result = await this.storage.getValue(PROVENANCE_STORAGE_KEY);
-    const map = result || {};
+    const map = await this.storage.get<Record<string, ActivityProvenance>>(PROVENANCE_STORAGE_KEY, {});
     map[id] = provenance;
-    await this.storage.setValue(PROVENANCE_STORAGE_KEY, map);
+    await this.storage.set(PROVENANCE_STORAGE_KEY, map);
   }
 
   /**
@@ -98,10 +96,9 @@ export class ActivityDatastore {
     const validated = validateActivity(data);
 
     // Store in persistent storage
-    const result = await this.storage.getValue('activities');
-    const activities = result || {};
+    const activities = await this.storage.get<Record<string, any>>('activities', {});
     activities[validated.id] = validated;
-    await this.storage.setValue('activities', activities);
+    await this.storage.set('activities', activities);
 
     // Store provenance separately
     await this.setProvenance(validated.id, provenance);
@@ -149,10 +146,9 @@ export class ActivityDatastore {
     const validated = validateActivity(merged);
 
     // Store updated activity
-    const result = await this.storage.getValue('activities');
-    const activities = result || {};
+    const activities = await this.storage.get<Record<string, any>>('activities', {});
     activities[id] = validated;
-    await this.storage.setValue('activities', activities);
+    await this.storage.set('activities', activities);
 
     console.debug('[ActivityDatastore] Activity updated:', id);
     return validated;
@@ -206,8 +202,7 @@ export class ActivityDatastore {
    * Get all activities with corruption detection
    */
   async getAllActivities(): Promise<Activity[]> {
-    const result = await this.storage.getValue('activities');
-    const activities = result || {};
+    const activities = await this.storage.get<Record<string, any>>('activities', {});
     return Object.values(activities);
   }
 
@@ -263,16 +258,14 @@ export class ActivityDatastore {
     console.debug('[ActivityDatastore] Deleting activity:', id);
 
     // Delete from activities
-    const result = await this.storage.getValue('activities');
-    const activities = result || {};
+    const activities = await this.storage.get<Record<string, any>>('activities', {});
     delete activities[id];
-    await this.storage.setValue('activities', activities);
+    await this.storage.set('activities', activities);
 
     // Delete provenance metadata
-    const provenanceResult = await this.storage.getValue(PROVENANCE_STORAGE_KEY);
-    const provenance = provenanceResult || {};
+    const provenance = await this.storage.get<Record<string, ActivityProvenance>>(PROVENANCE_STORAGE_KEY, {});
     delete provenance[id];
-    await this.storage.setValue(PROVENANCE_STORAGE_KEY, provenance);
+    await this.storage.set(PROVENANCE_STORAGE_KEY, provenance);
   }
 
   /**
