@@ -190,6 +190,9 @@ async function initializeExtension(): Promise<void> {
 
     // Start periodic integrity checks and cleanup
     _startPeriodicCleanup();
+
+    // Start content script health monitoring
+    _startContentScriptHealthCheck();
   } catch (error) {
     console.error('[Background] Initialization failed:', error);
     throw error;
@@ -231,6 +234,64 @@ function _startPeriodicCleanup(): void {
   }, CLEANUP_INTERVAL_MS);
 
   console.debug('[Background] Periodic cleanup started (every 5 minutes)');
+}
+
+/**
+ * Content Script Health Monitoring
+ * Pings each content script every 30 seconds to check responsiveness
+ * Tracks which services are healthy in which tabs
+ */
+function _startContentScriptHealthCheck(): void {
+  const HEALTH_CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
+  const SERVICES: Array<'netflix' | 'youtube' | 'twitch'> = ['netflix', 'youtube', 'twitch'];
+
+  setInterval(async () => {
+    try {
+      const tabs = await chrome.tabs.query({ windowType: 'normal' });
+
+      for (const tab of tabs) {
+        if (!tab.id || !tab.url) continue;
+
+        // Determine which service this tab is for
+        let service: 'netflix' | 'youtube' | 'twitch' | null = null;
+        if (tab.url.includes('netflix.com')) {
+          service = 'netflix';
+        } else if (tab.url.includes('youtube.com') || tab.url.includes('youtu.be')) {
+          service = 'youtube';
+        } else if (tab.url.includes('twitch.tv')) {
+          service = 'twitch';
+        }
+
+        if (!service) continue;
+
+        // Ping the content script
+        try {
+          const response = await chrome.tabs.sendMessage(tab.id, { type: 'HEALTH_CHECK' });
+          if (response && response.success) {
+            await storageManager.updateContentScriptHealth(tab.id, service, true);
+            console.debug(`[Background] ✅ ${service} tab ${tab.id} healthy`);
+          } else {
+            await storageManager.updateContentScriptHealth(tab.id, service, false);
+            console.warn(`[Background] ⚠️  ${service} tab ${tab.id} unhealthy (no response)`);
+          }
+        } catch (error) {
+          // Content script not responding
+          await storageManager.updateContentScriptHealth(tab.id, service, false);
+          console.debug(`[Background] ⚠️  ${service} tab ${tab.id} not responding`);
+        }
+      }
+
+      // Clean up stale entries (2+ minutes without ping)
+      const staleRemoved = await storageManager.clearStaleContentScriptHealth();
+      if (staleRemoved > 0) {
+        console.debug(`[Background] Cleared ${staleRemoved} stale content script health entries`);
+      }
+    } catch (error) {
+      console.error('[Background] Health check cycle failed:', error);
+    }
+  }, HEALTH_CHECK_INTERVAL_MS);
+
+  console.debug('[Background] Content script health monitoring started (every 30 seconds)');
 }
 
 // ============================================================================

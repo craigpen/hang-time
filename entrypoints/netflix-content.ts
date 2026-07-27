@@ -283,7 +283,10 @@ connectToExtension();
 
 // onMessage listener for TabService queries (chrome.tabs.sendMessage)
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'GET_NETFLIX_TITLE') {
+  if (message.type === 'HEALTH_CHECK') {
+    sendResponse({ success: true, service: 'netflix', timestamp: Date.now() });
+    return true;
+  } else if (message.type === 'GET_NETFLIX_TITLE') {
     (async () => {
       try {
         const extracted = extractNetflixTitle();

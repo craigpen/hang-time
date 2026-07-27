@@ -276,6 +276,12 @@ class VideoSyncContentScript {
   private _handleMessage(message: any, sendResponse: (response: any) => void): void {
     try {
       switch (message.type) {
+        case 'HEALTH_CHECK':
+          console.debug('[VideoSync] Responding to HEALTH_CHECK');
+          const service = this._getService();
+          sendResponse({ success: true, service, timestamp: Date.now() });
+          break;
+
         case 'GET_VIDEO_POSITION':
           console.debug('[VideoSync] Responding to GET_VIDEO_POSITION');
           sendResponse({

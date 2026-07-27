@@ -18,6 +18,16 @@ import {
   ActivityHistory,
 } from '../types';
 
+/**
+ * Content script health status for a service in a tab
+ */
+export interface ContentScriptHealth {
+  tabId: number;
+  service: 'netflix' | 'youtube' | 'twitch';
+  alive: boolean;
+  lastPing: number; // timestamp
+}
+
 export class StorageManager {
   /**
    * Get value from storage
@@ -508,6 +518,68 @@ export class StorageManager {
     }
 
     return 0;
+  }
+
+  // ============================================================================
+  // CONTENT SCRIPT HEALTH MONITORING
+  // ============================================================================
+
+  /**
+   * Get health status for all content scripts
+   */
+  async getContentScriptHealth(): Promise<ContentScriptHealth[]> {
+    return this.get<ContentScriptHealth[]>('content_script_health', []);
+  }
+
+  /**
+   * Update health status for a content script
+   * Creates entry if doesn't exist, updates lastPing and alive status
+   */
+  async updateContentScriptHealth(
+    tabId: number,
+    service: 'netflix' | 'youtube' | 'twitch',
+    alive: boolean
+  ): Promise<void> {
+    const health = await this.getContentScriptHealth();
+
+    // Find existing entry
+    const existing = health.find(h => h.tabId === tabId && h.service === service);
+
+    if (existing) {
+      existing.alive = alive;
+      existing.lastPing = Date.now();
+    } else {
+      health.push({
+        tabId,
+        service,
+        alive,
+        lastPing: Date.now(),
+      });
+    }
+
+    await this.set('content_script_health', health);
+  }
+
+  /**
+   * Clear dead content scripts (no ping for 2+ minutes)
+   * Returns count of removed entries
+   */
+  async clearStaleContentScriptHealth(): Promise<number> {
+    const health = await this.getContentScriptHealth();
+    const now = Date.now();
+    const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+
+    const filtered = health.filter(h => {
+      const ageSinceLastPing = now - h.lastPing;
+      return ageSinceLastPing <= STALE_THRESHOLD_MS;
+    });
+
+    const removed = health.length - filtered.length;
+    if (removed > 0) {
+      await this.set('content_script_health', filtered);
+    }
+
+    return removed;
   }
 
   // ============================================================================
