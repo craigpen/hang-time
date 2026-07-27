@@ -127,6 +127,7 @@ export function validateProgress(progress: unknown, duration?: number): number |
 
 /**
  * Validates that duration field is valid if provided
+ * Note: Duration can be 0 or undefined for live streams (Twitch, etc)
  */
 export function validateDuration(duration: unknown): number | undefined {
   if (duration === null || duration === undefined) {
@@ -137,14 +138,15 @@ export function validateDuration(duration: unknown): number | undefined {
     throw new ValidationError('duration', 'Must be a number if provided', duration);
   }
 
-  if (duration <= 0) {
-    throw new ValidationError('duration', 'Must be greater than 0', duration);
+  if (duration < 0) {
+    throw new ValidationError('duration', 'Cannot be negative', duration);
   }
 
   if (!isFinite(duration)) {
     throw new ValidationError('duration', 'Must be a finite number', duration);
   }
 
+  // Duration of 0 is OK for live streams (Twitch, etc)
   return duration;
 }
 

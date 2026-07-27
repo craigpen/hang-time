@@ -160,8 +160,7 @@ export class ActivityDatastore {
    * Detects corruption but returns activity anyway
    */
   async getActivity(id: string): Promise<Activity | null> {
-    const result = await this.storage.getValue('activities');
-    const activities = result || {};
+    const activities = await this.storage.get<Record<string, any>>('activities', {});
     const activity = activities[id];
 
     if (!activity) {

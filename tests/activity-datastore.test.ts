@@ -141,8 +141,11 @@ describe('Activity Validation', () => {
       expect(validateDuration(undefined)).toBeUndefined();
     });
 
-    it('rejects zero or negative duration', () => {
-      expect(() => validateDuration(0)).toThrow(ValidationError);
+    it('accepts zero duration (for live streams)', () => {
+      expect(validateDuration(0)).toBe(0);
+    });
+
+    it('rejects negative duration', () => {
       expect(() => validateDuration(-60)).toThrow(ValidationError);
     });
 
@@ -298,11 +301,11 @@ describe('ActivityDatastore', () => {
   let mockStorage: Partial<StorageManager>;
 
   beforeEach(() => {
-    // Create mock storage
+    // Create mock storage with correct API (get/set, not getValue/setValue)
     const store = new Map<string, any>();
     mockStorage = {
-      getValue: vi.fn((key: string) => Promise.resolve(store.get(key))),
-      setValue: vi.fn((key: string, value: any) => {
+      get: vi.fn((key: string, defaultValue?: any) => Promise.resolve(store.get(key) ?? defaultValue)),
+      set: vi.fn((key: string, value: any) => {
         store.set(key, value);
         return Promise.resolve();
       }),
@@ -491,7 +494,7 @@ describe('ActivityDatastore', () => {
       // Manually insert corrupted activity (bypassing validation)
       const store = new Map<string, any>();
       const mockStorageWithData = {
-        getValue: vi.fn((key: string) => {
+        get: vi.fn((key: string, defaultValue?: any) => {
           if (key === 'activities') {
             return Promise.resolve({
               'corrupted-1': {
@@ -505,9 +508,9 @@ describe('ActivityDatastore', () => {
               },
             });
           }
-          return Promise.resolve(store.get(key));
+          return Promise.resolve(store.get(key) ?? defaultValue);
         }),
-        setValue: vi.fn((key: string, value: any) => {
+        set: vi.fn((key: string, value: any) => {
           store.set(key, value);
           return Promise.resolve();
         }),
