@@ -25,6 +25,17 @@ export interface ActivityWithWarning {
 }
 
 /**
+ * Activity marked as ghost (no matching open tab)
+ */
+export interface GhostActivity {
+  id: string;
+  service: string;
+  content: string;
+  lastSeen: number;
+  reason: string;
+}
+
+/**
  * Comprehensive report of activity integrity issues
  */
 export interface CorruptionReport {
@@ -48,8 +59,29 @@ export interface CorruptionReport {
   };
 }
 
+const PROVENANCE_STORAGE_KEY = 'activity_provenance_map';
+
 export class ActivityDatastore {
   constructor(private storage: StorageManager) {}
+
+  /**
+   * Get provenance for an activity ID
+   */
+  private async getProvenance(id: string): Promise<ActivityProvenance> {
+    const result = await this.storage.getValue(PROVENANCE_STORAGE_KEY);
+    const map = result || {};
+    return map[id] || 'LOCAL_TAB';
+  }
+
+  /**
+   * Store provenance for an activity ID
+   */
+  private async setProvenance(id: string, provenance: ActivityProvenance): Promise<void> {
+    const result = await this.storage.getValue(PROVENANCE_STORAGE_KEY);
+    const map = result || {};
+    map[id] = provenance;
+    await this.storage.setValue(PROVENANCE_STORAGE_KEY, map);
+  }
 
   /**
    * Create a new activity with validation
@@ -60,6 +92,8 @@ export class ActivityDatastore {
   ): Promise<ValidatedActivity> {
     console.debug('[ActivityDatastore] Creating activity:', data.service, data.content);
 
+    const provenance = data.provenance || 'LOCAL_TAB';
+
     // Validate before storing
     const validated = validateActivity(data);
 
@@ -69,7 +103,10 @@ export class ActivityDatastore {
     activities[validated.id] = validated;
     await this.storage.setValue('activities', activities);
 
-    console.debug('[ActivityDatastore] Activity created with ID:', validated.id);
+    // Store provenance separately
+    await this.setProvenance(validated.id, provenance);
+
+    console.debug('[ActivityDatastore] Activity created with ID:', validated.id, 'provenance:', provenance);
     return validated;
   }
 
@@ -220,19 +257,27 @@ export class ActivityDatastore {
 
   /**
    * Delete an activity by ID
+   * Also cleans up provenance metadata
    */
   async deleteActivity(id: string): Promise<void> {
     console.debug('[ActivityDatastore] Deleting activity:', id);
 
+    // Delete from activities
     const result = await this.storage.getValue('activities');
     const activities = result || {};
     delete activities[id];
     await this.storage.setValue('activities', activities);
+
+    // Delete provenance metadata
+    const provenanceResult = await this.storage.getValue(PROVENANCE_STORAGE_KEY);
+    const provenance = provenanceResult || {};
+    delete provenance[id];
+    await this.storage.setValue(PROVENANCE_STORAGE_KEY, provenance);
   }
 
   /**
    * Validate all stored activities and report issues
-   * Does not modify data, only reports corruption
+   * Does not modify data, only reports corruption and ghosts
    */
   async validateAll(): Promise<CorruptionReport> {
     console.debug('[ActivityDatastore] Running integrity check...');
@@ -253,9 +298,15 @@ export class ActivityDatastore {
       }
     }
 
-    // TODO: Ghost detection will be implemented in Phase 4
-    // (requires comparing against open tabs)
-    const ghosts: CorruptionReport['ghostActivities'] = [];
+    // Detect ghost activities
+    const ghostsList = await this.detectGhosts();
+    const ghosts: CorruptionReport['ghostActivities'] = ghostsList.map((g) => ({
+      id: g.id,
+      service: g.service,
+      content: g.content,
+      reason: g.reason,
+    }));
+    totalIssues += ghosts.length;
 
     const report: CorruptionReport = {
       totalActivities: allWithWarnings.length,
@@ -284,9 +335,57 @@ export class ActivityDatastore {
   }
 
   /**
+   * Detect ghost activities (activities from closed tabs)
+   * Compares LOCAL_TAB activities against currently open tabs
+   */
+  async detectGhosts(): Promise<GhostActivity[]> {
+    console.debug('[ActivityDatastore] Detecting ghost activities...');
+
+    // Get all open tabs
+    let openTabs: chrome.tabs.Tab[] = [];
+    try {
+      openTabs = await chrome.tabs.query({ windowType: 'normal' });
+    } catch (error) {
+      console.warn('[ActivityDatastore] Could not query open tabs:', error);
+      return [];
+    }
+
+    const openTabUrls = new Set<string>();
+    for (const tab of openTabs) {
+      if (tab.url) {
+        openTabUrls.add(tab.url);
+      }
+    }
+
+    const ghosts: GhostActivity[] = [];
+    const all = await this.getAllActivities();
+
+    for (const activity of all) {
+      // Get this activity's provenance
+      const provenance = await this.getProvenance(activity.id);
+
+      // Only check LOCAL_TAB activities (FRIEND and TEST don't require a tab)
+      if (provenance === 'LOCAL_TAB') {
+        // Activity should have a matching open tab
+        if (!activity.url || !openTabUrls.has(activity.url)) {
+          ghosts.push({
+            id: activity.id,
+            service: activity.service,
+            content: activity.content,
+            lastSeen: activity.timestamp,
+            reason: `No matching open tab for ${activity.service}`,
+          });
+        }
+      }
+    }
+
+    console.debug('[ActivityDatastore] Found', ghosts.length, 'ghost activities');
+    return ghosts;
+  }
+
+  /**
    * Remove corrupted activities
    * Removes activities with detected corruption issues
-   * Does NOT remove ghosts (requires tab verification in Phase 4)
    */
   async cleanupCorrupted(): Promise<number> {
     console.debug('[ActivityDatastore] Cleaning up corrupted activities...');
@@ -305,6 +404,42 @@ export class ActivityDatastore {
 
     console.debug('[ActivityDatastore] Cleanup complete. Removed:', removed);
     return removed;
+  }
+
+  /**
+   * Remove ghost activities (from closed tabs)
+   */
+  async cleanupGhosts(): Promise<number> {
+    console.debug('[ActivityDatastore] Cleaning up ghost activities...');
+
+    const ghosts = await this.detectGhosts();
+    let removed = 0;
+
+    for (const ghost of ghosts) {
+      console.debug('[ActivityDatastore] Removing ghost:', ghost.id, ghost.reason);
+      await this.deleteActivity(ghost.id);
+      removed++;
+    }
+
+    console.debug('[ActivityDatastore] Ghost cleanup complete. Removed:', removed);
+    return removed;
+  }
+
+  /**
+   * Complete cleanup: remove both corrupted and ghost activities
+   */
+  async cleanup(): Promise<{ corruptedRemoved: number; ghostsRemoved: number }> {
+    console.debug('[ActivityDatastore] Running complete cleanup...');
+
+    const corruptedRemoved = await this.cleanupCorrupted();
+    const ghostsRemoved = await this.cleanupGhosts();
+
+    console.debug('[ActivityDatastore] Complete cleanup done:', {
+      corruptedRemoved,
+      ghostsRemoved,
+    });
+
+    return { corruptedRemoved, ghostsRemoved };
   }
 }
 
