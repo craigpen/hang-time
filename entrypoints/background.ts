@@ -974,11 +974,10 @@ async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
 async function _subscribeToIncomingMessages(): Promise<void> {
   try {
     const userPubkey = await identityManager.getPubkey();
-    const incomingMessagesId = `incoming-messages-${userPubkey}`;
 
-    // Subscribe to all events with this identifier
+    // Subscribe to events where user is the recipient (Nostr filter authors = [userPubkey])
     // The relay will send us events and we filter for kind 4 where we're the recipient
-    relayPool.subscribe(incomingMessagesId, async (event: NostrEvent) => {
+    relayPool.subscribe(userPubkey, async (event: NostrEvent) => {
       // Filter for kind 4 (encrypted DMs) only
       if (event.kind !== 4) {
         return;
