@@ -4,7 +4,7 @@
  * Detects service and runs appropriate handlers
  */
 
-type Service = 'netflix' | 'youtube' | 'twitch';
+type Service = 'netflix-tab' | 'youtube-tab' | 'twitch-tab';
 
 interface VideoState {
   videoId: string | null;
@@ -30,11 +30,11 @@ class UnifiedContentScript {
     const hostname = window.location.hostname;
 
     if (hostname.includes('netflix.com')) {
-      this.service = 'netflix';
+      this.service = 'netflix-tab';
     } else if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
-      this.service = 'youtube';
+      this.service = 'youtube-tab';
     } else if (hostname.includes('twitch.tv')) {
-      this.service = 'twitch';
+      this.service = 'twitch-tab';
     }
 
     if (this.service) {
