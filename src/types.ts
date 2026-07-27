@@ -31,7 +31,6 @@ export interface UserProfile {
     size: 'atomic' | 'full';
     scope: 'updates' | 'all';
     rate_ms: number;
-    filter_idle: boolean;
     relays: {
       'nos.lol': boolean;
       'relay.damus.io': boolean;

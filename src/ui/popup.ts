@@ -1451,7 +1451,6 @@ export class PopupController {
         size: 'full',
         scope: 'updates',
         rate_ms: 12000,
-        filter_idle: false,
         relays: { 'nos.lol': true, 'relay.damus.io': true, 'relay.snort.social': true, 'nostr.mom': true, 'relay.mostr.pub': true },
         retry_backoff_ms: 1000,
         compression: false,
@@ -1473,9 +1472,6 @@ export class PopupController {
       if (pubRate) pubRate.value = (pubConfig.rate_ms ?? 12000).toString();
 
       // Advanced settings
-      const pubFilterIdle = document.getElementById('pub-filter-idle-popup') as HTMLInputElement;
-      if (pubFilterIdle) pubFilterIdle.checked = pubConfig.filter_idle ?? false;
-
       const pubCompression = document.getElementById('pub-compression-popup') as HTMLInputElement;
       if (pubCompression) pubCompression.checked = pubConfig.compression ?? false;
 
@@ -1687,7 +1683,6 @@ export class PopupController {
     const pubSize = document.getElementById('pub-size-popup') as HTMLSelectElement;
     const pubScope = document.getElementById('pub-scope-popup') as HTMLSelectElement;
     const pubRate = document.getElementById('pub-rate-popup') as HTMLInputElement;
-    const pubFilterIdle = document.getElementById('pub-filter-idle-popup') as HTMLInputElement;
     const pubCompression = document.getElementById('pub-compression-popup') as HTMLInputElement;
     const pubDelta = document.getElementById('pub-delta-popup') as HTMLInputElement;
     const pubVerbose = document.getElementById('pub-verbose-popup') as HTMLInputElement;
@@ -1697,7 +1692,6 @@ export class PopupController {
     if (pubSize) pubSize.addEventListener('change', () => this._saveSettingsPanel());
     if (pubScope) pubScope.addEventListener('change', () => this._saveSettingsPanel());
     if (pubRate) pubRate.addEventListener('change', () => this._saveSettingsPanel());
-    if (pubFilterIdle) pubFilterIdle.addEventListener('change', () => this._saveSettingsPanel());
     if (pubCompression) pubCompression.addEventListener('change', () => this._saveSettingsPanel());
     if (pubDelta) pubDelta.addEventListener('change', () => this._saveSettingsPanel());
     if (pubVerbose) pubVerbose.addEventListener('change', () => this._saveSettingsPanel());
@@ -1903,7 +1897,6 @@ export class PopupController {
       const pubSize = (document.getElementById('pub-size-popup') as HTMLSelectElement)?.value ?? 'full';
       const pubScope = (document.getElementById('pub-scope-popup') as HTMLSelectElement)?.value ?? 'updates';
       const pubRate = parseInt((document.getElementById('pub-rate-popup') as HTMLInputElement)?.value ?? '12000', 10);
-      const pubFilterIdle = (document.getElementById('pub-filter-idle-popup') as HTMLInputElement)?.checked ?? false;
       const pubCompression = (document.getElementById('pub-compression-popup') as HTMLInputElement)?.checked ?? false;
       const pubDelta = (document.getElementById('pub-delta-popup') as HTMLInputElement)?.checked ?? false;
       const pubVerbose = (document.getElementById('pub-verbose-popup') as HTMLInputElement)?.checked ?? false;
@@ -1933,7 +1926,6 @@ export class PopupController {
             size: pubSize,
             scope: pubScope,
             rate_ms: pubRate,
-            filter_idle: pubFilterIdle,
             compression: pubCompression,
             verbose_logging: pubVerbose,
             delta_publishing: pubDelta,

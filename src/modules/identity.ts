@@ -104,7 +104,6 @@ export class IdentityManager {
         size: 'full',
         scope: 'updates',
         rate_ms: 12000,
-        filter_idle: false,
         relays: {
           'nos.lol': true,
           'relay.damus.io': true,

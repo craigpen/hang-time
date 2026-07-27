@@ -77,7 +77,6 @@ export class ActivityPublisher {
         size: 'full',
         scope: 'updates',
         rate_ms: 12000,
-        filter_idle: false,
         relays: {
           'nos.lol': true,
           'relay.damus.io': true,
@@ -93,7 +92,6 @@ export class ActivityPublisher {
 
       // Log active config
       const activeSettings = [];
-      if (config.filter_idle) activeSettings.push('filter_idle');
       if (config.compression) activeSettings.push('compression');
       if (config.verbose_logging) activeSettings.push('verbose_logging');
       if (config.retry_backoff_ms !== 1000) activeSettings.push(`retry_backoff=${config.retry_backoff_ms}ms`);
@@ -116,14 +114,6 @@ export class ActivityPublisher {
           console.warn(`[Publisher] ⚠️ Activity for ${service} has NO content!`, activity);
         }
       });
-
-      // Check if all activities are idle (audio:off) and filter is enabled
-      const allIdle = Object.values(currentActivities).every(a => !a || a.audio === 'off');
-      if (config.filter_idle && allIdle) {
-        console.log('[Publisher] ⏭️  Skipping publish - all services idle (filter_idle=on)');
-        this.publishCount++;
-        return;
-      }
 
       // If delta publishing, only publish changed fields (no full refresh)
       if (config.delta_publishing) {
@@ -325,7 +315,6 @@ export class ActivityPublisher {
       const settingsUsed = [];
       if (mode === 'compressed') settingsUsed.push('compression=on');
       if (config?.verbose_logging) settingsUsed.push('verbose_logging=on');
-      if (config?.filter_idle) settingsUsed.push('filter_idle=on');
       if (config?.retry_backoff_ms) settingsUsed.push(`retry_backoff=${config.retry_backoff_ms}ms`);
       if (config?.relays) {
         const enabledRelays = Object.entries(config.relays).filter(([, e]) => e).length;
