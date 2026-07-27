@@ -112,6 +112,9 @@ export class PopupController {
 
   async refreshFriends(): Promise<void> {
     try {
+      // Reload pending invites from storage to refresh invite icon state
+      await this._loadPendingInvites();
+
       const response = await chrome.runtime.sendMessage({
         type: 'GET_ALL_ACTIVITIES',
       });
