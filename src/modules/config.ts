@@ -4,6 +4,8 @@
  * Credentials should be set via environment variables or secure config endpoints
  */
 
+import { StorageManager } from './storage';
+
 export interface OAuthConfig {
   spotify: {
     client_id: string;
@@ -17,6 +19,7 @@ export interface OAuthConfig {
 
 class ConfigManager {
   private config: OAuthConfig | null = null;
+  private storage: StorageManager = new StorageManager();
 
   /**
    * Load configuration from environment or secure source
@@ -27,10 +30,10 @@ class ConfigManager {
       return this.config;
     }
 
-    // Try to load from chrome storage (admin set this up)
-    const stored = await chrome.storage.local.get('oauth_config');
-    if (stored.oauth_config) {
-      this.config = stored.oauth_config;
+    // Try to load from storage (admin set this up)
+    const stored = await this.storage.getOAuthConfig();
+    if (stored && Object.keys(stored).length > 0) {
+      this.config = stored as OAuthConfig;
       return this.config;
     }
 
@@ -38,7 +41,7 @@ class ConfigManager {
     throw new Error(
       'OAuth configuration not found. ' +
       'Administrator must configure credentials via: ' +
-      'chrome.storage.local.set({ oauth_config: { spotify: {...}, twitch: {...} } })'
+      'StorageManager.setOAuthConfig({ spotify: {...}, twitch: {...} })'
     );
   }
 
@@ -82,7 +85,7 @@ class ConfigManager {
    */
   async setConfig(config: OAuthConfig): Promise<void> {
     await this.validateConfig(config);
-    await chrome.storage.local.set({ oauth_config: config });
+    await this.storage.setOAuthConfig(config);
     this.config = config;
   }
 
@@ -90,7 +93,7 @@ class ConfigManager {
    * Clear configuration (for logout/reset)
    */
   async clearConfig(): Promise<void> {
-    await chrome.storage.local.remove('oauth_config');
+    await this.storage.setOAuthConfig({});
     this.config = null;
   }
 }

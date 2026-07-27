@@ -38,17 +38,30 @@ export class TabService implements IServiceModule {
         if (title) {
           // We have a real title - create normal activity
           const netflixId = generateActivityId('netflix', netflixTab.url);
-          // Query video data from content script for progress
+          // Query video data from content script for progress and play/pause state
           const videoData = await this.getVideoActivityDataFromTab(netflixTab.id, 'netflix');
-          // Preserve previous progress data if current query fails
+          // Preserve previous data if current query fails
           const lastNetflixActivity = this.lastDetected.get('netflix');
+          // Use content script's isPlaying state, fall back to audio, preserve previous if unavailable
+          let state = lastNetflixActivity?.state || 'paused';
+          if (videoData?.isPlaying !== undefined) {
+            state = videoData.isPlaying ? 'playing' : 'paused';
+          } else if (netflixTab.audible !== undefined) {
+            state = netflixTab.audible ? 'playing' : 'paused';
+          }
+          let audio = lastNetflixActivity?.audio || 'off';
+          if (videoData?.isPlaying !== undefined) {
+            audio = videoData.isPlaying ? 'on' : 'off';
+          } else if (netflixTab.audible !== undefined) {
+            audio = netflixTab.audible ? 'on' : 'off';
+          }
           const netflixActivity: Activity = {
             id: netflixId,
             service: 'netflix',
             content: title,
             url: netflixTab.url,
-            state: netflixTab.audible ? 'playing' : 'paused',
-            audio: netflixTab.audible ? 'on' : 'off',
+            state,
+            audio,
             timestamp: Date.now(),
             metadata: {
               lastAccessed: netflixTab.lastAccessed || 0,
@@ -69,17 +82,30 @@ export class TabService implements IServiceModule {
         // Ensure content is never a URL - use fallback if title extraction failed
         const finalContent = (title && !title.includes('http')) ? title : 'YouTube Video';
         const youtubeId = generateActivityId('youtube', youtubeTab.url);
-        // Query video data from content script
+        // Query video data from content script for progress and play/pause state
         const videoData = await this.getVideoActivityDataFromTab(youtubeTab.id, 'youtube');
-        // Preserve previous progress data if current query fails
+        // Preserve previous data if current query fails
         const lastYoutubeActivity = this.lastDetected.get('youtube');
+        // Use content script's isPlaying state, fall back to audio, preserve previous if unavailable
+        let state = lastYoutubeActivity?.state || 'paused';
+        if (videoData?.isPlaying !== undefined) {
+          state = videoData.isPlaying ? 'playing' : 'paused';
+        } else if (youtubeTab.audible !== undefined) {
+          state = youtubeTab.audible ? 'playing' : 'paused';
+        }
+        let audio = lastYoutubeActivity?.audio || 'off';
+        if (videoData?.isPlaying !== undefined) {
+          audio = videoData.isPlaying ? 'on' : 'off';
+        } else if (youtubeTab.audible !== undefined) {
+          audio = youtubeTab.audible ? 'on' : 'off';
+        }
         const youtubeActivity: Activity = {
           id: youtubeId,
           service: 'youtube',
           content: finalContent,
           url: youtubeTab.url,
-          state: youtubeTab.audible ? 'playing' : 'paused',
-          audio: youtubeTab.audible ? 'on' : 'off',
+          state,
+          audio,
           timestamp: Date.now(),
           metadata: {
             lastAccessed: youtubeTab.lastAccessed || 0,
@@ -95,18 +121,30 @@ export class TabService implements IServiceModule {
       if (twitchTab) {
         const title = this._extractTwitchTitle(twitchTab.title || '');
         const twitchId = generateActivityId('twitch', twitchTab.url);
-        // Use tab's audible property as initial state guess (if audio playing, likely stream is playing)
-        // Query video data from content script for Twitch
+        // Query video data from content script for play/pause state
         const videoData = await this.getVideoActivityDataFromTab(twitchTab.id, 'twitch');
-        // Preserve previous progress data if current query fails
+        // Preserve previous data if current query fails
         const lastTwitchActivity = this.lastDetected.get('twitch');
+        // Use content script's isPlaying state, fall back to audio, preserve previous if unavailable
+        let state = lastTwitchActivity?.state || 'paused';
+        if (videoData?.isPlaying !== undefined) {
+          state = videoData.isPlaying ? 'playing' : 'paused';
+        } else if (twitchTab.audible !== undefined) {
+          state = twitchTab.audible ? 'playing' : 'paused';
+        }
+        let audio = lastTwitchActivity?.audio || 'off';
+        if (videoData?.isPlaying !== undefined) {
+          audio = videoData.isPlaying ? 'on' : 'off';
+        } else if (twitchTab.audible !== undefined) {
+          audio = twitchTab.audible ? 'on' : 'off';
+        }
         const twitchActivity: Activity = {
           id: twitchId,
           service: 'twitch',
           content: title || 'Twitch Stream',
           url: twitchTab.url,
-          state: twitchTab.audible ? 'playing' : 'paused',
-          audio: twitchTab.audible ? 'on' : 'off',
+          state,
+          audio,
           timestamp: Date.now(),
           metadata: {
             lastAccessed: twitchTab.lastAccessed || 0,
@@ -305,8 +343,7 @@ export class TabService implements IServiceModule {
   async getNetflixTitleFromTab(tabId: number): Promise<string | null> {
     // First try to get from storage (content script should have written it)
     try {
-      const result = await chrome.storage.local.get('netflix_title');
-      const storedTitle = result['netflix_title'];
+      const storedTitle = await this.storage.getNetflixTitle();
       if (storedTitle && typeof storedTitle === 'string' && storedTitle.length > 0) {
         return storedTitle;
       }

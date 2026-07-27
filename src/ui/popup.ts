@@ -4,6 +4,7 @@
  */
 
 import { Friend, Activity, ExtensionResponse } from '../types';
+import { StorageManager } from '../modules/storage';
 
 /**
  * Simple toast notification manager
@@ -57,6 +58,7 @@ export class PopupController {
   private currentServiceActivities: Map<string, Activity | null> = new Map();
   private refreshPaused: boolean = false;
   private pendingInvitesByActivity: Map<string, string> = new Map(); // activityId -> friendId with pending invite
+  private storage: StorageManager = new StorageManager();
 
   static readonly MY_ACTIVITY_REFRESH_MS = 3000; // Keep "My Activity" responsive
   static readonly FALLBACK_FRIENDS_REFRESH_MS = 15000; // Safety net for missed Nostr messages
@@ -802,11 +804,10 @@ export class PopupController {
 
   private async _loadPendingInvites(): Promise<void> {
     try {
-      const result = await chrome.storage.local.get('pending_invites');
-      const pendingInvites = result.pending_invites || {};
+      const pendingInvites = await this.storage.getPendingInvites();
       this.pendingInvitesByActivity.clear();
-      for (const [activityId, friendId] of Object.entries(pendingInvites)) {
-        this.pendingInvitesByActivity.set(activityId as string, friendId as string);
+      for (const [activityId, inviteData] of Object.entries(pendingInvites)) {
+        this.pendingInvitesByActivity.set(activityId, inviteData.friendId);
       }
       console.debug('[Popup] Loaded pending invites from storage:', Array.from(this.pendingInvitesByActivity.entries()));
     } catch (error) {
@@ -2010,10 +2011,9 @@ export class PopupController {
       if (activity.id) {
         this.pendingInvitesByActivity.delete(activity.id);
         // Also remove from persistent storage
-        const result = await chrome.storage.local.get('pending_invites');
-        const pendingInvites = result.pending_invites || {};
+        const pendingInvites = await this.storage.getPendingInvites();
         delete pendingInvites[activity.id];
-        await chrome.storage.local.set({ pending_invites: pendingInvites });
+        await this.storage.setPendingInvites(pendingInvites);
       }
       modal.remove();
       await this.refreshFriends();
@@ -2033,10 +2033,9 @@ export class PopupController {
       if (activity.id) {
         this.pendingInvitesByActivity.delete(activity.id);
         // Also remove from persistent storage
-        const result = await chrome.storage.local.get('pending_invites');
-        const pendingInvites = result.pending_invites || {};
+        const pendingInvites = await this.storage.getPendingInvites();
         delete pendingInvites[activity.id];
-        await chrome.storage.local.set({ pending_invites: pendingInvites });
+        await this.storage.setPendingInvites(pendingInvites);
       }
 
       modal.remove();
