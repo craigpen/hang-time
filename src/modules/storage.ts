@@ -373,17 +373,41 @@ export class StorageManager {
   // ============================================================================
 
   /**
-   * Get pending invites: Map of activityId -> friendId
+   * Pending invite data with timestamp
    */
-  async getPendingInvites(): Promise<Record<string, string>> {
-    return this.get<Record<string, string>>('pending_invites', {});
+  async getPendingInvites(): Promise<Record<string, { friendId: string; sentAt: number }>> {
+    return this.get<Record<string, { friendId: string; sentAt: number }>>('pending_invites', {});
   }
 
   /**
-   * Set pending invites
+   * Set pending invites with timestamps
    */
-  async setPendingInvites(invites: Record<string, string>): Promise<void> {
+  async setPendingInvites(invites: Record<string, { friendId: string; sentAt: number }>): Promise<void> {
     await this.set('pending_invites', invites);
+  }
+
+  /**
+   * Remove expired invites (older than 2 hours)
+   * Returns count of removed invites
+   */
+  async removeExpiredInvites(): Promise<number> {
+    const invites = await this.getPendingInvites();
+    const now = Date.now();
+    const twoHoursMs = 2 * 60 * 60 * 1000;
+    let removedCount = 0;
+
+    for (const [activityId, inviteData] of Object.entries(invites)) {
+      if (now - inviteData.sentAt > twoHoursMs) {
+        delete invites[activityId];
+        removedCount++;
+      }
+    }
+
+    if (removedCount > 0) {
+      await this.setPendingInvites(invites);
+    }
+
+    return removedCount;
   }
 
   /**

@@ -198,6 +198,7 @@ async function initializeExtension(): Promise<void> {
 
 /**
  * Periodic cleanup: Run integrity checks and remove corrupted/ghost activities
+ * Also removes expired invites (older than 2 hours)
  * Runs every 5 minutes to catch any data corruption that slips through validation
  */
 function _startPeriodicCleanup(): void {
@@ -208,10 +209,14 @@ function _startPeriodicCleanup(): void {
       const datastore = getActivityDatastore();
       const { corruptedRemoved, ghostsRemoved } = await datastore.cleanup();
 
-      if (corruptedRemoved > 0 || ghostsRemoved > 0) {
+      // Also remove expired invites (2+ hours old)
+      const expiredInvites = await storageManager.removeExpiredInvites();
+
+      if (corruptedRemoved > 0 || ghostsRemoved > 0 || expiredInvites > 0) {
         console.log('[Background] 🧹 Cleanup cycle complete:', {
           corruptedRemoved,
           ghostsRemoved,
+          expiredInvites,
         });
       } else {
         console.debug('[Background] Cleanup cycle: no issues found');
@@ -1019,11 +1024,14 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       await markInviteNotified(event.id);
       console.log(`[Background] ✅ Invite: Notification fired for ${friend.local_name}`);
 
-      // Store pending invite in persistent storage
+      // Store pending invite in persistent storage with timestamp
       if (activityId) {
         console.debug(`[Background] 🔔 Invite: Storing pending invite - activityId: ${activityId}, friendId: ${friend.id}`);
         const pendingInvites = await storageManager.getPendingInvites();
-        pendingInvites[activityId] = friend.id;
+        pendingInvites[activityId] = {
+          friendId: friend.id,
+          sentAt: Date.now(),
+        };
         await storageManager.setPendingInvites(pendingInvites);
 
         // Also try to notify popup if it's open
