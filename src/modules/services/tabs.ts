@@ -289,11 +289,20 @@ export class TabService implements IServiceModule {
         const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_VIDEO_STATE' });
 
         if (response && response.success && response.data) {
-          return {
+          const data = {
             currentTime: response.data.currentTime,
             duration: response.data.duration,
             isPlaying: response.data.isPlaying,
           };
+
+          // Track metrics for this request
+          await this.storage.recordVideoDataRequest(service as 'netflix' | 'youtube' | 'twitch', {
+            isPlaying: data.isPlaying,
+            duration: data.duration,
+            currentTime: data.currentTime,
+          });
+
+          return data;
         }
 
         // Invalid response, retry if attempts left
@@ -307,6 +316,13 @@ export class TabService implements IServiceModule {
         }
       }
     }
+
+    // Track failed request
+    await this.storage.recordVideoDataRequest(service as 'netflix' | 'youtube' | 'twitch', {
+      isPlaying: undefined,
+      duration: undefined,
+      currentTime: undefined,
+    });
 
     return null;
   }
@@ -336,6 +352,10 @@ export class TabService implements IServiceModule {
     try {
       const storedTitle = await this.storage.getNetflixTitle();
       if (storedTitle && typeof storedTitle === 'string' && storedTitle.length > 0) {
+        // Track successful title
+        await this.storage.recordVideoDataRequest('netflix', {
+          netflix_title: storedTitle,
+        });
         return storedTitle;
       }
     } catch (error) {
@@ -351,6 +371,10 @@ export class TabService implements IServiceModule {
         const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_NETFLIX_TITLE' });
 
         if (response && response.success && response.data && typeof response.data === 'string' && response.data.length > 0) {
+          // Track successful title
+          await this.storage.recordVideoDataRequest('netflix', {
+            netflix_title: response.data,
+          });
           return response.data;
         }
 
@@ -368,7 +392,12 @@ export class TabService implements IServiceModule {
       }
     }
 
-    // All retries exhausted, return null (activity will show without title, but with play/pause state)
+    // All retries exhausted, track undefined title
+    await this.storage.recordVideoDataRequest('netflix', {
+      netflix_title: undefined,
+    });
+
+    // Return null (activity will show without title, but with play/pause state)
     return null;
   }
 

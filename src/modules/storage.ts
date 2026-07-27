@@ -16,6 +16,9 @@ import {
   DEFAULT_SETTINGS,
   StorageError,
   ActivityHistory,
+  VideoDataMetrics,
+  ServiceVideoDataMetrics,
+  VideoDataFieldMetrics,
 } from '../types';
 
 /**
@@ -580,6 +583,132 @@ export class StorageManager {
     }
 
     return removed;
+  }
+
+  // ============================================================================
+  // VIDEO DATA METRICS (Content script reliability tracking)
+  // ============================================================================
+
+  /**
+   * Get video data metrics for all services
+   * Auto-resets if last_reset was > 24 hours ago
+   */
+  async getVideoDataMetrics(): Promise<VideoDataMetrics> {
+    const metrics = await this.get<VideoDataMetrics>(STORAGE_KEYS.VIDEO_DATA_METRICS, {});
+    const now = Date.now();
+    const RESET_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+    // Check if any service needs auto-reset (daily reset)
+    let needsSave = false;
+    const updated: VideoDataMetrics = { ...metrics };
+
+    for (const service of ['netflix', 'youtube', 'twitch'] as const) {
+      const serviceMetrics = updated[service];
+      if (serviceMetrics) {
+        const lastReset = serviceMetrics.last_reset || 0;
+        const timeSinceReset = now - lastReset;
+
+        if (timeSinceReset > RESET_INTERVAL_MS) {
+          // Auto-reset after 24 hours
+          await this.resetVideoDataMetrics(service, 'daily');
+          needsSave = true;
+        }
+      }
+    }
+
+    // Return fresh metrics if auto-reset happened
+    if (needsSave) {
+      return this.get<VideoDataMetrics>(STORAGE_KEYS.VIDEO_DATA_METRICS, {});
+    }
+
+    return metrics;
+  }
+
+  /**
+   * Record a video data request and track undefined/invalid fields
+   */
+  async recordVideoDataRequest(
+    service: 'netflix' | 'youtube' | 'twitch',
+    fields: {
+      isPlaying?: boolean | undefined;
+      duration?: number | undefined;
+      currentTime?: number | undefined;
+      netflix_title?: string | undefined;
+    }
+  ): Promise<void> {
+    const metrics = await this.get<VideoDataMetrics>(STORAGE_KEYS.VIDEO_DATA_METRICS, {});
+
+    // Initialize service metrics if not present
+    if (!metrics[service]) {
+      metrics[service] = {
+        total_requests: 0,
+        isPlaying: { undefined: 0, invalid: 0 },
+        duration: { undefined: 0, invalid: 0 },
+        currentTime: { undefined: 0, invalid: 0 },
+        last_reset: Date.now(),
+      };
+    }
+
+    const serviceMetrics = metrics[service]!;
+    serviceMetrics.total_requests++;
+
+    // Track isPlaying: undefined or invalid
+    if (fields.isPlaying === undefined) {
+      serviceMetrics.isPlaying.undefined++;
+    } else if (typeof fields.isPlaying !== 'boolean') {
+      serviceMetrics.isPlaying.invalid++;
+    }
+
+    // Track duration: undefined or invalid (NaN, negative, or 0)
+    if (fields.duration === undefined) {
+      serviceMetrics.duration.undefined++;
+    } else if (typeof fields.duration !== 'number' || isNaN(fields.duration) || fields.duration < 0) {
+      serviceMetrics.duration.invalid++;
+    }
+
+    // Track currentTime: undefined or invalid (NaN or negative)
+    if (fields.currentTime === undefined) {
+      serviceMetrics.currentTime.undefined++;
+    } else if (typeof fields.currentTime !== 'number' || isNaN(fields.currentTime) || fields.currentTime < 0) {
+      serviceMetrics.currentTime.invalid++;
+    }
+
+    // Track Netflix title if present
+    if (service === 'netflix') {
+      if (!serviceMetrics.netflix_title) {
+        serviceMetrics.netflix_title = { undefined: 0, invalid: 0 };
+      }
+
+      if (fields.netflix_title === undefined) {
+        serviceMetrics.netflix_title.undefined++;
+      } else if (typeof fields.netflix_title !== 'string' || fields.netflix_title.length === 0) {
+        serviceMetrics.netflix_title.invalid++;
+      }
+    }
+
+    await this.set(STORAGE_KEYS.VIDEO_DATA_METRICS, metrics);
+  }
+
+  /**
+   * Reset metrics for a service (manual or daily auto-reset)
+   */
+  async resetVideoDataMetrics(service: 'netflix' | 'youtube' | 'twitch', reason: 'manual' | 'daily' = 'manual'): Promise<void> {
+    const metrics = await this.get<VideoDataMetrics>(STORAGE_KEYS.VIDEO_DATA_METRICS, {});
+
+    // Reset to fresh state
+    const emptyMetrics: ServiceVideoDataMetrics = {
+      total_requests: 0,
+      isPlaying: { undefined: 0, invalid: 0 },
+      duration: { undefined: 0, invalid: 0 },
+      currentTime: { undefined: 0, invalid: 0 },
+      last_reset: Date.now(),
+    };
+
+    metrics[service] = emptyMetrics;
+    await this.set(STORAGE_KEYS.VIDEO_DATA_METRICS, metrics);
+
+    const reasonText = reason === 'daily' ? '(daily auto-reset)' : '(manual reset)';
+    console.log(`[Storage] Reset video data metrics for ${service} ${reasonText}`);
   }
 
   // ============================================================================

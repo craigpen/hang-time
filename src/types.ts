@@ -196,6 +196,30 @@ export interface Settings {
 }
 
 // ============================================================================
+// VIDEO DATA METRICS (Content script reliability)
+// ============================================================================
+
+export interface VideoDataFieldMetrics {
+  undefined: number;
+  invalid: number;
+}
+
+export interface ServiceVideoDataMetrics {
+  total_requests: number;
+  isPlaying: VideoDataFieldMetrics;
+  duration: VideoDataFieldMetrics;
+  currentTime: VideoDataFieldMetrics;
+  netflix_title?: VideoDataFieldMetrics;
+  last_reset: number;
+}
+
+export interface VideoDataMetrics {
+  netflix?: ServiceVideoDataMetrics;
+  youtube?: ServiceVideoDataMetrics;
+  twitch?: ServiceVideoDataMetrics;
+}
+
+// ============================================================================
 // NOSTR RELAYS (Single source of truth)
 // ============================================================================
 
@@ -221,6 +245,7 @@ export const STORAGE_KEYS = {
   CURRENT_ACTIVITY: 'hang_time_current_activity',
   MY_ACTIVITIES: 'hang_time_my_activities',
   SETTINGS: 'hang_time_settings',
+  VIDEO_DATA_METRICS: 'hang_time_video_data_metrics',
   MESSAGES: (friendId: string) => `hang_time_messages_${friendId}`,
   ACTIVITY_HISTORY: (friendId: string) => `hang_time_activity_history_${friendId}`,
 } as const;
