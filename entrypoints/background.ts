@@ -10,6 +10,7 @@ import { IdentityManager, initializeIdentityManager, identityManager } from '../
 import { FriendManager, initializeFriendManager, getFriendManager } from '../src/modules/friends';
 import { MessagingManager, initializeMessagingManager, getMessagingManager } from '../src/modules/messaging';
 import { NotificationManager, initializeNotificationManager, getNotificationManager } from '../src/modules/notifications';
+import { initializeActivityDatastore, getActivityDatastore } from '../src/modules/activity-datastore';
 import { JoinHandler } from '../src/modules/join-handler';
 import { ActivityDetector } from '../src/modules/activity';
 import { ActivityPublisher } from '../src/modules/publisher';
@@ -131,6 +132,10 @@ async function initializeExtension(): Promise<void> {
     // Initialize notification manager
     initializeNotificationManager(storageManager);
     console.debug('[Background] Notification manager initialized');
+
+    // Initialize activity datastore (validates all activity writes)
+    initializeActivityDatastore(storageManager);
+    console.debug('[Background] Activity datastore initialized');
 
     // Initialize activity detector
     activityDetector = new ActivityDetector(storageManager);

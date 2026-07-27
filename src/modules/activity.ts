@@ -10,6 +10,7 @@ import {
   ExtensionMessage,
 } from '../types';
 import { StorageManager } from './storage';
+import { getActivityDatastore } from './activity-datastore';
 
 export class ActivityDetector {
   private services: Map<string, IServiceModule> = new Map();
@@ -60,17 +61,32 @@ export class ActivityDetector {
 
       console.log(`[Activity] 🎬 Detected ${allActivities.length} active service(s): ${allActivities.map(a => a.service).join(', ')}`);
 
-      // Store detected activities locally (publishing handled by separate publisher)
+      // Validate activities through datastore before storing
+      const datastore = getActivityDatastore();
+      const validatedActivities: Activity[] = [];
       const activitiesByService: Partial<Record<string, any>> = {};
+
       for (const activity of allActivities) {
-        // Defensive: ensure all activities have required content field
-        if (!activity.content) {
-          console.warn(`[Activity] WARNING: Activity for ${activity.service} has no content, using fallback`);
-          activity.content = `Activity on ${activity.service}`;
+        try {
+          // Validate through datastore
+          const validated = await datastore.createActivity({
+            ...activity,
+            provenance: 'LOCAL_TAB',
+          });
+          validatedActivities.push(validated);
+          activitiesByService[activity.service] = validated;
+          console.debug(`[Activity]   - ${activity.service}: "${activity.content}" (audio: ${activity.audio})`);
+        } catch (error) {
+          // Activity failed validation - log and skip it
+          console.warn(`[Activity] ⚠️  Validation failed for ${activity.service}:`, error instanceof Error ? error.message : error);
         }
-        activitiesByService[activity.service] = activity;
-        console.debug(`[Activity]   - ${activity.service}: "${activity.content}" (audio: ${activity.audio})`);
       }
+
+      if (validatedActivities.length === 0) {
+        console.debug('[Activity] No activities passed validation');
+        return;
+      }
+
       await this.storageManager.setMyActivities(activitiesByService);
       console.debug('[Activity] ✅ Stored in MY_ACTIVITIES');
 
