@@ -1396,9 +1396,6 @@ export class PopupController {
         }
       }
 
-      // Load content script health status for browser tabs
-      await this._updateContentScriptHealthDisplay();
-
       // Load video data metrics for browser tabs
       await this._loadVideoDataMetricsInPanel();
 
@@ -1504,6 +1501,9 @@ export class PopupController {
 
       // Load browser activity status
       await this._loadBrowserStatusInPanel();
+
+      // Load content script health status (after browser status so it shows on top)
+      await this._updateContentScriptHealthDisplay();
 
       // Update Steam status after loading
       await this._updateServiceStatus('steam');

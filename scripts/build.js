@@ -33,8 +33,7 @@ const ENTRYPOINTS = {
   background: 'entrypoints/background.ts',
   popup: 'src/ui/popup.ts',
   'oauth-handler': 'entrypoints/oauth-handler.ts',
-  'video-sync': 'entrypoints/video-sync.ts',
-  'netflix-content': 'entrypoints/netflix-content.ts',
+  'content-script': 'entrypoints/content-script.ts',
   'netflix-debug-comprehensive': 'entrypoints/netflix-debug-comprehensive.ts',
 };
 
