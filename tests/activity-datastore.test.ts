@@ -120,8 +120,13 @@ describe('Activity Validation', () => {
       expect(() => validateProgress(-1)).toThrow(ValidationError);
     });
 
-    it('rejects progress exceeding duration', () => {
+    it('rejects progress exceeding duration (for recorded content)', () => {
       expect(() => validateProgress(100, 50)).toThrow(ValidationError);
+    });
+
+    it('allows progress > 0 with duration=0 (live streams)', () => {
+      expect(validateProgress(30, 0)).toBe(30);
+      expect(validateProgress(100, 0)).toBe(100);
     });
 
     it('rejects non-finite progress', () => {

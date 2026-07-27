@@ -100,6 +100,7 @@ export function validateState(state: unknown): string {
 /**
  * Validates that progress field is valid if provided
  * Returns the validated progress value or undefined if not provided
+ * Note: For live streams (duration=0), progress is not bounded
  */
 export function validateProgress(progress: unknown, duration?: number): number | undefined {
   if (progress === null || progress === undefined) {
@@ -118,7 +119,8 @@ export function validateProgress(progress: unknown, duration?: number): number |
     throw new ValidationError('progress', 'Must be a finite number', progress);
   }
 
-  if (duration !== undefined && progress > duration) {
+  // For live streams (duration=0 or undefined), don't enforce bounds
+  if (duration !== undefined && duration > 0 && progress > duration) {
     throw new ValidationError('progress', `Cannot exceed duration (${duration}s)`, progress);
   }
 
