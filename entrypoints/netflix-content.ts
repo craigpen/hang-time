@@ -1,9 +1,23 @@
 /**
  * Hang Time - Netflix Content Script
  * Waits for React to render title, then extracts and stores in chrome.storage.local
+ * Tracks provenance and confidence levels for intelligent title selection
  */
 
-const STORAGE_KEY = 'netflix_title';
+const STORAGE_KEY = 'netflix_title_data';
+
+interface NetflixTitleData {
+  value: string;
+  extractedAt: number;
+  source: 'h2-tag' | 'data-uia' | 'fallback';
+  confidence: 'high' | 'medium' | 'low';
+}
+
+const SOURCE_CONFIDENCE: Record<string, number> = {
+  'h2-tag': 3,      // Most reliable - React renders title in h2 immediately
+  'data-uia': 2,    // Reliable - Netflix's own data attribute
+  'fallback': 1,    // Least reliable - regex parsing of complex structure
+};
 
 function isValidTitle(title: string | null | undefined): boolean {
   if (!title || typeof title !== 'string') return false;
@@ -64,44 +78,91 @@ function isValidTitle(title: string | null | undefined): boolean {
   return true;
 }
 
-async function writeValidTitle(title: string | null): Promise<void> {
-  try {
-    if (isValidTitle(title)) {
-      await chrome.storage.local.set({ [STORAGE_KEY]: title });
-    }
-  } catch (error) {
-    console.error('[NetflixContent] Failed to write title to storage:', error instanceof Error ? error.message : error);
-    // Extension context invalidated - will reconnect automatically
-  }
-}
-
-async function getStoredTitle(): Promise<string | null> {
+async function getStoredTitleData(): Promise<NetflixTitleData | null> {
   try {
     const result = await chrome.storage.local.get(STORAGE_KEY);
     const stored = result[STORAGE_KEY];
-    if (isValidTitle(stored)) {
+    if (stored && stored.value && isValidTitle(stored.value)) {
       return stored;
     }
     return null;
   } catch (error) {
     console.error('[NetflixContent] Failed to read title from storage:', error instanceof Error ? error.message : error);
-    // Extension context invalidated - will reconnect automatically
     return null;
   }
 }
 
-function extractNetflixTitle(): string | null {
+async function writeValidTitle(title: string | null, source: 'h2-tag' | 'data-uia' | 'fallback'): Promise<void> {
   try {
-    // Look for h2 tags (Netflix renders title here after React hydration)
+    if (!isValidTitle(title)) {
+      return;
+    }
+
+    const stored = await getStoredTitleData();
+    const newConfidence = SOURCE_CONFIDENCE[source];
+    const storedConfidence = stored ? SOURCE_CONFIDENCE[stored.source] : 0;
+
+    // Only write if:
+    // 1. No stored data, OR
+    // 2. New source has higher confidence, OR
+    // 3. Same confidence but different value (user changed show)
+    const shouldWrite =
+      !stored ||
+      newConfidence > storedConfidence ||
+      (newConfidence === storedConfidence && stored.value !== title);
+
+    if (shouldWrite) {
+      const confidenceMap: Record<string, 'high' | 'medium' | 'low'> = {
+        'h2-tag': 'high',
+        'data-uia': 'medium',
+        'fallback': 'low',
+      };
+
+      const titleData: NetflixTitleData = {
+        value: title,
+        extractedAt: Date.now(),
+        source,
+        confidence: confidenceMap[source],
+      };
+
+      await chrome.storage.local.set({ [STORAGE_KEY]: titleData });
+      console.debug(
+        `[NetflixContent] Stored title via ${source}: "${title}" (confidence: ${confidenceMap[source]})`
+      );
+    } else if (stored && stored.value !== title) {
+      console.debug(
+        `[NetflixContent] Rejected new title (lower confidence). ` +
+        `Stored: "${stored.value}" (${stored.source}/${stored.confidence}) ` +
+        `New: "${title}" (${source}/${confidenceMap[source]})`
+      );
+    }
+  } catch (error) {
+    console.error('[NetflixContent] Failed to write title to storage:', error instanceof Error ? error.message : error);
+  }
+}
+
+async function getStoredTitle(): Promise<string | null> {
+  try {
+    const data = await getStoredTitleData();
+    return data?.value || null;
+  } catch (error) {
+    console.error('[NetflixContent] Failed to read title from storage:', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+function extractNetflixTitle(): { title: string; source: 'h2-tag' | 'data-uia' | 'fallback' } | null {
+  try {
+    // Look for h2 tags (Netflix renders title here after React hydration) - HIGHEST CONFIDENCE
     const h2Elements = document.querySelectorAll('h2');
     for (const h2 of h2Elements) {
       const text = h2.textContent?.trim();
       if (text && isValidTitle(text)) {
-        return text;
+        return { title: text, source: 'h2-tag' };
       }
     }
 
-    // Fallback to data-uia attribute if h2 not found
+    // Try data-uia attribute if h2 not found - MEDIUM CONFIDENCE
     const titleElements = document.querySelectorAll("[data-uia='video-title']");
     for (const titleElement of titleElements) {
       const fullText = titleElement.textContent?.trim() || '';
@@ -135,7 +196,7 @@ function extractNetflixTitle(): string | null {
       if (title && title.length > 2) {
         const result = episode ? `${title} ${episode}` : title;
         if (isValidTitle(result)) {
-          return result;
+          return { title: result, source: 'data-uia' };
         }
       }
     }
@@ -174,14 +235,16 @@ function connectToExtension(retryCount: number = 0): void {
         console.debug('[NetflixContent] Received GET_NETFLIX_TITLE query');
         (async () => {
           try {
-            const freshTitle = extractNetflixTitle();
-            if (isValidTitle(freshTitle)) {
-              await writeValidTitle(freshTitle);
-              console.debug(`[NetflixContent] Responding with fresh title: "${freshTitle}"`);
-              port?.postMessage({ type: 'GET_NETFLIX_TITLE', success: true, data: freshTitle });
+            const extracted = extractNetflixTitle();
+            if (extracted) {
+              await writeValidTitle(extracted.title, extracted.source);
+              console.debug(
+                `[NetflixContent] Responding with fresh title via ${extracted.source}: "${extracted.title}"`
+              );
+              port?.postMessage({ type: 'GET_NETFLIX_TITLE', success: true, data: extracted.title });
             } else {
               const storedTitle = await getStoredTitle();
-              console.debug(`[NetflixContent] Fresh title invalid, using stored: "${storedTitle}"`);
+              console.debug(`[NetflixContent] Fresh title extraction failed, using stored: "${storedTitle}"`);
               port?.postMessage({ type: 'GET_NETFLIX_TITLE', success: true, data: storedTitle });
             }
           } catch (error) {
@@ -223,10 +286,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'GET_NETFLIX_TITLE') {
     (async () => {
       try {
-        const freshTitle = extractNetflixTitle();
-        if (isValidTitle(freshTitle)) {
-          await writeValidTitle(freshTitle);
-          sendResponse({ success: true, data: freshTitle });
+        const extracted = extractNetflixTitle();
+        if (extracted) {
+          await writeValidTitle(extracted.title, extracted.source);
+          sendResponse({ success: true, data: extracted.title });
         } else {
           const storedTitle = await getStoredTitle();
           sendResponse({ success: true, data: storedTitle });
@@ -272,7 +335,7 @@ function watchForTitle(): void {
   const observer = new MutationObserver(async (mutations) => {
     for (const mutation of mutations) {
       if (mutation.type === 'childList' || mutation.type === 'characterData') {
-        // Check if h2 now exists
+        // Check if h2 now exists (highest confidence source)
         const h2 = document.querySelector('h2');
         if (h2) {
           const text = h2.textContent?.trim();
@@ -280,7 +343,7 @@ function watchForTitle(): void {
             const storedTitle = await getStoredTitle();
             // Only write if different from what's stored
             if (text !== storedTitle) {
-              await writeValidTitle(text);
+              await writeValidTitle(text, 'h2-tag');
             }
           }
         }
@@ -302,11 +365,10 @@ watchForTitle();
 (window as any).__netflixDebug = {
   extractTitle: () => extractNetflixTitle(),
   getStored: async () => {
-    const result = await chrome.storage.local.get('netflix_title');
-    return result.netflix_title || null;
+    return await getStoredTitleData();
   },
   clearStorage: async () => {
-    await chrome.storage.local.remove('netflix_title');
-    console.log('[Netflix Content] Cleared stored title');
+    await chrome.storage.local.remove(STORAGE_KEY);
+    console.log('[Netflix Content] Cleared stored title data');
   },
 };
