@@ -1007,9 +1007,9 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
     // Handle notification event
     console.debug(`[Background] Received invite notification from ${friend.local_name}`);
     if (typeTag === 'invite') {
-      // Check if we've already notified for this invite
-      if (hasNotifiedForInvite(event.id)) {
-        console.debug(`[Background] Already notified for invite ${event.id.substring(0, 8)}..., skipping`);
+      // Rate limit: only notify if 20+ seconds have passed since last notification
+      if (!shouldNotifyForInvite(event.id)) {
+        console.debug(`[Background] Invite ${event.id.substring(0, 8)}... rate limited (< 20s since last notify), skipping notification`);
         return;
       }
 
@@ -1381,8 +1381,27 @@ async function initializeNotificationDedup(): Promise<void> {
   }
 }
 
+/**
+ * Rate limit: only re-notify if 20+ seconds have passed since last notification
+ * Prevents duplicate notifications if same invite is received multiple times
+ */
+const INVITE_NOTIFICATION_RATE_LIMIT_MS = 20 * 1000; // 20 seconds
+
 function hasNotifiedForInvite(eventId: string): boolean {
   return notifiedInviteIds.has(eventId);
+}
+
+function shouldNotifyForInvite(eventId: string): boolean {
+  // If never notified, return true
+  if (!notifiedInviteIds.has(eventId)) {
+    return true;
+  }
+
+  // Check if enough time has passed since last notification
+  const lastNotifiedAt = notifiedInviteIds.get(eventId)!;
+  const timeSinceLastNotification = Date.now() - lastNotifiedAt;
+
+  return timeSinceLastNotification >= INVITE_NOTIFICATION_RATE_LIMIT_MS;
 }
 
 async function markInviteNotified(eventId: string): Promise<void> {
