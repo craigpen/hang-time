@@ -147,15 +147,17 @@ export class ActivityDetector {
 
     // Ensure services_enabled exists (defensive check for profiles that might be missing it)
     const servicesEnabled = profile.services_enabled || {
-      spotify: false,
-      twitch: false,
-      steam: false,
-      netflix: false,
-      youtube: false,
+      'spotify-api': false,
+      'twitch-api': false,
+      'steam-api': false,
+      'discord-api': false,
+      'netflix-tab': false,
+      'youtube-tab': false,
+      'twitch-tab': false,
     };
 
-    // Check each enabled OAuth service (Spotify, Twitch, Steam)
-    const oauthServices: ServiceName[] = ['spotify', 'twitch', 'steam'];
+    // Check each enabled OAuth service (Spotify, Twitch, Steam, Discord)
+    const oauthServices: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api'];
     for (const serviceName of oauthServices) {
       if (!servicesEnabled[serviceName]) continue;
 
@@ -174,7 +176,7 @@ export class ActivityDetector {
     }
 
     // Check browser tabs (Netflix, YouTube, Twitch)
-    if (servicesEnabled.netflix || servicesEnabled.youtube || servicesEnabled.twitch) {
+    if (servicesEnabled['netflix-tab'] || servicesEnabled['youtube-tab'] || servicesEnabled['twitch-tab']) {
       const tabService = this.services.get('tabs') as any;
       if (tabService) {
         try {
@@ -182,29 +184,29 @@ export class ActivityDetector {
           await tabService.getCurrentActivity();
 
           // Get Netflix activity
-          if (servicesEnabled.netflix) {
-            const netflixActivity = tabService.getDetectedActivity('netflix');
+          if (servicesEnabled['netflix-tab']) {
+            const netflixActivity = tabService.getDetectedActivity('netflix-tab');
             if (netflixActivity) {
               activities.push(netflixActivity);
-              seenServices.add('netflix');
+              seenServices.add('netflix-tab');
             }
           }
 
           // Get YouTube activity
-          if (servicesEnabled.youtube) {
-            const youtubeActivity = tabService.getDetectedActivity('youtube');
+          if (servicesEnabled['youtube-tab']) {
+            const youtubeActivity = tabService.getDetectedActivity('youtube-tab');
             if (youtubeActivity) {
               activities.push(youtubeActivity);
-              seenServices.add('youtube');
+              seenServices.add('youtube-tab');
             }
           }
 
           // Get Twitch activity
-          if (servicesEnabled.twitch) {
-            const twitchActivity = tabService.getDetectedActivity('twitch');
+          if (servicesEnabled['twitch-tab']) {
+            const twitchActivity = tabService.getDetectedActivity('twitch-tab');
             if (twitchActivity) {
               activities.push(twitchActivity);
-              seenServices.add('twitch');
+              seenServices.add('twitch-tab');
             }
           }
         } catch (error) {

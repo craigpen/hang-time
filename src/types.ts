@@ -15,11 +15,13 @@ export interface UserProfile {
   discord_info?: string;
   steam_id?: string;
   services_enabled: {
-    spotify: boolean;
-    twitch: boolean;
-    steam: boolean;
-    netflix: boolean;
-    youtube: boolean;
+    'spotify-api': boolean;
+    'twitch-api': boolean;
+    'steam-api': boolean;
+    'discord-api': boolean;
+    'netflix-tab': boolean;
+    'youtube-tab': boolean;
+    'twitch-tab': boolean;
   };
   notification_preferences: {
     friend_online: boolean;
@@ -45,14 +47,14 @@ export interface UserProfile {
   };
 }
 
-export type ServiceName = 'spotify' | 'twitch' | 'steam' | 'netflix' | 'youtube';
+export type ServiceName = 'spotify-api' | 'twitch-api' | 'steam-api' | 'discord-api' | 'netflix-tab' | 'youtube-tab' | 'twitch-tab';
 
 // ============================================================================
 // OAUTH & TOKENS
 // ============================================================================
 
 export interface OAuthToken {
-  service: 'spotify' | 'twitch';
+  service: 'spotify-api' | 'twitch-api' | 'steam-api' | 'discord-api';
   access_token: string;
   refresh_token?: string;
   expires_at: number;
@@ -213,9 +215,9 @@ export interface ServiceVideoDataMetrics {
 }
 
 export interface VideoDataMetrics {
-  netflix?: ServiceVideoDataMetrics;
-  youtube?: ServiceVideoDataMetrics;
-  twitch?: ServiceVideoDataMetrics;
+  'netflix-tab'?: ServiceVideoDataMetrics;
+  'youtube-tab'?: ServiceVideoDataMetrics;
+  'twitch-tab'?: ServiceVideoDataMetrics;
 }
 
 // ============================================================================

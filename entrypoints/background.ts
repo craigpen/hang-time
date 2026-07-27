@@ -141,9 +141,10 @@ async function initializeExtension(): Promise<void> {
     activityDetector = new ActivityDetector(storageManager);
 
     // Register all service modules
-    activityDetector.registerService('spotify', new SpotifyService(storageManager));
-    activityDetector.registerService('twitch', new TwitchService(storageManager));
-    activityDetector.registerService('steam', new SteamService(storageManager));
+    activityDetector.registerService('spotify-api', new SpotifyService(storageManager));
+    activityDetector.registerService('twitch-api', new TwitchService(storageManager));
+    activityDetector.registerService('steam-api', new SteamService(storageManager));
+    // TODO: Register 'discord-api' when DiscordService is implemented
     activityDetector.registerService('tabs', new TabService(storageManager));
 
     console.debug('[Background] Services registered');
@@ -243,7 +244,7 @@ function _startPeriodicCleanup(): void {
  */
 function _startContentScriptHealthCheck(): void {
   const HEALTH_CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
-  const SERVICES: Array<'netflix' | 'youtube' | 'twitch'> = ['netflix', 'youtube', 'twitch'];
+  const SERVICES: Array<'netflix-tab' | 'youtube-tab' | 'twitch-tab'> = ['netflix-tab', 'youtube-tab', 'twitch-tab'];
 
   setInterval(async () => {
     try {
@@ -253,13 +254,13 @@ function _startContentScriptHealthCheck(): void {
         if (!tab.id || !tab.url) continue;
 
         // Determine which service this tab is for
-        let service: 'netflix' | 'youtube' | 'twitch' | null = null;
+        let service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab' | null = null;
         if (tab.url.includes('netflix.com')) {
-          service = 'netflix';
+          service = 'netflix-tab';
         } else if (tab.url.includes('youtube.com') || tab.url.includes('youtu.be')) {
-          service = 'youtube';
+          service = 'youtube-tab';
         } else if (tab.url.includes('twitch.tv')) {
-          service = 'twitch';
+          service = 'twitch-tab';
         }
 
         if (!service) continue;
@@ -548,12 +549,12 @@ async function _getAllActivities(): Promise<ExtensionResponse> {
 async function _getBrowserActivities(): Promise<ExtensionResponse> {
   // Get the TabService and retrieve detected activities for Netflix, YouTube, and Twitch.tv separately
   if (!activityDetector) {
-    return { success: true, data: { netflix: null, youtube: null, twitch: null } };
+    return { success: true, data: { 'netflix-tab': null, 'youtube-tab': null, 'twitch-tab': null } };
   }
 
   const tabService = activityDetector.getService('tabs') as any;
   if (!tabService) {
-    return { success: true, data: { netflix: null, youtube: null, twitch: null } };
+    return { success: true, data: { 'netflix-tab': null, 'youtube-tab': null, 'twitch-tab': null } };
   }
 
   // Call getCurrentActivity first to populate the lastDetected map
@@ -562,9 +563,9 @@ async function _getBrowserActivities(): Promise<ExtensionResponse> {
   return {
     success: true,
     data: {
-      netflix: tabService.getDetectedActivity?.('netflix') || null,
-      youtube: tabService.getDetectedActivity?.('youtube') || null,
-      twitch: tabService.getDetectedActivity?.('twitch') || null,
+      'netflix-tab': tabService.getDetectedActivity?.('netflix-tab') || null,
+      'youtube-tab': tabService.getDetectedActivity?.('youtube-tab') || null,
+      'twitch-tab': tabService.getDetectedActivity?.('twitch-tab') || null,
     },
   };
 }
@@ -851,10 +852,10 @@ async function _getOAuthStatus(service?: string): Promise<ExtensionResponse> {
     const serviceTyped = service as ServiceName;
     let hasToken = false;
 
-    if (serviceTyped === 'spotify') {
+    if (serviceTyped === 'spotify-api') {
       const spotifyService = new SpotifyService(storageManager);
       hasToken = await spotifyService.hasToken();
-    } else if (serviceTyped === 'twitch') {
+    } else if (serviceTyped === 'twitch-api') {
       const twitchService = new TwitchService(storageManager);
       hasToken = await twitchService.hasToken();
     }
@@ -874,10 +875,10 @@ async function _authenticateService(service?: string): Promise<ExtensionResponse
     const serviceTyped = service as ServiceName;
     let authUrl: string | null = null;
 
-    if (serviceTyped === 'spotify') {
+    if (serviceTyped === 'spotify-api') {
       const spotifyService = new SpotifyService(storageManager);
       authUrl = await spotifyService.getAuthUrl();
-    } else if (serviceTyped === 'twitch') {
+    } else if (serviceTyped === 'twitch-api') {
       const twitchService = new TwitchService(storageManager);
       authUrl = await twitchService.getAuthUrl();
     } else {
@@ -898,10 +899,10 @@ async function _disconnectService(service?: string): Promise<ExtensionResponse> 
   try {
     const serviceTyped = service as ServiceName;
 
-    if (serviceTyped === 'spotify') {
+    if (serviceTyped === 'spotify-api') {
       const spotifyService = new SpotifyService(storageManager);
       await spotifyService.clearToken();
-    } else if (serviceTyped === 'twitch') {
+    } else if (serviceTyped === 'twitch-api') {
       const twitchService = new TwitchService(storageManager);
       await twitchService.clearToken();
     } else {

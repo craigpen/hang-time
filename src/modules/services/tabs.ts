@@ -37,11 +37,11 @@ export class TabService implements IServiceModule {
 
         if (title) {
           // We have a real title - create normal activity
-          const netflixId = generateActivityId('netflix', netflixTab.url);
+          const netflixId = generateActivityId('netflix-tab', netflixTab.url);
           // Query video data from content script for progress and play/pause state
-          const videoData = await this.getVideoActivityDataFromTab(netflixTab.id, 'netflix');
+          const videoData = await this.getVideoActivityDataFromTab(netflixTab.id, 'netflix-tab');
           // Preserve previous data if current query fails
-          const lastNetflixActivity = this.lastDetected.get('netflix');
+          const lastNetflixActivity = this.lastDetected.get('netflix-tab');
           // Use content script's isPlaying state only, preserve previous if unavailable
           // (tab.audible is unreliable - removed fallback to prevent oscillation)
           let state = lastNetflixActivity?.state || 'paused';
@@ -54,7 +54,7 @@ export class TabService implements IServiceModule {
           }
           const netflixActivity: Activity = {
             id: netflixId,
-            service: 'netflix',
+            service: 'netflix-tab',
             content: title,
             url: netflixTab.url,
             state,
@@ -78,11 +78,11 @@ export class TabService implements IServiceModule {
         const title = this._extractYouTubeTitle(youtubeTab.title || '');
         // Ensure content is never a URL - use fallback if title extraction failed
         const finalContent = (title && !title.includes('http')) ? title : 'YouTube Video';
-        const youtubeId = generateActivityId('youtube', youtubeTab.url);
+        const youtubeId = generateActivityId('youtube-tab', youtubeTab.url);
         // Query video data from content script for progress and play/pause state
-        const videoData = await this.getVideoActivityDataFromTab(youtubeTab.id, 'youtube');
+        const videoData = await this.getVideoActivityDataFromTab(youtubeTab.id, 'youtube-tab');
         // Preserve previous data if current query fails
-        const lastYoutubeActivity = this.lastDetected.get('youtube');
+        const lastYoutubeActivity = this.lastDetected.get('youtube-tab');
         // Use content script's isPlaying state only, preserve previous if unavailable
         // (tab.audible is unreliable - removed fallback to prevent oscillation)
         let state = lastYoutubeActivity?.state || 'paused';
@@ -95,7 +95,7 @@ export class TabService implements IServiceModule {
         }
         const youtubeActivity: Activity = {
           id: youtubeId,
-          service: 'youtube',
+          service: 'youtube-tab',
           content: finalContent,
           url: youtubeTab.url,
           state,
@@ -114,11 +114,11 @@ export class TabService implements IServiceModule {
       const twitchTab = this._findMostRecentTabByDomain(tabs, 'twitch');
       if (twitchTab) {
         const title = this._extractTwitchTitle(twitchTab.title || '');
-        const twitchId = generateActivityId('twitch', twitchTab.url);
+        const twitchId = generateActivityId('twitch-tab', twitchTab.url);
         // Query video data from content script for play/pause state
-        const videoData = await this.getVideoActivityDataFromTab(twitchTab.id, 'twitch');
+        const videoData = await this.getVideoActivityDataFromTab(twitchTab.id, 'twitch-tab');
         // Preserve previous data if current query fails
-        const lastTwitchActivity = this.lastDetected.get('twitch');
+        const lastTwitchActivity = this.lastDetected.get('twitch-tab');
         // Use content script's isPlaying state only, preserve previous if unavailable
         // (tab.audible is unreliable - removed fallback to prevent oscillation)
         let state = lastTwitchActivity?.state || 'paused';
@@ -131,7 +131,7 @@ export class TabService implements IServiceModule {
         }
         const twitchActivity: Activity = {
           id: twitchId,
-          service: 'twitch',
+          service: 'twitch-tab',
           content: title || 'Twitch Stream',
           url: twitchTab.url,
           state,
@@ -193,7 +193,7 @@ export class TabService implements IServiceModule {
    * Get the last detected activity for a specific service
    * Called by settings UI to display each service's status separately
    */
-  getDetectedActivity(service: 'netflix' | 'youtube' | 'twitch'): Activity | null {
+  getDetectedActivity(service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab'): Activity | null {
     return this.lastDetected.get(service) || null;
   }
 
@@ -296,7 +296,7 @@ export class TabService implements IServiceModule {
           };
 
           // Track metrics for this request
-          await this.storage.recordVideoDataRequest(service as 'netflix' | 'youtube' | 'twitch', {
+          await this.storage.recordVideoDataRequest(service as 'netflix-tab' | 'youtube-tab' | 'twitch-tab', {
             isPlaying: data.isPlaying,
             duration: data.duration,
             currentTime: data.currentTime,
@@ -318,7 +318,7 @@ export class TabService implements IServiceModule {
     }
 
     // Track failed request
-    await this.storage.recordVideoDataRequest(service as 'netflix' | 'youtube' | 'twitch', {
+    await this.storage.recordVideoDataRequest(service as 'netflix-tab' | 'youtube-tab' | 'twitch-tab', {
       isPlaying: undefined,
       duration: undefined,
       currentTime: undefined,

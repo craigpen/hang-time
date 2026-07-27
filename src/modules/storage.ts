@@ -26,7 +26,7 @@ import {
  */
 export interface ContentScriptHealth {
   tabId: number;
-  service: 'netflix' | 'youtube' | 'twitch';
+  service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab';
   alive: boolean;
   lastPing: number; // timestamp
 }
@@ -540,7 +540,7 @@ export class StorageManager {
    */
   async updateContentScriptHealth(
     tabId: number,
-    service: 'netflix' | 'youtube' | 'twitch',
+    service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab',
     alive: boolean
   ): Promise<void> {
     const health = await this.getContentScriptHealth();
@@ -628,7 +628,7 @@ export class StorageManager {
    * Record a video data request and track undefined/invalid fields
    */
   async recordVideoDataRequest(
-    service: 'netflix' | 'youtube' | 'twitch',
+    service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab',
     fields: {
       isPlaying?: boolean | undefined;
       duration?: number | undefined;
@@ -692,7 +692,7 @@ export class StorageManager {
   /**
    * Reset metrics for a service (manual or daily auto-reset)
    */
-  async resetVideoDataMetrics(service: 'netflix' | 'youtube' | 'twitch', reason: 'manual' | 'daily' = 'manual'): Promise<void> {
+  async resetVideoDataMetrics(service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab', reason: 'manual' | 'daily' = 'manual'): Promise<void> {
     const metrics = await this.get<VideoDataMetrics>(STORAGE_KEYS.VIDEO_DATA_METRICS, {});
 
     // Reset to fresh state
