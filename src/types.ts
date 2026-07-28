@@ -3,6 +3,25 @@
  * Central source of truth for all data models
  */
 
+// Import game discovery types for re-export
+import type {
+  OwnedGame,
+  GameLibrary,
+  GameMetadata,
+  MetadataFetcherConfig,
+  DiscoveryUIState,
+  GameDiscoveryConfig,
+} from './types/game-discovery';
+
+export type {
+  OwnedGame,
+  GameLibrary,
+  GameMetadata,
+  MetadataFetcherConfig,
+  DiscoveryUIState,
+  GameDiscoveryConfig,
+};
+
 // ============================================================================
 // USER & IDENTITY
 // ============================================================================
@@ -53,6 +72,27 @@ export interface UserProfile {
     steam_id?: string;
     steam_username?: string;
     last_verified?: number;
+  };
+  game_discovery?: {
+    enabled: boolean;
+    last_library_sync: number;
+    last_metadata_refresh: number;
+  };
+  metadata_fetcher_config?: {
+    rate_limit_per_second: number;
+    batch_size: number;
+    cache_ttl_ms: number;
+    request_timeout_ms: number;
+    max_retries: number;
+    backoff_base_ms: number;
+  };
+  discovery_ui_state?: {
+    filters: {
+      genres: string[];
+      modes: string[];
+      playtime: 'all' | 'month' | 'week';
+    };
+    sortBy: 'most-friends' | 'score' | 'recent' | 'alphabetical';
   };
 }
 
@@ -271,6 +311,9 @@ export const STORAGE_KEYS = {
   NETFLIX_EXTRACTION_LOGS: 'hang_time_netflix_extraction_logs',
   NETFLIX_DEBUG_CAPTURES: 'hang_time_netflix_debug_captures',
   ACTIVITY_PROVENANCE_MAP: 'hang_time_activity_provenance_map',
+  MY_GAME_LIBRARY: 'hang_time_my_game_library',
+  FRIEND_GAME_LIBRARIES: 'hang_time_friend_game_libraries',
+  GAME_METADATA_CACHE: 'hang_time_game_metadata_cache',
   MESSAGES: (friendId: string) => `hang_time_messages_${friendId}`,
   ACTIVITY_HISTORY: (friendId: string) => `hang_time_activity_history_${friendId}`,
 } as const;
