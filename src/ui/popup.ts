@@ -1920,6 +1920,38 @@ export class PopupController {
     inputContainer.appendChild(toggleVisibilityBtn);
     modalContent.appendChild(inputContainer);
 
+    // Steam ID input
+    const steamIdLabel = document.createElement('label');
+    steamIdLabel.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 500;';
+    steamIdLabel.textContent = 'Steam ID (optional):';
+    modalContent.appendChild(steamIdLabel);
+
+    const steamIdInput = document.createElement('input');
+    steamIdInput.type = 'text';
+    steamIdInput.placeholder = 'e.g. 76561198024691357 or find at steamid.xyz';
+    steamIdInput.value = profile?.steam_config?.steam_id || '';
+    steamIdInput.style.cssText = `
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      margin-bottom: 16px;
+      box-sizing: border-box;
+      font-size: 0.85rem;
+    `;
+    modalContent.appendChild(steamIdInput);
+
+    const steamIdHelp = document.createElement('div');
+    steamIdHelp.style.cssText = `
+      font-size: 0.75rem;
+      color: #6b7280;
+      margin-bottom: 16px;
+    `;
+    steamIdHelp.textContent = 'Find your Steam ID at steamid.xyz (64-bit format)';
+    modalContent.appendChild(steamIdHelp);
+
     // Status display
     const statusDiv = document.createElement('div');
     statusDiv.style.cssText = `
@@ -1977,18 +2009,19 @@ export class PopupController {
           throw new Error('Invalid API key');
         }
 
-        // API key is valid, save it
-        const profile = await this.storage.getUserProfile();
-        if (profile) {
-          profile.steam_config = {
+        // API key is valid, save it along with optional steamid
+        const userProfile = await this.storage.getUserProfile();
+        if (userProfile) {
+          const steamIdValue = steamIdInput.value.trim() || undefined;
+          userProfile.steam_config = {
             enabled: true,
             connection_type: 'api_key',
             api_key: apiKey,
-            steam_id: undefined,
+            steam_id: steamIdValue,
             steam_username: undefined,
             last_verified: Date.now(),
           };
-          await this.storage.setUserProfile(profile);
+          await this.storage.setUserProfile(userProfile);
 
           // Show success message
           statusDiv.style.display = 'block';
