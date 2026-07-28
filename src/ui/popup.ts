@@ -1423,6 +1423,51 @@ export class PopupController {
     }
   }
 
+  private async _updateIntegrationHealthDisplays(): Promise<void> {
+    try {
+      const profile = await this.storage.getUserProfile();
+      if (!profile) return;
+
+      const integrations = ['steam-api', 'spotify-api', 'twitch-api', 'discord-api'];
+      for (const service of integrations) {
+        const statusEl = document.getElementById(`status-${service}-popup`);
+        if (!statusEl) continue;
+
+        const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? false;
+        if (!isEnabled) {
+          statusEl.textContent = 'Disabled';
+          statusEl.style.color = '';
+          continue;
+        }
+
+        // For Steam, show health status
+        if (service === 'steam-api') {
+          const health = await this.storage.getIntegrationHealth();
+          const steamHealth = health['steam-api'];
+          if (steamHealth) {
+            const timeSinceLastPing = Date.now() - steamHealth.lastPing;
+            const secondsAgo = Math.floor(timeSinceLastPing / 1000);
+            const minutesAgo = Math.floor(timeSinceLastPing / (60 * 1000));
+            const timeStr = secondsAgo < 60 ? `${secondsAgo}s ago` : `${minutesAgo}m ago`;
+
+            if (steamHealth.alive) {
+              statusEl.textContent = `✅ Active (${timeStr})`;
+              statusEl.style.color = '#10b981';
+            } else {
+              statusEl.textContent = `⚠️ Unavailable (${timeStr})`;
+              statusEl.style.color = '#ef4444';
+            }
+          } else {
+            statusEl.textContent = 'Not configured';
+            statusEl.style.color = '';
+          }
+        }
+        // TODO: Add health display for Spotify, Twitch, Discord when implemented
+      }
+    } catch (error) {
+      console.error('[Popup] Failed to update integration health displays:', error);
+    }
+  }
 
   private async _loadSettingsPanel(): Promise<void> {
     try {
@@ -1458,21 +1503,10 @@ export class PopupController {
       // Load service toggles for OAuth integrations
       const oauthServices = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api'];
       for (const service of oauthServices) {
-        const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
+        const toggle = document.getElementById(`service-${service}-enabled`) as HTMLInputElement;
         if (toggle && profile.services_enabled) {
           toggle.checked = profile.services_enabled[service as keyof typeof profile.services_enabled] ?? false;
-        }
-      }
-
-      // Load Steam ID and initialize state
-      // Load service integration enable/disable state from profile
-      const integrationServices = ['spotify-api', 'twitch-api', 'steam-api'];
-      for (const service of integrationServices) {
-        const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? false;
-        this.serviceIntegrationEnabled.set(service, isEnabled);
-        const enableToggle = document.getElementById(`service-${service}-enabled`) as HTMLInputElement;
-        if (enableToggle) {
-          enableToggle.checked = isEnabled;
+          this.serviceIntegrationEnabled.set(service, toggle.checked);
         }
       }
 
@@ -1544,6 +1578,9 @@ export class PopupController {
 
       // Load content script health status
       await this._updateContentScriptHealthDisplay();
+
+      // Update integration health status (Steam, Spotify, Twitch)
+      await this._updateIntegrationHealthDisplays();
 
       // Update Steam status after loading
       await this._updateServiceStatus('steam');
