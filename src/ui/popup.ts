@@ -1959,8 +1959,9 @@ export class PopupController {
 
       try {
         // Verify the API key by calling Steam API
+        // We use GetPlayerSummaries as a test endpoint - valid key returns response, invalid key returns error
         const steamApiUrl = 'https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/';
-        const verifyResponse = await fetch(`${steamApiUrl}?key=${apiKey}&steamids=0`, {
+        const verifyResponse = await fetch(`${steamApiUrl}?key=${apiKey}&steamids=76561198`, {
           method: 'GET',
           mode: 'cors',
         });
@@ -1971,9 +1972,9 @@ export class PopupController {
 
         const data = await verifyResponse.json();
 
-        // Check if API returned valid response (even with invalid steamid, it should return success)
+        // Valid key returns a response object (even if steamid doesn't exist)
         if (!data.response) {
-          throw new Error('Invalid API response from Steam');
+          throw new Error('Invalid API key');
         }
 
         // API key is valid, save it
@@ -1988,10 +1989,19 @@ export class PopupController {
             last_verified: Date.now(),
           };
           await this.storage.setUserProfile(profile);
-          modal.remove();
-          // Refresh status display
-          await this._updateServiceStatus('steam-api');
-          toastManager.show('Steam API key verified and saved');
+
+          // Show success message
+          statusDiv.style.display = 'block';
+          statusDiv.style.background = '#dcfce7';
+          statusDiv.style.color = '#166534';
+          statusDiv.textContent = 'API key verified and saved';
+
+          setTimeout(() => {
+            modal.remove();
+            // Refresh status display
+            this._updateServiceStatus('steam-api');
+            toastManager.show('Steam API key verified and saved');
+          }, 1500);
         }
       } catch (error) {
         console.error('[Popup] Failed to verify/save Steam config:', error);
