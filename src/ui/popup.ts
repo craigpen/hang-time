@@ -1440,7 +1440,7 @@ export class PopupController {
           continue;
         }
 
-        // For Steam, show health status
+        // For Steam, show health status with personaname if available
         if (service === 'steam-api') {
           const health = await this.storage.getIntegrationHealth();
           const steamHealth = health['steam-api'];
@@ -1449,12 +1449,13 @@ export class PopupController {
             const secondsAgo = Math.floor(timeSinceLastPing / 1000);
             const minutesAgo = Math.floor(timeSinceLastPing / (60 * 1000));
             const timeStr = secondsAgo < 60 ? `${secondsAgo}s ago` : `${minutesAgo}m ago`;
+            const personaStr = steamHealth.personaname ? ` - ${steamHealth.personaname}` : '';
 
             if (steamHealth.alive) {
-              statusEl.textContent = `✅ Active (${timeStr})`;
+              statusEl.textContent = `✅ Active${personaStr} (${timeStr})`;
               statusEl.style.color = '#10b981';
             } else {
-              statusEl.textContent = `⚠️ Unavailable (${timeStr})`;
+              statusEl.textContent = `⚠️ Unavailable${personaStr} (${timeStr})`;
               statusEl.style.color = '#ef4444';
             }
           } else {
@@ -1990,10 +1991,22 @@ export class PopupController {
       saveBtn.textContent = 'Verifying...';
 
       try {
+        const steamIdValue = steamIdInput.value.trim() || undefined;
+
+        // Validate steamid format if provided
+        if (steamIdValue) {
+          if (!/^\d+$/.test(steamIdValue)) {
+            throw new Error('Steam ID must be numeric (64-bit format)');
+          }
+          if (steamIdValue.length !== 17) {
+            throw new Error('Steam ID should be 17 digits (64-bit format)');
+          }
+        }
+
         // Verify the API key by calling Steam API
-        // We use GetPlayerSummaries as a test endpoint - valid key returns response, invalid key returns error
         const steamApiUrl = 'https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/';
-        const verifyResponse = await fetch(`${steamApiUrl}?key=${apiKey}&steamids=76561198`, {
+        const testSteamId = steamIdValue || '76561198';
+        const verifyResponse = await fetch(`${steamApiUrl}?key=${apiKey}&steamids=${testSteamId}`, {
           method: 'GET',
           mode: 'cors',
         });
@@ -2004,21 +2017,30 @@ export class PopupController {
 
         const data = await verifyResponse.json();
 
-        // Valid key returns a response object (even if steamid doesn't exist)
+        // Valid key returns a response object
         if (!data.response) {
           throw new Error('Invalid API key');
         }
 
-        // API key is valid, save it along with optional steamid
+        // If steamid was provided, verify it exists and extract personaname
+        let personaname: string | undefined;
+        if (steamIdValue) {
+          if (data.response.players && data.response.players.length > 0) {
+            personaname = data.response.players[0].personaname;
+          } else {
+            throw new Error('Steam ID not found or account is private');
+          }
+        }
+
+        // API key and steamid are valid, save them
         const userProfile = await this.storage.getUserProfile();
         if (userProfile) {
-          const steamIdValue = steamIdInput.value.trim() || undefined;
           userProfile.steam_config = {
             enabled: true,
             connection_type: 'api_key',
             api_key: apiKey,
             steam_id: steamIdValue,
-            steam_username: undefined,
+            steam_username: personaname,
             last_verified: Date.now(),
           };
           await this.storage.setUserProfile(userProfile);

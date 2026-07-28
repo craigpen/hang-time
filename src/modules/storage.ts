@@ -610,18 +610,19 @@ export class StorageManager {
   /**
    * Get health status for all integrations
    */
-  async getIntegrationHealth(): Promise<Record<string, { alive: boolean; lastPing: number }>> {
-    return this.get<Record<string, { alive: boolean; lastPing: number }>>('integration_health', {});
+  async getIntegrationHealth(): Promise<Record<string, { alive: boolean; lastPing: number; personaname?: string }>> {
+    return this.get<Record<string, { alive: boolean; lastPing: number; personaname?: string }>>('integration_health', {});
   }
 
   /**
    * Update health status for an integration
    */
-  async updateIntegrationHealth(service: string, alive: boolean): Promise<void> {
+  async updateIntegrationHealth(service: string, alive: boolean, personaname?: string): Promise<void> {
     const health = await this.getIntegrationHealth();
     health[service] = {
       alive,
       lastPing: Date.now(),
+      personaname,
     };
     await this.set('integration_health', health);
   }

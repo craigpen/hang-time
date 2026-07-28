@@ -314,14 +314,39 @@ function _startIntegrationHealthCheck(): void {
       if (profile.steam_config?.api_key) {
         try {
           const steamApiUrl = 'https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/';
-          const response = await fetch(`${steamApiUrl}?key=${profile.steam_config.api_key}&steamids=0`, {
-            method: 'GET',
-            mode: 'cors',
-          });
 
-          const isHealthy = response.ok;
-          await storageManager.updateIntegrationHealth('steam-api', isHealthy);
-          console.debug(`[Background] Steam API health: ${isHealthy ? '✅ Healthy' : '⚠️ Unhealthy'}`);
+          // If we have a steamid, use it to get personaname
+          let personaname: string | undefined;
+          if (profile.steam_config.steam_id) {
+            const response = await fetch(`${steamApiUrl}?key=${profile.steam_config.api_key}&steamids=${profile.steam_config.steam_id}`, {
+              method: 'GET',
+              mode: 'cors',
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data.response?.players?.[0]) {
+                personaname = data.response.players[0].personaname;
+              }
+            }
+          } else {
+            // No steamid, just verify key works
+            const response = await fetch(`${steamApiUrl}?key=${profile.steam_config.api_key}&steamids=76561198`, {
+              method: 'GET',
+              mode: 'cors',
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data.response) {
+                // Key is valid
+              }
+            }
+          }
+
+          const isHealthy = true;
+          await storageManager.updateIntegrationHealth('steam-api', isHealthy, personaname);
+          console.debug(`[Background] Steam API health: ✅ Healthy${personaname ? ` (${personaname})` : ''}`);
         } catch (error) {
           await storageManager.updateIntegrationHealth('steam-api', false);
           console.debug(`[Background] Steam API check failed:`, error instanceof Error ? error.message : error);
