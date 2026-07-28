@@ -17,24 +17,31 @@ export class SteamService implements IServiceModule {
   async isEnabled(): Promise<boolean> {
     const profile = await this.storage.getUserProfile();
     if (!profile) return false;
-    return profile.services_enabled.steam;
+    return profile.services_enabled['steam-api'] && profile.steam_config?.enabled;
   }
 
   async getCurrentActivity(): Promise<Activity | null> {
     const profile = await this.storage.getUserProfile();
-    if (!profile || !profile.steam_id) {
+    if (!profile?.steam_config?.steam_id) {
       console.debug('[Steam] Steam ID not configured');
       return null;
     }
 
-    return this._getCurrentlyPlayingGame(profile.steam_id);
+    return this._getCurrentlyPlayingGame(profile.steam_config.steam_id);
   }
 
   async hasToken(): Promise<boolean> {
-    // Steam uses public API, no token needed
-    // Check if user has configured their Steam ID
+    // For API key method, check if key is configured
+    // For OAuth method (future), check if token exists
     const profile = await this.storage.getUserProfile();
-    return profile?.steam_id ? true : false;
+    if (!profile?.steam_config) return false;
+
+    if (profile.steam_config.connection_type === 'api_key') {
+      return profile.steam_config.api_key ? true : false;
+    } else if (profile.steam_config.connection_type === 'oauth') {
+      return profile.steam_config.oauth_token ? true : false;
+    }
+    return false;
   }
 
   async clearToken(): Promise<void> {
@@ -89,8 +96,8 @@ export class SteamService implements IServiceModule {
       console.debug('[Steam] Currently playing:', gameName);
 
       return {
-        id: generateActivityId('steam', player.gameid.toString()),
-        service: 'steam',
+        id: generateActivityId('steam-api', player.gameid.toString()),
+        service: 'steam-api',
         content: gameName,
         url: `steam://run/${player.gameid}`,
         state: 'playing',

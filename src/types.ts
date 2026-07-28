@@ -45,6 +45,15 @@ export interface UserProfile {
     verbose_logging: boolean;
     delta_publishing: boolean;
   };
+  steam_config?: {
+    enabled: boolean;
+    connection_type: 'api_key' | 'oauth';
+    api_key?: string;
+    oauth_token?: OAuthToken;
+    steam_id?: string;
+    steam_username?: string;
+    last_verified?: number;
+  };
 }
 
 export type ServiceName = 'spotify-api' | 'twitch-api' | 'steam-api' | 'discord-api' | 'netflix-tab' | 'youtube-tab' | 'twitch-tab';
@@ -97,12 +106,15 @@ export interface Activity {
   state?: 'playing' | 'paused' | 'stopped'; // Activity state: playing, paused, or stopped (removal signal)
   audio: 'on' | 'off'; // Audio state detected from tab.audible (deprecated, kept for compatibility)
   timestamp: number; // When activity was detected
+  isStale?: boolean; // True if showing preserved data (content script unavailable), false if fresh from content script
+  provenance?: 'LOCAL_TAB' | 'FRIEND' | 'TEST'; // Source of activity: user's tab, friend's data, or test
   metadata: {
     lastAccessed?: number; // Browser tab's lastAccessed time (for sorting order on remote side)
     progress?: number; // Current position in video (seconds)
     duration?: number; // Total length of video/content (seconds)
     artist?: string; // For music: artist name
     thumbnailUrl?: string; // Image/thumbnail URL (for display)
+    tabId?: number; // Chrome tab ID for tab-based services (netflix-tab, youtube-tab, twitch-tab)
   };
 }
 
