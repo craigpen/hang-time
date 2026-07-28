@@ -192,7 +192,8 @@ export class PopupController {
       // Update existing friends and add new ones
       for (const friend of friends) {
         const isExpanded = this.expandedFriendsState.get(friend.id) ?? true;
-        const activities = Object.values(friend.current_activities || {});
+        // Aggressive deduplication: only show one activity per unique ID, prefer newest
+        const activities = this._deduplicateActivities(Object.values(friend.current_activities || {}));
 
         let friendElement = existingElements.get(friend.id);
         if (!friendElement) {
@@ -460,10 +461,36 @@ export class PopupController {
 
     // State indicator (on the left) - FIRST
     if (activity.state) {
-      const stateIcon = document.createElement('span');
-      stateIcon.className = `activity-state-icon activity-state-${activity.state}`;
-      stateIcon.textContent = activity.state === 'playing' ? '▶' : '⏸';
-      stateIcon.title = activity.state === 'playing' ? 'Playing' : 'Paused';
+      const stateIcon = document.createElement('div');
+      stateIcon.className = 'activity-state-icon';
+
+      if (activity.isStale) {
+        // Stale data (preserved): show moon icon in amber
+        stateIcon.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="#FF9800" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="state-icon-svg">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        `;
+        stateIcon.title = 'Data is stale (content script unavailable)';
+      } else if (activity.state === 'playing') {
+        // Fresh playing: green play icon
+        stateIcon.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="#4CAF50" stroke="none" class="state-icon-svg">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+        `;
+        stateIcon.title = 'Playing';
+      } else {
+        // Fresh paused: gray pause icon
+        stateIcon.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="#9E9E9E" stroke="none" class="state-icon-svg">
+            <rect x="6" y="4" width="4" height="16"></rect>
+            <rect x="14" y="4" width="4" height="16"></rect>
+          </svg>
+        `;
+        stateIcon.title = 'Paused';
+      }
+
       row.appendChild(stateIcon);
 
       // Pipe separator
@@ -920,11 +947,39 @@ export class PopupController {
     buttonsDiv.className = 'activity-actions';
 
     // Join button
+    // Check if we're watching together (same activity ID for same service)
+    const myActivityForService = this.userActivities.find(a => a.service === activity.service);
+    const isWatchingTogether = myActivityForService && myActivityForService.id === activity.id;
+
     const joinBtn = document.createElement('button');
     joinBtn.className = 'activity-action-btn activity-action-join';
-    joinBtn.textContent = '▶';
-    joinBtn.title = 'Join activity';
-    joinBtn.addEventListener('click', () => this._joinActivity(activity));
+
+    if (isWatchingTogether) {
+      // Show "watching together" icon (solid play + people)
+      joinBtn.innerHTML = `<svg viewBox="0 0 120 140" fill="none" style="width: 20px; height: 20px;">
+        <rect x="10" y="10" width="100" height="60" rx="8" fill="none" stroke="currentColor" stroke-width="3"/>
+        <circle cx="60" cy="40" r="18" fill="currentColor"/>
+        <polygon points="54,33 54,47 73,40" fill="white"/>
+        <circle cx="30" cy="88" r="8" fill="currentColor"/>
+        <path d="M20 100 Q20 98 22 98 L38 98 Q40 98 40 100 L40 120 L20 120 Z" fill="currentColor"/>
+        <circle cx="60" cy="88" r="8" fill="currentColor"/>
+        <path d="M50 100 Q50 98 52 98 L68 98 Q70 98 70 100 L70 120 L50 120 Z" fill="currentColor"/>
+        <circle cx="90" cy="88" r="8" fill="currentColor"/>
+        <path d="M80 100 Q80 98 82 98 L98 98 Q100 98 100 100 L100 120 L80 120 Z" fill="currentColor"/>
+      </svg>`;
+      joinBtn.title = 'Watching together';
+      joinBtn.addEventListener('click', () => {
+        // Can still invite more people from your own My Activity
+        // This button is just for information, not actionable
+        toastManager.show('You\'re already watching together!');
+      });
+    } else {
+      // Show standard join arrow
+      joinBtn.textContent = '▶';
+      joinBtn.title = 'Join activity';
+      joinBtn.addEventListener('click', () => this._joinActivity(activity));
+    }
+
     buttonsDiv.appendChild(joinBtn);
 
     // Message button
@@ -951,7 +1006,7 @@ export class PopupController {
     buttonsDiv.appendChild(msgBtn);
 
     // Sync button (video/music only)
-    if (['youtube', 'netflix', 'twitch', 'spotify'].includes(activity.service)) {
+    if (['youtube-tab', 'netflix-tab', 'twitch-tab', 'spotify-api'].includes(activity.service)) {
       const syncBtn = document.createElement('button');
       syncBtn.className = 'activity-action-btn activity-action-sync';
       syncBtn.textContent = '🕐';
@@ -966,32 +1021,87 @@ export class PopupController {
   }
 
   private _getFaviconUrl(service: string): string {
+    // Extract base service name from qualified name (e.g., 'spotify-api' -> 'spotify')
+    const baseService = service.replace('-api', '').replace('-tab', '');
     const iconMap: Record<string, string> = {
       netflix: 'public/icons/netflix.png',
       youtube: 'public/icons/youtube.png',
       spotify: 'public/icons/spotify.png',
       twitch: 'public/icons/twitch.png',
-      steam: 'public/icons/steam.png',
+      steam: 'public/icons/steampowered.png',
       discord: 'public/icons/discord.png',
     };
-    const icon = iconMap[service];
+    const icon = iconMap[baseService];
     if (!icon) return '';
     return chrome.runtime.getURL(icon);
   }
 
   private _getServiceLabel(service: string): string {
+    // Extract base service name from qualified name (e.g., 'spotify-api' -> 'spotify')
+    const baseService = service.replace('-api', '').replace('-tab', '');
     const labels: Record<string, string> = {
       spotify: 'Spotify',
       twitch: 'Twitch',
       youtube: 'YouTube',
       netflix: 'Netflix',
       steam: 'Steam',
+      discord: 'Discord',
     };
-    return labels[service] || service;
+    return labels[baseService] || service;
   }
 
   private _truncateActivityContent(content: string): string {
     return content.length > 40 ? content.substring(0, 40) + '...' : content;
+  }
+
+  /**
+   * Aggressively deduplicate activities by ID (keep only one per unique ID)
+   * Also enforces: one activity per service type
+   * Prefers most recent activity (by timestamp)
+   */
+  private _deduplicateActivities(activities: Activity[]): Activity[] {
+    const seen = new Map<string, Activity>();
+    const seenByService = new Map<string, Activity>();
+
+    for (const activity of activities) {
+      const id = activity.id || '';
+      const service = activity.service;
+
+      // Check for duplicate activity ID
+      if (seen.has(id)) {
+        const existing = seen.get(id)!;
+        const isNewer = (activity.timestamp || 0) > (existing.timestamp || 0);
+        if (isNewer) {
+          seen.set(id, activity);
+          console.warn(`[Popup] Duplicate activity ID ${id} detected; keeping newer version`);
+        } else {
+          console.warn(`[Popup] Duplicate activity ID ${id} detected; keeping existing version`);
+        }
+        continue;
+      }
+
+      // Check for duplicate service (should never happen but enforce it)
+      if (seenByService.has(service)) {
+        const existing = seenByService.get(service)!;
+        const isNewer = (activity.timestamp || 0) > (existing.timestamp || 0);
+        console.warn(
+          `[Popup] Multiple activities for service ${service} detected; keeping ${isNewer ? 'newer' : 'existing'}`
+        );
+        if (isNewer) {
+          // Remove old from seen map and use new one
+          const oldId = existing.id || '';
+          if (oldId) seen.delete(oldId);
+          seen.set(id, activity);
+          seenByService.set(service, activity);
+        }
+        continue;
+      }
+
+      seen.set(id, activity);
+      seenByService.set(service, activity);
+    }
+
+    return Array.from(seen.values());
   }
 
   private _setupMessageListener(): void {
@@ -1320,7 +1430,7 @@ export class PopupController {
       const services: Array<'netflix-tab' | 'youtube-tab' | 'twitch-tab'> = ['netflix-tab', 'youtube-tab', 'twitch-tab'];
       for (const service of services) {
         const metricsEl = document.getElementById(`metrics-${service}-popup`);
-        const resetBtn = document.getElementById(`reset-metrics-${service.replace('-tab', '')}-tab`);
+        const resetBtn = document.getElementById(`reset-metrics-${service}`);
 
         if (!metricsEl || !resetBtn) continue;
 
@@ -1343,7 +1453,7 @@ export class PopupController {
         let metricsText = `Video: ${isPlayingRate}% | Duration: ${durationRate}% | Time: ${currentTimeRate}%`;
 
         // Add Netflix title metrics if available
-        if (service === 'netflix' && serviceMetrics.netflix_title) {
+        if (service === 'netflix-tab' && serviceMetrics.netflix_title) {
           const titleSuccess = serviceMetrics.total_requests - serviceMetrics.netflix_title.undefined - serviceMetrics.netflix_title.invalid;
           const titleRate = Math.round((titleSuccess / serviceMetrics.total_requests) * 100);
           metricsText += ` | Title: ${titleRate}%`;
@@ -1397,7 +1507,7 @@ export class PopupController {
       }
 
       // Load service toggles for OAuth integrations
-      const oauthServices = ['spotify', 'twitch-api', 'steam-api', 'discord-api'];
+      const oauthServices = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api'];
       for (const service of oauthServices) {
         const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
         if (toggle && profile.services_enabled) {
@@ -1428,7 +1538,7 @@ export class PopupController {
       }
 
       // Load service integration enable/disable state from profile
-      const integrationServices = ['spotify', 'twitch', 'steam'];
+      const integrationServices = ['spotify-api', 'twitch-api', 'steam-api'];
       for (const service of integrationServices) {
         const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? false;
         this.serviceIntegrationEnabled.set(service, isEnabled);
@@ -1504,10 +1614,7 @@ export class PopupController {
       // Load OAuth status
       await this._loadOAuthStatusInPanel();
 
-      // Load browser activity status
-      await this._loadBrowserStatusInPanel();
-
-      // Load content script health status (after browser status so it shows on top)
+      // Load content script health status
       await this._updateContentScriptHealthDisplay();
 
       // Update Steam status after loading
@@ -1521,7 +1628,7 @@ export class PopupController {
   }
 
   private async _loadOAuthStatusInPanel(): Promise<void> {
-    const oauthServices = ['spotify', 'twitch'];
+    const oauthServices = ['spotify-api', 'twitch-api'];
     for (const service of oauthServices) {
       try {
         console.debug(`[Popup] Loading OAuth status for ${service}`);
@@ -1586,7 +1693,7 @@ export class PopupController {
       const browserActivities = response.success && response.data ? response.data : { 'netflix-tab': null, 'youtube-tab': null, 'twitch-tab': null };
 
       for (const service of ['netflix-tab', 'youtube-tab', 'twitch-tab']) {
-        const statusDiv = document.getElementById(`status-${service.replace('-tab', '')}-popup`);
+        const statusDiv = document.getElementById(`status-${service}-popup`);
         if (statusDiv && profile) {
           const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? false;
 
@@ -1838,12 +1945,12 @@ export class PopupController {
 
     // No current activity - check if service is configured (for OAuth and Steam)
     let isConfigured = false;
-    if (service === 'steam') {
+    if (service === 'steam-api') {
       const steamInput = document.getElementById('steam-id-popup-input') as HTMLInputElement;
       const steamId = steamInput?.value?.trim();
       isConfigured = !!steamId;
       console.debug('[Popup] Checking Steam status - steamId:', steamId, 'configured:', isConfigured);
-    } else if (!['netflix', 'youtube', 'twitch'].includes(service)) {
+    } else if (!['netflix-tab', 'youtube-tab', 'twitch-tab'].includes(service)) {
       // For OAuth services (not browser tab services), check if they have a token
       try {
         const authResponse = await chrome.runtime.sendMessage({
@@ -1857,7 +1964,7 @@ export class PopupController {
     }
 
     // Show appropriate status message
-    if (['netflix', 'youtube', 'twitch'].includes(service)) {
+    if (['netflix-tab', 'youtube-tab', 'twitch-tab'].includes(service)) {
       // Browser tab services with no activity just show "No activity"
       statusDiv.textContent = 'No activity';
     } else if (!isConfigured) {
@@ -1897,7 +2004,7 @@ export class PopupController {
       }
 
       // Collect service toggles for OAuth integrations
-      const oauthServices = ['spotify', 'twitch-api', 'steam-api', 'discord-api'];
+      const oauthServices = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api'];
       for (const service of oauthServices) {
         const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
         servicesEnabled[service] = toggle?.checked ?? false;
@@ -2143,8 +2250,11 @@ export class PopupController {
         const pendingInvites = await this.storage.getPendingInvites();
         delete pendingInvites[activity.id];
         await this.storage.setPendingInvites(pendingInvites);
+        console.debug('[Popup] Declined invite for activity:', activity.id);
       }
       modal.remove();
+      // Wait a tick to ensure storage is synced before reloading
+      await new Promise(resolve => setTimeout(resolve, 50));
       await this.refreshFriends();
     });
 
@@ -2165,9 +2275,12 @@ export class PopupController {
         const pendingInvites = await this.storage.getPendingInvites();
         delete pendingInvites[activity.id];
         await this.storage.setPendingInvites(pendingInvites);
+        console.debug('[Popup] Cleared pending invite for activity:', activity.id);
       }
 
       modal.remove();
+      // Wait a tick to ensure storage is synced before reloading
+      await new Promise(resolve => setTimeout(resolve, 50));
       await this.refreshFriends();
     });
 
