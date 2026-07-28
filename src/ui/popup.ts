@@ -1802,6 +1802,10 @@ export class PopupController {
   }
 
   private async _showSteamConfigureModal(): Promise<void> {
+    // Load existing config
+    const profile = await this.storage.getUserProfile();
+    const existingKey = profile?.steam_config?.api_key || '';
+
     const modal = document.createElement('div');
     modal.className = 'steam-configure-modal-overlay';
     modal.style.cssText = `
@@ -1830,7 +1834,7 @@ export class PopupController {
 
     // Title
     const title = document.createElement('h3');
-    title.textContent = 'Configure Steam';
+    title.textContent = existingKey ? 'Update Steam API Key' : 'Configure Steam';
     title.style.marginBottom = '16px';
     modalContent.appendChild(title);
 
@@ -1843,6 +1847,7 @@ export class PopupController {
     const apiKeyInput = document.createElement('input');
     apiKeyInput.type = 'password';
     apiKeyInput.placeholder = 'Enter your Steam Web API key';
+    apiKeyInput.value = existingKey;
     apiKeyInput.style.cssText = `
       width: 100%;
       padding: 8px 12px;
@@ -1890,10 +1895,28 @@ export class PopupController {
       }
 
       saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving...';
+      saveBtn.textContent = 'Verifying...';
 
       try {
-        // TODO: Verify the API key by calling Steam API
+        // Verify the API key by calling Steam API
+        const steamApiUrl = 'https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/';
+        const verifyResponse = await fetch(`${steamApiUrl}?key=${apiKey}&steamids=0`, {
+          method: 'GET',
+          mode: 'cors',
+        });
+
+        if (!verifyResponse.ok) {
+          throw new Error(`Steam API returned ${verifyResponse.status}`);
+        }
+
+        const data = await verifyResponse.json();
+
+        // Check if API returned valid response (even with invalid steamid, it should return success)
+        if (!data.response) {
+          throw new Error('Invalid API response from Steam');
+        }
+
+        // API key is valid, save it
         const profile = await this.storage.getUserProfile();
         if (profile) {
           profile.steam_config = {
@@ -1908,13 +1931,14 @@ export class PopupController {
           modal.remove();
           // Refresh status display
           await this._updateServiceStatus('steam-api');
+          toastManager.show('Steam API key verified and saved');
         }
       } catch (error) {
-        console.error('[Popup] Failed to save Steam config:', error);
+        console.error('[Popup] Failed to verify/save Steam config:', error);
         statusDiv.style.display = 'block';
         statusDiv.style.background = '#fee2e2';
         statusDiv.style.color = '#991b1b';
-        statusDiv.textContent = 'Failed to save. Try again.';
+        statusDiv.textContent = error instanceof Error ? error.message : 'Failed to verify API key. Check that it\'s correct.';
         saveBtn.disabled = false;
         saveBtn.textContent = 'Save';
       }
