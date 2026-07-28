@@ -170,7 +170,25 @@ export class StorageManager {
     console.debug(`[Storage] Found friend: ${friend.local_name}, merging updates:`, updates);
     // Merge activities separately to combine service objects
     if (updates.current_activities) {
-      friend.current_activities = { ...friend.current_activities, ...updates.current_activities };
+      const merged = { ...friend.current_activities, ...updates.current_activities };
+      // Clean up old service name keys (e.g., remove 'netflix' if 'netflix-tab' exists)
+      const cleaned: Partial<Record<string, any>> = {};
+      const serviceMap = new Map<string, string>(); // baseService -> key
+
+      Object.entries(merged).forEach(([key, value]) => {
+        const baseService = key.replace('-api', '').replace('-tab', '');
+        serviceMap.set(baseService, key);
+      });
+
+      // Keep only the qualified service names
+      Object.entries(merged).forEach(([key, value]) => {
+        if ((key.includes('-api') || key.includes('-tab')) ||
+            !Object.keys(merged).some(k => k.replace('-api', '').replace('-tab', '') === key && (k.includes('-api') || k.includes('-tab')))) {
+          cleaned[key] = value;
+        }
+      });
+
+      friend.current_activities = cleaned;
     }
     // Merge other fields
     const { current_activities, ...otherUpdates } = updates;
@@ -193,19 +211,19 @@ export class StorageManager {
     await this.set(STORAGE_KEYS.OAUTH_TOKENS, tokens);
   }
 
-  async getOAuthToken(service: 'spotify' | 'twitch'): Promise<OAuthToken | undefined> {
+  async getOAuthToken(service: 'spotify-api' | 'twitch-api' | 'steam-api' | 'discord-api'): Promise<OAuthToken | undefined> {
     const tokens = await this.getOAuthTokens();
     return tokens[service];
   }
 
-  async setOAuthToken(service: 'spotify' | 'twitch', token: OAuthToken): Promise<void> {
+  async setOAuthToken(service: 'spotify-api' | 'twitch-api' | 'steam-api' | 'discord-api', token: OAuthToken): Promise<void> {
     const tokens = await this.getOAuthTokens();
     tokens[service] = token;
     await this.setOAuthTokens(tokens);
     console.debug(`[Storage] Stored OAuth token for ${service}`);
   }
 
-  async clearOAuthToken(service: 'spotify' | 'twitch'): Promise<void> {
+  async clearOAuthToken(service: 'spotify-api' | 'twitch-api' | 'steam-api' | 'discord-api'): Promise<void> {
     const tokens = await this.getOAuthTokens();
     delete tokens[service];
     await this.setOAuthTokens(tokens);
@@ -586,6 +604,29 @@ export class StorageManager {
   }
 
   // ============================================================================
+  // INTEGRATION HEALTH (API/OAuth service monitoring)
+  // ============================================================================
+
+  /**
+   * Get health status for all integrations
+   */
+  async getIntegrationHealth(): Promise<Record<string, { alive: boolean; lastPing: number }>> {
+    return this.get<Record<string, { alive: boolean; lastPing: number }>>('integration_health', {});
+  }
+
+  /**
+   * Update health status for an integration
+   */
+  async updateIntegrationHealth(service: string, alive: boolean): Promise<void> {
+    const health = await this.getIntegrationHealth();
+    health[service] = {
+      alive,
+      lastPing: Date.now(),
+    };
+    await this.set('integration_health', health);
+  }
+
+  // ============================================================================
   // VIDEO DATA METRICS (Content script reliability tracking)
   // ============================================================================
 
@@ -602,7 +643,7 @@ export class StorageManager {
     let needsSave = false;
     const updated: VideoDataMetrics = { ...metrics };
 
-    for (const service of ['netflix', 'youtube', 'twitch'] as const) {
+    for (const service of ['netflix-tab', 'youtube-tab', 'twitch-tab'] as const) {
       const serviceMetrics = updated[service];
       if (serviceMetrics) {
         const lastReset = serviceMetrics.last_reset || 0;
@@ -674,7 +715,7 @@ export class StorageManager {
     }
 
     // Track Netflix title if present
-    if (service === 'netflix') {
+    if (service === 'netflix-tab') {
       if (!serviceMetrics.netflix_title) {
         serviceMetrics.netflix_title = { undefined: 0, invalid: 0 };
       }

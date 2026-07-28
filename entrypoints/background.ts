@@ -194,6 +194,9 @@ async function initializeExtension(): Promise<void> {
 
     // Start content script health monitoring
     _startContentScriptHealthCheck();
+
+    // Start integration health monitoring
+    _startIntegrationHealthCheck();
   } catch (error) {
     console.error('[Background] Initialization failed:', error);
     throw error;
@@ -293,6 +296,45 @@ function _startContentScriptHealthCheck(): void {
   }, HEALTH_CHECK_INTERVAL_MS);
 
   console.debug('[Background] Content script health monitoring started (every 30 seconds)');
+}
+
+/**
+ * Integration Health Monitoring (Steam, Spotify, Twitch, Discord)
+ * Pings each configured integration every 30 seconds to check if working
+ */
+function _startIntegrationHealthCheck(): void {
+  const HEALTH_CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
+
+  setInterval(async () => {
+    try {
+      const profile = await storageManager.getUserProfile();
+      if (!profile) return;
+
+      // Check Steam API
+      if (profile.steam_config?.api_key) {
+        try {
+          const steamApiUrl = 'https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/';
+          const response = await fetch(`${steamApiUrl}?key=${profile.steam_config.api_key}&steamids=0`, {
+            method: 'GET',
+            mode: 'cors',
+          });
+
+          const isHealthy = response.ok;
+          await storageManager.updateIntegrationHealth('steam-api', isHealthy);
+          console.debug(`[Background] Steam API health: ${isHealthy ? '✅ Healthy' : '⚠️ Unhealthy'}`);
+        } catch (error) {
+          await storageManager.updateIntegrationHealth('steam-api', false);
+          console.debug(`[Background] Steam API check failed:`, error instanceof Error ? error.message : error);
+        }
+      }
+
+      // TODO: Add Spotify, Twitch, Discord health checks later
+    } catch (error) {
+      console.error('[Background] Integration health check cycle failed:', error);
+    }
+  }, HEALTH_CHECK_INTERVAL_MS);
+
+  console.debug('[Background] Integration health monitoring started (every 30 seconds)');
 }
 
 // ============================================================================

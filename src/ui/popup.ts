@@ -1981,6 +1981,31 @@ export class PopupController {
       // Continue to check configuration status
     }
 
+    // Check integration health status (for Steam and OAuth services)
+    if (service === 'steam-api') {
+      try {
+        const health = await this.storage.getIntegrationHealth();
+        const steamHealth = health['steam-api'];
+        if (steamHealth) {
+          const timeSinceLastPing = Date.now() - steamHealth.lastPing;
+          const secondsAgo = Math.floor(timeSinceLastPing / 1000);
+          const minutesAgo = Math.floor(timeSinceLastPing / (60 * 1000));
+          let timeStr = secondsAgo < 60 ? `${secondsAgo}s ago` : `${minutesAgo}m ago`;
+
+          if (steamHealth.alive) {
+            statusDiv.textContent = `✅ Active (${timeStr})`;
+            statusDiv.style.color = '#10b981';
+          } else {
+            statusDiv.textContent = `⚠️ Unavailable (${timeStr})`;
+            statusDiv.style.color = '#ef4444';
+          }
+          return;
+        }
+      } catch (error) {
+        console.error('[Popup] Failed to check Steam health:', error);
+      }
+    }
+
     // No current activity - check if service is configured (for OAuth services)
     let isConfigured = false;
     if (!['netflix-tab', 'youtube-tab', 'twitch-tab', 'steam-api'].includes(service)) {
