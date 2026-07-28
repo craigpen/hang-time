@@ -9,8 +9,29 @@ import { generateActivityId } from '../activity-utils';
 
 export class TabService implements IServiceModule {
   private lastDetected: Map<string, Activity> = new Map();
+  private initialized = false;
 
   constructor(private storage: StorageManager) {}
+
+  /**
+   * Initialize lastDetected cache from stored activities on startup
+   * Ensures progress bars persist across service worker restarts
+   */
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+    try {
+      const activities = await this.storage.getMyActivities();
+      Object.values(activities).forEach((activity) => {
+        if (activity && (activity.service === 'netflix-tab' || activity.service === 'youtube-tab' || activity.service === 'twitch-tab')) {
+          this.lastDetected.set(activity.service, activity);
+        }
+      });
+      this.initialized = true;
+      console.debug('[TabService] Initialized lastDetected cache with', this.lastDetected.size, 'activities');
+    } catch (error) {
+      console.error('[TabService] Failed to initialize lastDetected cache:', error);
+    }
+  }
 
   async isEnabled(): Promise<boolean> {
     const profile = await this.storage.getUserProfile();
@@ -20,38 +41,50 @@ export class TabService implements IServiceModule {
 
   async getCurrentActivity(): Promise<Activity | null> {
     try {
+      // Initialize cache from storage on first call after restart
+      if (!this.initialized) {
+        await this.initialize();
+      }
+
       const tabs = await chrome.tabs.query({ windowType: 'normal' });
+      const stored = await this.storage.getMyActivities();
+      const openTabIds = new Set(tabs.map(t => t.id));
 
       // Detect ALL active services, not just the first one
       const detectedActivities: Activity[] = [];
+      let updateStorage = false;
 
       // Check for Netflix
       const netflixTab = this._findMostRecentTabByDomain(tabs, 'netflix');
       if (netflixTab && netflixTab.id) {
-        // Try to get the actual title from the Netflix page via content script
+        // Tab is open - try to get fresh data from content script
         let title = await this.getNetflixTitleFromTab(netflixTab.id);
-        // Fall back to parsing page title if content script fails
         if (!title) {
           title = this._extractNetflixTitle(netflixTab.title || '');
         }
 
         if (title) {
-          // We have a real title - create normal activity
           const netflixId = generateActivityId('netflix-tab', netflixTab.url);
-          // Query video data from content script for progress and play/pause state
           const videoData = await this.getVideoActivityDataFromTab(netflixTab.id, 'netflix-tab');
-          // Preserve previous data if current query fails
-          const lastNetflixActivity = this.lastDetected.get('netflix-tab');
-          // Use content script's isPlaying state only, preserve previous if unavailable
-          // (tab.audible is unreliable - removed fallback to prevent oscillation)
-          let state = lastNetflixActivity?.state || 'paused';
+          const storedNetflix = stored['netflix-tab'];
+
+          // Determine state based on content script responsiveness
+          let state: 'playing' | 'paused' = 'paused';
+          let audio: 'on' | 'off' = 'off';
+          let isStale = false;
+
           if (videoData?.isPlaying !== undefined) {
+            // Content script responsive - use fresh data
             state = videoData.isPlaying ? 'playing' : 'paused';
-          }
-          let audio = lastNetflixActivity?.audio || 'off';
-          if (videoData?.isPlaying !== undefined) {
             audio = videoData.isPlaying ? 'on' : 'off';
+            isStale = false;
+          } else if (storedNetflix) {
+            // Content script not responsive - use stored data with stale flag
+            state = storedNetflix.state || 'paused';
+            audio = storedNetflix.audio || 'off';
+            isStale = true;
           }
+
           const netflixActivity: Activity = {
             id: netflixId,
             service: 'netflix-tab',
@@ -60,39 +93,49 @@ export class TabService implements IServiceModule {
             state,
             audio,
             timestamp: Date.now(),
+            isStale,
+            provenance: 'LOCAL_TAB',
             metadata: {
               lastAccessed: netflixTab.lastAccessed || 0,
-              progress: videoData?.currentTime ?? lastNetflixActivity?.metadata?.progress,
-              duration: videoData?.duration ?? lastNetflixActivity?.metadata?.duration,
+              progress: videoData?.currentTime ?? storedNetflix?.metadata?.progress,
+              duration: videoData?.duration ?? storedNetflix?.metadata?.duration,
+              tabId: netflixTab.id,
             },
           };
           detectedActivities.push(netflixActivity);
         }
-        // Don't create guidance activities - skip publishing if no title found
-        // Friends will see no Netflix activity rather than a confusing message
+      } else if (stored['netflix-tab'] && stored['netflix-tab'].metadata?.tabId && !openTabIds.has(stored['netflix-tab'].metadata.tabId)) {
+        // Netflix tab was closed - remove from storage
+        delete stored['netflix-tab'];
+        updateStorage = true;
       }
 
       // Check for YouTube
       const youtubeTab = this._findMostRecentTabByDomain(tabs, 'youtube');
-      if (youtubeTab) {
+      if (youtubeTab && youtubeTab.id) {
         const title = this._extractYouTubeTitle(youtubeTab.title || '');
-        // Ensure content is never a URL - use fallback if title extraction failed
         const finalContent = (title && !title.includes('http')) ? title : 'YouTube Video';
         const youtubeId = generateActivityId('youtube-tab', youtubeTab.url);
-        // Query video data from content script for progress and play/pause state
         const videoData = await this.getVideoActivityDataFromTab(youtubeTab.id, 'youtube-tab');
-        // Preserve previous data if current query fails
-        const lastYoutubeActivity = this.lastDetected.get('youtube-tab');
-        // Use content script's isPlaying state only, preserve previous if unavailable
-        // (tab.audible is unreliable - removed fallback to prevent oscillation)
-        let state = lastYoutubeActivity?.state || 'paused';
+        const storedYoutube = stored['youtube-tab'];
+
+        // Determine state based on content script responsiveness
+        let state: 'playing' | 'paused' = 'paused';
+        let audio: 'on' | 'off' = 'off';
+        let isStale = false;
+
         if (videoData?.isPlaying !== undefined) {
+          // Content script responsive - use fresh data
           state = videoData.isPlaying ? 'playing' : 'paused';
-        }
-        let audio = lastYoutubeActivity?.audio || 'off';
-        if (videoData?.isPlaying !== undefined) {
           audio = videoData.isPlaying ? 'on' : 'off';
+          isStale = false;
+        } else if (storedYoutube) {
+          // Content script not responsive - use stored data with stale flag
+          state = storedYoutube.state || 'paused';
+          audio = storedYoutube.audio || 'off';
+          isStale = true;
         }
+
         const youtubeActivity: Activity = {
           id: youtubeId,
           service: 'youtube-tab',
@@ -101,34 +144,47 @@ export class TabService implements IServiceModule {
           state,
           audio,
           timestamp: Date.now(),
+          isStale,
+          provenance: 'LOCAL_TAB',
           metadata: {
             lastAccessed: youtubeTab.lastAccessed || 0,
-            progress: videoData?.currentTime ?? lastYoutubeActivity?.metadata?.progress,
-            duration: videoData?.duration ?? lastYoutubeActivity?.metadata?.duration,
+            progress: videoData?.currentTime ?? storedYoutube?.metadata?.progress,
+            duration: videoData?.duration ?? storedYoutube?.metadata?.duration,
+            tabId: youtubeTab.id,
           },
         };
         detectedActivities.push(youtubeActivity);
+      } else if (stored['youtube-tab'] && stored['youtube-tab'].metadata?.tabId && !openTabIds.has(stored['youtube-tab'].metadata.tabId)) {
+        // YouTube tab was closed - remove from storage
+        delete stored['youtube-tab'];
+        updateStorage = true;
       }
 
       // Check for Twitch
       const twitchTab = this._findMostRecentTabByDomain(tabs, 'twitch');
-      if (twitchTab) {
+      if (twitchTab && twitchTab.id) {
         const title = this._extractTwitchTitle(twitchTab.title || '');
         const twitchId = generateActivityId('twitch-tab', twitchTab.url);
-        // Query video data from content script for play/pause state
         const videoData = await this.getVideoActivityDataFromTab(twitchTab.id, 'twitch-tab');
-        // Preserve previous data if current query fails
-        const lastTwitchActivity = this.lastDetected.get('twitch-tab');
-        // Use content script's isPlaying state only, preserve previous if unavailable
-        // (tab.audible is unreliable - removed fallback to prevent oscillation)
-        let state = lastTwitchActivity?.state || 'paused';
+        const storedTwitch = stored['twitch-tab'];
+
+        // Determine state based on content script responsiveness
+        let state: 'playing' | 'paused' = 'paused';
+        let audio: 'on' | 'off' = 'off';
+        let isStale = false;
+
         if (videoData?.isPlaying !== undefined) {
+          // Content script responsive - use fresh data
           state = videoData.isPlaying ? 'playing' : 'paused';
-        }
-        let audio = lastTwitchActivity?.audio || 'off';
-        if (videoData?.isPlaying !== undefined) {
           audio = videoData.isPlaying ? 'on' : 'off';
+          isStale = false;
+        } else if (storedTwitch) {
+          // Content script not responsive - use stored data with stale flag
+          state = storedTwitch.state || 'paused';
+          audio = storedTwitch.audio || 'off';
+          isStale = true;
         }
+
         const twitchActivity: Activity = {
           id: twitchId,
           service: 'twitch-tab',
@@ -137,13 +193,25 @@ export class TabService implements IServiceModule {
           state,
           audio,
           timestamp: Date.now(),
+          isStale,
+          provenance: 'LOCAL_TAB',
           metadata: {
             lastAccessed: twitchTab.lastAccessed || 0,
-            progress: videoData?.currentTime ?? lastTwitchActivity?.metadata?.progress,
-            duration: videoData?.duration ?? lastTwitchActivity?.metadata?.duration,
+            progress: videoData?.currentTime ?? storedTwitch?.metadata?.progress,
+            duration: videoData?.duration ?? storedTwitch?.metadata?.duration,
+            tabId: twitchTab.id,
           },
         };
         detectedActivities.push(twitchActivity);
+      } else if (stored['twitch-tab'] && stored['twitch-tab'].metadata?.tabId && !openTabIds.has(stored['twitch-tab'].metadata.tabId)) {
+        // Twitch tab was closed - remove from storage
+        delete stored['twitch-tab'];
+        updateStorage = true;
+      }
+
+      // Update storage if any tabs were closed
+      if (updateStorage) {
+        await this.storage.setMyActivities(stored);
       }
 
       // Store all detected services for later retrieval
@@ -332,7 +400,7 @@ export class TabService implements IServiceModule {
    * Get video position (currentTime and duration) from content script
    * Called during activity detection for all video services
    */
-  async getVideoPositionFromTab(tabId: number, service: 'netflix' | 'youtube'): Promise<{ currentTime?: number; duration?: number } | null> {
+  async getVideoPositionFromTab(tabId: number, service: 'netflix-tab' | 'youtube-tab'): Promise<{ currentTime?: number; duration?: number } | null> {
     const data = await this.getVideoActivityDataFromTab(tabId, service);
     if (data) {
       return {
@@ -348,21 +416,8 @@ export class TabService implements IServiceModule {
    * Called when we detect a Netflix tab
    */
   async getNetflixTitleFromTab(tabId: number): Promise<string | null> {
-    // First try to get from storage (content script should have written it)
-    try {
-      const storedTitle = await this.storage.getNetflixTitle();
-      if (storedTitle && typeof storedTitle === 'string' && storedTitle.length > 0) {
-        // Track successful title
-        await this.storage.recordVideoDataRequest('netflix', {
-          netflix_title: storedTitle,
-        });
-        return storedTitle;
-      }
-    } catch (error) {
-      console.error('[TabService] Error reading Netflix title from storage:', error);
-    }
-
-    // Storage empty - use aggressive retry to get fresh extraction from content script
+    // Always try fresh extraction from content script first
+    // Storage is only a fallback if content script extraction fails
     const maxRetries = 10;
     const retryDelays = [500, 500, 500, 500, 1000, 1000, 1000, 1000, 1000, 1000]; // ms
 
@@ -372,7 +427,7 @@ export class TabService implements IServiceModule {
 
         if (response && response.success && response.data && typeof response.data === 'string' && response.data.length > 0) {
           // Track successful title
-          await this.storage.recordVideoDataRequest('netflix', {
+          await this.storage.recordVideoDataRequest('netflix-tab', {
             netflix_title: response.data,
           });
           return response.data;
@@ -392,12 +447,25 @@ export class TabService implements IServiceModule {
       }
     }
 
-    // All retries exhausted, track undefined title
-    await this.storage.recordVideoDataRequest('netflix', {
+    // Content script extraction failed - fall back to storage as last resort
+    try {
+      const storedTitle = await this.storage.getNetflixTitle();
+      if (storedTitle && typeof storedTitle === 'string' && storedTitle.length > 0) {
+        console.debug('[TabService] Using stored Netflix title (content script extraction failed)');
+        await this.storage.recordVideoDataRequest('netflix-tab', {
+          netflix_title: storedTitle,
+        });
+        return storedTitle;
+      }
+    } catch (error) {
+      console.error('[TabService] Error reading Netflix title from storage:', error);
+    }
+
+    // All retries exhausted and no fallback available
+    await this.storage.recordVideoDataRequest('netflix-tab', {
       netflix_title: undefined,
     });
 
-    // Return null (activity will show without title, but with play/pause state)
     return null;
   }
 
@@ -417,4 +485,5 @@ export class TabService implements IServiceModule {
       return currentTime > mostTime ? current : most;
     });
   }
+
 }
