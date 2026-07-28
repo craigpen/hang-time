@@ -1889,30 +1889,34 @@ export class PopupController {
         return;
       }
 
-      // TODO: Verify the API key by calling Steam API
-      // For now, just save it
-      const profile = await this.storage.getUserProfile();
-      if (profile) {
-        profile.steam_config = {
-          enabled: true,
-          connection_type: 'api_key',
-          api_key: apiKey,
-          steam_id: undefined,
-          steam_username: undefined,
-          last_verified: Date.now(),
-        };
-        await this.storage.setUserProfile(profile);
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
 
-        statusDiv.style.display = 'block';
-        statusDiv.style.background = '#dcfce7';
-        statusDiv.style.color = '#166534';
-        statusDiv.textContent = 'Saved! Steam integration ready.';
-
-        setTimeout(() => {
+      try {
+        // TODO: Verify the API key by calling Steam API
+        const profile = await this.storage.getUserProfile();
+        if (profile) {
+          profile.steam_config = {
+            enabled: true,
+            connection_type: 'api_key',
+            api_key: apiKey,
+            steam_id: undefined,
+            steam_username: undefined,
+            last_verified: Date.now(),
+          };
+          await this.storage.setUserProfile(profile);
           modal.remove();
           // Refresh status display
-          this._updateServiceStatus('steam-api');
-        }, 1500);
+          await this._updateServiceStatus('steam-api');
+        }
+      } catch (error) {
+        console.error('[Popup] Failed to save Steam config:', error);
+        statusDiv.style.display = 'block';
+        statusDiv.style.background = '#fee2e2';
+        statusDiv.style.color = '#991b1b';
+        statusDiv.textContent = 'Failed to save. Try again.';
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
       }
     });
     buttonContainer.appendChild(saveBtn);
