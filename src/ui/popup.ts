@@ -2087,7 +2087,7 @@ export class PopupController {
       // Collect service toggles for OAuth integrations
       const oauthServices = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api'];
       for (const service of oauthServices) {
-        const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
+        const toggle = document.getElementById(`service-${service}-enabled`) as HTMLInputElement;
         servicesEnabled[service] = toggle?.checked ?? false;
       }
 
