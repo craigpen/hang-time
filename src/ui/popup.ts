@@ -467,7 +467,7 @@ export class PopupController {
       if (activity.isStale) {
         // Stale data (preserved): show moon icon in subtle yellow
         stateIcon.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" stroke="#FCD34D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="state-icon-svg">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#FEF3C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="state-icon-svg">
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
           </svg>
         `;
