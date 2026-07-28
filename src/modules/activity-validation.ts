@@ -196,7 +196,7 @@ export function validateActivity(data: Partial<Activity> & { provenance?: Activi
     state: validatedState,
     audio: data.audio || 'off',
     timestamp: data.timestamp,
-    isStale: data.isStale || false,
+    freshness_timestamp: data.freshness_timestamp || data.timestamp || Date.now(),
     metadata: {
       lastAccessed: data.metadata?.lastAccessed,
       progress,
@@ -204,6 +204,7 @@ export function validateActivity(data: Partial<Activity> & { provenance?: Activi
       artist: data.metadata?.artist,
       thumbnailUrl: data.metadata?.thumbnailUrl,
       tabId: data.metadata?.tabId,
+      appid: data.metadata?.appid,
     },
     provenance: data.provenance || 'LOCAL_TAB',
   };

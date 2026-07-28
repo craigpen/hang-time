@@ -106,8 +106,8 @@ export interface Activity {
   state?: 'playing' | 'paused' | 'stopped'; // Activity state: playing, paused, or stopped (removal signal)
   audio: 'on' | 'off'; // Audio state detected from tab.audible (deprecated, kept for compatibility)
   timestamp: number; // When activity was detected
-  isStale?: boolean; // True if showing preserved data (content script unavailable), false if fresh from content script
-  provenance?: 'LOCAL_TAB' | 'FRIEND' | 'TEST'; // Source of activity: user's tab, friend's data, or test
+  freshness_timestamp: number; // When data was last refreshed (for calculating age and freshness)
+  provenance?: 'LOCAL_TAB' | 'LOCAL_STEAM' | 'FRIEND' | 'TEST'; // Source of activity: user's tab, Steam game, friend's data, or test
   metadata: {
     lastAccessed?: number; // Browser tab's lastAccessed time (for sorting order on remote side)
     progress?: number; // Current position in video (seconds)
@@ -115,6 +115,7 @@ export interface Activity {
     artist?: string; // For music: artist name
     thumbnailUrl?: string; // Image/thumbnail URL (for display)
     tabId?: number; // Chrome tab ID for tab-based services (netflix-tab, youtube-tab, twitch-tab)
+    appid?: number; // Steam app ID for steam-api service
   };
 }
 

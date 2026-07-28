@@ -464,7 +464,11 @@ export class PopupController {
       const stateIcon = document.createElement('div');
       stateIcon.className = 'activity-state-icon';
 
-      if (activity.isStale) {
+      // Calculate data freshness: show sleep icon if data is > 30 seconds old
+      const ageMs = Date.now() - (activity.freshness_timestamp || activity.timestamp);
+      const isDataFresh = ageMs < 30000; // 30 seconds
+
+      if (!isDataFresh) {
         // Stale data (preserved): show moon icon in subtle yellow
         stateIcon.innerHTML = `
           <svg viewBox="0 0 24 24" fill="none" stroke="#FEF3C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="state-icon-svg">

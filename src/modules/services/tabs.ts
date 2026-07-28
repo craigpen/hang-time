@@ -71,18 +71,17 @@ export class TabService implements IServiceModule {
           // Determine state based on content script responsiveness
           let state: 'playing' | 'paused' = 'paused';
           let audio: 'on' | 'off' = 'off';
-          let isStale = false;
+          let freshness_timestamp = Date.now();
 
           if (videoData?.isPlaying !== undefined) {
             // Content script responsive - use fresh data
             state = videoData.isPlaying ? 'playing' : 'paused';
             audio = videoData.isPlaying ? 'on' : 'off';
-            isStale = false;
           } else if (storedNetflix) {
-            // Content script not responsive - use stored data with stale flag
+            // Content script not responsive - use stored data (preserve freshness from stored version)
             state = storedNetflix.state || 'paused';
             audio = storedNetflix.audio || 'off';
-            isStale = true;
+            freshness_timestamp = storedNetflix.freshness_timestamp || Date.now();
           }
 
           const netflixActivity: Activity = {
@@ -93,7 +92,7 @@ export class TabService implements IServiceModule {
             state,
             audio,
             timestamp: Date.now(),
-            isStale,
+            freshness_timestamp,
             provenance: 'LOCAL_TAB',
             metadata: {
               lastAccessed: netflixTab.lastAccessed || 0,
@@ -122,18 +121,17 @@ export class TabService implements IServiceModule {
         // Determine state based on content script responsiveness
         let state: 'playing' | 'paused' = 'paused';
         let audio: 'on' | 'off' = 'off';
-        let isStale = false;
+        let freshness_timestamp = Date.now();
 
         if (videoData?.isPlaying !== undefined) {
           // Content script responsive - use fresh data
           state = videoData.isPlaying ? 'playing' : 'paused';
           audio = videoData.isPlaying ? 'on' : 'off';
-          isStale = false;
         } else if (storedYoutube) {
-          // Content script not responsive - use stored data with stale flag
+          // Content script not responsive - use stored data (preserve freshness from stored version)
           state = storedYoutube.state || 'paused';
           audio = storedYoutube.audio || 'off';
-          isStale = true;
+          freshness_timestamp = storedYoutube.freshness_timestamp || Date.now();
         }
 
         const youtubeActivity: Activity = {
@@ -144,7 +142,7 @@ export class TabService implements IServiceModule {
           state,
           audio,
           timestamp: Date.now(),
-          isStale,
+          freshness_timestamp,
           provenance: 'LOCAL_TAB',
           metadata: {
             lastAccessed: youtubeTab.lastAccessed || 0,
