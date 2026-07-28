@@ -1881,21 +1881,44 @@ export class PopupController {
     apiKeyLabel.textContent = 'Steam Web API Key:';
     modalContent.appendChild(apiKeyLabel);
 
+    // Input container for key + toggle button
+    const inputContainer = document.createElement('div');
+    inputContainer.style.cssText = 'display: flex; gap: 8px; margin-bottom: 16px;';
+
     const apiKeyInput = document.createElement('input');
     apiKeyInput.type = 'password';
     apiKeyInput.placeholder = 'Enter your Steam Web API key';
     apiKeyInput.value = existingKey;
     apiKeyInput.style.cssText = `
-      width: 100%;
+      flex: 1;
       padding: 8px 12px;
       border: 1px solid var(--border-color);
       border-radius: 4px;
       background: var(--bg-secondary);
       color: var(--text-primary);
-      margin-bottom: 16px;
       box-sizing: border-box;
     `;
-    modalContent.appendChild(apiKeyInput);
+    inputContainer.appendChild(apiKeyInput);
+
+    // Toggle password visibility button
+    const toggleVisibilityBtn = document.createElement('button');
+    toggleVisibilityBtn.type = 'button';
+    toggleVisibilityBtn.textContent = '👁️';
+    toggleVisibilityBtn.title = 'Toggle password visibility';
+    toggleVisibilityBtn.style.cssText = `
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      cursor: pointer;
+      font-size: 1rem;
+    `;
+    toggleVisibilityBtn.addEventListener('click', () => {
+      apiKeyInput.type = apiKeyInput.type === 'password' ? 'text' : 'password';
+    });
+    inputContainer.appendChild(toggleVisibilityBtn);
+    modalContent.appendChild(inputContainer);
 
     // Status display
     const statusDiv = document.createElement('div');
