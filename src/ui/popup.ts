@@ -1423,57 +1423,6 @@ export class PopupController {
     }
   }
 
-  private async _loadVideoDataMetricsInPanel(): Promise<void> {
-    try {
-      const metrics = await this.storage.getVideoDataMetrics();
-
-      const services: Array<'netflix-tab' | 'youtube-tab' | 'twitch-tab'> = ['netflix-tab', 'youtube-tab', 'twitch-tab'];
-      for (const service of services) {
-        const metricsEl = document.getElementById(`metrics-${service}-popup`);
-        const resetBtn = document.getElementById(`reset-metrics-${service}`);
-
-        if (!metricsEl || !resetBtn) continue;
-
-        const serviceMetrics = metrics[service];
-        if (!serviceMetrics || serviceMetrics.total_requests === 0) {
-          metricsEl.textContent = '';
-          resetBtn.style.display = 'none';
-          continue;
-        }
-
-        // Calculate success rates for each field
-        const isPlayingSuccess = serviceMetrics.total_requests - serviceMetrics.isPlaying.undefined - serviceMetrics.isPlaying.invalid;
-        const durationSuccess = serviceMetrics.total_requests - serviceMetrics.duration.undefined - serviceMetrics.duration.invalid;
-        const currentTimeSuccess = serviceMetrics.total_requests - serviceMetrics.currentTime.undefined - serviceMetrics.currentTime.invalid;
-
-        const isPlayingRate = Math.round((isPlayingSuccess / serviceMetrics.total_requests) * 100);
-        const durationRate = Math.round((durationSuccess / serviceMetrics.total_requests) * 100);
-        const currentTimeRate = Math.round((currentTimeSuccess / serviceMetrics.total_requests) * 100);
-
-        let metricsText = `Video: ${isPlayingRate}% | Duration: ${durationRate}% | Time: ${currentTimeRate}%`;
-
-        // Add Netflix title metrics if available
-        if (service === 'netflix-tab' && serviceMetrics.netflix_title) {
-          const titleSuccess = serviceMetrics.total_requests - serviceMetrics.netflix_title.undefined - serviceMetrics.netflix_title.invalid;
-          const titleRate = Math.round((titleSuccess / serviceMetrics.total_requests) * 100);
-          metricsText += ` | Title: ${titleRate}%`;
-        }
-
-        metricsEl.textContent = metricsText;
-        resetBtn.style.display = 'inline-block';
-
-        // Set up reset button listener
-        resetBtn.onclick = async (e) => {
-          e.preventDefault();
-          await this.storage.resetVideoDataMetrics(service, 'manual');
-          await this._loadVideoDataMetricsInPanel();
-          toastManager.show(`${service} metrics reset`);
-        };
-      }
-    } catch (error) {
-      console.error('[Popup] Failed to load video data metrics:', error);
-    }
-  }
 
   private async _loadSettingsPanel(): Promise<void> {
     try {
@@ -1514,9 +1463,6 @@ export class PopupController {
           toggle.checked = profile.services_enabled[service as keyof typeof profile.services_enabled] ?? false;
         }
       }
-
-      // Load video data metrics for browser tabs
-      await this._loadVideoDataMetricsInPanel();
 
       // Load Steam ID and initialize state
       const steamInput = document.getElementById('steam-id-popup-input') as HTMLInputElement;

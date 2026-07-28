@@ -93,10 +93,6 @@
           </div>
           <div class="service-col2">
             <div class="service-status" id="status-netflix-tab-popup">Idle</div>
-            <div class="service-metrics" id="metrics-netflix-tab-popup" style="font-size: 0.85rem; color: #666; margin-top: 2px;"></div>
-          </div>
-          <div class="service-col3">
-            <button id="reset-metrics-netflix-tab" class="btn-metrics" title="Reset metrics" style="font-size: 0.75rem; padding: 2px 6px; display: none;">Reset</button>
           </div>
         </div>
         <div class="service-row">
@@ -107,10 +103,6 @@
           </div>
           <div class="service-col2">
             <div class="service-status" id="status-youtube-tab-popup">Idle</div>
-            <div class="service-metrics" id="metrics-youtube-tab-popup" style="font-size: 0.85rem; color: #666; margin-top: 2px;"></div>
-          </div>
-          <div class="service-col3">
-            <button id="reset-metrics-youtube-tab" class="btn-metrics" title="Reset metrics" style="font-size: 0.75rem; padding: 2px 6px; display: none;">Reset</button>
           </div>
         </div>
         <div class="service-row">
@@ -121,10 +113,6 @@
           </div>
           <div class="service-col2">
             <div class="service-status" id="status-twitch-tab-popup">Idle</div>
-            <div class="service-metrics" id="metrics-twitch-tab-popup" style="font-size: 0.85rem; color: #666; margin-top: 2px;"></div>
-          </div>
-          <div class="service-col3">
-            <button id="reset-metrics-twitch-tab" class="btn-metrics" title="Reset metrics" style="font-size: 0.75rem; padding: 2px 6px; display: none;">Reset</button>
           </div>
         </div>
       </div>
@@ -134,41 +122,41 @@
         <h3>Service Integrations</h3>
 
         <div class="service-row">
-          <input type="checkbox" id="service-spotify-enabled" class="service-enable-toggle" data-service="spotify" checked>
+          <input type="checkbox" id="service-spotify-api-enabled" class="service-enable-toggle" data-service="spotify-api" checked>
           <div class="service-col1">
             <img src="public/icons/spotify.png" alt="Spotify" class="service-icon">
             <span class="service-name">Spotify</span>
           </div>
           <div class="service-col2">
-            <div class="service-status" id="status-spotify-popup">Not Connected</div>
+            <div class="service-status" id="status-spotify-api-popup">Not Connected</div>
           </div>
           <div class="service-col3">
-            <div id="spotify-auth-popup-container" class="service-actions"></div>
+            <div id="spotify-api-auth-popup-container" class="service-actions"></div>
           </div>
         </div>
 
         <div class="service-row">
-          <input type="checkbox" id="service-twitch-enabled" class="service-enable-toggle" data-service="twitch" checked>
+          <input type="checkbox" id="service-twitch-api-enabled" class="service-enable-toggle" data-service="twitch-api" checked>
           <div class="service-col1">
             <img src="public/icons/twitch.png" alt="Twitch" class="service-icon">
             <span class="service-name">Twitch</span>
           </div>
           <div class="service-col2">
-            <div class="service-status" id="status-twitch-popup">Not Connected</div>
+            <div class="service-status" id="status-twitch-api-popup">Not Connected</div>
           </div>
           <div class="service-col3">
-            <div id="twitch-auth-popup-container" class="service-actions"></div>
+            <div id="twitch-api-auth-popup-container" class="service-actions"></div>
           </div>
         </div>
 
         <div class="service-row">
-          <input type="checkbox" id="service-steam-enabled" class="service-enable-toggle" data-service="steam" checked>
+          <input type="checkbox" id="service-steam-api-enabled" class="service-enable-toggle" data-service="steam-api" checked>
           <div class="service-col1">
             <img src="public/icons/steam.png" alt="Steam" class="service-icon">
             <span class="service-name">Steam</span>
           </div>
           <div class="service-col2">
-            <div class="service-status" id="status-steam-popup">Not Configured</div>
+            <div class="service-status" id="status-steam-api-popup">Not Configured</div>
           </div>
           <div class="service-col3">
             <div class="steam-input-group">
