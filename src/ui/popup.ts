@@ -1465,24 +1465,6 @@ export class PopupController {
       }
 
       // Load Steam ID and initialize state
-      const steamInput = document.getElementById('steam-id-popup-input') as HTMLInputElement;
-      const steamEditBtn = document.getElementById('steam-edit-popup-btn');
-      const steamVerifyBtn = document.getElementById('steam-verify-popup-btn');
-
-      console.debug('[Popup] Profile steam_id:', profile.steam_id);
-      if (steamInput) {
-        if (profile.steam_id) {
-          steamInput.value = profile.steam_id;
-          steamInput.disabled = true;
-          if (steamEditBtn) steamEditBtn.style.display = 'inline-block';
-          if (steamVerifyBtn) steamVerifyBtn.style.display = 'none';
-        } else {
-          steamInput.disabled = false;
-          if (steamEditBtn) steamEditBtn.style.display = 'none';
-          if (steamVerifyBtn) steamVerifyBtn.style.display = 'inline-block';
-        }
-      }
-
       // Load service integration enable/disable state from profile
       const integrationServices = ['spotify-api', 'twitch-api', 'steam-api'];
       for (const service of integrationServices) {
@@ -1703,16 +1685,10 @@ export class PopupController {
       }
     });
 
-    // Steam edit button
-    const steamEditBtn = document.getElementById('steam-edit-popup-btn');
-    if (steamEditBtn) {
-      steamEditBtn.addEventListener('click', () => this._editSteamId());
-    }
-
-    // Steam verify button
-    const steamVerifyBtn = document.getElementById('steam-verify-popup-btn');
-    if (steamVerifyBtn) {
-      steamVerifyBtn.addEventListener('click', () => this._verifySteamIdPopup());
+    // Steam configure button
+    const steamConfigureBtn = document.getElementById('steam-configure-btn');
+    if (steamConfigureBtn) {
+      steamConfigureBtn.addEventListener('click', () => this._showSteamConfigureModal());
     }
 
     // Theme selector
@@ -1724,15 +1700,11 @@ export class PopupController {
       });
     });
 
-    // Discord and Steam input changes
+    // Discord input changes
     const discordInput = document.getElementById('discord-info-popup') as HTMLInputElement;
-    const steamInput = document.getElementById('steam-id-popup-input') as HTMLInputElement;
 
     if (discordInput) {
       discordInput.addEventListener('change', () => this._saveSettingsPanel());
-    }
-    if (steamInput) {
-      steamInput.addEventListener('change', () => this._saveSettingsPanel());
     }
 
     // Notification checkboxes
@@ -1819,35 +1791,6 @@ export class PopupController {
     }
   }
 
-  private async _verifySteamIdPopup(): Promise<void> {
-    const steamInput = document.getElementById('steam-id-popup-input') as HTMLInputElement;
-    if (!steamInput || !steamInput.value.trim()) {
-      alert('Please enter a Steam ID');
-      return;
-    }
-
-    const steamId = steamInput.value.trim();
-    if (!/^\d+$/.test(steamId)) {
-      alert('Steam ID must be numeric');
-      return;
-    }
-
-    await this._saveSettingsPanel();
-    alert('Steam ID verified');
-
-    // Hide verify button, show edit button, disable input
-    const steamEditBtn = document.getElementById('steam-edit-popup-btn');
-    const steamVerifyBtn = document.getElementById('steam-verify-popup-btn');
-    if (steamEditBtn && steamVerifyBtn) {
-      steamEditBtn.style.display = 'inline-block';
-      steamVerifyBtn.style.display = 'none';
-      steamInput.disabled = true;
-    }
-
-    // Update status display
-    await this._updateServiceStatus('steam');
-  }
-
   private _setTheme(theme: string): void {
     localStorage.setItem('hang-time-theme', theme);
     const root = document.documentElement;
@@ -1856,6 +1799,127 @@ export class PopupController {
     } else {
       root.setAttribute('data-theme', theme);
     }
+  }
+
+  private async _showSteamConfigureModal(): Promise<void> {
+    const modal = document.createElement('div');
+    modal.className = 'steam-configure-modal-overlay';
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    `;
+
+    const modalContent = document.createElement('div');
+    modalContent.className = 'steam-configure-modal-content';
+    modalContent.style.cssText = `
+      background: var(--bg-primary);
+      border-radius: 8px;
+      padding: 24px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    `;
+
+    // Title
+    const title = document.createElement('h3');
+    title.textContent = 'Configure Steam';
+    title.style.marginBottom = '16px';
+    modalContent.appendChild(title);
+
+    // API Key input
+    const apiKeyLabel = document.createElement('label');
+    apiKeyLabel.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 500;';
+    apiKeyLabel.textContent = 'Steam Web API Key:';
+    modalContent.appendChild(apiKeyLabel);
+
+    const apiKeyInput = document.createElement('input');
+    apiKeyInput.type = 'password';
+    apiKeyInput.placeholder = 'Enter your Steam Web API key';
+    apiKeyInput.style.cssText = `
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      margin-bottom: 16px;
+      box-sizing: border-box;
+    `;
+    modalContent.appendChild(apiKeyInput);
+
+    // Status display
+    const statusDiv = document.createElement('div');
+    statusDiv.style.cssText = `
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      display: none;
+      font-size: 0.9rem;
+    `;
+    modalContent.appendChild(statusDiv);
+
+    // Buttons container
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = 'display: flex; gap: 8px; justify-content: flex-end;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.className = 'btn-secondary';
+    cancelBtn.addEventListener('click', () => modal.remove());
+    buttonContainer.appendChild(cancelBtn);
+
+    const saveBtn = document.createElement('button');
+    saveBtn.textContent = 'Save';
+    saveBtn.className = 'btn-primary';
+    saveBtn.addEventListener('click', async () => {
+      const apiKey = apiKeyInput.value.trim();
+      if (!apiKey) {
+        statusDiv.style.display = 'block';
+        statusDiv.style.background = '#fee2e2';
+        statusDiv.style.color = '#991b1b';
+        statusDiv.textContent = 'API key required';
+        return;
+      }
+
+      // TODO: Verify the API key by calling Steam API
+      // For now, just save it
+      const profile = await this.storage.getUserProfile();
+      if (profile) {
+        profile.steam_config = {
+          enabled: true,
+          connection_type: 'api_key',
+          api_key: apiKey,
+          steam_id: undefined,
+          steam_username: undefined,
+          last_verified: Date.now(),
+        };
+        await this.storage.setUserProfile(profile);
+
+        statusDiv.style.display = 'block';
+        statusDiv.style.background = '#dcfce7';
+        statusDiv.style.color = '#166534';
+        statusDiv.textContent = 'Saved! Steam integration ready.';
+
+        setTimeout(() => {
+          modal.remove();
+          // Refresh status display
+          this._updateServiceStatus('steam-api');
+        }, 1500);
+      }
+    });
+    buttonContainer.appendChild(saveBtn);
+
+    modalContent.appendChild(buttonContainer);
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
   }
 
   private async _updateServiceStatus(service: string): Promise<void> {
@@ -1889,14 +1953,9 @@ export class PopupController {
       // Continue to check configuration status
     }
 
-    // No current activity - check if service is configured (for OAuth and Steam)
+    // No current activity - check if service is configured (for OAuth services)
     let isConfigured = false;
-    if (service === 'steam-api') {
-      const steamInput = document.getElementById('steam-id-popup-input') as HTMLInputElement;
-      const steamId = steamInput?.value?.trim();
-      isConfigured = !!steamId;
-      console.debug('[Popup] Checking Steam status - steamId:', steamId, 'configured:', isConfigured);
-    } else if (!['netflix-tab', 'youtube-tab', 'twitch-tab'].includes(service)) {
+    if (!['netflix-tab', 'youtube-tab', 'twitch-tab', 'steam-api'].includes(service)) {
       // For OAuth services (not browser tab services), check if they have a token
       try {
         const authResponse = await chrome.runtime.sendMessage({
@@ -1921,25 +1980,11 @@ export class PopupController {
     }
   }
 
-  private _editSteamId(): void {
-    const steamInput = document.getElementById('steam-id-popup-input') as HTMLInputElement;
-    const steamEditBtn = document.getElementById('steam-edit-popup-btn');
-    const steamVerifyBtn = document.getElementById('steam-verify-popup-btn');
-
-    if (steamInput && steamEditBtn && steamVerifyBtn) {
-      steamInput.disabled = false;
-      steamInput.focus();
-      steamEditBtn.style.display = 'none';
-      steamVerifyBtn.style.display = 'inline-block';
-    }
-  }
-
   private async _saveSettingsPanel(): Promise<void> {
     try {
       const discordInput = (document.getElementById('discord-info-popup') as HTMLInputElement)?.value || '';
-      const steamIdInput = (document.getElementById('steam-id-popup-input') as HTMLInputElement)?.value || '';
 
-      console.debug('[Popup] Saving settings - discord:', discordInput, 'steam_id:', steamIdInput);
+      console.debug('[Popup] Saving settings - discord:', discordInput);
 
       // Collect service toggles for browser tabs
       const servicesEnabled: Record<string, boolean> = {};
@@ -1983,7 +2028,6 @@ export class PopupController {
         type: 'SAVE_SETTINGS',
         data: {
           discord_info: discordInput,
-          steam_id: steamIdInput,
           services_enabled: servicesEnabled,
           notification_preferences: {
             friend_online: notifFriendOnline,
