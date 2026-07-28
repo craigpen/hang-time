@@ -68,11 +68,11 @@ describe('Activity Validation', () => {
 
   describe('validateService', () => {
     it('accepts valid services', () => {
-      expect(validateService('spotify')).toBe('spotify');
-      expect(validateService('twitch')).toBe('twitch');
-      expect(validateService('netflix')).toBe('netflix');
-      expect(validateService('youtube')).toBe('youtube');
-      expect(validateService('steam')).toBe('steam');
+      expect(validateService('spotify-api')).toBe('spotify-api');
+      expect(validateService('twitch-api')).toBe('twitch-api');
+      expect(validateService('netflix-tab')).toBe('netflix-tab');
+      expect(validateService('youtube-tab')).toBe('youtube-tab');
+      expect(validateService('steam-api')).toBe('steam-api');
     });
 
     it('rejects invalid services', () => {
@@ -166,7 +166,7 @@ describe('Activity Validation', () => {
   describe('validateActivity', () => {
     const validActivity = {
       id: 'test-id',
-      service: 'youtube',
+      service: 'youtube-tab',
       content: 'Test Video',
       state: 'playing',
       timestamp: Date.now(),
@@ -175,7 +175,7 @@ describe('Activity Validation', () => {
     it('accepts valid activity', () => {
       const result = validateActivity(validActivity);
       expect(result.id).toBe('test-id');
-      expect(result.service).toBe('youtube');
+      expect(result.service).toBe('youtube-tab');
       expect(result.content).toBe('Test Video');
       expect(result.state).toBe('playing');
       expect(result.provenance).toBe('LOCAL_TAB');
@@ -220,7 +220,7 @@ describe('Corruption Detection', () => {
   it('detects bullet points in content', () => {
     const activity: Activity = {
       id: 'test',
-      service: 'youtube',
+      service: 'youtube-tab',
       content: '• Contaminated',
       state: 'playing',
       audio: 'off',
@@ -235,7 +235,7 @@ describe('Corruption Detection', () => {
   it('detects notification fragments', () => {
     const activity: Activity = {
       id: 'test',
-      service: 'youtube',
+      service: 'youtube-tab',
       content: 'test invited you to watch',
       state: 'playing',
       audio: 'off',
@@ -250,7 +250,7 @@ describe('Corruption Detection', () => {
   it('detects invalid state', () => {
     const activity: Activity = {
       id: 'test',
-      service: 'youtube',
+      service: 'youtube-tab',
       content: 'Valid Title',
       state: 'invalid' as any,
       audio: 'off',
@@ -264,7 +264,7 @@ describe('Corruption Detection', () => {
   it('detects out-of-bounds progress', () => {
     const activity: Activity = {
       id: 'test',
-      service: 'youtube',
+      service: 'youtube-tab',
       content: 'Valid Title',
       state: 'playing',
       audio: 'off',
@@ -282,7 +282,7 @@ describe('Corruption Detection', () => {
   it('returns empty array for clean activity', () => {
     const activity: Activity = {
       id: 'test',
-      service: 'youtube',
+      service: 'youtube-tab',
       content: 'Valid Title',
       state: 'playing',
       audio: 'off',
@@ -323,7 +323,7 @@ describe('ActivityDatastore', () => {
     it('creates and stores a valid activity', async () => {
       const activity = {
         id: 'test-1',
-        service: 'youtube',
+        service: 'youtube-tab',
         content: 'Test Video',
         state: 'playing',
         timestamp: Date.now(),
@@ -333,7 +333,7 @@ describe('ActivityDatastore', () => {
       const result = await datastore.createActivity(activity);
 
       expect(result.id).toBe('test-1');
-      expect(result.service).toBe('youtube');
+      expect(result.service).toBe('youtube-tab');
       expect(result.content).toBe('Test Video');
       expect(result.provenance).toBe('LOCAL_TAB');
     });
@@ -341,7 +341,7 @@ describe('ActivityDatastore', () => {
     it('rejects invalid activity', async () => {
       const activity = {
         id: 'test-2',
-        service: 'youtube',
+        service: 'youtube-tab',
         content: '• Contaminated',
         state: 'playing',
         timestamp: Date.now(),
@@ -353,7 +353,7 @@ describe('ActivityDatastore', () => {
     it('sanitizes content (trims whitespace)', async () => {
       const activity = {
         id: 'test-3',
-        service: 'youtube',
+        service: 'youtube-tab',
         content: '  Test Video  ',
         state: 'playing',
         timestamp: Date.now(),
@@ -369,7 +369,7 @@ describe('ActivityDatastore', () => {
       // Create an activity first
       await datastore.createActivity({
         id: 'update-test',
-        service: 'youtube',
+        service: 'youtube-tab',
         content: 'Test Video',
         state: 'playing',
         timestamp: Date.now(),
@@ -420,7 +420,7 @@ describe('ActivityDatastore', () => {
     beforeEach(async () => {
       await datastore.createActivity({
         id: 'get-test',
-        service: 'youtube',
+        service: 'youtube-tab',
         content: 'Test Video',
         state: 'playing',
         timestamp: Date.now(),
@@ -443,14 +443,14 @@ describe('ActivityDatastore', () => {
     beforeEach(async () => {
       await datastore.createActivity({
         id: 'yt-1',
-        service: 'youtube',
+        service: 'youtube-tab',
         content: 'Video 1',
         state: 'playing',
         timestamp: Date.now(),
       });
       await datastore.createActivity({
         id: 'spotify-1',
-        service: 'spotify',
+        service: 'spotify-api',
         content: 'Track 1',
         state: 'playing',
         timestamp: Date.now(),
@@ -463,9 +463,9 @@ describe('ActivityDatastore', () => {
     });
 
     it('filters activities by service', async () => {
-      const youtube = await datastore.getActivitiesByService('youtube');
+      const youtube = await datastore.getActivitiesByService('youtube-tab');
       expect(youtube.length).toBe(1);
-      expect(youtube[0].service).toBe('youtube');
+      expect(youtube[0].service).toBe('youtube-tab');
     });
 
     it('counts activities', async () => {
@@ -479,7 +479,7 @@ describe('ActivityDatastore', () => {
       // Valid activity
       await datastore.createActivity({
         id: 'valid-1',
-        service: 'youtube',
+        service: 'youtube-tab',
         content: 'Valid Video',
         state: 'playing',
         timestamp: Date.now(),
@@ -492,7 +492,7 @@ describe('ActivityDatastore', () => {
       // This test focuses on the report structure
       const all = await datastore.getAllActivities();
       expect(all.length).toBeGreaterThan(0);
-      expect(all[0].service).toBe('youtube');
+      expect(all[0].service).toBe('youtube-tab');
     });
 
     it('removes corrupted activities', async () => {
@@ -504,7 +504,7 @@ describe('ActivityDatastore', () => {
             return Promise.resolve({
               'corrupted-1': {
                 id: 'corrupted-1',
-                service: 'youtube',
+                service: 'youtube-tab',
                 content: '• Bullet contaminated',
                 state: 'playing',
                 audio: 'off',
@@ -531,7 +531,7 @@ describe('ActivityDatastore', () => {
     it('generates summary', async () => {
       await datastore.createActivity({
         id: 'summary-test',
-        service: 'youtube',
+        service: 'youtube-tab',
         content: 'Test Video',
         state: 'playing',
         timestamp: Date.now(),

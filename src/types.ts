@@ -107,7 +107,8 @@ export interface Activity {
   audio: 'on' | 'off'; // Audio state detected from tab.audible (deprecated, kept for compatibility)
   timestamp: number; // When activity was detected
   freshness_timestamp: number; // When data was last refreshed (for calculating age and freshness)
-  provenance?: 'LOCAL_TAB' | 'LOCAL_STEAM' | 'FRIEND' | 'TEST'; // Source of activity: user's tab, Steam game, friend's data, or test
+  is_fresh?: boolean; // Whether data came from responsive content script (true) or stored/stale data (false)
+  provenance?: 'LOCAL_TAB' | 'LOCAL_STEAM' | 'LOCAL_SPOTIFY' | 'LOCAL_TWITCH' | 'FRIEND' | 'TEST'; // Source of activity: user's tab, Steam/Spotify/Twitch API, friend's data, or test
   metadata: {
     lastAccessed?: number; // Browser tab's lastAccessed time (for sorting order on remote side)
     progress?: number; // Current position in video (seconds)
@@ -260,6 +261,16 @@ export const STORAGE_KEYS = {
   MY_ACTIVITIES: 'hang_time_my_activities',
   SETTINGS: 'hang_time_settings',
   VIDEO_DATA_METRICS: 'hang_time_video_data_metrics',
+  PENDING_INVITES: 'hang_time_pending_invites',
+  NOTIFIED_INVITE_IDS: 'hang_time_notified_invite_ids',
+  OAUTH_CONFIG: 'hang_time_oauth_config',
+  NETFLIX_TITLE: 'hang_time_netflix_title',
+  NETFLIX_TITLE_DATA: 'hang_time_netflix_title_data',
+  CONTENT_SCRIPT_HEALTH: 'hang_time_content_script_health',
+  INTEGRATION_HEALTH: 'hang_time_integration_health',
+  NETFLIX_EXTRACTION_LOGS: 'hang_time_netflix_extraction_logs',
+  NETFLIX_DEBUG_CAPTURES: 'hang_time_netflix_debug_captures',
+  ACTIVITY_PROVENANCE_MAP: 'hang_time_activity_provenance_map',
   MESSAGES: (friendId: string) => `hang_time_messages_${friendId}`,
   ACTIVITY_HISTORY: (friendId: string) => `hang_time_activity_history_${friendId}`,
 } as const;

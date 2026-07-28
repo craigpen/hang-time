@@ -6,6 +6,7 @@
 import { Activity, IServiceModule } from '../../types';
 import { StorageManager } from '../storage';
 import { generateActivityId } from '../activity-utils';
+import { getActivityDatastore } from '../activity-datastore';
 
 export class TabService implements IServiceModule {
   private lastDetected: Map<string, Activity> = new Map();
@@ -49,10 +50,11 @@ export class TabService implements IServiceModule {
       const tabs = await chrome.tabs.query({ windowType: 'normal' });
       const stored = await this.storage.getMyActivities();
       const openTabIds = new Set(tabs.map(t => t.id));
+      const datastore = getActivityDatastore();
 
       // Detect ALL active services, not just the first one
       const detectedActivities: Activity[] = [];
-      let updateStorage = false;
+      const closedActivityIds: string[] = [];  // Track activities to remove
 
       // Check for Netflix
       const netflixTab = this._findMostRecentTabByDomain(tabs, 'netflix');
@@ -72,16 +74,20 @@ export class TabService implements IServiceModule {
           let state: 'playing' | 'paused' = 'paused';
           let audio: 'on' | 'off' = 'off';
           let freshness_timestamp = Date.now();
+          let is_fresh = false;
 
           if (videoData?.isPlaying !== undefined) {
             // Content script responsive - use fresh data
             state = videoData.isPlaying ? 'playing' : 'paused';
             audio = videoData.isPlaying ? 'on' : 'off';
+            freshness_timestamp = Date.now();
+            is_fresh = true;
           } else if (storedNetflix) {
             // Content script not responsive - use stored data (preserve freshness from stored version)
             state = storedNetflix.state || 'paused';
             audio = storedNetflix.audio || 'off';
             freshness_timestamp = storedNetflix.freshness_timestamp || Date.now();
+            is_fresh = false;
           }
 
           const netflixActivity: Activity = {
@@ -93,6 +99,7 @@ export class TabService implements IServiceModule {
             audio,
             timestamp: Date.now(),
             freshness_timestamp,
+            is_fresh,
             provenance: 'LOCAL_TAB',
             metadata: {
               lastAccessed: netflixTab.lastAccessed || 0,
@@ -104,9 +111,10 @@ export class TabService implements IServiceModule {
           detectedActivities.push(netflixActivity);
         }
       } else if (stored['netflix-tab'] && stored['netflix-tab'].metadata?.tabId && !openTabIds.has(stored['netflix-tab'].metadata.tabId)) {
-        // Netflix tab was closed - remove from storage
-        delete stored['netflix-tab'];
-        updateStorage = true;
+        // Netflix tab was closed - mark for removal
+        if (stored['netflix-tab'].id) {
+          closedActivityIds.push(stored['netflix-tab'].id);
+        }
       }
 
       // Check for YouTube
@@ -122,16 +130,20 @@ export class TabService implements IServiceModule {
         let state: 'playing' | 'paused' = 'paused';
         let audio: 'on' | 'off' = 'off';
         let freshness_timestamp = Date.now();
+        let is_fresh = false;
 
         if (videoData?.isPlaying !== undefined) {
           // Content script responsive - use fresh data
           state = videoData.isPlaying ? 'playing' : 'paused';
           audio = videoData.isPlaying ? 'on' : 'off';
+          freshness_timestamp = Date.now();
+          is_fresh = true;
         } else if (storedYoutube) {
           // Content script not responsive - use stored data (preserve freshness from stored version)
           state = storedYoutube.state || 'paused';
           audio = storedYoutube.audio || 'off';
           freshness_timestamp = storedYoutube.freshness_timestamp || Date.now();
+          is_fresh = false;
         }
 
         const youtubeActivity: Activity = {
@@ -143,6 +155,7 @@ export class TabService implements IServiceModule {
           audio,
           timestamp: Date.now(),
           freshness_timestamp,
+          is_fresh,
           provenance: 'LOCAL_TAB',
           metadata: {
             lastAccessed: youtubeTab.lastAccessed || 0,
@@ -153,9 +166,10 @@ export class TabService implements IServiceModule {
         };
         detectedActivities.push(youtubeActivity);
       } else if (stored['youtube-tab'] && stored['youtube-tab'].metadata?.tabId && !openTabIds.has(stored['youtube-tab'].metadata.tabId)) {
-        // YouTube tab was closed - remove from storage
-        delete stored['youtube-tab'];
-        updateStorage = true;
+        // YouTube tab was closed - mark for removal
+        if (stored['youtube-tab'].id) {
+          closedActivityIds.push(stored['youtube-tab'].id);
+        }
       }
 
       // Check for Twitch
@@ -169,18 +183,21 @@ export class TabService implements IServiceModule {
         // Determine state based on content script responsiveness
         let state: 'playing' | 'paused' = 'paused';
         let audio: 'on' | 'off' = 'off';
-        let isStale = false;
+        let freshness_timestamp = Date.now();
+        let is_fresh = false;
 
         if (videoData?.isPlaying !== undefined) {
           // Content script responsive - use fresh data
           state = videoData.isPlaying ? 'playing' : 'paused';
           audio = videoData.isPlaying ? 'on' : 'off';
-          isStale = false;
+          freshness_timestamp = Date.now();
+          is_fresh = true;
         } else if (storedTwitch) {
-          // Content script not responsive - use stored data with stale flag
+          // Content script not responsive - use stored data
           state = storedTwitch.state || 'paused';
           audio = storedTwitch.audio || 'off';
-          isStale = true;
+          freshness_timestamp = storedTwitch.freshness_timestamp || Date.now();
+          is_fresh = false;
         }
 
         const twitchActivity: Activity = {
@@ -191,7 +208,8 @@ export class TabService implements IServiceModule {
           state,
           audio,
           timestamp: Date.now(),
-          isStale,
+          freshness_timestamp,
+          is_fresh,
           provenance: 'LOCAL_TAB',
           metadata: {
             lastAccessed: twitchTab.lastAccessed || 0,
@@ -202,14 +220,15 @@ export class TabService implements IServiceModule {
         };
         detectedActivities.push(twitchActivity);
       } else if (stored['twitch-tab'] && stored['twitch-tab'].metadata?.tabId && !openTabIds.has(stored['twitch-tab'].metadata.tabId)) {
-        // Twitch tab was closed - remove from storage
-        delete stored['twitch-tab'];
-        updateStorage = true;
+        // Twitch tab was closed - mark for removal
+        if (stored['twitch-tab'].id) {
+          closedActivityIds.push(stored['twitch-tab'].id);
+        }
       }
 
-      // Update storage if any tabs were closed
-      if (updateStorage) {
-        await this.storage.setMyActivities(stored);
+      // Remove closed tab activities via datastore
+      for (const activityId of closedActivityIds) {
+        await datastore.deleteActivity(activityId);
       }
 
       // Store all detected services for later retrieval

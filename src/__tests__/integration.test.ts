@@ -60,7 +60,7 @@ describe('Integration Tests', () => {
 
       // Step 2: Update friend activity
       const activity: Activity = {
-        service: 'spotify',
+        service: 'spotify-api',
         content: 'Song Title',
         url: 'https://spotify.com/track/123',
         timestamp: now,
@@ -104,7 +104,7 @@ describe('Integration Tests', () => {
         hidden_services: [],
         current_activities: {
           spotify: {
-            service: 'spotify',
+            service: 'spotify-api',
             content: 'Song',
             timestamp: now,
             metadata: {},
@@ -145,7 +145,7 @@ describe('Integration Tests', () => {
         hidden_services: [],
         current_activities: {
           spotify: {
-            service: 'spotify',
+            service: 'spotify-api',
             content: 'Song',
             timestamp: now,
             metadata: {},
@@ -232,7 +232,7 @@ describe('Integration Tests', () => {
       const now = Date.now();
 
       // Step 1: User publishes their playback position
-      await timeSyncManager.publishTimeSync('video123', 150, 3600, true, 'youtube');
+      await timeSyncManager.publishTimeSync('video123', 150, 3600, true, 'youtube-tab');
 
       expect(mockRelayPool.publish).toHaveBeenCalled();
       const publishedEvent = mockRelayPool.publish.mock.calls[0][0];
@@ -246,7 +246,7 @@ describe('Integration Tests', () => {
         kind: 1,
         tags: [
           ['type', 'time-sync'],
-          ['service', 'youtube'],
+          ['service', 'youtube-tab'],
           ['video_id', 'video123'],
           ['current_time', '155'],
           ['duration', '3600'],
@@ -283,7 +283,7 @@ describe('Integration Tests', () => {
         kind: 1,
         tags: [
           ['type', 'time-sync'],
-          ['service', 'youtube'],
+          ['service', 'youtube-tab'],
           ['video_id', 'video123'],
           ['current_time', '150'],
           ['duration', '3600'],
@@ -368,14 +368,14 @@ describe('Integration Tests', () => {
       mockStorage.getFriend.mockResolvedValue(friend);
 
       const activity1: Activity = {
-        service: 'spotify',
+        service: 'spotify-api',
         content: 'Song 1',
         timestamp: now,
         metadata: {},
       };
 
       const activity2: Activity = {
-        service: 'youtube',
+        service: 'youtube-tab',
         content: 'Video 1',
         timestamp: now + 5000,
         metadata: {},

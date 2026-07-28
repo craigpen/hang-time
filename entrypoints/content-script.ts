@@ -15,6 +15,7 @@ interface VideoState {
 
 class UnifiedContentScript {
   private service: Service | null = null;
+  private port: chrome.runtime.Port | null = null;
   private videoState: VideoState = {
     videoId: null,
     currentTime: 0,
@@ -50,11 +51,85 @@ class UnifiedContentScript {
 
     console.debug(`[ContentScript] Initializing for ${this.service}`);
 
-    // Set up message listeners
+    // Establish persistent port connection with reconnection on extension reload
+    this._connectToExtension();
+
+    // Set up message listeners for tab.sendMessage queries
     this._setupMessageListener();
 
     // Start video monitoring for all services
     this._startVideoMonitoring();
+  }
+
+  private _connectToExtension(retryCount: number = 0): void {
+    try {
+      this.port = chrome.runtime.connect({ name: `${this.service}-content` });
+      console.log(`[ContentScript] ✅ Connected to extension via port`);
+
+      // Listen for messages on the port
+      this.port.onMessage.addListener((message: any) => {
+        try {
+          console.debug(`[ContentScript] Received port message: ${message.type}`);
+          this._handleMessageForPort(message, (response: any) => {
+            try {
+              if (this.port) {
+                this.port.postMessage({ type: message.type, response });
+                console.debug(`[ContentScript] Responded to ${message.type} via port`);
+              }
+            } catch (error) {
+              console.error(`[ContentScript] Failed to send port response:`, error instanceof Error ? error.message : error);
+            }
+          });
+        } catch (error) {
+          console.error(`[ContentScript] Error handling port message:`, error instanceof Error ? error.message : error);
+        }
+      });
+
+      // Handle disconnection (e.g., extension reload)
+      this.port.onDisconnect.addListener(() => {
+        console.warn('[ContentScript] ⚠️  Disconnected from extension (extension reload?), attempting reconnect in 1s...');
+        this.port = null;
+        setTimeout(() => this._connectToExtension(0), 1000);
+      });
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[ContentScript] ❌ Failed to connect to extension (attempt ${retryCount + 1}):`, error);
+
+      const delay = errorMsg.includes('Extension context invalidated') ? 2000 : 1000;
+      const maxRetries = 10;
+
+      if (retryCount < maxRetries) {
+        console.log(`[ContentScript] Retrying connection in ${delay}ms... (${retryCount + 1}/${maxRetries})`);
+        setTimeout(() => this._connectToExtension(retryCount + 1), delay);
+      } else {
+        console.error(`[ContentScript] ❌ Failed to connect after ${maxRetries} retries. Giving up.`);
+      }
+    }
+  }
+
+  private _handleMessageForPort(message: any, sendResponse: (response: any) => void): void {
+    try {
+      switch (message.type) {
+        case 'GET_NETFLIX_TITLE':
+          this._handleGetNetflixTitle(sendResponse);
+          break;
+        case 'GET_VIDEO_STATE':
+          this._handleGetVideoState(sendResponse);
+          break;
+        case 'GET_VIDEO_POSITION':
+          this._handleGetVideoPosition(sendResponse);
+          break;
+        case 'SYNC_VIDEO':
+          this._handleSyncVideo(message.data?.targetTime, sendResponse);
+          break;
+        default:
+          console.debug(`[ContentScript] Unknown port message type: ${message.type}`);
+          sendResponse({ success: false, error: 'Unknown message type' });
+      }
+    } catch (error) {
+      console.error('[ContentScript] Error handling port message:', error);
+      sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+    }
   }
 
   private _setupMessageListener(): void {
@@ -163,24 +238,25 @@ class UnifiedContentScript {
   }
 
   private _handleGetNetflixTitle(sendResponse: (response: any) => void): void {
-    if (this.service !== 'netflix') {
+    if (this.service !== 'netflix-tab') {
       sendResponse({ success: true, data: null });
       return;
     }
 
     (async () => {
       try {
-        const title = this._extractNetflixTitle();
+        const title = await this._extractNetflixTitle();
         if (title) {
+          console.log(`[ContentScript] ✅ Extracted Netflix title: "${title}"`);
           await this._storeNetflixTitle(title);
           sendResponse({ success: true, data: title });
         } else {
-          const stored = await this._getStoredNetflixTitle();
-          sendResponse({ success: true, data: stored });
+          console.warn('[ContentScript] ⚠️  Failed to extract Netflix title from DOM after retries');
+          sendResponse({ success: true, data: null });
         }
       } catch (error) {
-        const stored = await this._getStoredNetflixTitle();
-        sendResponse({ success: true, data: stored });
+        console.error('[ContentScript] Error extracting Netflix title:', error instanceof Error ? error.message : error);
+        sendResponse({ success: true, data: null });
       }
     })();
   }
@@ -190,9 +266,21 @@ class UnifiedContentScript {
   }
 
   private _startVideoMonitoring(): void {
+    let lastVideoElement: HTMLVideoElement | null = null;
+    let lastCurrentTime: number = 0;
+
     const pollInterval = setInterval(() => {
       const video = this._getVideoElement();
       if (!video) return;
+
+      // Detect video element change or significant time reset (new content)
+      if (video !== lastVideoElement || (lastCurrentTime > 10 && video.currentTime < 5)) {
+        console.debug('[ContentScript] Detected new content (video element changed or time reset), clearing cached title');
+        this._clearCachedNetflixTitle();
+        lastVideoElement = video;
+      }
+
+      lastCurrentTime = video.currentTime;
 
       this.videoState = {
         videoId: null,
@@ -203,8 +291,38 @@ class UnifiedContentScript {
     }, 500);
   }
 
+  private async _clearCachedNetflixTitle(): Promise<void> {
+    try {
+      await chrome.storage.local.remove('netflix_title_data');
+      console.debug('[ContentScript] Cleared cached Netflix title from storage');
+    } catch (error) {
+      console.error('[ContentScript] Failed to clear cached Netflix title:', error instanceof Error ? error.message : error);
+    }
+  }
+
   // Netflix-specific methods
-  private _extractNetflixTitle(): string | null {
+  private async _extractNetflixTitle(): Promise<string | null> {
+    try {
+      // Try extraction with a small delay to let React render
+      // First attempt: immediate
+      let title = this._tryExtractTitle();
+      if (title) return title;
+
+      // Second attempt: wait 100ms and retry
+      await new Promise(resolve => setTimeout(resolve, 100));
+      title = this._tryExtractTitle();
+      if (title) return title;
+
+      // Third attempt: wait another 100ms and retry
+      await new Promise(resolve => setTimeout(resolve, 100));
+      title = this._tryExtractTitle();
+      return title;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  private _tryExtractTitle(): string | null {
     try {
       // Look for h2 tags (React renders title here)
       const h2Elements = document.querySelectorAll('h2');
@@ -259,6 +377,7 @@ class UnifiedContentScript {
       return null;
     }
   }
+
 
   private _isValidTitle(title: string | null | undefined): boolean {
     if (!title || typeof title !== 'string') return false;

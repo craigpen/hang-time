@@ -9,8 +9,9 @@ import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
 import { encryptionManager } from './encryption';
+import { validateActivity, detectCorruption } from './activity-validation';
 
-const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify', 'twitch', 'steam', 'netflix', 'youtube'];
+const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'netflix-tab', 'youtube-tab', 'twitch-tab'];
 
 export class ActivityPublisher {
   private lastPublishedState: Partial<Record<string, Activity>> = {};
@@ -90,6 +91,21 @@ export class ActivityPublisher {
         delta_publishing: false,
       };
 
+      // Check if publish rate has changed and restart interval if needed
+      if (config.rate_ms !== this.publishRateMs) {
+        console.debug(`[Publisher] Publish rate changed from ${this.publishRateMs}ms to ${config.rate_ms}ms, restarting interval`);
+        this.publishRateMs = config.rate_ms;
+        // Clear old interval and start new one with updated rate
+        if (this.publishInterval) {
+          clearInterval(this.publishInterval);
+        }
+        this.publishInterval = setInterval(() => {
+          this.publishCycle().catch((error) => {
+            console.error('[Publisher] Publish cycle error:', error);
+          });
+        }, this.publishRateMs);
+      }
+
       // Log active config
       const activeSettings = [];
       if (config.compression) activeSettings.push('compression');
@@ -108,16 +124,32 @@ export class ActivityPublisher {
 
       const currentActivities = await this.storageManager.getMyActivities();
 
-      // Debug: log what we're about to publish
-      Object.entries(currentActivities).forEach(([service, activity]) => {
-        if (activity && !activity.content) {
-          console.warn(`[Publisher] ⚠️ Activity for ${service} has NO content!`, activity);
+      // Debug: log what we're about to publish (currentActivities keyed by activity ID, not service)
+      // Also validate and skip corrupted activities
+      const validActivities: Partial<Record<string, Activity>> = {};
+      Object.entries(currentActivities).forEach(([activityId, activity]) => {
+        if (!activity) return;
+
+        const issues = detectCorruption(activity);
+        if (issues.length > 0) {
+          console.warn(`[Publisher] ⚠️ Activity ${activity.service} (ID: ${activityId}) is corrupted:`, issues);
+          return;  // Skip corrupted activities
         }
+
+        if (!activity.content) {
+          console.warn(`[Publisher] ⚠️ Activity ${activity.service} (ID: ${activityId}) has NO content!`, activity);
+          return;  // Skip invalid activities
+        }
+
+        validActivities[activityId] = activity;
       });
+
+      // Use only valid activities for publishing
+      const currentActivitiesForPublishing = validActivities;
 
       // If delta publishing, only publish changed fields (no full refresh)
       if (config.delta_publishing) {
-        const changedActivities = await this._getActivityDeltas(currentActivities);
+        const changedActivities = await this._getActivityDeltas(currentActivitiesForPublishing);
 
         if (changedActivities.length > 0) {
           console.debug(`[Publisher] Delta mode: ${changedActivities.length} services with changes`);
@@ -135,22 +167,29 @@ export class ActivityPublisher {
         if (doFullRefresh) {
           // Full refresh: publish all active services
           console.debug('[Publisher] Full refresh cycle');
-          await this._publishServices(currentActivities, config.size === 'atomic' ? 'atomic' : 'all', config);
-          this.lastPublishedState = { ...currentActivities };
+          await this._publishServices(currentActivitiesForPublishing, config.size === 'atomic' ? 'atomic' : 'all', config);
+          this.lastPublishedState = { ...currentActivitiesForPublishing };
         } else {
           // Changed services only: publish only what changed since last publish
-          const changedServices: Partial<Record<string, Activity>> = {};
-          for (const service of SERVICES_TO_PUBLISH) {
-            if (!this._activityUnchanged(currentActivities[service], this.lastPublishedState[service])) {
-              changedServices[service] = currentActivities[service];
+          const changedActivities: Partial<Record<string, Activity>> = {};
+
+          // Iterate over activities and filter by service
+          for (const activity of Object.values(currentActivitiesForPublishing)) {
+            if (!activity) continue;
+
+            // Get the last published activity for this service
+            const lastActivity = Object.values(this.lastPublishedState).find(a => a?.service === activity.service);
+
+            if (!this._activityUnchanged(activity, lastActivity)) {
+              changedActivities[activity.id] = activity;  // Key by ID for consistency
             }
           }
 
-          if (Object.keys(changedServices).length > 0) {
-            console.debug(`[Publisher] Changed services: ${Object.keys(changedServices).join(', ')}`);
-            await this._publishServices(changedServices, 'changed', config);
+          if (Object.keys(changedActivities).length > 0) {
+            console.debug(`[Publisher] Changed services: ${Object.values(changedActivities).map(a => a?.service).join(', ')}`);
+            await this._publishServices(changedActivities, 'changed', config);
             // Update last published state with what we just published
-            this.lastPublishedState = { ...this.lastPublishedState, ...changedServices };
+            this.lastPublishedState = { ...this.lastPublishedState, ...changedActivities };
           } else {
             console.debug('[Publisher] No changes to publish');
           }
@@ -166,15 +205,17 @@ export class ActivityPublisher {
   private async _getActivityDeltas(currentActivities: Partial<Record<string, Activity>>): Promise<Activity[]> {
     const deltas: Activity[] = [];
 
-    for (const service of SERVICES_TO_PUBLISH) {
-      const current = currentActivities[service];
-      if (!current) continue;
+    // Iterate over activities and filter by service (currentActivities now keyed by ID, not service)
+    for (const activity of Object.values(currentActivities)) {
+      if (!activity || !SERVICES_TO_PUBLISH.includes(activity.service)) continue;
 
-      const lastFields = this.lastPublishedFields.get(service) || {};
+      const current = activity;
+
+      const lastFields = this.lastPublishedFields.get(current.service) || {};
       // Always include required fields for complete Activity object
       // Defensive: ensure content is never undefined (fallback to service name if missing)
       const changedFields: Record<string, any> = {
-        service,
+        service: current.service,
         id: current.id,
         content: current.content || `Activity on ${current.service}`,
         audio: current.audio || 'off',
@@ -204,7 +245,7 @@ export class ActivityPublisher {
         // Ensure url and timestamp are also included
         if (current.url) changedFields.url = current.url;
         if (current.timestamp) changedFields.timestamp = current.timestamp;
-        console.log(`[Publisher] Delta for ${service}:`, {
+        console.log(`[Publisher] Delta for ${current.service}:`, {
           service: changedFields.service,
           id: changedFields.id,
           content: changedFields.content,
@@ -218,7 +259,7 @@ export class ActivityPublisher {
         for (const field of fieldsToCheck) {
           newTrackedFields[field] = (current as any)[field];
         }
-        this.lastPublishedFields.set(service, newTrackedFields);
+        this.lastPublishedFields.set(current.service, newTrackedFields);
       }
     }
 

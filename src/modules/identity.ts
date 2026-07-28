@@ -88,11 +88,13 @@ export class IdentityManager {
       secret_key: secretKey,
       created_at: now,
       services_enabled: {
-        spotify: false,
-        twitch: false,
-        steam: false,
-        netflix: false,
-        youtube: false,
+        'spotify-api': false,
+        'twitch-api': false,
+        'steam-api': false,
+        'discord-api': false,
+        'netflix-tab': false,
+        'youtube-tab': false,
+        'twitch-tab': false,
       },
       notification_preferences: {
         friend_online: true,

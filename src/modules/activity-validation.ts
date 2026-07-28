@@ -16,7 +16,7 @@ export class ValidationError extends Error {
   }
 }
 
-export type ActivityProvenance = 'LOCAL_TAB' | 'FRIEND' | 'TEST';
+export type ActivityProvenance = 'LOCAL_TAB' | 'LOCAL_STEAM' | 'LOCAL_SPOTIFY' | 'LOCAL_TWITCH' | 'FRIEND' | 'TEST';
 
 export interface ValidatedActivity extends Activity {
   provenance: ActivityProvenance;
@@ -197,6 +197,7 @@ export function validateActivity(data: Partial<Activity> & { provenance?: Activi
     audio: data.audio || 'off',
     timestamp: data.timestamp,
     freshness_timestamp: data.freshness_timestamp || data.timestamp || Date.now(),
+    is_fresh: data.is_fresh,
     metadata: {
       lastAccessed: data.metadata?.lastAccessed,
       progress,

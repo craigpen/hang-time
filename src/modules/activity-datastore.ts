@@ -3,7 +3,7 @@
  * Single API gateway for all activity access with validation and integrity checks
  */
 
-import { Activity } from '../types';
+import { Activity, STORAGE_KEYS } from '../types';
 import { StorageManager } from './storage';
 import {
   validateActivity,
@@ -59,8 +59,6 @@ export interface CorruptionReport {
   };
 }
 
-const PROVENANCE_STORAGE_KEY = 'activity_provenance_map';
-
 export class ActivityDatastore {
   constructor(private storage: StorageManager) {}
 
@@ -68,7 +66,7 @@ export class ActivityDatastore {
    * Get provenance for an activity ID
    */
   private async getProvenance(id: string): Promise<ActivityProvenance> {
-    const map = await this.storage.get<Record<string, ActivityProvenance>>(PROVENANCE_STORAGE_KEY, {});
+    const map = await this.storage.get<Record<string, ActivityProvenance>>(STORAGE_KEYS.ACTIVITY_PROVENANCE_MAP, {});
     return map[id] || 'LOCAL_TAB';
   }
 
@@ -76,9 +74,9 @@ export class ActivityDatastore {
    * Store provenance for an activity ID
    */
   private async setProvenance(id: string, provenance: ActivityProvenance): Promise<void> {
-    const map = await this.storage.get<Record<string, ActivityProvenance>>(PROVENANCE_STORAGE_KEY, {});
+    const map = await this.storage.get<Record<string, ActivityProvenance>>(STORAGE_KEYS.ACTIVITY_PROVENANCE_MAP, {});
     map[id] = provenance;
-    await this.storage.set(PROVENANCE_STORAGE_KEY, map);
+    await this.storage.set(STORAGE_KEYS.ACTIVITY_PROVENANCE_MAP, map);
   }
 
   /**
@@ -95,10 +93,11 @@ export class ActivityDatastore {
     // Validate before storing
     const validated = validateActivity(data);
 
-    // Store in persistent storage
-    const activities = await this.storage.get<Record<string, any>>('activities', {});
+    // Store in persistent storage via StorageManager (single source of truth)
+    // Use activity ID as key for lookups and updates
+    const activities = await this.storage.getMyActivities();
     activities[validated.id] = validated;
-    await this.storage.set('activities', activities);
+    await this.storage.setMyActivities(activities);
 
     // Store provenance separately
     await this.setProvenance(validated.id, provenance);
@@ -145,10 +144,10 @@ export class ActivityDatastore {
     const merged = { ...current, ...allowedUpdates };
     const validated = validateActivity(merged);
 
-    // Store updated activity
-    const activities = await this.storage.get<Record<string, any>>('activities', {});
+    // Store updated activity via StorageManager (single source of truth)
+    const activities = await this.storage.getMyActivities();
     activities[id] = validated;
-    await this.storage.set('activities', activities);
+    await this.storage.setMyActivities(activities);
 
     console.debug('[ActivityDatastore] Activity updated:', id);
     return validated;
@@ -160,7 +159,7 @@ export class ActivityDatastore {
    * Detects corruption but returns activity anyway
    */
   async getActivity(id: string): Promise<Activity | null> {
-    const activities = await this.storage.get<Record<string, any>>('activities', {});
+    const activities = await this.storage.getMyActivities();
     const activity = activities[id];
 
     if (!activity) {
@@ -201,7 +200,7 @@ export class ActivityDatastore {
    * Get all activities with corruption detection
    */
   async getAllActivities(): Promise<Activity[]> {
-    const activities = await this.storage.get<Record<string, any>>('activities', {});
+    const activities = await this.storage.getMyActivities();
     return Object.values(activities);
   }
 
@@ -256,15 +255,15 @@ export class ActivityDatastore {
   async deleteActivity(id: string): Promise<void> {
     console.debug('[ActivityDatastore] Deleting activity:', id);
 
-    // Delete from activities
-    const activities = await this.storage.get<Record<string, any>>('activities', {});
+    // Delete from activities via StorageManager (single source of truth)
+    const activities = await this.storage.getMyActivities();
     delete activities[id];
-    await this.storage.set('activities', activities);
+    await this.storage.setMyActivities(activities);
 
     // Delete provenance metadata
-    const provenance = await this.storage.get<Record<string, ActivityProvenance>>(PROVENANCE_STORAGE_KEY, {});
+    const provenance = await this.storage.get<Record<string, ActivityProvenance>>(STORAGE_KEYS.ACTIVITY_PROVENANCE_MAP, {});
     delete provenance[id];
-    await this.storage.set(PROVENANCE_STORAGE_KEY, provenance);
+    await this.storage.set(STORAGE_KEYS.ACTIVITY_PROVENANCE_MAP, provenance);
   }
 
   /**
@@ -356,7 +355,9 @@ export class ActivityDatastore {
       // Get this activity's provenance
       const provenance = await this.getProvenance(activity.id);
 
-      // Only check LOCAL_TAB activities (FRIEND and TEST don't require a tab)
+      // Only check LOCAL_TAB activities (tab-based detection)
+      // API-based activities (LOCAL_STEAM, LOCAL_SPOTIFY, LOCAL_TWITCH) don't correspond to tabs
+      // FRIEND and TEST activities are excluded from ghost detection
       if (provenance === 'LOCAL_TAB') {
         // Activity should have a matching open tab
         if (!activity.url || !openTabUrls.has(activity.url)) {
@@ -365,7 +366,7 @@ export class ActivityDatastore {
             service: activity.service,
             content: activity.content,
             lastSeen: activity.timestamp,
-            reason: `No matching open tab for ${activity.service}`,
+            reason: `Tab closed for ${activity.service}`,
           });
         }
       }

@@ -1317,20 +1317,26 @@ body {
 
 .activity-state-icon {
   flex-shrink: 0;
-  font-size: 1.2em;
-  font-weight: bold;
-  min-width: auto;
-  width: auto;
-  text-align: center;
+  min-width: 20px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background-color: transparent !important;
   background: none !important;
   border: none !important;
   padding: 0 !important;
   margin: 0 !important;
-  line-height: 1 !important;
-  display: inline !important;
-  -webkit-text-fill-color: inherit;
   user-select: none;
+  font-size: 1.6em;
+  line-height: 1;
+}
+
+.state-icon-svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
 }
 
 .activity-separator {
@@ -1659,6 +1665,33 @@ body {
   padding: 2px 6px;
   background-color: var(--bg-tertiary);
   border-radius: 2px;
+}
+
+.friend-header-buttons {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.btn-friend-action {
+  padding: 4px 6px;
+  font-size: 0.9em;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color 0.2s;
+  font-family: inherit;
+}
+
+.btn-friend-action:hover {
+  color: var(--text-secondary);
+}
+
+.btn-delete-friend:hover {
+  color: #e74c3c;
 }
 
 .friend-activities {

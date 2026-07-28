@@ -168,9 +168,24 @@ export class FriendManager {
       throw new Error(`Friend not found: ${friendId}`);
     }
 
+    // Clean up old service name entries to prevent duplicates
+    // (e.g., remove 'netflix' if we're adding 'netflix-tab')
+    const cleanedActivities = { ...friend.current_activities };
+
+    // Get the base service name (strip -api or -tab)
+    const baseService = activity.service.replace('-api', '').replace('-tab', '');
+
+    // Remove any old entries that use the base name without suffix
+    Object.keys(cleanedActivities).forEach((key) => {
+      const keyBase = key.replace('-api', '').replace('-tab', '');
+      if (keyBase === baseService && key !== activity.service) {
+        delete cleanedActivities[key as any];
+      }
+    });
+
     await this.storage.updateFriend(friendId, {
       current_activities: {
-        ...friend.current_activities,
+        ...cleanedActivities,
         [activity.service]: activity,
       },
       last_seen: Date.now(),

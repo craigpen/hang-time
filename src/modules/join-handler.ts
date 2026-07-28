@@ -25,20 +25,20 @@ export class JoinHandler {
     console.log(`[JoinHandler] Joining ${friend.local_name}'s activity on ${activity.service}`);
 
     switch (activity.service) {
-      case 'spotify':
+      case 'spotify-api':
         await this._joinSpotify(activity);
         break;
 
-      case 'twitch':
+      case 'twitch-api':
         await this._joinTwitch(activity);
         break;
 
-      case 'steam':
+      case 'steam-api':
         await this._joinSteam(activity);
         break;
 
-      case 'netflix':
-      case 'youtube':
+      case 'netflix-tab':
+      case 'youtube-tab':
         await this._joinVideo(activity);
         break;
 

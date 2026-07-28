@@ -69,10 +69,20 @@ export class ActivityDetector {
 
       for (const activity of allActivities) {
         try {
+          // Determine provenance based on service
+          let provenance: 'LOCAL_TAB' | 'LOCAL_STEAM' | 'LOCAL_SPOTIFY' | 'LOCAL_TWITCH' = 'LOCAL_TAB';
+          if (activity.service === 'steam-api') {
+            provenance = 'LOCAL_STEAM';
+          } else if (activity.service === 'spotify-api') {
+            provenance = 'LOCAL_SPOTIFY';
+          } else if (activity.service === 'twitch-api') {
+            provenance = 'LOCAL_TWITCH';
+          }
+
           // Validate through datastore
           const validated = await datastore.createActivity({
             ...activity,
-            provenance: 'LOCAL_TAB',
+            provenance,
           });
           validatedActivities.push(validated);
           activitiesByService[activity.service] = validated;
@@ -85,6 +95,13 @@ export class ActivityDetector {
 
       if (validatedActivities.length === 0) {
         console.debug('[Activity] No activities passed validation');
+        // Clean up ghost activities from closed tabs
+        const ghostsRemoved = await datastore.cleanupGhosts();
+        if (ghostsRemoved > 0) {
+          console.debug('[Activity] Cleaned up', ghostsRemoved, 'ghost activities');
+          // Update my_activities after cleanup
+          await this._updateMyActivitiesFromDatastore();
+        }
         return;
       }
 
@@ -97,23 +114,29 @@ export class ActivityDetector {
         newActivityIds.size !== lastActivityIds.size ||
         Array.from(newActivityIds).some(id => !lastActivityIds.has(id));
 
+      // Clean up ghost activities from closed tabs before updating my_activities
+      await datastore.cleanupGhosts();
+
+      // Clean up stale API activities (from services that are enabled but didn't return anything)
+      const profile = await this.storageManager.getUserProfile();
+      if (profile) {
+        await this._cleanupStaleApiActivities(validatedActivities, profile);
+      }
+
+      // Populate my_activities from datastore (single source of truth)
+      await this._updateMyActivitiesFromDatastore();
+
+      // Store most recent activity for backwards compatibility
+      await this.storageManager.setCurrentActivity(allActivities[0]);
+
       if (!activityIdsChanged) {
         // Same activities, only state/audio might have changed (oscillation)
         console.debug('[Activity] ℹ️  Activity IDs unchanged (state-only change, skipping notification)');
-        // Still publish to Nostr via Publisher (which is rate-limited anyway)
-        await this.storageManager.setMyActivities(activitiesByService);
         return;
       }
 
       // Meaningful change: activity IDs changed, notify popup
       console.debug('[Activity] Activity IDs changed, notifying popup');
-      await this.storageManager.setMyActivities(activitiesByService);
-      console.debug('[Activity] ✅ Stored in MY_ACTIVITIES');
-
-      // Store most recent activity for backwards compatibility
-      await this.storageManager.setCurrentActivity(allActivities[0]);
-
-      // Notify popup that activities changed
       await this._notifyPopup({
         type: 'MY_ACTIVITIES_CHANGED',
         data: { activities: activitiesByService },
@@ -234,6 +257,65 @@ export class ActivityDetector {
   }
 
 
+
+  private async _updateMyActivitiesFromDatastore(): Promise<void> {
+    try {
+      const datastore = getActivityDatastore();
+      const allActivities = await datastore.getAllActivities();
+
+      // Include all user-detected activities (LOCAL_TAB, LOCAL_STEAM, etc), exclude FRIEND/TEST
+      // Use activity ID as key (consistent with ActivityDatastore)
+      const myActivities: Partial<Record<string, any>> = {};
+      for (const activity of allActivities) {
+        // Include all local activities (user's own detected activities), exclude friend/test data
+        if (activity.provenance !== 'FRIEND' && activity.provenance !== 'TEST') {
+          myActivities[activity.id] = activity;
+        }
+      }
+
+      await this.storageManager.setMyActivities(myActivities);
+      console.debug('[Activity] Updated MY_ACTIVITIES from datastore with', Object.keys(myActivities).length, 'activities');
+    } catch (error) {
+      console.error('[Activity] Failed to update my_activities from datastore:', error);
+    }
+  }
+
+  private async _cleanupStaleApiActivities(currentActivities: Activity[], profile: UserProfile): Promise<void> {
+    const datastore = getActivityDatastore();
+    const allActivities = await datastore.getAllActivities();
+
+    // API services that were enabled
+    const enabledApiServices = new Set<string>();
+    if (profile.services_enabled['steam-api']) enabledApiServices.add('steam-api');
+    if (profile.services_enabled['spotify-api']) enabledApiServices.add('spotify-api');
+    if (profile.services_enabled['twitch-api']) enabledApiServices.add('twitch-api');
+
+    for (const service of enabledApiServices) {
+      const currentActivity = currentActivities.find(a => a.service === service);
+
+      if (!currentActivity) {
+        // Service is enabled but didn't return an activity - remove all stale activities
+        const staleActivities = allActivities.filter(a => a.service === service && a.provenance !== 'FRIEND' && a.provenance !== 'TEST');
+        for (const activity of staleActivities) {
+          console.debug(`[Activity] Removing stale ${service} activity: ${activity.content}`);
+          await datastore.deleteActivity(activity.id);
+        }
+      } else {
+        // Service returned an activity - but remove any OTHER activities from the same service
+        // (APIs like Steam only return the most recent activity; any other stored are stale)
+        const otherActivities = allActivities.filter(
+          a => a.service === service &&
+               a.id !== currentActivity.id &&
+               a.provenance !== 'FRIEND' &&
+               a.provenance !== 'TEST'
+        );
+        for (const activity of otherActivities) {
+          console.debug(`[Activity] Removing duplicate ${service} activity (keeping current): ${activity.content}`);
+          await datastore.deleteActivity(activity.id);
+        }
+      }
+    }
+  }
 
   private async _notifyPopup(message: ExtensionMessage): Promise<void> {
     try {

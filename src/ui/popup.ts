@@ -186,6 +186,12 @@ export class PopupController {
     // Show "no friends" placeholder
     if (!friends || friends.length === 0) {
       this.noFriendsPlaceholder!.style.display = 'block';
+      // Remove all existing friend elements (keep only self)
+      existingElements.forEach((element, friendId) => {
+        if (friendId !== 'self') {
+          element.remove();
+        }
+      });
     } else {
       this.noFriendsPlaceholder!.style.display = 'none';
 
@@ -315,12 +321,41 @@ export class PopupController {
     nameSpan.className = 'friend-name';
     nameSpan.textContent = this._escapeHtml(name);
 
+    // Buttons container (right-aligned, before status)
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.className = 'friend-header-buttons';
+
+    // Only show buttons for actual friends, not for "My Activity" (self)
+    if (id !== 'self') {
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn-friend-action btn-edit-friend';
+      editBtn.textContent = '✎';
+      editBtn.title = 'Rename friend';
+      editBtn.onclick = (e) => {
+        e.stopPropagation();
+        this._handleEditFriend(id, name);
+      };
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn-friend-action btn-delete-friend';
+      deleteBtn.textContent = '✕';
+      deleteBtn.title = 'Remove friend';
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        this._handleDeleteFriend(id, name);
+      };
+
+      buttonsContainer.appendChild(editBtn);
+      buttonsContainer.appendChild(deleteBtn);
+    }
+
     const statusSpan = document.createElement('span');
     statusSpan.className = 'friend-status';
     statusSpan.textContent = statusText;
 
     header.appendChild(caret);
     header.appendChild(nameSpan);
+    header.appendChild(buttonsContainer);
     header.appendChild(statusSpan);
     item.appendChild(header);
 
@@ -464,35 +499,40 @@ export class PopupController {
       const stateIcon = document.createElement('div');
       stateIcon.className = 'activity-state-icon';
 
-      // Calculate data freshness: show sleep icon if data is > 30 seconds old
-      const ageMs = Date.now() - (activity.freshness_timestamp || activity.timestamp);
-      const isDataFresh = ageMs < 30000; // 30 seconds
-
-      if (!isDataFresh) {
-        // Stale data (preserved): show moon icon in subtle yellow
-        stateIcon.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" stroke="#FEF3C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="state-icon-svg">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-          </svg>
-        `;
-        stateIcon.title = 'Data is stale (content script unavailable)';
-      } else if (activity.state === 'playing') {
-        // Fresh playing: green play icon
-        stateIcon.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="#4CAF50" stroke="none" class="state-icon-svg">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
-        `;
+      // For Steam games, show controller emoji instead of play/pause states
+      if (activity.service === 'steam-api') {
+        stateIcon.textContent = '🎮';
         stateIcon.title = 'Playing';
       } else {
-        // Fresh paused: gray pause icon
-        stateIcon.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="#9E9E9E" stroke="none" class="state-icon-svg">
-            <rect x="6" y="4" width="4" height="16"></rect>
-            <rect x="14" y="4" width="4" height="16"></rect>
-          </svg>
-        `;
-        stateIcon.title = 'Paused';
+        // Check if data is fresh from content script (only for browser tabs)
+        const isDataFresh = activity.is_fresh !== false; // Default to true if not set
+
+        if (!isDataFresh) {
+          // Stale data (content script unresponsive): show moon icon in subtle yellow
+          stateIcon.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="#FEF3C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="state-icon-svg">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          `;
+          stateIcon.title = 'Content script unavailable (tab may be backgrounded)';
+        } else if (activity.state === 'playing') {
+          // Fresh playing: green play icon
+          stateIcon.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="#4CAF50" stroke="none" class="state-icon-svg">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          `;
+          stateIcon.title = 'Playing';
+        } else {
+          // Fresh paused: gray pause icon
+          stateIcon.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="#9E9E9E" stroke="none" class="state-icon-svg">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+          `;
+          stateIcon.title = 'Paused';
+        }
       }
 
       row.appendChild(stateIcon);
@@ -728,6 +768,40 @@ export class PopupController {
       console.error('[Popup] Remove friend failed:', error);
       this._showError('Failed to remove friend');
     }
+  }
+
+  private _handleDeleteFriend(friendId: string, friendName: string): void {
+    const minimalFriend: Friend = {
+      id: friendId,
+      identifier: '',
+      pubkey: '',
+      local_name: friendName,
+      added_at: 0,
+      last_seen: 0,
+      muted: false,
+      hidden_services: [],
+      current_activities: {},
+    };
+    this._handleRemoveFriend(minimalFriend);
+  }
+
+  private _handleEditFriend(friendId: string, currentName: string): void {
+    const newName = prompt('Rename friend:', currentName);
+    if (!newName || newName.trim() === '' || newName === currentName) {
+      return;
+    }
+
+    chrome.runtime.sendMessage({
+      type: 'RENAME_FRIEND',
+      data: { friendId, newName: newName.trim() },
+    }, (response) => {
+      if (response?.success) {
+        console.debug(`[Popup] Renamed friend to: ${newName}`);
+        this.refreshFriends().catch(() => {});
+      } else {
+        this._showError(response?.error || 'Failed to rename friend');
+      }
+    });
   }
 
   private _showMessageModal(friend: Friend, messages: any[], activity?: Activity): void {
@@ -1032,7 +1106,7 @@ export class PopupController {
       youtube: 'public/icons/youtube.png',
       spotify: 'public/icons/spotify.png',
       twitch: 'public/icons/twitch.png',
-      steam: 'public/icons/steampowered.png',
+      steam: 'public/icons/steam.png',
       discord: 'public/icons/discord.png',
     };
     const icon = iconMap[baseService];

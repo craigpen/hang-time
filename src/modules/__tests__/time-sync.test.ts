@@ -6,10 +6,18 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TimeSyncManager } from '../time-sync';
 import { NostrEvent } from '../../types';
 
+vi.mock('../encryption', () => ({
+  encryptionManager: {
+    signEvent: vi.fn().mockReturnValue('sig123abcdef1234567890abcdef123456789012345678901234567890abcdef'),
+    sha256: vi.fn().mockResolvedValue('abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'),
+  },
+}));
+
 describe('TimeSyncManager', () => {
   let timeSyncManager: TimeSyncManager;
   let mockRelayPool: any;
   let mockIdentityManager: any;
+  let mockStorageManager: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -18,25 +26,30 @@ describe('TimeSyncManager', () => {
     };
     mockIdentityManager = {
       getIdentifier: vi.fn().mockResolvedValue('TestIdentifier123'),
+      getPubkey: vi.fn().mockResolvedValue('pubkey123'),
+      getSecretKey: vi.fn().mockResolvedValue('secretkey123'),
     };
-    timeSyncManager = new TimeSyncManager(mockRelayPool, mockIdentityManager);
+    mockStorageManager = {
+      getUserProfile: vi.fn().mockResolvedValue({ publisher_config: {} }),
+    };
+    timeSyncManager = new TimeSyncManager(mockRelayPool, mockIdentityManager, mockStorageManager);
   });
 
   describe('publishTimeSync', () => {
     it('should publish time-sync event to relay pool', async () => {
-      await timeSyncManager.publishTimeSync('video123', 150, 3600, true, 'youtube');
+      await timeSyncManager.publishTimeSync('video123', 150, 3600, true, 'youtube-tab');
 
       expect(mockRelayPool.publish).toHaveBeenCalled();
       const event = mockRelayPool.publish.mock.calls[0][0];
 
       expect(event.kind).toBe(1);
       expect(event.tags).toContainEqual(['type', 'time-sync']);
-      expect(event.tags).toContainEqual(['service', 'youtube']);
+      expect(event.tags).toContainEqual(['service', 'youtube-tab']);
       expect(event.tags).toContainEqual(['video_id', 'video123']);
     });
 
     it('should include current time and duration in tags', async () => {
-      await timeSyncManager.publishTimeSync('video123', 150, 3600, true, 'youtube');
+      await timeSyncManager.publishTimeSync('video123', 150, 3600, true, 'youtube-tab');
 
       const event = mockRelayPool.publish.mock.calls[0][0];
       expect(event.tags).toContainEqual(['current_time', '150']);
@@ -53,7 +66,7 @@ describe('TimeSyncManager', () => {
         kind: 1,
         tags: [
           ['type', 'time-sync'],
-          ['service', 'youtube'],
+          ['service', 'youtube-tab'],
           ['video_id', 'video123'],
           ['current_time', '150'],
           ['duration', '3600'],
@@ -66,7 +79,7 @@ describe('TimeSyncManager', () => {
 
       expect(result).toBeDefined();
       expect(result?.friendIdentifier).toBe('friend123');
-      expect(result?.service).toBe('youtube');
+      expect(result?.service).toBe('youtube-tab');
       expect(result?.videoId).toBe('video123');
       expect(result?.currentTime).toBe(150);
       expect(result?.duration).toBe(3600);
@@ -119,7 +132,7 @@ describe('TimeSyncManager', () => {
         kind: 1,
         tags: [
           ['type', 'time-sync'],
-          ['service', 'youtube'],
+          ['service', 'youtube-tab'],
           ['video_id', 'video123'],
           ['current_time', '150'],
           ['duration', '3600'],
@@ -143,7 +156,7 @@ describe('TimeSyncManager', () => {
         kind: 1,
         tags: [
           ['type', 'time-sync'],
-          ['service', 'youtube'],
+          ['service', 'youtube-tab'],
           ['video_id', 'video123'],
           ['current_time', '150'],
           ['duration', '3600'],
@@ -170,7 +183,7 @@ describe('TimeSyncManager', () => {
         kind: 1,
         tags: [
           ['type', 'time-sync'],
-          ['service', 'youtube'],
+          ['service', 'youtube-tab'],
           ['video_id', 'video123'],
           ['current_time', '150'],
           ['duration', '3600'],

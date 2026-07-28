@@ -9,8 +9,11 @@ import { generateActivityId } from '../activity-utils';
 
 export class SteamService implements IServiceModule {
   private static readonly API_BASE = 'https://api.steampowered.com';
+  private static readonly CACHE_TTL_MS = 30000; // 30 second cache to reduce API calls
   private lastActivityTime: number = 0;
   private lastActivity: Activity | null = null;
+  private cachedResult: Activity | null = null;
+  private cacheTimestamp: number = 0;
 
   constructor(private storage: StorageManager) {}
 
@@ -21,13 +24,26 @@ export class SteamService implements IServiceModule {
   }
 
   async getCurrentActivity(): Promise<Activity | null> {
+    // Check cache first (30 second TTL to reduce API calls)
+    const now = Date.now();
+    if (this.cachedResult !== undefined && now - this.cacheTimestamp < SteamService.CACHE_TTL_MS) {
+      console.debug('[Steam] Using cached result (age:', now - this.cacheTimestamp, 'ms)');
+      return this.cachedResult;
+    }
+
     const profile = await this.storage.getUserProfile();
     if (!profile?.steam_config?.steam_id) {
       console.debug('[Steam] Steam ID not configured');
       return null;
     }
 
-    return this._getCurrentlyPlayingGame(profile.steam_config.steam_id);
+    const result = await this._getCurrentlyPlayingGame(profile.steam_config.steam_id);
+
+    // Update cache
+    this.cachedResult = result;
+    this.cacheTimestamp = Date.now();
+
+    return result;
   }
 
   async hasToken(): Promise<boolean> {
@@ -65,36 +81,66 @@ export class SteamService implements IServiceModule {
    * Note: This requires "Public" game settings in Steam profile
    */
   private async _getCurrentlyPlayingGame(steamId: string): Promise<Activity | null> {
+    const stored = await this.storage.getMyActivities();
+    const storedSteam = stored['steam-api'];
+    const profile = await this.storage.getUserProfile();
+
     try {
       const url = `${SteamService.API_BASE}/ISteamUser/GetPlayerSummaries/v0002/`;
-      // Try with API key first if available, otherwise without
       const params = new URLSearchParams({
         steamids: steamId,
       });
 
+      // Add API key if configured
+      if (profile?.steam_config?.api_key) {
+        params.append('key', profile.steam_config.api_key);
+      }
+
       const response = await fetch(`${url}?${params}`);
       if (!response.ok) {
         console.error('[Steam] API error:', response.status);
+        // Fall back to stored activity on API error
+        if (storedSteam) {
+          return {
+            ...storedSteam,
+            is_fresh: false,
+            freshness_timestamp: storedSteam.freshness_timestamp || Date.now(),
+          };
+        }
         return null;
       }
 
       const data = await response.json();
+      console.debug('[Steam] API response:', data);
       const player = data.response?.players?.[0];
 
       if (!player) {
         console.debug('[Steam] Player not found');
+        // Fall back to stored activity
+        if (storedSteam) {
+          return {
+            ...storedSteam,
+            is_fresh: false,
+            freshness_timestamp: storedSteam.freshness_timestamp || Date.now(),
+          };
+        }
         return null;
       }
 
+      console.debug('[Steam] Player data:', player);
+
       // Check if player is currently playing a game
       if (!player.gameid) {
-        console.debug('[Steam] No game currently playing');
+        console.debug('[Steam] No game currently playing (gameid missing from response)');
+        // No game playing - remove stored activity by returning null
+        // (ActivityDetector will handle cleanup)
         return null;
       }
 
       const gameName = player.gameextrainfo || `Game (${player.gameid})`;
       console.debug('[Steam] Currently playing:', gameName);
 
+      // Fresh data from API
       return {
         id: generateActivityId('steam-api', player.gameid.toString()),
         service: 'steam-api',
@@ -103,6 +149,8 @@ export class SteamService implements IServiceModule {
         state: 'playing',
         audio: 'on',
         timestamp: Date.now(),
+        freshness_timestamp: Date.now(),
+        is_fresh: true,
         metadata: {
           title: gameName,
           steamId: player.steamid,
@@ -110,6 +158,14 @@ export class SteamService implements IServiceModule {
       };
     } catch (error) {
       console.error('[Steam] Failed to fetch game info:', error);
+      // Fall back to stored activity on error
+      if (storedSteam) {
+        return {
+          ...storedSteam,
+          is_fresh: false,
+          freshness_timestamp: storedSteam.freshness_timestamp || Date.now(),
+        };
+      }
       return null;
     }
   }

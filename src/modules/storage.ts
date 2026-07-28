@@ -151,6 +151,11 @@ export class StorageManager {
     const friends = await this.getFriends();
     const filtered = friends.filter((f) => f.id !== friendId);
     await this.setFriends(filtered);
+
+    // Clean up associated data: messages and activity history
+    await this.delete(STORAGE_KEYS.MESSAGES(friendId));
+    await this.delete(STORAGE_KEYS.ACTIVITY_HISTORY(friendId));
+
     console.debug('[Storage] Removed friend:', friendId);
   }
 

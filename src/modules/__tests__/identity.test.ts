@@ -39,7 +39,7 @@ describe('IdentityManager', () => {
       expect(id).toBeDefined();
       expect(typeof id).toBe('string');
       expect(id.length).toBeGreaterThan(0);
-      expect(/^[A-Z][a-z]+[A-Z][a-z]+\d+$/.test(id)).toBe(true);
+      expect(/^[a-z]+-[a-z]+-[a-z]+-[a-z]+$/.test(id)).toBe(true);
     });
 
     it('should generate different identifiers on multiple calls', async () => {
@@ -62,7 +62,7 @@ describe('IdentityManager', () => {
 
       expect(id).toBeDefined();
       expect(typeof id).toBe('string');
-      expect(/^[A-Z][a-z]+[A-Z][a-z]+\d+$/.test(id)).toBe(true);
+      expect(/^[a-z]+-[a-z]+-[a-z]+-[a-z]+$/.test(id)).toBe(true);
     });
 
     it('should generate new identifier if none exists', async () => {
@@ -93,7 +93,7 @@ describe('IdentityManager', () => {
       const profile = {
         user_id: 'test',
         memorable_identifier: 'TestIdentifier123',
-        services_enabled: { spotify: false, twitch: false, steam: false, netflix: false, youtube: false },
+        services_enabled: { 'spotify-api': false, 'twitch-api': false, 'steam-api': false, 'discord-api': false, 'netflix-tab': false, 'youtube-tab': false, 'twitch-tab': false },
       };
       mockStorageManager.getUserProfile.mockResolvedValueOnce(profile);
 

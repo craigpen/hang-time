@@ -29,7 +29,7 @@ function extractStableId(service: string, url?: string): string {
     const search = urlObj.search;
 
     switch (service.toLowerCase()) {
-      case 'youtube':
+      case 'youtube-tab':
         // Extract video ID from v parameter: watch?v=dQw4w9WgXcQ
         const videoIdMatch = search.match(/[?&]v=([^&]+)/);
         if (videoIdMatch && videoIdMatch[1]) return videoIdMatch[1];
@@ -38,25 +38,25 @@ function extractStableId(service: string, url?: string): string {
         if (shortUrlMatch && shortUrlMatch[1]) return shortUrlMatch[1];
         break;
 
-      case 'netflix':
+      case 'netflix-tab':
         // Extract title ID from path: /watch/80057281
         const netflixMatch = pathname.match(/\/watch\/(\d+)/);
         if (netflixMatch && netflixMatch[1]) return netflixMatch[1];
         break;
 
-      case 'spotify':
+      case 'spotify-api':
         // Extract track/album ID from path: /track/3n3Ppam7vgaVa1iaRUc9Lp
         const spotifyMatch = pathname.match(/\/(track|album|playlist)\/([^/?]+)/);
         if (spotifyMatch && spotifyMatch[2]) return spotifyMatch[2];
         break;
 
-      case 'twitch':
+      case 'twitch-api':
         // Extract channel name from path: /username
         const channelMatch = pathname.match(/^\/([^/?]+)/);
         if (channelMatch && channelMatch[1]) return channelMatch[1];
         break;
 
-      case 'steam':
+      case 'steam-api':
         // Extract app ID from steam:// URL: steam://run/730/
         const steamMatch = url.match(/steam:\/\/run\/(\d+)/);
         if (steamMatch && steamMatch[1]) return steamMatch[1];

@@ -21,7 +21,7 @@ export class TwitchService implements IServiceModule {
   async isEnabled(): Promise<boolean> {
     const profile = await this.storage.getUserProfile();
     if (!profile) return false;
-    return profile.services_enabled.twitch;
+    return profile.services_enabled['twitch-api'];
   }
 
   async getCurrentActivity(): Promise<Activity | null> {
@@ -30,6 +30,9 @@ export class TwitchService implements IServiceModule {
       secureLog.debug('Twitch', 'No valid token available');
       return null;
     }
+
+    const stored = await this.storage.getMyActivities();
+    const storedTwitch = stored['twitch-api'];
 
     try {
       const config = await configManager.getTwitchConfig();
@@ -47,6 +50,14 @@ export class TwitchService implements IServiceModule {
           await this.clearToken();
           return null;
         }
+        // Fall back to stored activity on API error
+        if (storedTwitch) {
+          return {
+            ...storedTwitch,
+            is_fresh: false,
+            freshness_timestamp: storedTwitch.freshness_timestamp || Date.now(),
+          };
+        }
         return null;
       }
 
@@ -54,6 +65,14 @@ export class TwitchService implements IServiceModule {
       const userId = userData.data?.[0]?.id;
 
       if (!userId) {
+        // Fall back to stored activity
+        if (storedTwitch) {
+          return {
+            ...storedTwitch,
+            is_fresh: false,
+            freshness_timestamp: storedTwitch.freshness_timestamp || Date.now(),
+          };
+        }
         return null;
       }
 
@@ -67,6 +86,14 @@ export class TwitchService implements IServiceModule {
 
       if (!streamResponse.ok) {
         secureLog.error('Twitch', `Stream check failed: ${streamResponse.status}`);
+        // Fall back to stored activity on API error
+        if (storedTwitch) {
+          return {
+            ...storedTwitch,
+            is_fresh: false,
+            freshness_timestamp: storedTwitch.freshness_timestamp || Date.now(),
+          };
+        }
         return null;
       }
 
@@ -78,13 +105,15 @@ export class TwitchService implements IServiceModule {
       }
 
       return {
-        id: generateActivityId('twitch', `${stream.user_name}/${stream.game_name}`),
-        service: 'twitch',
+        id: generateActivityId('twitch-api', `${stream.user_name}/${stream.game_name}`),
+        service: 'twitch-api',
         content: stream.title || stream.game_name || 'Twitch Stream',
         url: `https://twitch.tv/${stream.user_name}`,
         state: 'playing',
         audio: 'on',
         timestamp: Date.now(),
+        freshness_timestamp: Date.now(),
+        is_fresh: true,
         metadata: {
           title: stream.title,
           game: stream.game_name,
@@ -94,17 +123,25 @@ export class TwitchService implements IServiceModule {
       };
     } catch (error) {
       secureLog.error('Twitch', 'Failed to get stream info', error);
+      // Fall back to stored activity on error
+      if (storedTwitch) {
+        return {
+          ...storedTwitch,
+          is_fresh: false,
+          freshness_timestamp: storedTwitch.freshness_timestamp || Date.now(),
+        };
+      }
       return null;
     }
   }
 
   async hasToken(): Promise<boolean> {
-    const token = await this.storage.getOAuthToken('twitch');
+    const token = await this.storage.getOAuthToken('twitch-api');
     return !!token;
   }
 
   async clearToken(): Promise<void> {
-    await this.storage.clearOAuthToken('twitch');
+    await this.storage.clearOAuthToken('twitch-api');
     secureLog.debug('Twitch', 'Token cleared');
   }
 
@@ -162,14 +199,14 @@ export class TwitchService implements IServiceModule {
       }
 
       const token: OAuthToken = {
-        service: 'twitch',
+        service: 'twitch-api',
         access_token: data.access_token,
         expires_at: Date.now() + data.expires_in * 1000,
         scopes: [TwitchService.SCOPE],
         stored_at: Date.now(),
       };
 
-      await this.storage.setOAuthToken('twitch', token);
+      await this.storage.setOAuthToken('twitch-api', token);
       secureLog.debug('Twitch', 'Token stored successfully');
     } catch (error) {
       secureLog.error('Twitch', 'Failed to handle auth callback', error);
@@ -178,7 +215,7 @@ export class TwitchService implements IServiceModule {
   }
 
   private async _getValidToken(): Promise<string | null> {
-    const token = await this.storage.getOAuthToken('twitch');
+    const token = await this.storage.getOAuthToken('twitch-api');
 
     if (!token) return null;
 

@@ -21,7 +21,7 @@ export class SpotifyService implements IServiceModule {
   async isEnabled(): Promise<boolean> {
     const profile = await this.storage.getUserProfile();
     if (!profile) return false;
-    return profile.services_enabled.spotify;
+    return profile.services_enabled['spotify-api'];
   }
 
   async getCurrentActivity(): Promise<Activity | null> {
@@ -30,6 +30,9 @@ export class SpotifyService implements IServiceModule {
       secureLog.debug('Spotify', 'No valid token available');
       return null;
     }
+
+    const stored = await this.storage.getMyActivities();
+    const storedSpotify = stored['spotify-api'];
 
     try {
       const response = await fetch(`${SpotifyService.API_BASE}/me/player/currently-playing`, {
@@ -46,6 +49,14 @@ export class SpotifyService implements IServiceModule {
           return null;
         }
         secureLog.error('Spotify', `API error: ${response.status}`);
+        // Fall back to stored activity on API error
+        if (storedSpotify) {
+          return {
+            ...storedSpotify,
+            is_fresh: false,
+            freshness_timestamp: storedSpotify.freshness_timestamp || Date.now(),
+          };
+        }
         return null;
       }
 
@@ -60,13 +71,15 @@ export class SpotifyService implements IServiceModule {
       const artist = track.artists?.[0]?.name || 'Unknown Artist';
 
       return {
-        id: generateActivityId('spotify', track.external_urls?.spotify),
-        service: 'spotify',
+        id: generateActivityId('spotify-api', track.external_urls?.spotify),
+        service: 'spotify-api',
         content: `${track.name}`,
         url: track.external_urls?.spotify,
         state: data.is_playing ? 'playing' : 'paused',
         audio: data.is_playing ? 'on' : 'off',
         timestamp: Date.now(),
+        freshness_timestamp: Date.now(),
+        is_fresh: true,
         metadata: {
           title: track.name,
           artist,
@@ -77,17 +90,25 @@ export class SpotifyService implements IServiceModule {
       };
     } catch (error) {
       secureLog.error('Spotify', 'Failed to get current activity', error);
+      // Fall back to stored activity on error
+      if (storedSpotify) {
+        return {
+          ...storedSpotify,
+          is_fresh: false,
+          freshness_timestamp: storedSpotify.freshness_timestamp || Date.now(),
+        };
+      }
       return null;
     }
   }
 
   async hasToken(): Promise<boolean> {
-    const token = await this.storage.getOAuthToken('spotify');
+    const token = await this.storage.getOAuthToken('spotify-api');
     return !!token;
   }
 
   async clearToken(): Promise<void> {
-    await this.storage.clearOAuthToken('spotify');
+    await this.storage.clearOAuthToken('spotify-api');
     secureLog.debug('Spotify', 'Token cleared');
   }
 
@@ -147,7 +168,7 @@ export class SpotifyService implements IServiceModule {
       }
 
       const token: OAuthToken = {
-        service: 'spotify',
+        service: 'spotify-api',
         access_token: data.access_token,
         refresh_token: data.refresh_token,
         expires_at: Date.now() + data.expires_in * 1000,
@@ -155,7 +176,7 @@ export class SpotifyService implements IServiceModule {
         stored_at: Date.now(),
       };
 
-      await this.storage.setOAuthToken('spotify', token);
+      await this.storage.setOAuthToken('spotify-api', token);
       secureLog.debug('Spotify', 'Token stored successfully');
     } catch (error) {
       secureLog.error('Spotify', 'Failed to handle auth callback', error);
@@ -164,7 +185,7 @@ export class SpotifyService implements IServiceModule {
   }
 
   private async _getValidToken(): Promise<string | null> {
-    const token = await this.storage.getOAuthToken('spotify');
+    const token = await this.storage.getOAuthToken('spotify-api');
 
     if (!token) return null;
 
@@ -178,7 +199,7 @@ export class SpotifyService implements IServiceModule {
     if (token.refresh_token) {
       try {
         await this._refreshToken(token.refresh_token);
-        const newToken = await this.storage.getOAuthToken('spotify');
+        const newToken = await this.storage.getOAuthToken('spotify-api');
         return newToken?.access_token ?? null;
       } catch (error) {
         secureLog.error('Spotify', 'Token refresh failed', error);
@@ -220,7 +241,7 @@ export class SpotifyService implements IServiceModule {
       }
 
       const token: OAuthToken = {
-        service: 'spotify',
+        service: 'spotify-api',
         access_token: data.access_token,
         refresh_token: data.refresh_token || refreshToken,
         expires_at: Date.now() + data.expires_in * 1000,
@@ -228,7 +249,7 @@ export class SpotifyService implements IServiceModule {
         stored_at: Date.now(),
       };
 
-      await this.storage.setOAuthToken('spotify', token);
+      await this.storage.setOAuthToken('spotify-api', token);
       secureLog.debug('Spotify', 'Token refreshed successfully');
     } catch (error) {
       secureLog.error('Spotify', 'Token refresh error', error);
