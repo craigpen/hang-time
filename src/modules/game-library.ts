@@ -382,8 +382,9 @@ export class GameLibraryManager {
 
   /**
    * Handle incoming game library event from Nostr
+   * Public for integration with RelayPool
    */
-  private async handleGameLibraryEvent(event: NostrEvent): Promise<void> {
+  async handleGameLibraryEvent(event: NostrEvent): Promise<void> {
     try {
       // Validate event has game-library tag
       const hasGameLibraryTag = event.tags.find((t) => t[0] === 't' && t[1] === 'game-library');

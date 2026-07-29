@@ -894,6 +894,9 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
     if (data.publisher_config !== undefined) {
       profile.publisher_config = data.publisher_config;
     }
+    if (data.game_discovery_enabled !== undefined) {
+      profile.game_discovery_enabled = data.game_discovery_enabled;
+    }
 
     console.debug('[Background] Saving settings - profile.steam_id after update:', profile.steam_id);
 
@@ -1132,8 +1135,17 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
 
     try {
       if (event.kind === 1) {
-        // Activity event
-        await _handleActivityEvent(friendIdentifier, event);
+        // Check if this is a game-library event (tag t=game-library)
+        const isGameLibraryEvent = event.tags.find((t) => t[0] === 't' && t[1] === 'game-library');
+
+        if (isGameLibraryEvent) {
+          // Route to game library manager
+          const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
+          await gameLibraryManager.handleGameLibraryEvent(event);
+        } else {
+          // Activity event
+          await _handleActivityEvent(friendIdentifier, event);
+        }
       } else if (event.kind === 4) {
         // Chat message
         console.debug(`[Message] Handling incoming kind-4`);

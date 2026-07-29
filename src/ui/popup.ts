@@ -1718,6 +1718,12 @@ export class PopupController {
       // Load content script health status
       await this._updateContentScriptHealthDisplay();
 
+      // Load game discovery setting
+      const gameDiscoveryToggle = document.getElementById('game-discovery-enabled-popup') as HTMLInputElement;
+      if (gameDiscoveryToggle) {
+        gameDiscoveryToggle.checked = profile.game_discovery_enabled ?? false;
+      }
+
       // Update integration health status (Steam, Spotify, Twitch)
       await this._updateIntegrationHealthDisplays();
 
@@ -1860,6 +1866,19 @@ export class PopupController {
         });
       }
     });
+
+    // Game discovery toggle
+    const gameDiscoveryToggle = document.getElementById('game-discovery-enabled-popup') as HTMLInputElement;
+    if (gameDiscoveryToggle) {
+      gameDiscoveryToggle.addEventListener('change', async () => {
+        await this._saveSettingsPanel();
+        if (gameDiscoveryToggle.checked) {
+          console.debug('[Popup] Game discovery enabled - will start in background service worker');
+        } else {
+          console.debug('[Popup] Game discovery disabled');
+        }
+      });
+    }
 
     // Steam configure button
     const steamConfigureBtn = document.getElementById('steam-configure-btn');
@@ -2340,6 +2359,9 @@ export class PopupController {
         }
       });
 
+      // Collect game discovery setting
+      const gameDiscoveryEnabled = (document.getElementById('game-discovery-enabled-popup') as HTMLInputElement)?.checked ?? false;
+
       await chrome.runtime.sendMessage({
         type: 'SAVE_SETTINGS',
         data: {
@@ -2361,6 +2383,7 @@ export class PopupController {
             retry_backoff_ms: pubRetry,
             relays,
           },
+          game_discovery_enabled: gameDiscoveryEnabled,
         },
       });
 

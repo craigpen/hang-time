@@ -10,6 +10,7 @@ import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
 import { encryptionManager } from './encryption';
 import { validateActivity, detectCorruption } from './activity-validation';
+import { GameLibraryManager } from './game-library';
 
 const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'netflix-tab', 'youtube-tab', 'twitch-tab'];
 
@@ -19,9 +20,11 @@ export class ActivityPublisher {
   private publishInterval: NodeJS.Timeout | null = null;
   private publishCount = 0; // Increments every 12s, 5th publish (index 4) is full refresh
   private publishRateMs = 12000; // Default: publish every 12 seconds
+  private lastGameLibraryPublishTime = 0; // Track last game library publish
 
   static readonly PUBLISH_INTERVAL_MS = 12000; // Default: publish every 12 seconds (5 per 60s)
   static readonly FULL_REFRESH_CYCLE = 5; // Every 5th publish is a full refresh
+  static readonly GAME_LIBRARY_PUBLISH_INTERVAL_MS = 6 * 60 * 60 * 1000; // Every 6 hours
 
   constructor(
     private relayPool: RelayPool,
@@ -90,6 +93,22 @@ export class ActivityPublisher {
         verbose_logging: false,
         delta_publishing: false,
       };
+
+      // Check if we should publish game library (every 6 hours)
+      const now = Date.now();
+      if (now - this.lastGameLibraryPublishTime > ActivityPublisher.GAME_LIBRARY_PUBLISH_INTERVAL_MS) {
+        try {
+          const gameDiscoveryEnabled = profile?.game_discovery_enabled ?? false;
+          if (gameDiscoveryEnabled) {
+            const gameLibraryManager = GameLibraryManager.getInstance(this.storageManager);
+            await gameLibraryManager.publishMyGameLibrary();
+            this.lastGameLibraryPublishTime = now;
+            console.log('[Publisher] Game library published as part of periodic cycle');
+          }
+        } catch (error) {
+          console.warn('[Publisher] Failed to publish game library:', error);
+        }
+      }
 
       // Check if publish rate has changed and restart interval if needed
       if (config.rate_ms !== this.publishRateMs) {
