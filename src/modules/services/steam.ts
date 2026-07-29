@@ -141,11 +141,12 @@ export class SteamService implements IServiceModule {
       console.debug('[Steam] Currently playing:', gameName);
 
       // Fresh data from API
+      const steamUrl = `steam://run/${player.gameid}`;
       return {
-        id: generateActivityId('steam-api', player.gameid.toString()),
+        id: generateActivityId('steam-api', steamUrl),
         service: 'steam-api',
         content: gameName,
-        url: `steam://run/${player.gameid}`,
+        url: steamUrl,
         state: 'playing',
         audio: 'on',
         timestamp: Date.now(),
