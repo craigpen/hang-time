@@ -11,6 +11,7 @@ import { FriendManager, initializeFriendManager, getFriendManager } from '../src
 import { MessagingManager, initializeMessagingManager, getMessagingManager } from '../src/modules/messaging';
 import { NotificationManager, initializeNotificationManager, getNotificationManager } from '../src/modules/notifications';
 import { initializeActivityDatastore, getActivityDatastore } from '../src/modules/activity-datastore';
+import { initializeGameLibraryManager } from '../src/modules/game-library';
 import { JoinHandler } from '../src/modules/join-handler';
 import { ActivityDetector } from '../src/modules/activity';
 import { ActivityPublisher } from '../src/modules/publisher';
@@ -136,6 +137,10 @@ async function initializeExtension(): Promise<void> {
     // Initialize activity datastore (validates all activity writes)
     initializeActivityDatastore(storageManager);
     console.debug('[Background] Activity datastore initialized');
+
+    // Initialize game library manager
+    initializeGameLibraryManager(storageManager);
+    console.debug('[Background] Game library manager initialized');
 
     // Initialize activity detector
     activityDetector = new ActivityDetector(storageManager);
