@@ -19,6 +19,7 @@ import { TabService } from '../src/modules/services/tabs';
 import { SteamService } from '../src/modules/services/steam';
 import { SpotifyService } from '../src/modules/services/spotify';
 import { TwitchService } from '../src/modules/services/twitch';
+import { initializeMetadataFetcher, metadataFetcher } from '../src/modules/metadata-fetcher';
 import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } from '../src/types';
 
 // ============================================================================
@@ -146,6 +147,12 @@ async function initializeExtension(): Promise<void> {
     const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
     gameLibraryManager.setNostrDependencies(relayPool, identityManager);
     console.debug('[Background] Game library manager Nostr dependencies set');
+
+    // Initialize metadata fetcher and start background fetcher
+    initializeMetadataFetcher(storageManager);
+    console.debug('[Background] Metadata fetcher initialized');
+    await metadataFetcher.startBackgroundFetcher();
+    console.debug('[Background] Metadata background fetcher started');
 
     // Initialize activity detector
     activityDetector = new ActivityDetector(storageManager);
@@ -1601,6 +1608,41 @@ async function cleanupOrphanedInvites(
     console.debug(`[Background] Cleaned up ${removed} orphaned invite(s) for friend ${friendId}`);
   }
 }
+
+// ============================================================================
+// CLEANUP
+// ============================================================================
+
+/**
+ * Clean up background processes when service worker unloads
+ */
+async function cleanupOnUnload(): Promise<void> {
+  try {
+    if (activityDetector) {
+      await activityDetector.stop();
+      console.debug('[Background] Activity detector stopped');
+    }
+
+    if (activityPublisher) {
+      activityPublisher.stop();
+      console.debug('[Background] Activity publisher stopped');
+    }
+
+    // Stop metadata fetcher background processing
+    await metadataFetcher.stopBackgroundFetcher();
+    console.debug('[Background] Metadata fetcher stopped');
+
+    console.log('[Background] Service worker cleanup complete');
+  } catch (error) {
+    console.error('[Background] Error during cleanup:', error);
+  }
+}
+
+// Register unload handler
+chrome.runtime.onSuspend?.addListener(async () => {
+  console.log('[Background] Service worker suspending');
+  await cleanupOnUnload();
+});
 
 // ============================================================================
 // STARTUP

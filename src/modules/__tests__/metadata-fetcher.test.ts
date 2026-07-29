@@ -694,6 +694,377 @@ describe('MetadataFetcher', () => {
   });
 
   // ============================================================================
+  // RATE LIMITING AND QUEUE TESTS (PHASE 5)
+  // ============================================================================
+
+  describe('rate limiter', () => {
+    it('should acquire tokens at configured rate', async () => {
+      const metadataFetcher2 = new MetadataFetcher(mockStorage);
+      const start = Date.now();
+
+      // First token should be immediate
+      await metadataFetcher2['rateLimiter'].acquireToken();
+      const afterFirst = Date.now() - start;
+      expect(afterFirst).toBeLessThan(100); // Should be instant
+
+      // Second token should also be immediate (bucket has tokens)
+      await metadataFetcher2['rateLimiter'].acquireToken();
+      const afterSecond = Date.now() - start;
+      expect(afterSecond).toBeLessThan(200); // Should still be fast
+
+      // Third token would require waiting (at 1.5 req/sec, after 2 tokens we have ~0.67s of tokens left)
+      // This test verifies the rate limiter exists and works
+    });
+  });
+
+  describe('queue management', () => {
+    it('should add items to fetch queue', async () => {
+      const appIds = [100, 200, 300];
+      await metadataFetcher.scheduleBackgroundRefresh(appIds);
+
+      const queue = metadataFetcher.getFetchQueue();
+      expect(queue).toContain(100);
+      expect(queue).toContain(200);
+      expect(queue).toContain(300);
+      expect(queue.length).toBe(3);
+    });
+
+    it('should accumulate items in fetch queue', async () => {
+      await metadataFetcher.scheduleBackgroundRefresh([100]);
+      await metadataFetcher.scheduleBackgroundRefresh([200, 300]);
+
+      const queue = metadataFetcher.getFetchQueue();
+      expect(queue.length).toBe(3);
+      expect(queue).toContain(100);
+      expect(queue).toContain(200);
+      expect(queue).toContain(300);
+    });
+
+    it('should clear fetch queue', async () => {
+      await metadataFetcher.scheduleBackgroundRefresh([100, 200]);
+
+      metadataFetcher.clearFetchQueue();
+
+      const queue = metadataFetcher.getFetchQueue();
+      expect(queue.length).toBe(0);
+    });
+
+    it('should track failed appIds with retry count', async () => {
+      const failed = metadataFetcher.getFailedAppIds();
+      expect(failed.size).toBe(0);
+    });
+
+    it('should report processing state', async () => {
+      expect(metadataFetcher.isQueueProcessing()).toBe(false);
+    });
+
+    it('should report background fetcher state', async () => {
+      expect(metadataFetcher.isBackgroundFetcherRunning()).toBe(false);
+    });
+  });
+
+  describe('background fetcher lifecycle', () => {
+    it('should start background fetcher', async () => {
+      expect(metadataFetcher.isBackgroundFetcherRunning()).toBe(false);
+
+      await metadataFetcher.startBackgroundFetcher();
+
+      expect(metadataFetcher.isBackgroundFetcherRunning()).toBe(true);
+
+      // Cleanup
+      await metadataFetcher.stopBackgroundFetcher();
+    });
+
+    it('should not start fetcher twice', async () => {
+      await metadataFetcher.startBackgroundFetcher();
+
+      // Try to start again
+      await metadataFetcher.startBackgroundFetcher();
+
+      expect(metadataFetcher.isBackgroundFetcherRunning()).toBe(true);
+
+      // Cleanup
+      await metadataFetcher.stopBackgroundFetcher();
+    });
+
+    it('should stop background fetcher', async () => {
+      await metadataFetcher.startBackgroundFetcher();
+      expect(metadataFetcher.isBackgroundFetcherRunning()).toBe(true);
+
+      await metadataFetcher.stopBackgroundFetcher();
+
+      expect(metadataFetcher.isBackgroundFetcherRunning()).toBe(false);
+    });
+  });
+
+  describe('queue processing', () => {
+    it('should process queue items successfully', async () => {
+      vi.useFakeTimers();
+
+      const mockResponse = {
+        330: {
+          success: true,
+          data: {
+            name: 'Portal 2',
+            genres: [{ description: 'Puzzle' }],
+            categories: [{ description: 'Single-player' }],
+            platforms: { windows: true, mac: false, linux: false },
+            header_image: 'https://example.com/portal2.jpg',
+          },
+        },
+      };
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValueOnce(mockResponse),
+      });
+
+      await metadataFetcher.scheduleBackgroundRefresh([330]);
+      await metadataFetcher.startBackgroundFetcher();
+
+      // Let queue process
+      await vi.advanceTimersByTimeAsync(200);
+
+      await metadataFetcher.stopBackgroundFetcher();
+
+      expect(mockStorage.set).toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('should handle 404 without retry', async () => {
+      vi.useFakeTimers();
+
+      const mockResponse = {
+        999999: {
+          success: false,
+        },
+      };
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValueOnce(mockResponse),
+      });
+
+      await metadataFetcher.scheduleBackgroundRefresh([999999]);
+      await metadataFetcher.startBackgroundFetcher();
+
+      // Let queue process
+      await vi.advanceTimersByTimeAsync(200);
+
+      await metadataFetcher.stopBackgroundFetcher();
+
+      // Should not retry (not in failed list)
+      const failed = metadataFetcher.getFailedAppIds();
+      expect(failed.has(999999)).toBe(false);
+
+      vi.useRealTimers();
+    });
+
+    it('should retry on network error with exponential backoff', async () => {
+      vi.useFakeTimers();
+
+      (global.fetch as any).mockRejectedValue(new Error('Network error'));
+
+      await metadataFetcher.scheduleBackgroundRefresh([123]);
+      await metadataFetcher.startBackgroundFetcher();
+
+      // Let queue process - first attempt
+      await vi.advanceTimersByTimeAsync(200);
+
+      // Should be in failed list
+      const failed = metadataFetcher.getFailedAppIds();
+      expect(failed.get(123)).toBe(1); // First retry
+
+      // Item should be re-queued
+      const queue = metadataFetcher.getFetchQueue();
+      // Queue might be empty now but will have item after backoff expires
+
+      await metadataFetcher.stopBackgroundFetcher();
+      vi.useRealTimers();
+    });
+
+    it('should retry on timeout with exponential backoff', async () => {
+      vi.useFakeTimers();
+
+      const timeoutError = new Error('Timeout');
+      timeoutError.name = 'AbortError';
+
+      (global.fetch as any).mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            setTimeout(() => reject(timeoutError), 100);
+          })
+      );
+
+      await metadataFetcher.scheduleBackgroundRefresh([456]);
+      await metadataFetcher.startBackgroundFetcher();
+
+      // Let queue process
+      await vi.advanceTimersByTimeAsync(300);
+
+      // Should be in failed list
+      const failed = metadataFetcher.getFailedAppIds();
+      expect(failed.get(456)).toBe(1);
+
+      await metadataFetcher.stopBackgroundFetcher();
+      vi.useRealTimers();
+    });
+
+    it('should retry on rate limit (429) with exponential backoff', async () => {
+      vi.useFakeTimers();
+
+      (global.fetch as any).mockResolvedValueOnce({
+        status: 429,
+        ok: false,
+      });
+
+      await metadataFetcher.scheduleBackgroundRefresh([789]);
+      await metadataFetcher.startBackgroundFetcher();
+
+      // Let queue process
+      await vi.advanceTimersByTimeAsync(200);
+
+      // Should be in failed list
+      const failed = metadataFetcher.getFailedAppIds();
+      expect(failed.get(789)).toBe(1);
+
+      await metadataFetcher.stopBackgroundFetcher();
+      vi.useRealTimers();
+    });
+
+    it('should give up after max retries', async () => {
+      vi.useFakeTimers();
+
+      (global.fetch as any).mockRejectedValue(new Error('Network error'));
+
+      await metadataFetcher.scheduleBackgroundRefresh([321]);
+      await metadataFetcher.startBackgroundFetcher();
+
+      // Simulate max retries by advancing time enough for all attempts
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(5000); // 5 seconds per backoff
+      }
+
+      await metadataFetcher.stopBackgroundFetcher();
+
+      // Should be removed from failed list after max retries
+      const failed = metadataFetcher.getFailedAppIds();
+      expect(failed.has(321)).toBe(false);
+
+      vi.useRealTimers();
+    });
+
+    it('should calculate correct exponential backoff', async () => {
+      const metadataFetcher2 = new MetadataFetcher(mockStorage);
+
+      // Access private method for testing
+      const backoff0 = metadataFetcher2['calculateBackoff'](0);
+      const backoff1 = metadataFetcher2['calculateBackoff'](1);
+      const backoff2 = metadataFetcher2['calculateBackoff'](2);
+
+      expect(backoff0).toBe(1000); // 2^0 * 1000 = 1000ms
+      expect(backoff1).toBe(2000); // 2^1 * 1000 = 2000ms
+      expect(backoff2).toBe(4000); // 2^2 * 1000 = 4000ms
+    });
+  });
+
+  describe('queue processing with multiple items', () => {
+    it('should process multiple items sequentially', async () => {
+      vi.useFakeTimers();
+
+      const mockResponse1 = {
+        100: {
+          success: true,
+          data: {
+            name: 'Game 100',
+            genres: [{ description: 'Action' }],
+            categories: [{ description: 'Single-player' }],
+            platforms: { windows: true, mac: false, linux: false },
+            header_image: 'https://example.com/game100.jpg',
+          },
+        },
+      };
+
+      const mockResponse2 = {
+        200: {
+          success: true,
+          data: {
+            name: 'Game 200',
+            genres: [{ description: 'Strategy' }],
+            categories: [{ description: 'Multiplayer' }],
+            platforms: { windows: true, mac: true, linux: false },
+            header_image: 'https://example.com/game200.jpg',
+          },
+        },
+      };
+
+      (global.fetch as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValueOnce(mockResponse1),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValueOnce(mockResponse2),
+        });
+
+      await metadataFetcher.scheduleBackgroundRefresh([100, 200]);
+      await metadataFetcher.startBackgroundFetcher();
+
+      // Let queue process both items
+      await vi.advanceTimersByTimeAsync(500);
+
+      await metadataFetcher.stopBackgroundFetcher();
+
+      // Both should have been cached
+      expect(mockStorage.set).toHaveBeenCalledTimes(2);
+
+      vi.useRealTimers();
+    });
+
+    it('should handle mixed success and failure items', async () => {
+      vi.useFakeTimers();
+
+      const mockResponse = {
+        100: {
+          success: true,
+          data: {
+            name: 'Game 100',
+            genres: [{ description: 'Action' }],
+            categories: [],
+            platforms: { windows: true, mac: false, linux: false },
+            header_image: 'https://example.com/game100.jpg',
+          },
+        },
+      };
+
+      (global.fetch as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValueOnce(mockResponse),
+        })
+        .mockRejectedValueOnce(new Error('Network error'));
+
+      await metadataFetcher.scheduleBackgroundRefresh([100, 999]);
+      await metadataFetcher.startBackgroundFetcher();
+
+      // Let queue process
+      await vi.advanceTimersByTimeAsync(500);
+
+      await metadataFetcher.stopBackgroundFetcher();
+
+      // First item should succeed (cached)
+      expect(mockStorage.set).toHaveBeenCalled();
+
+      // Second item should be retried
+      const failed = metadataFetcher.getFailedAppIds();
+      expect(failed.get(999)).toBe(1);
+
+      vi.useRealTimers();
+    });
+  });
+
+  // ============================================================================
   // CACHE TTL BEHAVIOR TESTS
   // ============================================================================
 

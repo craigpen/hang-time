@@ -8,6 +8,46 @@ import { StorageManager } from './storage';
 
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const FETCH_TIMEOUT_MS = 5000; // 5 seconds
+const MAX_RETRIES = 3;
+const RATE_LIMIT_REQUESTS_PER_SECOND = 1.5;
+
+/**
+ * Token bucket rate limiter for API requests
+ */
+class RateLimiter {
+  private tokens: number;
+  private lastRefillTime: number;
+  private readonly tokensPerSecond: number;
+
+  constructor(tokensPerSecond: number) {
+    this.tokensPerSecond = tokensPerSecond;
+    this.tokens = tokensPerSecond;
+    this.lastRefillTime = Date.now();
+  }
+
+  /**
+   * Acquire a token, waiting if necessary
+   */
+  async acquireToken(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastRefill = (now - this.lastRefillTime) / 1000;
+    const tokensToAdd = timeSinceLastRefill * this.tokensPerSecond;
+
+    this.tokens = Math.min(this.tokensPerSecond, this.tokens + tokensToAdd);
+    this.lastRefillTime = now;
+
+    if (this.tokens >= 1) {
+      this.tokens -= 1;
+      return;
+    }
+
+    // Wait for a token to become available
+    const waitTime = (1 - this.tokens) / this.tokensPerSecond * 1000;
+    await new Promise((resolve) => setTimeout(resolve, waitTime));
+    this.tokens = 0;
+    this.lastRefillTime = Date.now();
+  }
+}
 
 /**
  * Manages game metadata fetching and caching from Steam API
@@ -15,8 +55,15 @@ const FETCH_TIMEOUT_MS = 5000; // 5 seconds
 export class MetadataFetcher {
   private static instance: MetadataFetcher;
   private backgroundRefreshQueue: number[] = [];
+  private rateLimiter: RateLimiter;
+  private fetchQueue: number[] = [];
+  private failedAppIds: Map<number, number> = new Map();
+  private isProcessing: boolean = false;
+  private processingIntervalId: NodeJS.Timeout | null = null;
 
-  private constructor(private storage: StorageManager) {}
+  private constructor(private storage: StorageManager) {
+    this.rateLimiter = new RateLimiter(RATE_LIMIT_REQUESTS_PER_SECOND);
+  }
 
   /**
    * Get or create singleton instance
@@ -94,17 +141,20 @@ export class MetadataFetcher {
   }
 
   /**
-   * Schedule app IDs for background refresh (Phase 5 will handle actual scheduling)
+   * Schedule app IDs for background refresh with queue and retry logic
    */
   async scheduleBackgroundRefresh(appIds: number[]): Promise<void> {
     try {
       console.debug(`[Metadata] Scheduling ${appIds.length} games for background refresh`);
 
-      // Add to queue for Phase 5 background processing
+      // Add to fetch queue for background processing (Phase 5 queue)
+      this.fetchQueue.push(...appIds);
+
+      // Also keep in legacy queue for compatibility
       this.backgroundRefreshQueue.push(...appIds);
 
       console.debug(
-        `[Metadata] Background refresh queue now has ${this.backgroundRefreshQueue.length} items`
+        `[Metadata] Fetch queue now has ${this.fetchQueue.length} items, background queue has ${this.backgroundRefreshQueue.length} items`
       );
     } catch (error) {
       console.error('[Metadata] Failed to schedule background refresh:', error);
@@ -113,12 +163,147 @@ export class MetadataFetcher {
   }
 
   /**
-   * Fetch metadata from Steam API
+   * Start background fetcher - processes queue continuously
+   */
+  async startBackgroundFetcher(): Promise<void> {
+    if (this.processingIntervalId !== null) {
+      console.debug('[Metadata] Background fetcher already running');
+      return;
+    }
+
+    console.log('[Metadata] Background fetcher started');
+
+    this.processingIntervalId = setInterval(async () => {
+      try {
+        await this.processQueue();
+      } catch (error) {
+        console.error('[Metadata] Error in background fetch cycle:', error);
+      }
+    }, 100); // Process queue every 100ms
+  }
+
+  /**
+   * Stop background fetcher
+   */
+  async stopBackgroundFetcher(): Promise<void> {
+    if (this.processingIntervalId !== null) {
+      clearInterval(this.processingIntervalId);
+      this.processingIntervalId = null;
+      this.isProcessing = false;
+      console.log('[Metadata] Background fetcher stopped');
+    }
+  }
+
+  /**
+   * Process the fetch queue - called periodically by background fetcher
+   */
+  private async processQueue(): Promise<void> {
+    if (this.isProcessing || this.fetchQueue.length === 0) {
+      return;
+    }
+
+    this.isProcessing = true;
+
+    try {
+      while (this.fetchQueue.length > 0) {
+        const appId = this.fetchQueue.shift();
+        if (appId === undefined) break;
+
+        try {
+          const result = await this.fetchFromSteamAPI(appId);
+
+          // Handle rate limit response
+          if (result && result.__rateLimited) {
+            // Re-queue with backoff
+            const retryCount = this.failedAppIds.get(appId) || 0;
+            if (retryCount < MAX_RETRIES) {
+              const backoffMs = this.calculateBackoff(retryCount);
+              console.debug(`[Metadata] Rate limited for appId ${appId}, retrying after ${backoffMs}ms`);
+              // Add back to queue after delay
+              setTimeout(() => this.fetchQueue.push(appId), backoffMs);
+              this.failedAppIds.set(appId, retryCount + 1);
+            } else {
+              console.warn(`[Metadata] ⚠️  Max retries exceeded for appId ${appId} (rate limit)`);
+              this.failedAppIds.delete(appId);
+            }
+            continue;
+          }
+
+          // Handle timeout response
+          if (result && result.__timeout) {
+            const retryCount = this.failedAppIds.get(appId) || 0;
+            if (retryCount < MAX_RETRIES) {
+              const backoffMs = this.calculateBackoff(retryCount);
+              console.debug(`[Metadata] Timeout for appId ${appId}, retrying after ${backoffMs}ms`);
+              setTimeout(() => this.fetchQueue.push(appId), backoffMs);
+              this.failedAppIds.set(appId, retryCount + 1);
+            } else {
+              console.warn(`[Metadata] ⚠️  Max retries exceeded for appId ${appId} (timeout)`);
+              this.failedAppIds.delete(appId);
+            }
+            continue;
+          }
+
+          // Handle network error response
+          if (result && result.__networkError) {
+            const retryCount = this.failedAppIds.get(appId) || 0;
+            if (retryCount < MAX_RETRIES) {
+              const backoffMs = this.calculateBackoff(retryCount);
+              console.debug(`[Metadata] Network error for appId ${appId}, retrying after ${backoffMs}ms`);
+              setTimeout(() => this.fetchQueue.push(appId), backoffMs);
+              this.failedAppIds.set(appId, retryCount + 1);
+            } else {
+              console.warn(`[Metadata] ⚠️  Max retries exceeded for appId ${appId} (network error)`);
+              this.failedAppIds.delete(appId);
+            }
+            continue;
+          }
+
+          // Handle 404 (not found) - don't retry
+          if (result === null) {
+            // Check if this was a 404 or other error
+            // For now, treat null as "not found" and don't retry
+            console.debug(`[Metadata] App ${appId} not found or invalid, skipping retry`);
+            this.failedAppIds.delete(appId);
+            continue;
+          }
+
+          // Success - parse and cache
+          if (result) {
+            const metadata = this.parseAppDetails(result, appId);
+            if (metadata) {
+              await this.setCachedMetadata(appId, metadata);
+              console.debug(`[Metadata] ✅ Successfully fetched and cached appId ${appId} in background`);
+              this.failedAppIds.delete(appId);
+            }
+          }
+        } catch (error) {
+          console.error(`[Metadata] Unexpected error processing appId ${appId}:`, error);
+        }
+      }
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  /**
+   * Calculate exponential backoff: 2^retryCount seconds
+   */
+  private calculateBackoff(retryCount: number): number {
+    const seconds = Math.pow(2, retryCount);
+    return seconds * 1000; // Convert to milliseconds
+  }
+
+  /**
+   * Fetch metadata from Steam API with rate limiting
    */
   private async fetchFromSteamAPI(appId: number): Promise<any> {
     const API_BASE = 'https://store.steampowered.com/api';
 
     try {
+      // Acquire rate limit token before making request
+      await this.rateLimiter.acquireToken();
+
       const url = `${API_BASE}/appdetails?appids=${appId}`;
 
       console.debug(`[Metadata] Calling Steam API: ${url}`);
@@ -129,6 +314,13 @@ export class MetadataFetcher {
       try {
         const response = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
+
+        // Handle rate limit response
+        if (response.status === 429) {
+          console.warn(`[Metadata] Steam API rate limited (429) for appId ${appId}`);
+          // Return special value to indicate rate limit
+          return { __rateLimited: true };
+        }
 
         if (!response.ok) {
           console.warn(`[Metadata] Steam API returned ${response.status} for appId ${appId}`);
@@ -155,11 +347,12 @@ export class MetadataFetcher {
       } catch (error: any) {
         clearTimeout(timeoutId);
         if (error.name === 'AbortError') {
-          console.warn(`[Metadata] Steam API request timeout (${FETCH_TIMEOUT_MS}ms) for appId ${appId}`);
+          console.warn(`[Metadata] ⚠️  Steam API request timeout (${FETCH_TIMEOUT_MS}ms) for appId ${appId}`);
+          return { __timeout: true };
         } else {
-          console.warn(`[Metadata] Steam API fetch error for appId ${appId}:`, error.message);
+          console.warn(`[Metadata] ⚠️  Steam API fetch error for appId ${appId}:`, error.message);
+          return { __networkError: true };
         }
-        return null;
       }
     } catch (error) {
       console.error(`[Metadata] Unexpected error calling Steam API for appId ${appId}:`, error);
@@ -328,6 +521,41 @@ export class MetadataFetcher {
    */
   getBackgroundRefreshQueue(): number[] {
     return [...this.backgroundRefreshQueue];
+  }
+
+  /**
+   * Get current fetch queue (for testing)
+   */
+  getFetchQueue(): number[] {
+    return [...this.fetchQueue];
+  }
+
+  /**
+   * Clear fetch queue (for testing)
+   */
+  clearFetchQueue(): void {
+    this.fetchQueue = [];
+  }
+
+  /**
+   * Get failed appIds and their retry counts (for testing)
+   */
+  getFailedAppIds(): Map<number, number> {
+    return new Map(this.failedAppIds);
+  }
+
+  /**
+   * Check if background fetcher is running (for testing)
+   */
+  isBackgroundFetcherRunning(): boolean {
+    return this.processingIntervalId !== null;
+  }
+
+  /**
+   * Check if queue is currently being processed (for testing)
+   */
+  isQueueProcessing(): boolean {
+    return this.isProcessing;
   }
 }
 
