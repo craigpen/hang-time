@@ -5,6 +5,8 @@
 
 import { Activity } from '../types';
 import { StorageManager } from './storage';
+import { getNotificationManager } from './notifications';
+import { getActivityVerb } from './activity-utils';
 
 export class JoinHandler {
   constructor(private storage: StorageManager) {}
@@ -46,8 +48,8 @@ export class JoinHandler {
         throw new Error(`Join action not supported for ${activity.service}`);
     }
 
-    // Prompt for Discord coordination if enabled
-    await this._promptDiscord(friend.local_name);
+    // Send smart Discord coordination notification
+    await this._notifyDiscordCoordination(friend.local_name, activity);
   }
 
   /**
@@ -107,41 +109,43 @@ export class JoinHandler {
   }
 
   /**
-   * Prompt user to open Discord for voice coordination
+   * Send smart Discord coordination notification with activity verb
    */
-  private async _promptDiscord(friendName: string): Promise<void> {
+  private async _notifyDiscordCoordination(friendName: string, activity: Activity): Promise<void> {
     try {
-      const settings = await this.storage.getSettings();
+      const notificationManager = getNotificationManager();
+      const profile = await this.storage.getUserProfile();
 
-      if (!settings.discord_info) {
-        console.debug('[JoinHandler] Discord not configured');
-        return;
+      // Determine the action verb based on service type
+      const verb = getActivityVerb(activity.service);
+
+      // Check if friend has Discord configured
+      const friend = await this.storage.getFriend(friendName);
+      let discordInfo: { owner: string; link: string } | undefined;
+
+      if (profile?.discord_info) {
+        // User's own Discord server
+        const discordUrl = this._parseDiscordInfo(profile.discord_info);
+        if (discordUrl) {
+          discordInfo = {
+            owner: 'my',
+            link: discordUrl,
+          };
+        }
       }
 
-      // Show notification with Discord link
-      const discordInfo = settings.discord_info;
-      const discordUrl = this._parseDiscordInfo(discordInfo);
+      // Send smart notification
+      await notificationManager.notifyInvite(
+        friendName, // friend ID (not perfect but used for deduplication)
+        friendName, // display name
+        activity.content, // activity name
+        verb, // play/watch/listen
+        discordInfo
+      );
 
-      if (discordUrl) {
-        // Create notification
-        chrome.notifications.create({
-          type: 'basic',
-          iconUrl: chrome.runtime.getURL('public/icon-48.png'),
-          title: 'Join Discord',
-          message: `Want to chat with ${friendName} on Discord?`,
-          buttons: [{ title: 'Open Discord' }, { title: 'Dismiss' }],
-          requireInteraction: false,
-        });
-
-        // Listen for button clicks
-        chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
-          if (buttonIndex === 0 && discordUrl) {
-            chrome.tabs.create({ url: discordUrl, active: true });
-          }
-        });
-      }
+      console.debug('[JoinHandler] Discord coordination notification sent');
     } catch (error) {
-      console.debug('[JoinHandler] Discord prompt failed:', error);
+      console.debug('[JoinHandler] Discord notification failed:', error);
     }
   }
 
