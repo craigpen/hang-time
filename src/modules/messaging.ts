@@ -53,9 +53,22 @@ export class MessagingManager {
       tags.push(['url', activity.url]);
     }
 
-    // Include Discord link if user has one configured
+    // Determine Discord link to include: prefer sender's, fall back to recipient's
+    let discordLink: string | undefined;
+
     if (userProfile.discord_info) {
-      tags.push(['discord_link', userProfile.discord_info]);
+      // Sender has Discord configured
+      discordLink = userProfile.discord_info;
+    } else {
+      // Sender doesn't have Discord, check if recipient has one
+      const recipientProfile = await this.storageManager.getFriendProfile(recipientFriend.pubkey);
+      if (recipientProfile?.discord_link) {
+        discordLink = recipientProfile.discord_link;
+      }
+    }
+
+    if (discordLink) {
+      tags.push(['discord_link', discordLink]);
     }
 
     // Create kind-1 notification event

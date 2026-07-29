@@ -191,6 +191,9 @@ async function initializeExtension(): Promise<void> {
       console.debug('[Background] ActivityPublisher created');
       await activityPublisher.start();
       console.debug('[Background] Activity publisher started');
+
+      // Publish user profile on startup
+      await activityPublisher.publishProfile();
     } catch (error) {
       console.error('[Background] Failed to initialize activity publisher:', error);
     }
@@ -1153,7 +1156,10 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
     console.debug(`[Friend] Details - pubkey: ${event.pubkey.substring(0, 8)}..., tags: ${JSON.stringify(event.tags.slice(0, 3))}`);
 
     try {
-      if (event.kind === 1) {
+      if (event.kind === 0) {
+        // Profile event
+        await _handleProfileEvent(event);
+      } else if (event.kind === 1) {
         // Check if this is a game-library event (tag t=game-library)
         const isGameLibraryEvent = event.tags.find((t) => t[0] === 't' && t[1] === 'game-library');
 
@@ -1179,6 +1185,21 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
 
   activeSubscriptions.set(pubkey, undefined);
   console.debug(`[Friend] Subscribed to: ${friendIdentifier} (pubkey: ${pubkey})`);
+}
+
+async function _handleProfileEvent(event: NostrEvent): Promise<void> {
+  try {
+    // Extract Discord link from profile event tags
+    const discordLink = event.tags.find((t) => t[0] === 'discord_link')?.[1];
+
+    if (discordLink) {
+      // Store the friend's Discord info
+      await storageManager.setFriendProfile(event.pubkey, { discord_link: discordLink });
+      console.debug(`[Profile] Stored Discord link for friend ${event.pubkey.substring(0, 8)}...`);
+    }
+  } catch (error) {
+    console.error('[Profile] Error handling profile event:', error);
+  }
 }
 
 async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {
