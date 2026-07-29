@@ -343,7 +343,7 @@ export class DiscoveryTabController {
 
     for (const game of myGames) {
       const metadata = this.allGameMetadata.get(game.appId);
-      const friendsWithGame = this._getFreindNamesWithGame(game.appId);
+      const friendsWithGame = await this._getFreindNamesWithGame(game.appId);
 
       enriched.push({
         ...game,
@@ -359,10 +359,21 @@ export class DiscoveryTabController {
   /**
    * Private: Get friend names that own a specific game
    */
-  private _getFreindNamesWithGame(appId: number): string[] {
-    // For now, return empty array
-    // In Phase 7 (Integration), this will fetch friend library data from Nostr
-    return [];
+  private async _getFreindNamesWithGame(appId: number): Promise<string[]> {
+    const friendNames: string[] = [];
+
+    for (const friend of this.allFriends) {
+      try {
+        const friendGames = await this.gameLibraryManager.getFriendGameLibrary(friend.pubkey);
+        if (friendGames && friendGames.some((game) => game.appId === appId)) {
+          friendNames.push(friend.local_name);
+        }
+      } catch (error) {
+        console.debug(`[Discovery] Failed to get library for friend ${friend.local_name}:`, error);
+      }
+    }
+
+    return friendNames;
   }
 
   /**
