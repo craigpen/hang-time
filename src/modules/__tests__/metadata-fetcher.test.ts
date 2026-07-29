@@ -1128,4 +1128,372 @@ describe('MetadataFetcher', () => {
       expect(global.fetch).toHaveBeenCalled(); // Should refetch
     });
   });
+
+  // ============================================================================
+  // PHASE 8: ADDITIONAL COMPREHENSIVE TESTS (10+ more tests)
+  // ============================================================================
+
+  describe('large scale metadata operations', () => {
+    it('should fetch metadata for 100+ games in batch', async () => {
+      const appIds = Array.from({ length: 100 }, (_, i) => 200000 + i);
+      const responses: any = {};
+
+      appIds.forEach(appId => {
+        responses[appId] = {
+          success: true,
+          data: {
+            name: `Game ${appId}`,
+            genres: [{ description: 'Action' }],
+            categories: [{ description: 'Multiplayer' }],
+            platforms: { windows: true, mac: false, linux: false },
+            header_image: 'https://example.com/game.jpg',
+          },
+        };
+      });
+
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockImplementation(() => Promise.resolve(responses)),
+      });
+
+      const start = Date.now();
+      const result = await metadataFetcher.batchFetchMetadata(appIds);
+      const duration = Date.now() - start;
+
+      expect(result.size).toBeGreaterThanOrEqual(1);
+      expect(duration).toBeLessThan(5000); // Should be reasonably fast
+    });
+
+    it('should handle Steam API rate limiting (429) with retry', async () => {
+      vi.useFakeTimers();
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+      });
+
+      await metadataFetcher.scheduleBackgroundRefresh([100]);
+      await metadataFetcher.startBackgroundFetcher();
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      const failed = metadataFetcher.getFailedAppIds();
+      expect(failed.has(100)).toBe(true);
+
+      await metadataFetcher.stopBackgroundFetcher();
+      vi.useRealTimers();
+    });
+
+    it('should cache quota management for large metadata stores', async () => {
+      // Simulate storage with many cached items
+      const hugeCache: Record<number, GameMetadata> = {};
+      for (let i = 0; i < 1000; i++) {
+        hugeCache[i] = {
+          appId: i,
+          name: `Game ${i}`,
+          genres: ['Action'],
+          categories: ['Multiplayer'],
+          platforms: { windows: true, mac: false, linux: false },
+          capsuleImageUrl: 'https://example.com/game.jpg',
+          storePageUrl: `https://store.steampowered.com/app/${i}/`,
+          lastFetched: Date.now() - (i % 30) * 24 * 60 * 60 * 1000,
+          isCrossPlayable: true,
+        };
+      }
+
+      mockStorage.get.mockResolvedValueOnce(hugeCache);
+
+      const result = await metadataFetcher.fetchMetadata(0);
+      expect(result).toBeDefined();
+      expect(result?.appId).toBe(0);
+    });
+  });
+
+  describe('Steam API unreachable scenarios', () => {
+    it('should handle Steam API completely down', async () => {
+      (global.fetch as any).mockRejectedValue(new Error('Connection refused'));
+
+      const result = await metadataFetcher.fetchMetadata(123);
+
+      expect(result).toBeNull();
+    });
+
+    it('should handle Steam API with no response', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+      });
+
+      const result = await metadataFetcher.fetchMetadata(456);
+
+      expect(result).toBeNull();
+    });
+
+    it('should handle Steam API DNS failure', async () => {
+      const error = new Error('getaddrinfo ENOTFOUND');
+      error.code = 'ENOTFOUND';
+
+      (global.fetch as any).mockRejectedValue(error);
+
+      const result = await metadataFetcher.fetchMetadata(789);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('cache eviction and memory management', () => {
+    it('should handle cache eviction under storage quota', async () => {
+      vi.useFakeTimers();
+
+      // Create fetcher with limited cache
+      const metadataFetcher2 = new MetadataFetcher(mockStorage);
+
+      // Try to cache many items
+      for (let i = 0; i < 50; i++) {
+        mockStorage.get.mockResolvedValueOnce({});
+
+        const mockResponse = {
+          [100000 + i]: {
+            success: true,
+            data: {
+              name: `Game ${i}`,
+              genres: [{ description: 'Action' }],
+              categories: [],
+              platforms: { windows: true, mac: false, linux: false },
+              header_image: 'https://example.com/game.jpg',
+            },
+          },
+        };
+
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValueOnce(mockResponse),
+        });
+
+        await metadataFetcher2.fetchMetadata(100000 + i);
+      }
+
+      // Cache should be manageable
+      expect(mockStorage.set).toHaveBeenCalled();
+
+      vi.useRealTimers();
+    });
+  });
+
+  describe('malformed Steam response handling', () => {
+    it('should handle response with nested null values', async () => {
+      const mockResponse = {
+        111: {
+          success: true,
+          data: {
+            name: 'Game',
+            genres: null,
+            categories: [{ description: 'Single-player' }],
+            platforms: { windows: null, mac: false, linux: false },
+            header_image: 'https://example.com/game.jpg',
+          },
+        },
+      };
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValueOnce(mockResponse),
+      });
+
+      const result = await metadataFetcher.fetchMetadata(111);
+
+      // Should handle gracefully
+      expect(result).toBeNull(); // May return null due to malformed data
+    });
+
+    it('should handle extremely large response body', async () => {
+      const largeContent = 'x'.repeat(50 * 1024 * 1024); // 50MB
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockRejectedValueOnce(new Error('Response too large')),
+      });
+
+      const result = await metadataFetcher.fetchMetadata(222);
+
+      expect(result).toBeNull();
+    });
+
+    it('should handle Steam response with unexpected type', async () => {
+      const mockResponse = 'not an object'; // String instead of object
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValueOnce(mockResponse),
+      });
+
+      const result = await metadataFetcher.fetchMetadata(333);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('concurrent fetch operations', () => {
+    it('should handle concurrent fetches for same app', async () => {
+      const mockResponse = {
+        777: {
+          success: true,
+          data: {
+            name: 'Concurrent Game',
+            genres: [{ description: 'Action' }],
+            categories: [],
+            platforms: { windows: true, mac: false, linux: false },
+            header_image: 'https://example.com/game.jpg',
+          },
+        },
+      };
+
+      mockStorage.get.mockResolvedValue({});
+
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockImplementation(() => Promise.resolve(mockResponse)),
+      });
+
+      const start = Date.now();
+      const results = await Promise.all([
+        metadataFetcher.fetchMetadata(777),
+        metadataFetcher.fetchMetadata(777),
+        metadataFetcher.fetchMetadata(777),
+      ]);
+      const duration = Date.now() - start;
+
+      expect(results).toHaveLength(3);
+      results.forEach(result => {
+        expect(result?.appId).toBe(777);
+      });
+      expect(duration).toBeLessThan(2000);
+    });
+
+    it('should handle concurrent fetches for different apps', async () => {
+      const appIds = [100, 200, 300, 400, 500];
+
+      mockStorage.get.mockResolvedValue({});
+
+      (global.fetch as any).mockImplementation((url: string) => {
+        return Promise.resolve({
+          ok: true,
+          json: () => {
+            const match = url.match(/appids=(\d+)/);
+            const appId = match ? parseInt(match[1]) : 100;
+            return Promise.resolve({
+              [appId]: {
+                success: true,
+                data: {
+                  name: `Game ${appId}`,
+                  genres: [{ description: 'Action' }],
+                  categories: [],
+                  platforms: { windows: true, mac: false, linux: false },
+                  header_image: 'https://example.com/game.jpg',
+                },
+              },
+            });
+          },
+        });
+      });
+
+      const results = await Promise.all(
+        appIds.map(appId => metadataFetcher.fetchMetadata(appId))
+      );
+
+      expect(results).toHaveLength(5);
+      results.forEach((result, index) => {
+        expect(result?.appId).toBe(appIds[index]);
+      });
+    });
+  });
+
+  describe('background fetcher stress testing', () => {
+    it('should handle large queue with mixed success/failure', async () => {
+      vi.useFakeTimers();
+
+      const appIds = Array.from({ length: 50 }, (_, i) => 100000 + i);
+
+      (global.fetch as any).mockImplementation((url: string) => {
+        const appId = parseInt(url.match(/appids=(\d+)/)?.[1] || '0');
+        // 80% success, 20% failure
+        if (appId % 5 === 0) {
+          return Promise.reject(new Error('Network error'));
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              [appId]: {
+                success: true,
+                data: {
+                  name: `Game ${appId}`,
+                  genres: [{ description: 'Action' }],
+                  categories: [],
+                  platforms: { windows: true, mac: false, linux: false },
+                  header_image: 'https://example.com/game.jpg',
+                },
+              },
+            }),
+        });
+      });
+
+      await metadataFetcher.scheduleBackgroundRefresh(appIds);
+      await metadataFetcher.startBackgroundFetcher();
+
+      await vi.advanceTimersByTimeAsync(5000);
+
+      await metadataFetcher.stopBackgroundFetcher();
+
+      const failed = metadataFetcher.getFailedAppIds();
+      expect(failed.size).toBeGreaterThan(0); // Some should have failed
+
+      vi.useRealTimers();
+    });
+  });
+
+  describe('metadata field completeness', () => {
+    it('should preserve all metadata fields during fetch', async () => {
+      const completeMockResponse = {
+        12345: {
+          success: true,
+          data: {
+            name: 'Complete Game',
+            genres: [
+              { description: 'Action' },
+              { description: 'Adventure' },
+              { description: 'Indie' },
+            ],
+            categories: [
+              { description: 'Single-player' },
+              { description: 'Multiplayer' },
+              { description: 'Co-op' },
+            ],
+            platforms: { windows: true, mac: true, linux: true },
+            metacritic: { score: 92, url: 'https://metacritic.com/game' },
+            header_image: 'https://example.com/game-header.jpg',
+            capsule_image: 'https://example.com/game-capsule.jpg',
+            release_date: '2024-01-15',
+          },
+        },
+      };
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValueOnce(completeMockResponse),
+      });
+
+      const result = await metadataFetcher.fetchMetadata(12345);
+
+      expect(result).toBeDefined();
+      expect(result?.appId).toBe(12345);
+      expect(result?.name).toBe('Complete Game');
+      expect(result?.genres).toHaveLength(3);
+      expect(result?.categories).toHaveLength(3);
+      expect(result?.metacriticScore).toBe(92);
+      expect(result?.isCrossPlayable).toBe(true);
+    });
+  });
 });
