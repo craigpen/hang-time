@@ -377,6 +377,15 @@ export class DiscoveryTabController {
    */
   private _filterGames(games: EnrichedGame[]): EnrichedGame[] {
     return games.filter((game) => {
+      // If any filters are active, require metadata to be present
+      const hasActiveFilters = this.currentFilters.genres.length > 0 ||
+                               this.currentFilters.modes.length > 0 ||
+                               this.currentFilters.playtime !== 'all';
+
+      if (hasActiveFilters && !game.metadata) {
+        return false; // Hide games without metadata when filtering
+      }
+
       // Filter by genres
       if (this.currentFilters.genres.length > 0 && game.metadata) {
         const hasGenre = this.currentFilters.genres.some((genre) =>
