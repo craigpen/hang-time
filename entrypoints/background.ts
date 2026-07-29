@@ -11,7 +11,7 @@ import { FriendManager, initializeFriendManager, getFriendManager } from '../src
 import { MessagingManager, initializeMessagingManager, getMessagingManager } from '../src/modules/messaging';
 import { NotificationManager, initializeNotificationManager, getNotificationManager } from '../src/modules/notifications';
 import { initializeActivityDatastore, getActivityDatastore } from '../src/modules/activity-datastore';
-import { initializeGameLibraryManager } from '../src/modules/game-library';
+import { initializeGameLibraryManager, GameLibraryManager } from '../src/modules/game-library';
 import { JoinHandler } from '../src/modules/join-handler';
 import { ActivityDetector } from '../src/modules/activity';
 import { ActivityPublisher } from '../src/modules/publisher';
@@ -142,6 +142,11 @@ async function initializeExtension(): Promise<void> {
     initializeGameLibraryManager(storageManager);
     console.debug('[Background] Game library manager initialized');
 
+    // Set Nostr dependencies for game library manager
+    const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
+    gameLibraryManager.setNostrDependencies(relayPool, identityManager);
+    console.debug('[Background] Game library manager Nostr dependencies set');
+
     // Initialize activity detector
     activityDetector = new ActivityDetector(storageManager);
 
@@ -177,6 +182,17 @@ async function initializeExtension(): Promise<void> {
       } catch (error) {
         console.warn(`[Background] Failed to subscribe to friend ${friend.identifier}:`, error);
       }
+    }
+
+    // Subscribe to friends' game libraries for discovery
+    try {
+      const friendPubkeys = friends.map((f) => friendManager.derivePubkeyFromIdentifier(f.identifier));
+      if (friendPubkeys.length > 0) {
+        await gameLibraryManager.subscribeToFriendGames(friendPubkeys);
+        console.debug(`[Background] Subscribed to ${friendPubkeys.length} friends' game libraries`);
+      }
+    } catch (error) {
+      console.warn('[Background] Failed to subscribe to friend game libraries:', error);
     }
 
     // Subscribe to incoming kind 4 (encrypted DM) messages

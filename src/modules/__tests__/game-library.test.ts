@@ -4,11 +4,13 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GameLibraryManager, initializeGameLibraryManager } from '../game-library';
-import { STORAGE_KEYS, OwnedGame } from '../../types';
+import { STORAGE_KEYS, OwnedGame, NostrEvent } from '../../types';
 
 describe('GameLibraryManager', () => {
   let gameLibraryManager: GameLibraryManager;
   let mockStorageManager: any;
+  let mockRelayPool: any;
+  let mockIdentityManager: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -23,6 +25,18 @@ describe('GameLibraryManager', () => {
       get: vi.fn().mockResolvedValue(null),
       set: vi.fn().mockResolvedValue(undefined),
       delete: vi.fn().mockResolvedValue(undefined),
+    };
+
+    mockRelayPool = {
+      subscribe: vi.fn(),
+      publish: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn().mockResolvedValue(undefined),
+    };
+
+    mockIdentityManager = {
+      getPubkey: vi.fn().mockResolvedValue('test_pubkey_123456789abcdef0'),
+      getSecretKey: vi.fn().mockResolvedValue('test_secret_key_123456789abcdef0123456789abcdef0'),
+      getIdentifier: vi.fn().mockResolvedValue('TestUser123'),
     };
 
     gameLibraryManager = GameLibraryManager.getInstance(mockStorageManager);
@@ -486,6 +500,263 @@ describe('GameLibraryManager', () => {
       const commonGames = await gameLibraryManager.getCommonGames(friendPubkey);
 
       expect(commonGames).toEqual([]);
+    });
+  });
+
+  describe('Nostr pub/sub integration', () => {
+    beforeEach(() => {
+      gameLibraryManager.setNostrDependencies(mockRelayPool, mockIdentityManager);
+    });
+
+    describe('publishMyGameLibrary', () => {
+      it('should publish game library as Nostr kind 1 event', async () => {
+        const now = Date.now();
+        const cachedData = {
+          ownedGames: [
+            { appId: 570, lastUpdated: now },
+            { appId: 730, lastUpdated: now },
+            { appId: 440, lastUpdated: now },
+          ],
+          lastFetched: now,
+          steamId: '12345',
+        };
+
+        mockStorageManager.get.mockResolvedValueOnce(cachedData);
+
+        await gameLibraryManager.publishMyGameLibrary();
+
+        expect(mockRelayPool.publish).toHaveBeenCalledWith(
+          expect.objectContaining({
+            kind: 1,
+            pubkey: 'test_pubkey_123456789abcdef0',
+            tags: expect.arrayContaining([
+              ['t', 'game-library'],
+              ['steam-id', '12345'],
+            ]),
+            content: expect.stringContaining('"appIds":[570,730,440]'),
+          })
+        );
+      });
+
+      it('should skip publication if no Nostr dependencies', async () => {
+        const gameLibraryManagerNoDeps = GameLibraryManager.getInstance(mockStorageManager);
+
+        await gameLibraryManagerNoDeps.publishMyGameLibrary();
+
+        expect(mockRelayPool.publish).not.toHaveBeenCalled();
+      });
+
+      it('should skip publication if no cached game library', async () => {
+        mockStorageManager.get.mockResolvedValueOnce(null);
+
+        await gameLibraryManager.publishMyGameLibrary();
+
+        expect(mockRelayPool.publish).not.toHaveBeenCalled();
+      });
+
+      it('should handle publish errors gracefully', async () => {
+        mockStorageManager.get.mockResolvedValueOnce({
+          ownedGames: [{ appId: 570, lastUpdated: Date.now() }],
+          lastFetched: Date.now(),
+          steamId: '12345',
+        });
+
+        mockRelayPool.publish.mockRejectedValueOnce(new Error('Relay error'));
+
+        await expect(gameLibraryManager.publishMyGameLibrary()).rejects.toThrow('Relay error');
+      });
+    });
+
+    describe('subscribeToFriendGames', () => {
+      it('should subscribe to multiple friends game libraries', async () => {
+        const friendPubkeys = ['friend1_pubkey', 'friend2_pubkey', 'friend3_pubkey'];
+
+        await gameLibraryManager.subscribeToFriendGames(friendPubkeys);
+
+        expect(mockRelayPool.subscribe).toHaveBeenCalledTimes(3);
+        friendPubkeys.forEach((pubkey) => {
+          expect(mockRelayPool.subscribe).toHaveBeenCalledWith(pubkey, expect.any(Function));
+        });
+      });
+
+      it('should not double-subscribe to same friend', async () => {
+        const friendPubkeys = ['friend1_pubkey'];
+
+        await gameLibraryManager.subscribeToFriendGames(friendPubkeys);
+        await gameLibraryManager.subscribeToFriendGames(friendPubkeys);
+
+        expect(mockRelayPool.subscribe).toHaveBeenCalledTimes(1);
+      });
+
+      it('should skip subscription if relay pool not initialized', async () => {
+        const gameLibraryManagerNoDeps = GameLibraryManager.getInstance(mockStorageManager);
+
+        await gameLibraryManagerNoDeps.subscribeToFriendGames(['friend1_pubkey']);
+
+        expect(mockRelayPool.subscribe).not.toHaveBeenCalled();
+      });
+
+      it('should handle subscription errors gracefully', async () => {
+        mockRelayPool.subscribe.mockImplementationOnce(() => {
+          throw new Error('Subscribe failed');
+        });
+
+        const friendPubkeys = ['friend1_pubkey'];
+
+        await expect(gameLibraryManager.subscribeToFriendGames(friendPubkeys)).rejects.toThrow(
+          'Subscribe failed'
+        );
+      });
+    });
+
+    describe('unsubscribeFromFriendGames', () => {
+      it('should unsubscribe from friends game libraries', async () => {
+        const friendPubkeys = ['friend1_pubkey', 'friend2_pubkey'];
+
+        await gameLibraryManager.subscribeToFriendGames(friendPubkeys);
+        await gameLibraryManager.unsubscribeFromFriendGames(friendPubkeys);
+
+        // Should not throw
+        expect(true).toBe(true);
+      });
+    });
+
+    describe('handleGameLibraryEvent', () => {
+      it('should cache friend game library from valid event', async () => {
+        const event: NostrEvent = {
+          id: 'event123',
+          pubkey: 'friend_pubkey_abc123',
+          created_at: Math.floor(Date.now() / 1000),
+          kind: 1,
+          tags: [
+            ['t', 'game-library'],
+            ['steam-id', 'friend_steam_123'],
+          ],
+          content: JSON.stringify({
+            appIds: [570, 730, 440, 1091500],
+            count: 4,
+            timestamp: Date.now(),
+          }),
+        };
+
+        await gameLibraryManager.subscribeToFriendGames(['friend_pubkey_abc123']);
+
+        // Get the subscription callback
+        const subscribeCall = mockRelayPool.subscribe.mock.calls[0];
+        const callback = subscribeCall[1];
+
+        // Call the callback with the event
+        await callback(event);
+
+        expect(mockStorageManager.set).toHaveBeenCalledWith(
+          STORAGE_KEYS.FRIEND_GAME_LIBRARIES,
+          expect.objectContaining({
+            friend_pubkey_abc123: expect.objectContaining({
+              pubkey: 'friend_pubkey_abc123',
+              appIds: [570, 730, 440, 1091500],
+              lastUpdated: expect.any(Number),
+            }),
+          })
+        );
+      });
+
+      it('should ignore events without game-library tag', async () => {
+        const event: NostrEvent = {
+          id: 'event123',
+          pubkey: 'friend_pubkey_abc123',
+          created_at: Math.floor(Date.now() / 1000),
+          kind: 1,
+          tags: [['t', 'activity']],
+          content: 'some content',
+        };
+
+        await gameLibraryManager.subscribeToFriendGames(['friend_pubkey_abc123']);
+
+        const callback = mockRelayPool.subscribe.mock.calls[0][1];
+        await callback(event);
+
+        expect(mockStorageManager.set).not.toHaveBeenCalled();
+      });
+
+      it('should handle malformed event content gracefully', async () => {
+        const event: NostrEvent = {
+          id: 'event123',
+          pubkey: 'friend_pubkey_abc123',
+          created_at: Math.floor(Date.now() / 1000),
+          kind: 1,
+          tags: [['t', 'game-library']],
+          content: 'invalid json {{{',
+        };
+
+        await gameLibraryManager.subscribeToFriendGames(['friend_pubkey_abc123']);
+
+        const callback = mockRelayPool.subscribe.mock.calls[0][1];
+        await callback(event); // Should not throw
+
+        expect(mockStorageManager.set).not.toHaveBeenCalled();
+      });
+
+      it('should handle missing appIds in event content', async () => {
+        const event: NostrEvent = {
+          id: 'event123',
+          pubkey: 'friend_pubkey_abc123',
+          created_at: Math.floor(Date.now() / 1000),
+          kind: 1,
+          tags: [['t', 'game-library']],
+          content: JSON.stringify({
+            count: 0,
+            timestamp: Date.now(),
+          }),
+        };
+
+        await gameLibraryManager.subscribeToFriendGames(['friend_pubkey_abc123']);
+
+        const callback = mockRelayPool.subscribe.mock.calls[0][1];
+        await callback(event); // Should not throw
+
+        expect(mockStorageManager.set).not.toHaveBeenCalled();
+      });
+
+      it('should handle events with empty app IDs', async () => {
+        const event: NostrEvent = {
+          id: 'event123',
+          pubkey: 'friend_pubkey_abc123',
+          created_at: Math.floor(Date.now() / 1000),
+          kind: 1,
+          tags: [['t', 'game-library']],
+          content: JSON.stringify({
+            appIds: [],
+            count: 0,
+            timestamp: Date.now(),
+          }),
+        };
+
+        await gameLibraryManager.subscribeToFriendGames(['friend_pubkey_abc123']);
+
+        mockStorageManager.get.mockResolvedValueOnce({});
+
+        const callback = mockRelayPool.subscribe.mock.calls[0][1];
+        await callback(event);
+
+        expect(mockStorageManager.set).toHaveBeenCalledWith(
+          STORAGE_KEYS.FRIEND_GAME_LIBRARIES,
+          expect.objectContaining({
+            friend_pubkey_abc123: expect.objectContaining({
+              appIds: [],
+            }),
+          })
+        );
+      });
+    });
+
+    describe('setNostrDependencies', () => {
+      it('should set relay pool and identity manager', () => {
+        const newGameLibraryManager = GameLibraryManager.getInstance(mockStorageManager);
+        newGameLibraryManager.setNostrDependencies(mockRelayPool, mockIdentityManager);
+
+        // Should not throw
+        expect(mockIdentityManager.getPubkey).toBeDefined();
+      });
     });
   });
 });

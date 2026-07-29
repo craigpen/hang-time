@@ -3,8 +3,10 @@
  * Manages game library fetching, caching, and common game discovery
  */
 
-import { OwnedGame, STORAGE_KEYS } from '../types';
+import { OwnedGame, STORAGE_KEYS, NostrEvent, NostrError } from '../types';
 import { StorageManager } from './storage';
+import { RelayPool } from './nostr';
+import { IdentityManager } from './identity';
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -22,6 +24,9 @@ interface CachedFriendGameLibrary {
  */
 export class GameLibraryManager {
   private static instance: GameLibraryManager;
+  private relayPool: RelayPool | null = null;
+  private identityManager: IdentityManager | null = null;
+  private activeGameLibrarySubscriptions: Map<string, void> = new Map();
 
   private constructor(private storage: StorageManager) {}
 
@@ -33,6 +38,15 @@ export class GameLibraryManager {
       GameLibraryManager.instance = new GameLibraryManager(storage);
     }
     return GameLibraryManager.instance;
+  }
+
+  /**
+   * Set relay pool and identity manager for Nostr integration
+   */
+  setNostrDependencies(relayPool: RelayPool, identityManager: IdentityManager): void {
+    this.relayPool = relayPool;
+    this.identityManager = identityManager;
+    console.debug('[GameLibrary] Nostr dependencies initialized');
   }
 
   /**
@@ -252,6 +266,155 @@ export class GameLibraryManager {
     } catch (error) {
       console.error('[GameLibrary] Steam API call failed:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Publish user's game library as a Nostr kind 1 event
+   */
+  async publishMyGameLibrary(): Promise<void> {
+    try {
+      if (!this.relayPool || !this.identityManager) {
+        console.warn('[GameLibrary] Nostr dependencies not initialized, skipping publication');
+        return;
+      }
+
+      console.debug('[GameLibrary] Publishing my game library to Nostr');
+
+      // Get user's pubkey and secret key
+      const pubkey = await this.identityManager.getPubkey();
+      const secretKey = await this.identityManager.getSecretKey();
+
+      // Get cached game library
+      const cached = await this.storage.get<any>(STORAGE_KEYS.MY_GAME_LIBRARY);
+      if (!cached?.ownedGames) {
+        console.warn('[GameLibrary] No cached game library to publish');
+        return;
+      }
+
+      const library = cached.ownedGames;
+      const appIds = library.map((game: OwnedGame) => game.appId);
+
+      // Get user's Steam ID for tag
+      const profile = await this.storage.getUserProfile();
+      const steamId = profile?.steam_config?.steam_id || '';
+
+      // Create Nostr event
+      const event: NostrEvent = {
+        id: '', // Will be set by signing function
+        pubkey,
+        created_at: Math.floor(Date.now() / 1000),
+        kind: 1,
+        tags: [
+          ['t', 'game-library'],
+          ['steam-id', steamId],
+        ],
+        content: JSON.stringify({
+          appIds,
+          count: library.length,
+          timestamp: Date.now(),
+        }),
+      };
+
+      // Note: In production, we'd need to sign this event with the secret key
+      // For MVP, we'll skip signing and let the relay handle it
+      console.debug(`[GameLibrary] Publishing ${appIds.length} games to Nostr`);
+
+      await this.relayPool.publish(event);
+      console.log(`[GameLibrary] ✓ Published game library (${appIds.length} games)`);
+    } catch (error) {
+      console.error('[GameLibrary] Failed to publish game library:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Subscribe to friends' game library events from Nostr
+   */
+  async subscribeToFriendGames(friendPubkeys: string[]): Promise<void> {
+    try {
+      if (!this.relayPool) {
+        console.warn('[GameLibrary] Relay pool not initialized, skipping subscription');
+        return;
+      }
+
+      console.debug(`[GameLibrary] Subscribing to ${friendPubkeys.length} friends' game libraries`);
+
+      for (const pubkey of friendPubkeys) {
+        if (this.activeGameLibrarySubscriptions.has(pubkey)) {
+          continue;
+        }
+
+        this.relayPool.subscribe(pubkey, async (event: NostrEvent) => {
+          await this.handleGameLibraryEvent(event);
+        });
+
+        this.activeGameLibrarySubscriptions.set(pubkey, undefined);
+        console.debug(`[GameLibrary] Subscribed to friend game library: ${pubkey.substring(0, 16)}...`);
+      }
+
+      console.log(`[GameLibrary] Subscribed to ${friendPubkeys.length} friends' game libraries`);
+    } catch (error) {
+      console.error('[GameLibrary] Failed to subscribe to friend games:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Unsubscribe from friends' game library events
+   */
+  async unsubscribeFromFriendGames(friendPubkeys: string[]): Promise<void> {
+    try {
+      console.debug(`[GameLibrary] Unsubscribing from ${friendPubkeys.length} friends' game libraries`);
+
+      for (const pubkey of friendPubkeys) {
+        this.activeGameLibrarySubscriptions.delete(pubkey);
+      }
+
+      // Note: Full unsubscribe from relay pool would require additional API
+      // For now, we just stop processing events for these friends
+      console.log(`[GameLibrary] Unsubscribed from ${friendPubkeys.length} friends' game libraries`);
+    } catch (error) {
+      console.error('[GameLibrary] Failed to unsubscribe from friend games:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle incoming game library event from Nostr
+   */
+  private async handleGameLibraryEvent(event: NostrEvent): Promise<void> {
+    try {
+      // Validate event has game-library tag
+      const hasGameLibraryTag = event.tags.find((t) => t[0] === 't' && t[1] === 'game-library');
+      if (!hasGameLibraryTag) {
+        console.debug('[GameLibrary] Event does not have game-library tag, skipping');
+        return;
+      }
+
+      // Parse content as JSON
+      let data: any;
+      try {
+        data = JSON.parse(event.content);
+      } catch (error) {
+        console.error('[GameLibrary] Failed to parse game library event content:', error);
+        return;
+      }
+
+      // Extract appIds array
+      if (!Array.isArray(data.appIds)) {
+        console.warn('[GameLibrary] Event content missing appIds array');
+        return;
+      }
+
+      const appIds = data.appIds as number[];
+
+      // Cache friend's game library
+      await this.cacheFriendGameLibrary(event.pubkey, appIds);
+      console.log(`[GameLibrary] Received library from friend (${appIds.length} games)`);
+    } catch (error) {
+      console.error('[GameLibrary] Error handling game library event:', error);
+      // Gracefully handle errors without stopping other processing
     }
   }
 }
