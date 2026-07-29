@@ -2471,7 +2471,7 @@ export class PopupController {
     const header = document.createElement('div');
     header.className = 'invite-modal-header';
     const title = document.createElement('h3');
-    title.textContent = `Invite friends to ${activity.service}`;
+    title.textContent = `Invite friends to ${activity.content}`;
     header.appendChild(title);
     modalContent.appendChild(header);
 
