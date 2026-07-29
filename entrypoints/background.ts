@@ -579,6 +579,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'TEST_NOTIFICATION':
       return _sendTestNotification();
 
+    case 'REFRESH_GAME_LIBRARY':
+      return _refreshGameLibrary();
+
     default:
       return {
         success: false,
@@ -1520,6 +1523,25 @@ async function _sendTestNotification(): Promise<ExtensionResponse> {
   } catch (error) {
     console.error('[Background] Test notification error:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Failed to send test notification' };
+  }
+}
+
+async function _refreshGameLibrary(): Promise<ExtensionResponse> {
+  try {
+    console.debug('[Background] Refreshing game library from Steam');
+    const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
+    const userGames = await gameLibraryManager.fetchMyGameLibrary();
+    console.debug(`[Background] Fetched ${userGames.length} games from Steam`);
+
+    // Schedule games for metadata fetching (respects rate limiting)
+    const appIds = userGames.map(g => g.appId);
+    await metadataFetcher.scheduleBackgroundRefresh(appIds);
+    console.debug(`[Background] Scheduled ${appIds.length} games for metadata fetching`);
+
+    return { success: true, data: { gamesRefreshed: userGames.length } };
+  } catch (error) {
+    console.error('[Background] Game library refresh error:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to refresh game library' };
   }
 }
 

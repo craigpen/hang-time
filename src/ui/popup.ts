@@ -151,6 +151,13 @@ export class PopupController {
       // Refresh Friends list
       await this.refreshFriends();
 
+      // Refresh game library from Steam
+      await chrome.runtime.sendMessage({
+        type: 'REFRESH_GAME_LIBRARY',
+      }).catch(() => {
+        // Silently ignore if not available (non-critical)
+      });
+
       // Refresh Settings if panel is open
       if (this.settingsPanel && this.settingsPanel.style.display !== 'none') {
         await this._loadSettingsPanel();
