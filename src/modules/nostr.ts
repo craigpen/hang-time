@@ -393,10 +393,15 @@ export class RelayPool {
 
         const successful = results.filter((r) => r.status === 'fulfilled').length;
         if (successful === 0) {
-          // All relays rejected - check if it's PoW and retry
+          // All relays rejected - extract and log detailed errors
           const errors = results
             .filter((r) => r.status === 'rejected')
             .map((r) => (r as PromiseRejectedResult).reason?.message || String((r as PromiseRejectedResult).reason));
+
+          console.error(`[Nostr] ❌ Publish failed: All ${relays.length} relays rejected`);
+          errors.forEach((error, idx) => {
+            console.error(`[Nostr]   Relay ${idx + 1}: ${error}`);
+          });
 
           const powError = errors.some((e) => e.includes('pow:'));
           if (powError && attempt < maxRetries - 1) {
@@ -406,7 +411,7 @@ export class RelayPool {
             continue;
           }
 
-          throw new NostrError('Failed to publish to any relay');
+          throw new NostrError('Failed to publish to any relay', { errors });
         }
 
         console.debug(`[Nostr] kind-${event.kind} published to ${successful}/${relays.length} relays`);
