@@ -471,7 +471,7 @@ export class MetadataFetcher {
   /**
    * Get metadata from cache
    */
-  private async getCachedMetadata(appId: number): Promise<GameMetadata | null> {
+  async getCachedMetadata(appId: number): Promise<GameMetadata | null> {
     try {
       const cache = await this.storage.get<Record<number, GameMetadata>>(
         STORAGE_KEYS.GAME_METADATA_CACHE,

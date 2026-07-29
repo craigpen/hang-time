@@ -310,26 +310,28 @@ export class DiscoveryTabController {
   }
 
   /**
-   * Private: Fetch metadata for all games
+   * Private: Load cached metadata for all games (background fetcher handles new fetches)
    */
   private async _fetchAllGameMetadata(games: OwnedGame[]): Promise<void> {
-    console.debug(`[Discovery] Fetching metadata for ${games.length} games`);
+    console.debug(`[Discovery] Loading cached metadata for ${games.length} games`);
 
     this.allGameMetadata.clear();
 
-    // Batch fetch with rate limiting
+    // Only load already-cached metadata; don't try to fetch on-demand
+    // Background fetcher handles all fetches at 1.5 games/sec
     for (const game of games) {
       try {
-        const metadata = await this.metadataFetcher.getMetadata(game.appId);
-        if (metadata) {
-          this.allGameMetadata.set(game.appId, metadata);
+        const cached = await this.metadataFetcher.getCachedMetadata(game.appId);
+        if (cached) {
+          this.allGameMetadata.set(game.appId, cached);
         }
       } catch (error) {
-        console.warn(`[Discovery] Failed to fetch metadata for appId ${game.appId}:`, error);
+        // Silently skip games without cached metadata
+        console.debug(`[Discovery] No cached metadata for appId ${game.appId}`);
       }
     }
 
-    console.debug(`[Discovery] Fetched metadata for ${this.allGameMetadata.size}/${games.length} games`);
+    console.debug(`[Discovery] Loaded cached metadata for ${this.allGameMetadata.size}/${games.length} games`);
   }
 
   /**
