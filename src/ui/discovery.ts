@@ -415,7 +415,10 @@ export class DiscoveryTabController {
   private _sortGames(games: EnrichedGame[]): EnrichedGame[] {
     const sorted = [...games];
 
-    switch (this.currentSort) {
+    // Default to 'recent' if no sort is selected
+    const sortBy = this.currentSort || 'recent';
+
+    switch (sortBy) {
       case 'most-friends':
         sorted.sort((a, b) => b.friendCount - a.friendCount);
         break;
