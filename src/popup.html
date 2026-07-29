@@ -28,8 +28,10 @@
 
     <!-- Friends List Tab -->
     <div id="friends-tab" class="tab-content active">
+      <!-- Friends populated by JS (includes "My Activity" first, then friends) -->
+      <div id="friends-list" class="friends-list"></div>
       <!-- Friends Section Header -->
-      <div class="friends-header">
+      <div class="friends-header" id="friends-header">
         <h2>Friend Activity</h2>
         <div class="friends-header-actions">
           <button id="show-inactive-btn" class="btn-icon-small btn-toggle-inactive" title="Toggle offline friends">●</button>
@@ -40,8 +42,6 @@
       <div id="no-friends" class="no-friends-placeholder" style="display: none;">
         <p>No friends yet. Add one to get started!</p>
       </div>
-      <!-- Friends populated by JS -->
-      <div id="friends-list" class="friends-list"></div>
     </div>
 
     <!-- Discovery Tab -->
