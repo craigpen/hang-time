@@ -48,13 +48,16 @@
     <div id="discovery-tab" class="tab-content">
       <div class="discovery-header">
         <div class="discovery-controls">
-          <select id="sort-dropdown" class="sort-dropdown">
-            <option value="" disabled selected hidden>Sort</option>
-            <option value="most-friends">Most friends own it</option>
-            <option value="score">Highest user score</option>
-            <option value="recent">Most recently played</option>
-            <option value="alphabetical">Alphabetical</option>
-          </select>
+          <div class="sort-wrapper">
+            <select id="sort-dropdown" class="sort-dropdown">
+              <option value="" disabled selected></option>
+              <option value="most-friends">Most friends own it</option>
+              <option value="score">Highest user score</option>
+              <option value="recent">Most recently played</option>
+              <option value="alphabetical">Alphabetical</option>
+            </select>
+            <span class="sort-overlay">Sort</span>
+          </div>
           <button id="filters-button" class="filters-btn">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 6px;">
               <path d="M6 8 L12 18 L18 8 Z"/>

@@ -1920,6 +1920,28 @@ body {
   align-items: center;
 }
 
+.sort-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.sort-overlay {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 0.9em;
+  color: var(--text-primary);
+  white-space: nowrap;
+  transition: opacity 0.2s;
+}
+
+.sort-dropdown:focus ~ .sort-overlay,
+.sort-dropdown:invalid ~ .sort-overlay {
+  opacity: 0;
+}
+
 .filters-btn {
   padding: 6px 12px;
   background-color: var(--bg-tertiary);
