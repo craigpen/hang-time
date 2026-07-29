@@ -1215,6 +1215,8 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
   const isActivityTag = event.tags.find((t) => t[0] === 'is_activity')?.[1];
   const typeTag = event.tags.find((t) => t[0] === 'type')?.[1];
 
+  console.debug(`[Background] Activity event from ${friend.local_name}: is_notification=${isNotificationTag}, type=${typeTag}, tags=${JSON.stringify(event.tags)}`);
+
   if (isNotificationTag === 'true') {
     // Handle notification event
     console.debug(`[Background] Received invite notification from ${friend.local_name}`);
