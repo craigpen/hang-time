@@ -2145,8 +2145,8 @@ body {
 }
 
 .game-card-image {
-  width: 64px;
-  height: 64px;
+  width: 110px;
+  height: 62px;
   border-radius: 4px;
   flex-shrink: 0;
   object-fit: contain;
