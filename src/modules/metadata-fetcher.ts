@@ -89,15 +89,19 @@ export class MetadataFetcher {
         return cached;
       }
 
-      // Cache is missing or stale - fetch from Steam API
-      const raw = await this.fetchFromSteamAPI(appId);
+      // Cache is missing or stale - fetch from Steam API and SteamSpy in parallel
+      const [raw, steamSpyData] = await Promise.all([
+        this.fetchFromSteamAPI(appId),
+        this.fetchFromSteamSpy(appId),
+      ]);
+
       if (!raw) {
         console.warn(`[Metadata] Failed to fetch from Steam API for appId: ${appId}`);
         return null;
       }
 
-      // Parse and cache the metadata
-      const metadata = this.parseAppDetails(raw, appId);
+      // Parse and cache the metadata (with SteamSpy data for review score)
+      const metadata = this.parseAppDetails(raw, appId, steamSpyData);
       if (!metadata) {
         console.warn(`[Metadata] Failed to parse app details for appId: ${appId}`);
         return null;
@@ -268,9 +272,11 @@ export class MetadataFetcher {
             continue;
           }
 
-          // Success - parse and cache
+          // Success - fetch SteamSpy data and parse
           if (result) {
-            const metadata = this.parseAppDetails(result, appId);
+            // Fetch SteamSpy data to get review score
+            const steamSpyData = await this.fetchFromSteamSpy(appId);
+            const metadata = this.parseAppDetails(result, appId, steamSpyData);
             if (metadata) {
               await this.setCachedMetadata(appId, metadata);
               console.debug(`[Metadata] ✅ Successfully fetched and cached appId ${appId} in background`);
@@ -361,9 +367,46 @@ export class MetadataFetcher {
   }
 
   /**
-   * Parse app details response from Steam API
+   * Fetch review data from SteamSpy API (no rate limiting needed)
    */
-  private parseAppDetails(raw: any, appId: number): GameMetadata | null {
+  private async fetchFromSteamSpy(appId: number): Promise<any> {
+    try {
+      const url = `https://steamspy.com/api.php?request=appdetails&appid=${appId}`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          console.debug(`[Metadata] SteamSpy returned ${response.status} for appId ${appId}`);
+          return null;
+        }
+
+        const data = await response.json();
+        console.debug(`[Metadata] SteamSpy response received for appId ${appId}`);
+        return data;
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          console.debug(`[Metadata] SteamSpy request timeout for appId ${appId}`);
+        } else {
+          console.debug(`[Metadata] SteamSpy fetch error for appId ${appId}:`, error.message);
+        }
+        return null;
+      }
+    } catch (error) {
+      console.error(`[Metadata] Unexpected error calling SteamSpy for appId ${appId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Parse app details response from Steam API and SteamSpy
+   */
+  private parseAppDetails(raw: any, appId: number, steamSpyData?: any): GameMetadata | null {
     try {
       const data = raw.data;
 
@@ -404,8 +447,15 @@ export class MetadataFetcher {
         linux: data.platforms?.linux || false,
       };
 
-      // Extract Metacritic score
-      const metacriticScore = data.metacritic?.score || undefined;
+      // Extract user review score from SteamSpy (calculated from positive/negative)
+      let metacriticScore: number | undefined;
+      if (steamSpyData && steamSpyData.positive && steamSpyData.negative) {
+        const total = steamSpyData.positive + steamSpyData.negative;
+        if (total > 0) {
+          metacriticScore = Math.round((steamSpyData.positive / total) * 100);
+          console.debug(`[Metadata] SteamSpy score for appId ${appId}: ${metacriticScore}% (${steamSpyData.positive} positive, ${steamSpyData.negative} negative)`);
+        }
+      }
 
       // Detect cross-platform support
       const isCrossPlayable = this.isCrossPlayable({
