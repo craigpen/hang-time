@@ -149,8 +149,9 @@ async function initializeExtension(): Promise<void> {
     console.debug('[Background] Game library manager Nostr dependencies set');
 
     // Fetch user's game library (enabled by default for MVP)
+    let userGames: any[] = [];
     try {
-      await gameLibraryManager.fetchMyGameLibrary();
+      userGames = await gameLibraryManager.fetchMyGameLibrary();
       console.debug('[Background] Fetched user game library');
     } catch (error) {
       console.warn('[Background] Failed to fetch game library:', error);
@@ -161,6 +162,12 @@ async function initializeExtension(): Promise<void> {
     console.debug('[Background] Metadata fetcher initialized');
     await metadataFetcher.startBackgroundFetcher();
     console.debug('[Background] Metadata background fetcher started');
+
+    // Queue all games for metadata fetching
+    if (userGames.length > 0) {
+      await metadataFetcher.scheduleBackgroundRefresh(userGames.map(g => g.appId));
+      console.debug(`[Background] Scheduled ${userGames.length} games for metadata fetching`);
+    }
 
     // Initialize activity detector
     activityDetector = new ActivityDetector(storageManager);
