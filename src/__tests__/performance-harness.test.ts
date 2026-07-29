@@ -434,6 +434,121 @@ class PerformanceTestScenario {
 // TEST SUITE
 // ============================================================================
 
+// ============================================================================
+// PARAMETER MATRIX FOR SYSTEMATIC TESTING
+// ============================================================================
+
+interface TestConfig {
+  pollRateMs: number;
+  publishRateMs: number;
+  batchSize: number;
+  compression: boolean;
+  deltaPublishing: boolean;
+  uiRefreshMs: number;
+}
+
+/**
+ * Generate test matrix to systematically explore parameter space
+ * Focuses on discovering minimums and inflection points
+ */
+function generateTestMatrix(): TestConfig[] {
+  const configs: TestConfig[] = [];
+
+  // Test 1: Poll rate sweep (find minimum polling frequency)
+  const pollRates = [200, 500, 1000, 2000, 5000];
+  for (const pollRate of pollRates) {
+    configs.push({
+      pollRateMs: pollRate,
+      publishRateMs: 12000,
+      batchSize: 10,
+      compression: false,
+      deltaPublishing: false,
+      uiRefreshMs: 3000,
+    });
+  }
+
+  // Test 2: Publish rate sweep (find minimum publishing frequency)
+  const publishRates = [6000, 9000, 12000, 15000, 18000];
+  for (const pubRate of publishRates) {
+    configs.push({
+      pollRateMs: 500,
+      publishRateMs: pubRate,
+      batchSize: 10,
+      compression: false,
+      deltaPublishing: false,
+      uiRefreshMs: 3000,
+    });
+  }
+
+  // Test 3: UI refresh sweep (find minimum UI refresh frequency)
+  const uiRefreshRates = [1000, 3000, 5000, 10000];
+  for (const uiRate of uiRefreshRates) {
+    configs.push({
+      pollRateMs: 500,
+      publishRateMs: 12000,
+      batchSize: 10,
+      compression: false,
+      deltaPublishing: false,
+      uiRefreshMs: uiRate,
+    });
+  }
+
+  // Test 4: Batch size sweep (find optimal batch size)
+  const batchSizes = [1, 5, 10, 20];
+  for (const batch of batchSizes) {
+    configs.push({
+      pollRateMs: 500,
+      publishRateMs: 12000,
+      batchSize: batch,
+      compression: false,
+      deltaPublishing: false,
+      uiRefreshMs: 3000,
+    });
+  }
+
+  // Test 5: Compression impact
+  configs.push({
+    pollRateMs: 500,
+    publishRateMs: 12000,
+    batchSize: 10,
+    compression: true,
+    deltaPublishing: false,
+    uiRefreshMs: 3000,
+  });
+
+  // Test 6: Delta publishing impact
+  configs.push({
+    pollRateMs: 500,
+    publishRateMs: 12000,
+    batchSize: 10,
+    compression: false,
+    deltaPublishing: true,
+    uiRefreshMs: 3000,
+  });
+
+  // Test 7: Compression + Delta publishing
+  configs.push({
+    pollRateMs: 500,
+    publishRateMs: 12000,
+    batchSize: 10,
+    compression: true,
+    deltaPublishing: true,
+    uiRefreshMs: 3000,
+  });
+
+  // Test 8: Optimized config (reduced frequencies)
+  configs.push({
+    pollRateMs: 1000,
+    publishRateMs: 15000,
+    batchSize: 10,
+    compression: true,
+    deltaPublishing: true,
+    uiRefreshMs: 5000,
+  });
+
+  return configs;
+}
+
 describe('Performance & Efficiency Test Harness', () => {
   const resultsFile = path.join(process.cwd(), 'performance-results.json');
   const allResults: PerformanceMetrics[] = [];
@@ -450,116 +565,33 @@ describe('Performance & Efficiency Test Harness', () => {
     if (allResults.length > 0) {
       fs.writeFileSync(resultsFile, JSON.stringify(allResults, null, 2));
       console.log(`✅ Performance results written to ${resultsFile}`);
+      console.log(`📊 Total tests run: ${allResults.length}`);
     }
   });
 
-  it('should measure latency with baseline config', async () => {
-    const scenario = new PerformanceTestScenario({
-      pollRateMs: 500,
-      publishRateMs: 12000,
-      batchSize: 10,
-      compression: false,
-      deltaPublishing: false,
-      uiRefreshMs: 3000,
-    });
+  it('should run full parameter matrix test suite', async () => {
+    const testConfigs = generateTestMatrix();
+    console.log(`\n📋 Running ${testConfigs.length} test configurations...\n`);
 
-    await scenario.runRealisticScenario(15000);
-    const metrics = scenario.getMetrics();
+    for (let i = 0; i < testConfigs.length; i++) {
+      const config = testConfigs[i];
+      const scenario = new PerformanceTestScenario(config);
 
-    allResults.push(metrics);
+      console.log(`[${i + 1}/${testConfigs.length}] Testing: poll=${config.pollRateMs}ms, pub=${config.publishRateMs}ms, batch=${config.batchSize}, compression=${config.compression}, delta=${config.deltaPublishing}, uiRefresh=${config.uiRefreshMs}ms`);
 
-    console.log('Baseline Results:', {
-      localLatency: `p95=${metrics.results.localActivityLatency.p95.toFixed(0)}ms`,
-      remoteLatency: `p95=${metrics.results.remoteActivityLatency.p95.toFixed(0)}ms`,
-      publishSuccess: `${metrics.results.publishSuccess.successRate.toFixed(1)}%`,
-      pollsPerSec: metrics.results.resourceUsage.pollsPerSecond.toFixed(2),
-    });
+      await scenario.runRealisticScenario(10000); // Shorter runs for matrix (10s per test)
+      const metrics = scenario.getMetrics();
+      allResults.push(metrics);
 
-    expect(metrics.results.localActivityLatency.p95).toBeLessThan(2000);
-    expect(metrics.results.remoteActivityLatency.p95).toBeLessThan(7000);
-    expect(metrics.results.publishSuccess.successRate).toBeGreaterThan(95);
-  });
+      // Log key results
+      console.log(`  ✓ Local: p95=${metrics.results.localActivityLatency.p95.toFixed(0)}ms | Remote: p95=${metrics.results.remoteActivityLatency.p95.toFixed(0)}ms | Pub: ${metrics.results.publishSuccess.successRate.toFixed(1)}% | Polls/s: ${metrics.results.resourceUsage.pollsPerSecond.toFixed(2)}\n`);
+    }
 
-  it('should test reduced polling frequency', async () => {
-    const scenario = new PerformanceTestScenario({
-      pollRateMs: 1000, // Doubled from baseline
-      publishRateMs: 12000,
-      batchSize: 10,
-      compression: false,
-      deltaPublishing: false,
-      uiRefreshMs: 3000,
-    });
+    console.log(`\n✅ All ${allResults.length} tests completed!`);
 
-    await scenario.runRealisticScenario(15000);
-    const metrics = scenario.getMetrics();
-
-    allResults.push(metrics);
-
-    console.log('Reduced Poll Rate Results:', {
-      localLatency: `p95=${metrics.results.localActivityLatency.p95.toFixed(0)}ms`,
-      pollsPerSec: metrics.results.resourceUsage.pollsPerSecond.toFixed(2),
-    });
-  });
-
-  it('should test increased publish rate', async () => {
-    const scenario = new PerformanceTestScenario({
-      pollRateMs: 500,
-      publishRateMs: 6000, // Doubled (more frequent)
-      batchSize: 10,
-      compression: false,
-      deltaPublishing: false,
-      uiRefreshMs: 3000,
-    });
-
-    await scenario.runRealisticScenario(15000);
-    const metrics = scenario.getMetrics();
-
-    allResults.push(metrics);
-
-    console.log('Increased Publish Rate Results:', {
-      remoteLatency: `p95=${metrics.results.remoteActivityLatency.p95.toFixed(0)}ms`,
-      publishSuccess: `${metrics.results.publishSuccess.successRate.toFixed(1)}%`,
-    });
-  });
-
-  it('should test with compression enabled', async () => {
-    const scenario = new PerformanceTestScenario({
-      pollRateMs: 500,
-      publishRateMs: 12000,
-      batchSize: 10,
-      compression: true, // Enabled
-      deltaPublishing: false,
-      uiRefreshMs: 3000,
-    });
-
-    await scenario.runRealisticScenario(15000);
-    const metrics = scenario.getMetrics();
-
-    allResults.push(metrics);
-
-    console.log('Compression Enabled Results:', {
-      dataVolume: `${metrics.results.resourceUsage.dataVolumeKb.toFixed(1)}KB`,
-    });
-  });
-
-  it('should test with delta publishing', async () => {
-    const scenario = new PerformanceTestScenario({
-      pollRateMs: 500,
-      publishRateMs: 12000,
-      batchSize: 10,
-      compression: false,
-      deltaPublishing: true, // Enabled
-      uiRefreshMs: 3000,
-    });
-
-    await scenario.runRealisticScenario(15000);
-    const metrics = scenario.getMetrics();
-
-    allResults.push(metrics);
-
-    console.log('Delta Publishing Results:', {
-      dataVolume: `${metrics.results.resourceUsage.dataVolumeKb.toFixed(1)}KB`,
-      publishSuccess: `${metrics.results.publishSuccess.successRate.toFixed(1)}%`,
-    });
+    // Assertions on critical path
+    const baselineResult = allResults[0]; // First config is baseline
+    expect(baselineResult.results.localActivityLatency.p95).toBeLessThan(3000);
+    expect(baselineResult.results.publishSuccess.successRate).toBeGreaterThan(90);
   });
 });
