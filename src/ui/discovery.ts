@@ -475,7 +475,8 @@ export class DiscoveryTabController {
     const imageUrl = metadata?.capsuleImageUrl || 'public/icons/steam.png';
     const storeUrl = metadata?.storePageUrl || `https://steampowered.com/app/${game.appId}`;
     const score = metadata?.metacriticScore || 0;
-    const genres = metadata?.genres.slice(0, 3).join(', ') || 'Unknown';
+    const genres = metadata?.genres.slice(0, 2).join(', ') || 'Unknown';
+    const modes = metadata?.categories.slice(0, 2).join(', ') || '';
 
     const friendNamesText =
       game.friendCount === 0
@@ -499,7 +500,7 @@ export class DiscoveryTabController {
             ${score > 0 ? `<span class="game-score">⭐ ${score}/100</span>` : ''}
           </div>
           <div class="game-genres">
-            <span>${this._escapeHtml(genres)}</span>
+            <span>${this._escapeHtml(genres)}${modes ? ' • ' + this._escapeHtml(modes) : ''}</span>
           </div>
           <div class="game-friends">
             <span class="friends-count">${game.friendCount} ${game.friendCount === 1 ? 'friend' : 'friends'} own:</span>
