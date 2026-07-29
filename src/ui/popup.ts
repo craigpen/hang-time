@@ -5,6 +5,9 @@
 
 import { Friend, Activity, ExtensionResponse } from '../types';
 import { StorageManager } from '../modules/storage';
+import { GameLibraryManager } from '../modules/game-library';
+import { MetadataFetcher } from '../modules/metadata-fetcher';
+import { DiscoveryTabController } from './discovery';
 
 /**
  * Simple toast notification manager
@@ -59,6 +62,7 @@ export class PopupController {
   private refreshPaused: boolean = false;
   private pendingInvitesByActivity: Map<string, string> = new Map(); // activityId -> friendId with pending invite
   private storage: StorageManager = new StorageManager();
+  private discoveryTabController: DiscoveryTabController | null = null;
 
   static readonly MY_ACTIVITY_REFRESH_MS = 3000; // Keep "My Activity" responsive
   static readonly FALLBACK_FRIENDS_REFRESH_MS = 15000; // Safety net for missed Nostr messages
@@ -83,6 +87,8 @@ export class PopupController {
     }
 
     this._setupEventListeners();
+    this._setupTabNavigation();
+    this._setupDiscoveryController();
     this._setupMessageListener();
     this._setupStorageListener();
     await this._loadPendingInvites();
@@ -1387,6 +1393,60 @@ export class PopupController {
           this._handleAddFriendSubmit();
         }
       });
+    }
+  }
+
+  private _setupTabNavigation(): void {
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const tabId = button.getAttribute('data-tab');
+        if (!tabId) return;
+
+        // Deactivate all tabs and contents
+        tabButtons.forEach((btn) => btn.classList.remove('active'));
+        tabContents.forEach((content) => content.classList.remove('active'));
+
+        // Activate selected tab
+        button.classList.add('active');
+        const tabContent = document.getElementById(tabId);
+        if (tabContent) {
+          tabContent.classList.add('active');
+
+          // If this is the discovery tab, render it
+          if (tabId === 'discovery-tab' && this.discoveryTabController) {
+            this.discoveryTabController.render().catch((error) => {
+              console.error('[Popup] Failed to render discovery tab:', error);
+            });
+          }
+
+          // Resize popup to fit new content
+          this._resizePopupToFitContent();
+        }
+      });
+    });
+
+    console.debug('[Popup] Tab navigation initialized');
+  }
+
+  private _setupDiscoveryController(): void {
+    try {
+      const popupElement = document.getElementById('popup-container');
+      const storage = this.storage;
+      const gameLibraryManager = GameLibraryManager.getInstance(storage);
+      const metadataFetcher = MetadataFetcher.getInstance(storage);
+
+      this.discoveryTabController = new DiscoveryTabController(popupElement, gameLibraryManager, metadataFetcher, storage);
+
+      this.discoveryTabController.init().catch((error) => {
+        console.error('[Popup] Failed to initialize discovery controller:', error);
+      });
+
+      console.debug('[Popup] Discovery controller initialized');
+    } catch (error) {
+      console.error('[Popup] Error setting up discovery controller:', error);
     }
   }
 
