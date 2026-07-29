@@ -1920,26 +1920,11 @@ body {
   align-items: center;
 }
 
-.sort-wrapper {
-  position: relative;
-  display: inline-block;
-}
-
-.sort-overlay {
-  position: absolute;
-  left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
+.sort-label {
   font-size: 0.9em;
+  font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
-  transition: opacity 0.2s;
-}
-
-.sort-dropdown:focus ~ .sort-overlay,
-.sort-dropdown:invalid ~ .sort-overlay {
-  opacity: 0;
 }
 
 .filters-btn {
@@ -1998,17 +1983,13 @@ body {
 .sort-dropdown {
   padding: 6px 10px;
   background-color: var(--bg-tertiary);
-  color: transparent;
+  color: var(--text-primary);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9em;
   transition: all 0.2s;
   max-width: 160px;
-}
-
-.sort-dropdown:focus {
-  color: var(--text-primary);
 }
 
 .sort-dropdown:hover {
