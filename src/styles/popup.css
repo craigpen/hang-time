@@ -2225,6 +2225,179 @@ body {
   word-break: break-word;
 }
 
+.game-card-invite-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-secondary);
+  color: #999;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.game-card-invite-btn:hover:not(.disabled) {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  background-color: var(--bg-tertiary);
+}
+
+.game-card-invite-btn.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.envelope-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* Invite Modal */
+.invite-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.invite-modal {
+  background-color: var(--bg-primary);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  max-width: 400px;
+  width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-primary);
+}
+
+.invite-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.invite-modal-header h3 {
+  margin: 0;
+  font-size: 1em;
+  color: var(--text-primary);
+}
+
+.btn-close-modal {
+  background: none;
+  border: none;
+  font-size: 1.5em;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-close-modal:hover {
+  color: var(--text-primary);
+}
+
+.invite-modal-content {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.invite-modal-content p {
+  margin: 0 0 12px 0;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+}
+
+.friend-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.friend-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  user-select: none;
+}
+
+.friend-checkbox-label:hover {
+  background-color: var(--bg-secondary);
+}
+
+.friend-checkbox-label input[type='checkbox'] {
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
+.friend-checkbox-label span {
+  color: var(--text-primary);
+  font-size: 0.9em;
+}
+
+.invite-modal-actions {
+  display: flex;
+  gap: 8px;
+  padding: 16px;
+  border-top: 1px solid var(--border-color);
+  justify-content: flex-end;
+}
+
+.btn-cancel,
+.btn-send-invites {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.btn-send-invites {
+  background-color: var(--accent-primary);
+  color: white;
+  border-color: var(--accent-primary);
+}
+
+.btn-send-invites:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-send-invites:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Loading / Empty / Error States */
 .loading-skeleton,
 .empty-state,

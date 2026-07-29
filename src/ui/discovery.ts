@@ -486,6 +486,8 @@ export class DiscoveryTabController {
             ? game.friendNames.join(', ')
             : `${game.friendNames.slice(0, 3).join(', ')}, +${game.friendCount - 3} more`;
 
+    const hasInvitableFriends = game.friendCount > 0;
+
     card.innerHTML = `
       <div class="game-card-inner">
         <img src="${this._escapeHtml(imageUrl)}" alt="${this._escapeHtml(gameName)}" class="game-card-image" onerror="this.src='public/icons/steam.png'">
@@ -504,8 +506,23 @@ export class DiscoveryTabController {
             <span class="friends-list">${this._escapeHtml(friendNamesText)}</span>
           </div>
         </div>
+        <button class="game-card-invite-btn ${hasInvitableFriends ? '' : 'disabled'}" title="${hasInvitableFriends ? 'Invite friends to play' : 'No friends own this game'}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
+            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+            <path d="M 2 6 L 12 13 L 22 6"></path>
+          </svg>
+        </button>
       </div>
     `;
+
+    // Add event listener for invite button
+    const inviteBtn = card.querySelector('.game-card-invite-btn') as HTMLButtonElement;
+    if (inviteBtn && hasInvitableFriends) {
+      inviteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._showInviteModal(game);
+      });
+    }
 
     return card;
   }
@@ -564,5 +581,141 @@ export class DiscoveryTabController {
       "'": '&#039;',
     };
     return text.replace(/[&<>"']/g, (char) => map[char]);
+  }
+
+  /**
+   * Private: Show invite modal for a game
+   */
+  private _showInviteModal(game: EnrichedGame): void {
+    // Create modal overlay
+    const modal = document.createElement('div');
+    modal.className = 'invite-modal-overlay';
+
+    const gameName = game.metadata?.name || `Game ${game.appId}`;
+
+    // Get friends who own this game
+    const friendsWhoOwn = this.allFriends.filter((friend) => game.friendNames.includes(friend.local_name));
+
+    modal.innerHTML = `
+      <div class="invite-modal">
+        <div class="invite-modal-header">
+          <h3>Invite to play ${this._escapeHtml(gameName)}</h3>
+          <button class="btn-close-modal">×</button>
+        </div>
+        <div class="invite-modal-content">
+          <p>Select friends to invite:</p>
+          <div class="friend-checkboxes">
+            ${friendsWhoOwn
+              .map(
+                (friend) => `
+              <label class="friend-checkbox-label">
+                <input type="checkbox" class="friend-invite-checkbox" data-friend-id="${friend.id}" data-friend-name="${this._escapeHtml(friend.local_name)}">
+                <span>${this._escapeHtml(friend.local_name)}</span>
+              </label>
+            `
+              )
+              .join('')}
+          </div>
+        </div>
+        <div class="invite-modal-actions">
+          <button class="btn-cancel">Cancel</button>
+          <button class="btn-send-invites" disabled>Send Invites</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Setup event listeners
+    const closeBtn = modal.querySelector('.btn-close-modal') as HTMLButtonElement;
+    const cancelBtn = modal.querySelector('.btn-cancel') as HTMLButtonElement;
+    const sendBtn = modal.querySelector('.btn-send-invites') as HTMLButtonElement;
+    const checkboxes = modal.querySelectorAll('.friend-invite-checkbox') as NodeListOf<HTMLInputElement>;
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => modal.remove());
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => modal.remove());
+    }
+
+    // Enable send button when at least one friend is selected
+    checkboxes.forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        const anyChecked = Array.from(checkboxes).some((cb) => cb.checked);
+        if (sendBtn) sendBtn.disabled = !anyChecked;
+      });
+    });
+
+    if (sendBtn) {
+      sendBtn.addEventListener('click', async () => {
+        const selectedCheckboxes = Array.from(checkboxes).filter((cb) => cb.checked);
+        const selectedFriendIds = selectedCheckboxes.map((cb) => cb.dataset.friendId || '');
+
+        if (selectedFriendIds.length === 0) return;
+
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Sending...';
+
+        try {
+          // Create activity from game data
+          const activity = {
+            id: `steam-game-${game.appId}`,
+            service: 'steam-api' as const,
+            content: gameName,
+            url: `steam://run/${game.appId}/`,
+            state: 'playing' as const,
+            audio: 'on' as const,
+            timestamp: Date.now(),
+            freshness_timestamp: Date.now(),
+            metadata: {
+              appid: game.appId,
+            },
+          };
+
+          // Send invites to each selected friend
+          for (const friendId of selectedFriendIds) {
+            await chrome.runtime.sendMessage({
+              type: 'SEND_INVITE',
+              data: { activity, friendId },
+            });
+          }
+
+          // Close modal and show success
+          modal.remove();
+          this._showToast(`Invited ${selectedFriendIds.length} friend${selectedFriendIds.length !== 1 ? 's' : ''}`);
+        } catch (error) {
+          console.error('[Discovery] Failed to send invites:', error);
+          sendBtn.disabled = false;
+          sendBtn.textContent = 'Send Invites';
+          this._showToast('Failed to send invites');
+        }
+      });
+    }
+
+    // Close on backdrop click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.remove();
+      }
+    });
+  }
+
+  /**
+   * Private: Show toast notification
+   */
+  private _showToast(message: string, duration: number = 3000): void {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+
+    const container = document.getElementById('toast-container') || document.body;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+      toast.classList.add('toast-hide');
+      setTimeout(() => toast.remove(), 300);
+    }, duration);
   }
 }

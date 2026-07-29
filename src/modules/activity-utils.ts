@@ -100,3 +100,26 @@ export function isSameActivity(activity1: { service: string; url?: string }, act
 
   return id1 === id2 && id1 !== '';
 }
+
+/**
+ * Get the action verb for an activity based on service type
+ * Returns: 'play' for games, 'watch' for video/streams, 'listen' for audio
+ */
+export function getActivityVerb(service: string): 'play' | 'watch' | 'listen' {
+  switch (service.toLowerCase()) {
+    case 'steam-api':
+      return 'play';
+    case 'spotify-api':
+      return 'listen';
+    case 'youtube-tab':
+    case 'youtube':
+    case 'netflix-tab':
+    case 'netflix':
+    case 'twitch-api':
+    case 'twitch-tab':
+    case 'twitch':
+      return 'watch';
+    default:
+      return 'watch';
+  }
+}

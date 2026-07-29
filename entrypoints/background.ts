@@ -20,6 +20,7 @@ import { SteamService } from '../src/modules/services/steam';
 import { SpotifyService } from '../src/modules/services/spotify';
 import { TwitchService } from '../src/modules/services/twitch';
 import { initializeMetadataFetcher, metadataFetcher } from '../src/modules/metadata-fetcher';
+import { getActivityVerb } from '../src/modules/activity-utils';
 import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } from '../src/types';
 
 // ============================================================================
@@ -1204,12 +1205,36 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       }
 
       const service = event.tags.find((t) => t[0] === 'service')?.[1] || 'an activity';
+      const activityName = event.tags.find((t) => t[0] === 'activity_name')?.[1] || service;
       const activityId = event.tags.find((t) => t[0] === 'activity_id')?.[1];
       const notificationManager = getNotificationManager();
+      
+      // Determine verb based on service
+      const verb = getActivityVerb(service);
+      
+      // Get Discord info: check friend's Discord link first, then ask for initiator's (if available in friend profile)
+      let discordInfo: { owner: string; link: string } | undefined;
+      if (friend.current_activities && Object.keys(friend.current_activities).length > 0) {
+        // Try to get initiator's Discord from the event (if included)
+        const initiatorDiscord = event.tags.find((t) => t[0] === 'discord_link')?.[1];
+        if (initiatorDiscord) {
+          discordInfo = {
+            owner: friend.local_name,
+            link: initiatorDiscord,
+          };
+        } else if (friend.current_activities) {
+          // Fallback: check if friend has Discord configured (we'd need to get their profile)
+          // For now, we only use what's explicitly in the event
+        }
+      }
+      
       console.log(`[Background] 🔔 Invite: Firing notification for ${friend.local_name}`);
-      await notificationManager.notifyPersistent(
-        `Want to watch ${service} with ${friend.local_name}?`,
-        'Click the green invite envelope in the Hang Time popup. Accept to watch together, or Decline to skip.'
+      await notificationManager.notifyInvite(
+        friend.id,
+        friend.local_name,
+        activityName,
+        verb,
+        discordInfo
       );
       await markInviteNotified(event.id);
       console.log(`[Background] ✅ Invite: Notification fired for ${friend.local_name}`);

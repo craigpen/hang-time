@@ -39,21 +39,33 @@ export class MessagingManager {
     const pubkey = await this.identityManager.getPubkey();
     const created_at = Math.floor(Date.now() / 1000);
 
+    // Build tags with activity metadata and Discord link if available
+    const tags = [
+      ['is_notification', 'true'],
+      ['type', 'invite'],
+      ['activity_id', activity.id || generateActivityId(activity.service, activity.url)],
+      ['activity_name', activity.content || activity.service],
+      ['recipient', recipientFriend.pubkey],
+      ['service', activity.service],
+    ];
+
+    if (activity.url) {
+      tags.push(['url', activity.url]);
+    }
+
+    // Include Discord link if user has one configured
+    if (userProfile.discord_info) {
+      tags.push(['discord_link', userProfile.discord_info]);
+    }
+
     // Create kind-1 notification event
     const event: NostrEvent = {
       id: '',
       pubkey,
       created_at,
       kind: 1,
-      tags: [
-        ['is_notification', 'true'],
-        ['type', 'invite'],
-        ['activity_id', activity.id || generateActivityId(activity.service, activity.url)],
-        ['recipient', recipientFriend.pubkey],
-        ['service', activity.service],
-        ['url', activity.url],
-      ],
-      content: `Inviting ${recipientFriend.local_name} to join ${activity.service}`,
+      tags,
+      content: `Inviting ${recipientFriend.local_name} to ${activity.content || activity.service}`,
     };
 
     // Compute event ID and sign

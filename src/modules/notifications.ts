@@ -95,6 +95,47 @@ export class NotificationManager {
   }
 
   /**
+   * Notify about an invite with activity-specific verb and Discord coordination info
+   * Verb: 'play' for games, 'watch' for video/streams, 'listen' for audio
+   */
+  async notifyInvite(
+    friendId: string,
+    friendName: string,
+    activityName: string,
+    verb: 'play' | 'watch' | 'listen',
+    discordInfo?: { owner: string; link: string }
+  ): Promise<void> {
+    try {
+      const settings = await this.storage.getSettings();
+      if (!settings.notification_preferences?.join_suggestion) {
+        return;
+      }
+
+      const subject = `${friendName} invited you to ${verb} ${activityName}`;
+      let bodyMessage = '';
+
+      if (discordInfo) {
+        bodyMessage = `Coordinate on ${discordInfo.owner}'s Discord: ${discordInfo.link}`;
+      } else {
+        bodyMessage = 'Configure Discord in settings for voice/chat coordination';
+      }
+
+      chrome.notifications.create(`invite_${friendId}_${Date.now()}`, {
+        type: 'basic',
+        iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
+        title: subject,
+        message: bodyMessage,
+        contextMessage: 'Click to join via Hang Time',
+        requireInteraction: true,
+      });
+
+      console.debug('[Notifications] Invite notification sent for', friendName);
+    } catch (error) {
+      console.error('[Notifications] Failed to send invite notification:', error);
+    }
+  }
+
+  /**
    * Generic notification
    */
   async notify(title: string, message: string, iconUrl?: string): Promise<void> {
