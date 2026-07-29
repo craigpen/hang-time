@@ -259,6 +259,7 @@ export class GameLibraryManager {
           linux: false,
         },
         lastUpdated: Date.now(),
+        rtime_last_played: game.rtime_last_played ?? 0, // Unix timestamp, 0 if never played
       }));
 
       console.debug(`[GameLibrary] Parsed ${games.length} games from Steam API`);

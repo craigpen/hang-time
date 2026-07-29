@@ -18,6 +18,7 @@ export interface OwnedGame {
     linux?: boolean;
   };
   lastUpdated: number;
+  rtime_last_played?: number; // Unix timestamp of last play time from Steam API
 }
 
 /**

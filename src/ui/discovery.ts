@@ -418,7 +418,11 @@ export class DiscoveryTabController {
         });
         break;
       case 'recent':
-        sorted.sort((a, b) => b.lastUpdated - a.lastUpdated);
+        sorted.sort((a, b) => {
+          const lastA = a.rtime_last_played || 0;
+          const lastB = b.rtime_last_played || 0;
+          return lastB - lastA; // Most recently played first
+        });
         break;
       case 'alphabetical':
         sorted.sort((a, b) => {
