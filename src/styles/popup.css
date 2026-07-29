@@ -1920,13 +1920,6 @@ body {
   align-items: center;
 }
 
-.sort-label {
-  font-size: 0.9em;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
 .filters-btn {
   padding: 6px 12px;
   background-color: var(--bg-tertiary);
