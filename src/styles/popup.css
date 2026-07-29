@@ -1906,13 +1906,32 @@ body {
 
 .discovery-header {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: center;
   padding: 12px 14px;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
-  flex-wrap: wrap;
+}
+
+.discovery-controls {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.control-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.control-label {
+  font-size: 0.9em;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .filters-btn {
@@ -1937,8 +1956,7 @@ body {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  flex: 1;
-  min-width: 150px;
+  width: 100%;
 }
 
 .filter-chip {

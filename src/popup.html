@@ -47,19 +47,27 @@
     <!-- Discovery Tab -->
     <div id="discovery-tab" class="tab-content">
       <div class="discovery-header">
-        <button id="filters-button" class="filters-btn">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 6px;">
-            <path d="M6 8 L12 18 L18 8 Z"/>
-          </svg>
-          Filters
-        </button>
+        <div class="discovery-controls">
+          <div class="control-group">
+            <label class="control-label">Sort:</label>
+            <select id="sort-dropdown" class="sort-dropdown">
+              <option value="most-friends">Most friends own it</option>
+              <option value="score">Highest user score</option>
+              <option value="recent">Most recently played</option>
+              <option value="alphabetical">Alphabetical</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label class="control-label">Filters:</label>
+            <button id="filters-button" class="filters-btn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 6px;">
+                <path d="M6 8 L12 18 L18 8 Z"/>
+              </svg>
+              Filter
+            </button>
+          </div>
+        </div>
         <div id="active-filters" class="filter-chips"></div>
-        <select id="sort-dropdown" class="sort-dropdown">
-          <option value="most-friends">Most friends own it</option>
-          <option value="score">Highest user score</option>
-          <option value="recent">Most recently played</option>
-          <option value="alphabetical">Alphabetical</option>
-        </select>
       </div>
 
       <div id="filters-panel" class="filters-panel hidden">
