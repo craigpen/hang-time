@@ -116,7 +116,8 @@ export class NotificationManager {
       const buttons: Array<{ title: string }> = [];
 
       if (discordInfo) {
-        bodyMessage = `Coordinate on ${discordInfo.owner}'s Discord`;
+        const ownerText = discordInfo.owner === 'your' ? 'your' : `${discordInfo.owner}'s`;
+        bodyMessage = `Coordinate on ${ownerText} Discord`;
         buttons.push({ title: 'Open Discord' });
       } else {
         bodyMessage = 'Configure Discord in settings for voice/chat coordination';

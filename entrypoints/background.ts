@@ -1212,19 +1212,24 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       // Determine verb based on service
       const verb = getActivityVerb(service);
       
-      // Get Discord info: check friend's Discord link first, then ask for initiator's (if available in friend profile)
+      // Get Discord info: try sender's Discord first, fall back to recipient's
       let discordInfo: { owner: string; link: string } | undefined;
-      if (friend.current_activities && Object.keys(friend.current_activities).length > 0) {
-        // Try to get initiator's Discord from the event (if included)
-        const initiatorDiscord = event.tags.find((t) => t[0] === 'discord_link')?.[1];
-        if (initiatorDiscord) {
+
+      // Try to get sender's Discord from the event
+      const initiatorDiscord = event.tags.find((t) => t[0] === 'discord_link')?.[1];
+      if (initiatorDiscord) {
+        discordInfo = {
+          owner: friend.local_name,
+          link: initiatorDiscord,
+        };
+      } else {
+        // Fallback: use recipient's Discord if available
+        const userProfile = await storageManager.getUserProfile();
+        if (userProfile?.discord_info) {
           discordInfo = {
-            owner: friend.local_name,
-            link: initiatorDiscord,
+            owner: 'your',
+            link: userProfile.discord_info,
           };
-        } else if (friend.current_activities) {
-          // Fallback: check if friend has Discord configured (we'd need to get their profile)
-          // For now, we only use what's explicitly in the event
         }
       }
       
