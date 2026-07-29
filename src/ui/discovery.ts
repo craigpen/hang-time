@@ -30,7 +30,7 @@ export class DiscoveryTabController {
     modes: [],
     playtime: 'all',
   };
-  private currentSort: DiscoveryUIState['sortBy'] = 'most-friends';
+  private currentSort: DiscoveryUIState['sortBy'] = 'recent';
   private allFriends: Friend[] = [];
   private allGameMetadata: Map<number, GameMetadata> = new Map();
   private loading: boolean = false;
