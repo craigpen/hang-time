@@ -464,6 +464,34 @@ export class StorageManager {
   }
 
   // ============================================================================
+  // FRIEND PROFILES
+  // ============================================================================
+
+  /**
+   * Get all cached friend profiles (pubkey -> {discord_link})
+   */
+  async getFriendProfiles(): Promise<Record<string, { discord_link?: string }>> {
+    return this.get<Record<string, { discord_link?: string }>>(STORAGE_KEYS.FRIEND_PROFILES, {});
+  }
+
+  /**
+   * Store a friend's profile data
+   */
+  async setFriendProfile(pubkey: string, profile: { discord_link?: string }): Promise<void> {
+    const profiles = await this.getFriendProfiles();
+    profiles[pubkey] = profile;
+    await this.set(STORAGE_KEYS.FRIEND_PROFILES, profiles);
+  }
+
+  /**
+   * Get a specific friend's profile
+   */
+  async getFriendProfile(pubkey: string): Promise<{ discord_link?: string } | null> {
+    const profiles = await this.getFriendProfiles();
+    return profiles[pubkey] || null;
+  }
+
+  // ============================================================================
   // OAUTH & CONFIG
   // ============================================================================
 

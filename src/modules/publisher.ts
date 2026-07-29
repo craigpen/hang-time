@@ -73,6 +73,54 @@ export class ActivityPublisher {
     }
   }
 
+  /**
+   * Publish user profile information (kind 0)
+   * Contains Discord link and other profile metadata
+   */
+  async publishProfile(): Promise<void> {
+    try {
+      const profile = await this.storageManager.getUserProfile();
+      if (!profile) {
+        console.debug('[Publisher] No profile to publish');
+        return;
+      }
+
+      const pubkey = await this.identityManager.getPubkey();
+      const created_at = Math.floor(Date.now() / 1000);
+
+      // Build profile tags
+      const tags: Array<[string, string]> = [];
+      if (profile.discord_info) {
+        tags.push(['discord_link', profile.discord_info]);
+      }
+
+      // Create kind 0 profile event
+      const event: NostrEvent = {
+        id: '',
+        pubkey,
+        created_at,
+        kind: 0,
+        tags,
+        content: '', // Kind 0 typically has empty content for profile data in tags
+      };
+
+      // Compute event ID and sign
+      const eventData = [0, pubkey, created_at, 0, event.tags, event.content];
+      const canonicalJson = JSON.stringify(eventData);
+      const eventId = await encryptionManager.sha256(canonicalJson);
+      event.id = eventId.substring(0, 64);
+      event.sig = encryptionManager.signEvent(event.id, await this.identityManager.getSecretKey());
+
+      // Publish to relays
+      console.log(`[Publisher] 📤 Publishing kind-0 profile (discord: ${profile.discord_info ? 'yes' : 'no'})`);
+      const config = profile?.publisher_config;
+      await this.relayPool.publish(event, config);
+      console.debug('[Publisher] Profile published successfully');
+    } catch (error) {
+      console.error('[Publisher] Failed to publish profile:', error);
+    }
+  }
+
   async publishCycle(): Promise<void> {
     try {
       const profile = await this.storageManager.getUserProfile();

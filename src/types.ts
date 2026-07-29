@@ -314,6 +314,7 @@ export const STORAGE_KEYS = {
   MY_GAME_LIBRARY: 'hang_time_my_game_library',
   FRIEND_GAME_LIBRARIES: 'hang_time_friend_game_libraries',
   GAME_METADATA_CACHE: 'hang_time_game_metadata_cache',
+  FRIEND_PROFILES: 'hang_time_friend_profiles',
   MESSAGES: (friendId: string) => `hang_time_messages_${friendId}`,
   ACTIVITY_HISTORY: (friendId: string) => `hang_time_activity_history_${friendId}`,
 } as const;
