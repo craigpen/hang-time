@@ -2149,7 +2149,7 @@ body {
   height: 64px;
   border-radius: 4px;
   flex-shrink: 0;
-  object-fit: cover;
+  object-fit: contain;
   background-color: var(--bg-tertiary);
 }
 
