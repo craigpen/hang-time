@@ -8,6 +8,7 @@ import { StorageManager } from '../modules/storage';
 import { GameLibraryManager } from '../modules/game-library';
 import { MetadataFetcher } from '../modules/metadata-fetcher';
 import { DiscoveryTabController } from './discovery';
+import { showInviteModal } from './invite-modal-builder';
 
 /**
  * Simple toast notification manager
@@ -2433,7 +2434,7 @@ export class PopupController {
   }
 
   private async _inviteToActivity(activity: Activity): Promise<void> {
-    console.debug('[Popup] Opening invite modal for:', activity.service);
+    console.debug('[Popup] Opening invite modal for:', activity.content);
     try {
       const friendsResponse = await chrome.runtime.sendMessage({
         type: 'GET_ALL_ACTIVITIES',
@@ -2452,94 +2453,14 @@ export class PopupController {
         return;
       }
 
-      this._showInviteModal(activity, activeFriends);
+      await showInviteModal(activeFriends, {
+        title: activity.content,
+        onInvite: (friendIds) => this._sendInvitesToFriends(activity, friendIds),
+      });
     } catch (error) {
       console.error('[Popup] Failed to open invite modal:', error);
       this._showError('Failed to open invite modal');
     }
-  }
-
-  private _showInviteModal(activity: Activity, friends: Friend[]): void {
-    // Create modal overlay
-    const modal = document.createElement('div');
-    modal.className = 'invite-modal-overlay';
-
-    const modalContent = document.createElement('div');
-    modalContent.className = 'invite-modal-content';
-
-    // Header
-    const header = document.createElement('div');
-    header.className = 'invite-modal-header';
-    const title = document.createElement('h3');
-    title.textContent = `Invite friends to ${activity.content}`;
-    header.appendChild(title);
-    modalContent.appendChild(header);
-
-    // Friends list with checkboxes
-    const friendsList = document.createElement('div');
-    friendsList.className = 'invite-friends-list';
-
-    const selectedFriends = new Set<string>();
-
-    // Create buttons first so we can update them from checkbox changes
-    const buttons = document.createElement('div');
-    buttons.className = 'invite-modal-buttons';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'btn-secondary';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.addEventListener('click', () => modal.remove());
-
-    const inviteBtn = document.createElement('button');
-    inviteBtn.className = 'btn-primary';
-    inviteBtn.textContent = 'Invite';
-    inviteBtn.disabled = true; // Disabled by default
-    inviteBtn.addEventListener('click', async () => {
-      if (selectedFriends.size > 0) {
-        inviteBtn.disabled = true;
-        inviteBtn.textContent = 'Sending...';
-        await this._sendInvitesToFriends(activity, Array.from(selectedFriends));
-        modal.remove();
-      }
-    });
-
-    // Create friend checkboxes
-    for (const friend of friends) {
-      const friendCheckbox = document.createElement('label');
-      friendCheckbox.className = 'invite-friend-item';
-
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.value = friend.id;
-      checkbox.addEventListener('change', (e) => {
-        if ((e.target as HTMLInputElement).checked) {
-          selectedFriends.add(friend.id);
-        } else {
-          selectedFriends.delete(friend.id);
-        }
-        // Enable invite button when at least one friend is selected
-        inviteBtn.disabled = selectedFriends.size === 0;
-      });
-
-      const nameSpan = document.createElement('span');
-      nameSpan.textContent = friend.local_name;
-
-      friendCheckbox.appendChild(checkbox);
-      friendCheckbox.appendChild(nameSpan);
-      friendsList.appendChild(friendCheckbox);
-    }
-
-    modalContent.appendChild(friendsList);
-
-    buttons.appendChild(cancelBtn);
-    buttons.appendChild(inviteBtn);
-
-    buttons.appendChild(cancelBtn);
-    buttons.appendChild(inviteBtn);
-    modalContent.appendChild(buttons);
-
-    modal.appendChild(modalContent);
-    document.body.appendChild(modal);
   }
 
   private _showAcceptInviteModal(activity: Activity, friendId: string): void {
