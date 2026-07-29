@@ -2199,9 +2199,7 @@ body {
 }
 
 .game-genres span {
-  background-color: var(--bg-secondary);
-  padding: 2px 6px;
-  border-radius: 2px;
+  color: var(--text-tertiary);
 }
 
 .game-friends {
