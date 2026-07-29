@@ -113,21 +113,36 @@ export class NotificationManager {
 
       const subject = `${friendName} invited you to ${verb} ${activityName}`;
       let bodyMessage = '';
+      const buttons: Array<{ title: string }> = [];
 
       if (discordInfo) {
-        bodyMessage = `Coordinate on ${discordInfo.owner}'s Discord: ${discordInfo.link}`;
+        bodyMessage = `Coordinate on ${discordInfo.owner}'s Discord`;
+        buttons.push({ title: 'Open Discord' });
       } else {
         bodyMessage = 'Configure Discord in settings for voice/chat coordination';
       }
 
-      chrome.notifications.create(`invite_${friendId}_${Date.now()}`, {
+      const notificationId = `invite_${friendId}_${Date.now()}`;
+      chrome.notifications.create(notificationId, {
         type: 'basic',
         iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
         title: subject,
         message: bodyMessage,
         contextMessage: 'Click to join via Hang Time',
+        buttons,
         requireInteraction: true,
       });
+
+      // Setup button click handler if Discord link exists
+      if (discordInfo) {
+        chrome.notifications.onButtonClicked.addListener((clickedNotificationId, buttonIndex) => {
+          if (clickedNotificationId === notificationId && buttonIndex === 0) {
+            // Open Discord link
+            chrome.tabs.create({ url: discordInfo.link, active: true });
+            chrome.notifications.clear(notificationId);
+          }
+        });
+      }
 
       console.debug('[Notifications] Invite notification sent for', friendName);
     } catch (error) {
