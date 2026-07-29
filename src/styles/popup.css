@@ -1945,8 +1945,8 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  background-color: var(--accent-primary);
-  color: var(--text-on-accent);
+  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+  color: white;
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 0.85em;
