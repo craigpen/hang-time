@@ -111,9 +111,9 @@ export class IdentityManager {
       },
       publisher_config: {
         enabled: true,
-        size: 'full',
+        size: 'atomic',
         scope: 'updates',
-        rate_ms: 12000,
+        rate_ms: 24000,
         relays: {
           'nos.lol': true,
           'relay.damus.io': true,
