@@ -30,6 +30,14 @@ export class IdentityManager {
     const profile = await this.storage.getUserProfile();
     if (profile?.memorable_identifier) {
       this.identifierCache = profile.memorable_identifier;
+
+      // Migration: Enable join_suggestion for existing users (was disabled by default before)
+      if (profile.notification_preferences?.join_suggestion === false) {
+        console.debug('[Identity] Migrating user profile: enabling join_suggestion notifications');
+        profile.notification_preferences.join_suggestion = true;
+        await this.storage.setUserProfile(profile);
+      }
+
       return profile.memorable_identifier;
     }
 
@@ -99,7 +107,7 @@ export class IdentityManager {
       notification_preferences: {
         friend_online: true,
         new_message: true,
-        join_suggestion: false,
+        join_suggestion: true,
       },
       publisher_config: {
         enabled: true,
