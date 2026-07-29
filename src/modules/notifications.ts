@@ -19,8 +19,8 @@ export class NotificationManager {
    */
   async notifyFriendOnline(friendId: string, friendName: string, activity: string): Promise<void> {
     try {
-      const settings = await this.storage.getSettings();
-      if (!settings.notification_preferences?.friend_online) {
+      const profile = await this.storage.getUserProfile();
+      if (!profile?.notification_preferences?.friend_online) {
         return;
       }
 
@@ -45,9 +45,9 @@ export class NotificationManager {
   async notifyNewMessage(friendId: string, friendName: string, messagePreview: string): Promise<void> {
     try {
       console.debug(`[Notifications] notifyNewMessage called for ${friendName}`);
-      const settings = await this.storage.getSettings();
-      console.debug(`[Notifications] new_message setting:`, settings.notification_preferences?.new_message);
-      if (!settings.notification_preferences?.new_message) {
+      const profile = await this.storage.getUserProfile();
+      console.debug(`[Notifications] new_message setting:`, profile?.notification_preferences?.new_message);
+      if (!profile?.notification_preferences?.new_message) {
         console.debug(`[Notifications] new_message disabled, returning`);
         return;
       }
@@ -73,8 +73,8 @@ export class NotificationManager {
    */
   async suggestJoin(friendId: string, friendName: string, activity: string): Promise<void> {
     try {
-      const settings = await this.storage.getSettings();
-      if (!settings.notification_preferences?.join_suggestion) {
+      const profile = await this.storage.getUserProfile();
+      if (!profile?.notification_preferences?.join_suggestion) {
         return;
       }
 
@@ -106,8 +106,8 @@ export class NotificationManager {
     discordInfo?: { owner: string; link: string }
   ): Promise<void> {
     try {
-      const settings = await this.storage.getSettings();
-      if (!settings.notification_preferences?.join_suggestion) {
+      const profile = await this.storage.getUserProfile();
+      if (!profile?.notification_preferences?.join_suggestion) {
         return;
       }
 
