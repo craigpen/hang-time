@@ -1916,22 +1916,8 @@ body {
 
 .discovery-controls {
   display: flex;
-  gap: 24px;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.control-group {
-  display: flex;
   gap: 8px;
   align-items: center;
-}
-
-.control-label {
-  font-size: 0.9em;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
 }
 
 .filters-btn {
@@ -1995,8 +1981,8 @@ body {
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9em;
-  flex-shrink: 0;
   transition: all 0.2s;
+  max-width: 160px;
 }
 
 .sort-dropdown:hover {
