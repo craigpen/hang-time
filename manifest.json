@@ -16,6 +16,7 @@
     "https://api.spotify.com/*",
     "https://api.twitch.tv/*",
     "https://api.steampowered.com/*",
+    "https://store.steampowered.com/*",
     "https://accounts.spotify.com/*",
     "https://id.twitch.tv/*",
     "wss://relay.damus.io/*",
