@@ -148,6 +148,14 @@ async function initializeExtension(): Promise<void> {
     gameLibraryManager.setNostrDependencies(relayPool, identityManager);
     console.debug('[Background] Game library manager Nostr dependencies set');
 
+    // Fetch user's game library (enabled by default for MVP)
+    try {
+      await gameLibraryManager.fetchMyGameLibrary();
+      console.debug('[Background] Fetched user game library');
+    } catch (error) {
+      console.warn('[Background] Failed to fetch game library:', error);
+    }
+
     // Initialize metadata fetcher and start background fetcher
     initializeMetadataFetcher(storageManager);
     console.debug('[Background] Metadata fetcher initialized');
