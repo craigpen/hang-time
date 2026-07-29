@@ -2482,7 +2482,7 @@ export class PopupController {
     const header = document.createElement('div');
     header.className = 'invite-modal-header';
     const title = document.createElement('h3');
-    title.textContent = `${this._truncateActivityContent(activity.content)}`;
+    title.textContent = activity.content;
     const subtitle = document.createElement('p');
     subtitle.style.fontSize = '0.9em';
     subtitle.style.color = 'var(--text-tertiary)';

@@ -1771,6 +1771,9 @@ body {
   margin: 0;
   font-size: 1.1em;
   color: var(--text-primary);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .invite-friends-list {
