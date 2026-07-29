@@ -1998,13 +1998,17 @@ body {
 .sort-dropdown {
   padding: 6px 10px;
   background-color: var(--bg-tertiary);
-  color: var(--text-primary);
+  color: transparent;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9em;
   transition: all 0.2s;
   max-width: 160px;
+}
+
+.sort-dropdown:focus {
+  color: var(--text-primary);
 }
 
 .sort-dropdown:hover {
