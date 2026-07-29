@@ -1,0 +1,108 @@
+[
+  {
+    "testName": "poll=500ms_pub=12000ms",
+    "timestamp": 2471.6689,
+    "config": {
+      "pollRateMs": 500,
+      "publishRateMs": 12000,
+      "batchSize": 10,
+      "compression": false,
+      "deltaPublishing": false,
+      "uiRefreshMs": 3000
+    },
+    "results": {
+      "localActivityLatency": {
+        "p50": 3551.5200000000004,
+        "p95": 3562.8986000000004,
+        "p99": 3562.8986000000004,
+        "min": 3549.1513,
+        "max": 3562.8986000000004,
+        "mean": 3554.5233000000003,
+        "samples": 3
+      },
+      "remoteActivityLatency": {
+        "p50": 3151.495500000001,
+        "p95": 3151.495500000001,
+        "p99": 3151.495500000001,
+        "min": 3151.495500000001,
+        "max": 3151.495500000001,
+        "mean": 3151.495500000001,
+        "samples": 1
+      },
+      "publishSuccess": {
+        "successRate": 100,
+        "failures": 0,
+        "rateLimitErrors": 0,
+        "timeoutErrors": 0,
+        "otherErrors": 0
+      },
+      "completeness": 99.2896845043465,
+      "resourceUsage": {
+        "pollsPerSecond": 0,
+        "cpuMs": 6907.532700000001,
+        "memoryMb": 30.521257210834754,
+        "networkCallsPerSecond": 0.1,
+        "dataVolumeKb": 0.00146484375
+      },
+      "relayHealth": {
+        "connectedRelays": 3,
+        "totalRelays": 3,
+        "avgResponseTimeMs": 20.909966666667213,
+        "connectionDrops": 0
+      }
+    }
+  },
+  {
+    "testName": "poll=1000ms_pub=12000ms",
+    "timestamp": 7479.7504,
+    "config": {
+      "pollRateMs": 1000,
+      "publishRateMs": 12000,
+      "batchSize": 10,
+      "compression": false,
+      "deltaPublishing": false,
+      "uiRefreshMs": 3000
+    },
+    "results": {
+      "localActivityLatency": {
+        "p50": 4069.0050999999985,
+        "p95": 4085.0685999999987,
+        "p99": 4085.0685999999987,
+        "min": 4041.1886999999997,
+        "max": 4085.0685999999987,
+        "mean": 4065.0874666666655,
+        "samples": 3
+      },
+      "remoteActivityLatency": {
+        "p50": 3068.2098000000005,
+        "p95": 3068.2098000000005,
+        "p99": 3068.2098000000005,
+        "min": 3068.2098000000005,
+        "max": 3068.2098000000005,
+        "mean": 3068.2098000000005,
+        "samples": 1
+      },
+      "publishSuccess": {
+        "successRate": 100,
+        "failures": 0,
+        "rateLimitErrors": 0,
+        "timeoutErrors": 0,
+        "otherErrors": 0
+      },
+      "completeness": 95.44285263193264,
+      "resourceUsage": {
+        "pollsPerSecond": 0,
+        "cpuMs": 7631.736099999998,
+        "memoryMb": 51.758872952717155,
+        "networkCallsPerSecond": 0.1,
+        "dataVolumeKb": 0.00146484375
+      },
+      "relayHealth": {
+        "connectedRelays": 3,
+        "totalRelays": 3,
+        "avgResponseTimeMs": 31.05673333333228,
+        "connectionDrops": 0
+      }
+    }
+  }
+]
