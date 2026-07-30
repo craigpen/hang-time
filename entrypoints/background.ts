@@ -20,7 +20,7 @@ import { SteamService } from '../src/modules/services/steam';
 import { SpotifyService } from '../src/modules/services/spotify';
 import { TwitchService } from '../src/modules/services/twitch';
 import { initializeMetadataFetcher, metadataFetcher } from '../src/modules/metadata-fetcher';
-import { getActivityVerb } from '../src/modules/activity-utils';
+import { getActivityVerb, generateActivityId } from '../src/modules/activity-utils';
 import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } from '../src/types';
 
 // ============================================================================
@@ -53,46 +53,84 @@ chrome.runtime.onInstalled.addListener(async (details) => {
       console.log('[Background] Generated user identifier');
     }
   } else if (details.reason === 'update') {
-    console.log('[Background] Extension updated, re-injecting content scripts...');
-    await _reInjectContentScripts();
+    console.log('[Background] Extension updated, registering content scripts...');
+    await _registerContentScripts();
   }
 });
 
 /**
- * Re-inject content scripts into tabs that match our content script URLs
- * This ensures orphaned scripts are replaced with fresh ones
+ * Track if we received a fresh content script connection after startup
  */
-async function _reInjectContentScripts(): Promise<void> {
+let receivedFreshContentScriptConnection = false;
+
+/**
+ * Check if content script reconnected after startup
+ * If an activity exists but no fresh script has connected within 3 seconds, mark as disconnected
+ */
+async function _checkForOrphanedActivity(): Promise<void> {
+  console.log(`[Background] ⏰ 3-second check: Fresh connection flag = ${receivedFreshContentScriptConnection}`);
+
+  if (receivedFreshContentScriptConnection) {
+    console.log('[Background] ✅ Fresh script already connected, NOT marking as disconnected');
+    return;
+  }
+
+  console.log('[Background] ⚠️  No fresh script connected yet, will mark as disconnected');
+
+  // No fresh connection - check if there's an activity to mark as disconnected
   try {
-    // Query only tabs that match our content script patterns
-    const tabs = await chrome.tabs.query({
-      url: [
-        'https://www.youtube.com/*',
-        'https://youtu.be/*',
-        'https://www.netflix.com/*',
-        'https://www.twitch.tv/*',
-      ],
-    });
+    const myActivities = await storageManager.getMyActivities();
 
-    console.debug(`[Background] Found ${tabs.length} tabs matching content script patterns`);
+    // Find video-tab activity
+    const videoActivity = Object.values(myActivities).find(
+      (activity: any) => activity?.service === 'video-tab'
+    ) as any;
 
-    for (const tab of tabs) {
-      if (!tab.id) continue;
+    console.log('[Background] Video activity exists:', !!videoActivity, 'state:', videoActivity?.state);
 
-      try {
-        // Re-inject content script
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['dist/chrome-mv3/content-script.js'],
-        });
-        console.debug(`[Background] Re-injected content script into tab ${tab.id}`);
-      } catch (err) {
-        // Tab may no longer exist or injection failed for other reasons
-        console.debug(`[Background] Could not re-inject into tab ${tab.id}:`, err instanceof Error ? err.message : err);
-      }
+    if (videoActivity && videoActivity.state !== 'disconnected') {
+      await _markActivityAsDisconnected(0);
     }
   } catch (err) {
-    console.error('[Background] Failed to re-inject content scripts:', err);
+    console.error('[Background] Error checking orphaned activity:', err);
+  }
+}
+
+/**
+ * Register content scripts persistently for all tabs
+ * Uses registerContentScripts() which survives extension restart/reload
+ */
+async function _registerContentScripts(): Promise<void> {
+  try {
+    if (!chrome.scripting) {
+      console.warn('[Background] chrome.scripting not available');
+      return;
+    }
+
+    // Unregister existing scripts if they exist
+    try {
+      await chrome.scripting.unregisterContentScripts({
+        ids: ['hang-time-video-tracker'],
+      });
+      console.debug('[Background] Unregistered existing content scripts');
+    } catch (err) {
+      // Scripts might not be registered yet, that's ok
+      console.debug('[Background] No existing scripts to unregister');
+    }
+
+    // Register content scripts persistently
+    await chrome.scripting.registerContentScripts([
+      {
+        id: 'hang-time-video-tracker',
+        matches: ['https://*/*', 'http://*/*'],
+        js: ['content-script.js'],
+        runAt: 'document_end',
+      },
+    ]);
+
+    console.log('[Background] ✅ Content scripts registered persistently');
+  } catch (err) {
+    console.error('[Background] ❌ Failed to register content scripts:', err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -119,25 +157,22 @@ async function initializeExtension(): Promise<void> {
 
     // Re-inject content scripts if we detect orphaned scripts from before restart
     // Check if there's activity data in storage (indicates scripts were running before restart)
+    // Register content scripts persistently on startup
+    // This ensures scripts are available for all current and future tabs
     try {
-      const myActivities = await storageManager.getMyActivities();
-      const hasRecentActivity = Object.values(myActivities).some((activity: any) => {
-        // Check if activity has a tab-based provenance and was active recently
-        const isTabBased = activity.service?.includes('-tab');
-        const isRecent = (Date.now() - activity.timestamp) < 60000; // within last 60 seconds
-        return isTabBased && isRecent;
-      });
-
-      if (hasRecentActivity) {
-        console.log('[Background] Detected recent tab activity—re-injecting content scripts for orphaned scripts...');
-        await _reInjectContentScripts();
-      } else {
-        console.debug('[Background] No recent tab activity detected, skipping re-injection');
-      }
+      await _registerContentScripts();
     } catch (error) {
-      console.debug('[Background] Content script re-injection check:', error);
-      // Not fatal if check fails
+      console.error('[Background] Failed to register content scripts on startup:', error);
     }
+
+    // Check after 3 seconds if fresh content script connected
+    // If not, mark existing video-tab activity as disconnected (means it's from orphaned script)
+    console.log('[Background] Scheduling orphaned activity check in 3 seconds...');
+    setTimeout(async () => {
+      console.log('[Background] 3-second timeout fired, checking for orphaned activity');
+      await _checkForOrphanedActivity();
+    }, 3000);
+
 
     try {
       console.debug('[Background] Initializing identity manager...');
@@ -301,9 +336,6 @@ async function initializeExtension(): Promise<void> {
     // Start periodic integrity checks and cleanup
     _startPeriodicCleanup();
 
-    // Start content script health monitoring
-    _startContentScriptHealthCheck();
-
     // Start integration health monitoring
     _startIntegrationHealthCheck();
   } catch (error) {
@@ -331,16 +363,12 @@ function _startPeriodicCleanup(): void {
       // Remove stale Netflix titles (24+ hours old)
       const staleNetflixTitles = await storageManager.removeStaleNetflixTitle();
 
-      // Clean up stale video state and health entries from closed tabs
-      const staleVideoStates = await _cleanupStaleStorageEntries();
-
-      if (corruptedRemoved > 0 || ghostsRemoved > 0 || expiredInvites > 0 || staleNetflixTitles > 0 || staleVideoStates > 0) {
+      if (corruptedRemoved > 0 || ghostsRemoved > 0 || expiredInvites > 0 || staleNetflixTitles > 0) {
         console.log('[Background] 🧹 Cleanup cycle complete:', {
           corruptedRemoved,
           ghostsRemoved,
           expiredInvites,
           staleNetflixTitles,
-          staleVideoStates,
         });
       } else {
         console.debug('[Background] Cleanup cycle: no issues found');
@@ -353,120 +381,6 @@ function _startPeriodicCleanup(): void {
   console.debug('[Background] Periodic cleanup started (every 5 minutes)');
 }
 
-/**
- * Clean up stale storage entries from content scripts
- * Removes video state and health data for closed tabs and stale entries
- */
-async function _cleanupStaleStorageEntries(): Promise<number> {
-  const storage = await chrome.storage.local.get(null);
-  const openTabs = await chrome.tabs.query({});
-  const openTabIds = new Set(openTabs.map(t => t.id));
-  const now = Date.now();
-  const STALE_THRESHOLD_MS = 60 * 1000; // 1 minute
-
-  let cleaned = 0;
-  const keysToRemove: string[] = [];
-
-  for (const key in storage) {
-    // Check for stale video state (older than 1 minute)
-    if (key.startsWith('content_script_video_state_')) {
-      const value = storage[key];
-      if (value?.timestamp && now - value.timestamp > STALE_THRESHOLD_MS) {
-        keysToRemove.push(key);
-        cleaned++;
-      }
-    }
-
-    // Check for stale health entries (handled separately but check here too)
-    if (key.startsWith('content_script_health_')) {
-      const value = storage[key];
-      if (value?.timestamp && now - value.timestamp > 2 * 60 * 1000) {
-        keysToRemove.push(key);
-        cleaned++;
-      }
-    }
-  }
-
-  if (keysToRemove.length > 0) {
-    await chrome.storage.local.remove(keysToRemove);
-  }
-
-  return cleaned;
-}
-
-/**
- * Content Script Health Monitoring
- * Listens to storage updates from content scripts
- * Tracks which services are healthy
- */
-function _startContentScriptHealthCheck(): void {
-  // Listen to storage changes from content scripts
-  chrome.storage.onChanged.addListener(async (changes, areaName) => {
-    if (areaName !== 'local') return;
-
-    // Check for health updates from content scripts
-    for (const key in changes) {
-      if (key.startsWith('content_script_health_')) {
-        const service = key.replace('content_script_health_', '') as 'netflix-tab' | 'youtube-tab' | 'twitch-tab';
-        const health = changes[key].newValue;
-
-        if (health && health.service && health.timestamp) {
-          console.debug(`[Background] 📊 Health update from ${service}: ${health.visibility}`);
-        }
-      }
-
-      // Check for activity updates from content scripts
-      if (key.startsWith('content_script_activity_')) {
-        const service = key.replace('content_script_activity_', '') as 'netflix-tab' | 'youtube-tab' | 'twitch-tab';
-        const activity = changes[key].newValue;
-
-        if (activity && activity.service && activity.content) {
-          console.debug(`[Background] 📺 Activity update from ${service}: ${activity.content}`);
-
-          // Update my_activities with the complete activity data
-          if (storageManager) {
-            try {
-              const activities = await storageManager.getMyActivities();
-              const activityId = activity.id || `${service}-${activity.timestamp}`;
-              activities[activityId] = {
-                id: activityId,
-                service: activity.service,
-                content: activity.content,
-                state: activity.state || 'playing',
-                audio: activity.audio || 'on',
-                timestamp: activity.timestamp,
-                freshness_timestamp: activity.timestamp,
-                is_fresh: true,
-                url: activity.url, // Include URL so ghost detection works
-                metadata: {
-                  progress: activity.currentTime || 0,
-                  duration: activity.duration || 0,
-                },
-              };
-              await storageManager.setMyActivities(activities);
-            } catch (error) {
-              console.error(`[Background] Failed to update activities from storage:`, error);
-            }
-          }
-        }
-      }
-    }
-  });
-
-  // Periodic cleanup of stale entries (every 60 seconds)
-  setInterval(async () => {
-    try {
-      const staleRemoved = await storageManager.clearStaleContentScriptHealth();
-      if (staleRemoved > 0) {
-        console.debug(`[Background] Cleaned up ${staleRemoved} stale health entries`);
-      }
-    } catch (error) {
-      console.error('[Background] Health cleanup failed:', error);
-    }
-  }, 60000);
-
-  console.log('[Background] Content script health monitoring started (storage-based)');
-}
 
 /**
  * Integration Health Monitoring (Steam, Spotify, Twitch, Discord)
@@ -535,33 +449,35 @@ function _startIntegrationHealthCheck(): void {
 // ============================================================================
 // MESSAGE HANDLING
 // ============================================================================
+// PORT TRACKING - Track which tabs have active content script connections
+// ============================================================================
 
-/**
- * Port connection handler for content scripts (persistent connections)
- * Allows content scripts to reconnect after extension reload
- */
-chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
-  console.log(`[Background] 🔌 Port connected: ${port.name}`);
-
-  // Port disconnection is now a no-op (no longer using port for communication)
-  port.onDisconnect.addListener(() => {
-    console.debug(`[Background] Content script port disconnected: ${port.name}`);
-  });
-});
+const activeContentScriptPorts = new Map<number, chrome.runtime.Port>();
 
 /**
  * Port-based connection handler for content script ↔ background communication
- * Allows persistent connection that survives across extension restarts
+ * Tracks connections and detects when content scripts disconnect (e.g., after extension restart)
  */
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name.startsWith('content-script-')) {
     const service = port.name.replace('content-script-', '');
-    console.log(`[Background] 🔌 Content script connected (${service})`);
+    const tabId = port.sender?.tabId;
+
+    if (tabId !== undefined) {
+      activeContentScriptPorts.set(tabId, port);
+      receivedFreshContentScriptConnection = true; // Mark that we got a fresh connection
+      console.log(`[Background] 🔌 Content script FRESH connection (${service}) for tab ${tabId} - FLAG SET TO TRUE`);
+    } else {
+      console.warn(`[Background] Content script connected but no tab ID: ${service}`);
+    }
 
     port.onMessage.addListener(async (message) => {
       try {
         if (message.type === 'CONTENT_SCRIPT_ACTIVITY') {
           await _handleContentScriptActivity(message.data?.key, message.data?.value);
+        } else if (message.type === 'CONTENT_SCRIPT_ORPHANED') {
+          console.log(`[Background] Content script orphaned for tab ${tabId}`);
+          _markActivityAsDisconnected(tabId);
         }
       } catch (error) {
         console.error(`[Background] Port message handler error:`, error);
@@ -569,7 +485,12 @@ chrome.runtime.onConnect.addListener((port) => {
     });
 
     port.onDisconnect.addListener(() => {
-      console.log(`[Background] 🔌 Content script disconnected (${service})`);
+      if (tabId !== undefined) {
+        activeContentScriptPorts.delete(tabId);
+        console.log(`[Background] 🔌 Content script disconnected (${service}) for tab ${tabId}`);
+        // Mark the tab's activity as disconnected since the content script is gone
+        _markActivityAsDisconnected(tabId);
+      }
     });
 
     // Send a ping to confirm connection
@@ -717,6 +638,11 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'CONTENT_SCRIPT_ACTIVITY':
       return _handleContentScriptActivity(message.data?.key, message.data?.value);
 
+    case 'CONTENT_SCRIPT_ORPHANED':
+      // Orphaned content script notifying that it lost context
+      await _markActivityAsDisconnected(0); // tabId unknown, but we only have one video-tab activity
+      return { success: true };
+
     default:
       return {
         success: false,
@@ -768,6 +694,20 @@ async function _getAllActivities(): Promise<ExtensionResponse> {
   try {
     // Get my activities from storage
     const myActivities = await storageManager.getMyActivities();
+
+    // Debug: log what we're returning for video-tab activities
+    Object.entries(myActivities).forEach(([id, activity]: [string, any]) => {
+      if (activity && activity.service === 'video-tab') {
+        console.log(`[Background] ✅ Returning video-tab activity: "${activity.content}"`, {
+          state: activity.state,
+          disconnected_reason: activity.metadata?.disconnected_reason,
+          has_metadata: !!activity.metadata,
+          progress: activity.metadata?.progress,
+          duration: activity.metadata?.duration,
+          favicon: activity.metadata?.favicon,
+        });
+      }
+    });
 
     // Get all friends
     const friendManager = getFriendManager();
@@ -1638,10 +1578,11 @@ async function _handleContentScriptActivity(key: string, value: any): Promise<Ex
       }
     }
 
-    // Write complete object to storage (never partial updates)
-    await chrome.storage.local.set({ [key]: value });
-    console.debug(`[Background] ✅ Wrote to storage: ${key}`, {
-      fields: value ? Object.keys(value) : 'null',
+    // Store content script activity directly in MY_ACTIVITIES collection (single source of truth)
+    const activityId = value.id || generateActivityId(value.service, value.url || '');
+    await storageManager.updateMyActivity(activityId, value);
+    console.debug(`[Background] ✅ Stored activity in MY_ACTIVITIES:`, {
+      id: activityId,
       service: value?.service,
       content: value?.content?.substring(0, 50)
     });
@@ -1661,6 +1602,45 @@ async function _handleContentScriptActivity(key: string, value: any): Promise<Ex
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
+  }
+}
+
+/**
+ * Mark a tab's content script activity as disconnected
+ * Called when the content script port disconnects (e.g., extension restart, context lost)
+ */
+async function _markActivityAsDisconnected(tabId: number): Promise<void> {
+  try {
+    // Get all activities from MY_ACTIVITIES collection
+    const myActivities = await storageManager.getMyActivities();
+    console.log(`[Background] Got ${Object.keys(myActivities).length} activities to check`);
+
+    // Find video-tab activity by service type
+    for (const [activityId, activity] of Object.entries(myActivities)) {
+      if ((activity as any)?.service === 'video-tab') {
+        console.log(`[Background] Found video-tab activity with ID: ${activityId}, current state: ${(activity as any)?.state}`);
+
+        // Mark as disconnected
+        const disconnectedActivity: Activity = {
+          ...activity,
+          state: 'disconnected',
+          metadata: {
+            ...(activity as any)?.metadata,
+            disconnected_reason: 'Disconnected - reload tab',
+          },
+        };
+
+        console.log(`[Background] Updating activity to state: disconnected`);
+
+        // Update using StorageManager
+        await storageManager.updateMyActivity(activityId, disconnectedActivity);
+        console.log(`[Background] ✅ Marked video-tab activity as disconnected, new state: ${disconnectedActivity.state}`);
+        return;
+      }
+    }
+    console.log(`[Background] No video-tab activity found to mark as disconnected`);
+  } catch (err) {
+    console.error(`[Background] Failed to mark activity as disconnected:`, err);
   }
 }
 

@@ -1,8 +1,14 @@
+(function() {
+  console.log('[ContentScript] >>>>>> SCRIPT EXECUTING AT:', window.location.href, 'time:', new Date().toISOString());
+})();
+
 /**
  * Hang Time - Generic Video Content Script
  * Detects any <video> element on any platform
  * Works with YouTube, Netflix, Twitch, and potentially any video site
  */
+
+console.log('[ContentScript] Script loaded at:', window.location.href);
 
 import { generateActivityId } from '../src/modules/activity-utils';
 
@@ -25,9 +31,6 @@ class GenericVideoTracker {
 
     // Initial lookup for existing video elements
     this._findAndHookVideo();
-
-    // Set up periodic health reporting
-    this._setupHealthReporting();
   }
 
   private _setupDOMObserver(): void {
@@ -150,13 +153,6 @@ class GenericVideoTracker {
       return;
     }
 
-    // Rate limit duplicate reports (max 1 report per second)
-    const now = Date.now();
-    if (now - this.lastReportTimestamp < 1000) {
-      return;
-    }
-    this.lastReportTimestamp = now;
-
     // Get video metadata
     const title = this._getVideoTitle();
     const favicon = this._getFavicon();
@@ -166,7 +162,27 @@ class GenericVideoTracker {
     const currentTime = Math.floor(this.activeVideoElement.currentTime || 0);
     const isPaused = this.activeVideoElement.paused;
 
+    // Rate limit position updates (max 1 per second), but allow state changes immediately
+    const now = Date.now();
+    const positionChanged = Math.abs(currentTime - this.lastReportedTime) >= 2;
+    const timeSinceLastReport = now - this.lastReportTimestamp;
+
+    // Skip if: same position, still playing, and reported recently
+    if (!positionChanged && !isPaused && timeSinceLastReport < 1000) {
+      return;
+    }
+
+    this.lastReportTimestamp = now;
     this.lastReportedTime = currentTime;
+
+    // Skip Twitch homepage and non-stream pages (only report actual streams)
+    if (url.includes('twitch.tv')) {
+      const pathname = new URL(url).pathname;
+      if (pathname === '/' || pathname === '' || pathname.startsWith('/search') || pathname.startsWith('/directory')) {
+        console.debug('[ContentScript] Skipping Twitch non-stream page:', url);
+        return;
+      }
+    }
 
     // Filter out ads and very short videos (typically < 60 seconds)
     if (duration > 0 && duration < 60) {
@@ -207,7 +223,13 @@ class GenericVideoTracker {
           },
         });
         console.log(
-          `[ContentScript] ✅ Sent activity: ${title} (${currentTime}/${duration}s) favicon: ${favicon}`
+          `[ContentScript] ✅ Sent activity: ${title} (${currentTime}/${duration}s) favicon: ${favicon}`,
+          {
+            metadata: activity.metadata,
+            hasDuration: activity.metadata?.duration !== undefined,
+            hasProgress: activity.metadata?.progress !== undefined,
+            hasFavicon: activity.metadata?.favicon !== undefined,
+          }
         );
       } catch (err) {
         console.debug('[ContentScript] Port send failed:', err);
@@ -258,48 +280,6 @@ class GenericVideoTracker {
     return '/favicon.ico';
   }
 
-  private _setupHealthReporting(): void {
-    // Report health on visibility change
-    document.addEventListener('visibilitychange', () => {
-      console.log(`[ContentScript] Tab ${document.hidden ? 'hidden' : 'visible'}`);
-      this._reportHealth();
-    });
-
-    // Periodic health heartbeat every 30 seconds
-    const healthInterval = setInterval(() => {
-      if (!this._isContextValid()) {
-        clearInterval(healthInterval);
-        return;
-      }
-      this._reportHealth();
-    }, 30000);
-
-    // Initial health report
-    this._reportHealth();
-  }
-
-  private _reportHealth(): void {
-    const health = {
-      service: 'video-tab',
-      alive: true,
-      timestamp: Date.now(),
-      visibility: document.hidden ? 'hidden' : 'visible',
-    };
-
-    if ((window as any).hangTimePort) {
-      try {
-        (window as any).hangTimePort.postMessage({
-          type: 'CONTENT_SCRIPT_ACTIVITY',
-          data: {
-            key: 'content_script_health_video-tab',
-            value: health,
-          },
-        });
-      } catch (err) {
-        console.debug('[ContentScript] Health report failed:', err);
-      }
-    }
-  }
 
   private _isContextValid(): boolean {
     try {
@@ -333,6 +313,8 @@ class GenericVideoTracker {
 // GLOBAL INITIALIZATION
 // ============================================================================
 
+let globalMonitorInterval: NodeJS.Timeout | null = null;
+
 function isContextValid(): boolean {
   try {
     return !!chrome.runtime?.id;
@@ -342,15 +324,22 @@ function isContextValid(): boolean {
 }
 
 // Handle duplicate injections from orphaned scripts
+console.log('[ContentScript] Global flag at load:', !!(window as any).hangTimeExtensionLoaded);
 if ((window as any).hangTimeExtensionLoaded) {
-  console.log('[ContentScript] Old instance detected, triggering cleanup');
+  console.log('[ContentScript] Old instance detected, dispatching cleanup');
   window.dispatchEvent(new CustomEvent('CLEANUP_VIDEO_TRACKER'));
 } else {
+  console.log('[ContentScript] Fresh instance, setting flag');
   (window as any).hangTimeExtensionLoaded = true;
 }
 
 // Cleanup signal for orphaned scripts
 window.addEventListener('CLEANUP_VIDEO_TRACKER', () => {
+  console.log('[ContentScript] Cleanup event RECEIVED');
+  if (globalMonitorInterval) {
+    clearInterval(globalMonitorInterval);
+    globalMonitorInterval = null;
+  }
   (window as any).hangTimeExtensionLoaded = false;
 });
 
@@ -375,11 +364,33 @@ if (isContextValid()) {
   tracker.init();
 
   // Monitor context validity - cleanup if it becomes invalid
-  const monitorInterval = setInterval(() => {
+  globalMonitorInterval = setInterval(() => {
     if (!isContextValid()) {
       console.error('[ContentScript] Extension context lost—orphaned script detected');
       (window as any).hangTimeExtensionLoaded = false;
-      clearInterval(monitorInterval);
+
+      // Notify background that this script is going orphaned via sendMessage (more reliable than port)
+      try {
+        chrome.runtime.sendMessage(
+          {
+            type: 'CONTENT_SCRIPT_ORPHANED',
+            data: {
+              service: 'video-tab',
+              timestamp: Date.now(),
+            },
+          },
+          () => {
+            // Ignore response - this is fire-and-forget
+          }
+        );
+      } catch (err) {
+        console.debug('[ContentScript] Failed to notify background of orphaned state:', err);
+      }
+
+      if (globalMonitorInterval) {
+        clearInterval(globalMonitorInterval);
+        globalMonitorInterval = null;
+      }
     }
   }, 5000);
 } else {

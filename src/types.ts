@@ -96,7 +96,7 @@ export interface UserProfile {
   };
 }
 
-export type ServiceName = 'spotify-api' | 'twitch-api' | 'steam-api' | 'discord-api' | 'netflix-tab' | 'youtube-tab' | 'twitch-tab';
+export type ServiceName = 'spotify-api' | 'twitch-api' | 'steam-api' | 'discord-api' | 'video-tab';
 
 // ============================================================================
 // OAUTH & TOKENS
@@ -143,7 +143,7 @@ export interface Activity {
   service: ServiceName;
   content: string; // The title/name of what's playing (single source of truth)
   url?: string; // Direct link to the content
-  state?: 'playing' | 'paused' | 'stopped'; // Activity state: playing, paused, or stopped (removal signal)
+  state?: 'playing' | 'paused' | 'stopped' | 'disconnected'; // Activity state: playing, paused, stopped, or disconnected (content script lost connection)
   audio: 'on' | 'off'; // Audio state detected from tab.audible (deprecated, kept for compatibility)
   timestamp: number; // When activity was detected
   freshness_timestamp: number; // When data was last refreshed (for calculating age and freshness)
@@ -157,6 +157,8 @@ export interface Activity {
     thumbnailUrl?: string; // Image/thumbnail URL (for display)
     tabId?: number; // Chrome tab ID for tab-based services (netflix-tab, youtube-tab, twitch-tab)
     appid?: number; // Steam app ID for steam-api service
+    disconnected_reason?: string; // Reason why content script disconnected (for state === 'disconnected')
+    favicon?: string; // Dynamic favicon URL from content script
   };
 }
 

@@ -29,19 +29,30 @@ function extractStableId(service: string, url?: string): string {
     const search = urlObj.search;
 
     switch (service.toLowerCase()) {
-      case 'youtube-tab':
-        // Extract video ID from v parameter: watch?v=dQw4w9WgXcQ
-        const videoIdMatch = search.match(/[?&]v=([^&]+)/);
-        if (videoIdMatch && videoIdMatch[1]) return videoIdMatch[1];
-        // Also try from URL path for youtu.be/xyz format
-        const shortUrlMatch = pathname.match(/^\/([^/?]+)/);
-        if (shortUrlMatch && shortUrlMatch[1]) return shortUrlMatch[1];
-        break;
-
-      case 'netflix-tab':
-        // Extract title ID from path: /watch/80057281
-        const netflixMatch = pathname.match(/\/watch\/(\d+)/);
-        if (netflixMatch && netflixMatch[1]) return netflixMatch[1];
+      case 'video-tab':
+        // Generic video detector - try to extract ID based on domain
+        // YouTube: extract video ID from v parameter or path
+        if (url.includes('youtube.com') || url.includes('youtu.be')) {
+          const videoIdMatch = search.match(/[?&]v=([^&]+)/);
+          if (videoIdMatch && videoIdMatch[1]) return videoIdMatch[1];
+          const shortUrlMatch = pathname.match(/^\/([^/?]+)/);
+          if (shortUrlMatch && shortUrlMatch[1]) return shortUrlMatch[1];
+        }
+        // Netflix: extract title ID from path
+        if (url.includes('netflix.com')) {
+          const netflixMatch = pathname.match(/\/watch\/(\d+)/);
+          if (netflixMatch && netflixMatch[1]) return netflixMatch[1];
+        }
+        // Twitch: extract channel name from path
+        if (url.includes('twitch.tv')) {
+          const channelMatch = pathname.match(/^\/([^/?]+)/);
+          if (channelMatch && channelMatch[1]) return channelMatch[1];
+        }
+        // Fallback: use hostname + some path component
+        if (url) {
+          const hostAndPath = `${urlObj.hostname}${pathname}`.replace(/\//g, '');
+          if (hostAndPath) return hostAndPath;
+        }
         break;
 
       case 'spotify-api':
@@ -111,13 +122,8 @@ export function getActivityVerb(service: string): 'play' | 'watch' | 'listen' {
       return 'play';
     case 'spotify-api':
       return 'listen';
-    case 'youtube-tab':
-    case 'youtube':
-    case 'netflix-tab':
-    case 'netflix':
+    case 'video-tab':
     case 'twitch-api':
-    case 'twitch-tab':
-    case 'twitch':
       return 'watch';
     default:
       return 'watch';

@@ -39,8 +39,7 @@ export class JoinHandler {
         await this._joinSteam(activity);
         break;
 
-      case 'netflix-tab':
-      case 'youtube-tab':
+      case 'video-tab':
         await this._joinVideo(activity);
         break;
 

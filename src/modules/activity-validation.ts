@@ -63,7 +63,7 @@ export function validateContent(content: unknown): string {
  * Validates that service field is valid
  */
 export function validateService(service: unknown): string {
-  const validServices = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'netflix-tab', 'youtube-tab', 'twitch-tab'];
+  const validServices = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'video-tab'];
 
   if (typeof service !== 'string') {
     throw new ValidationError('service', 'Must be a string', service);
@@ -202,6 +202,8 @@ export function validateActivity(data: Partial<Activity> & { provenance?: Activi
       lastAccessed: data.metadata?.lastAccessed,
       progress,
       duration,
+      domain: data.metadata?.domain,
+      favicon: data.metadata?.favicon,
       artist: data.metadata?.artist,
       thumbnailUrl: data.metadata?.thumbnailUrl,
       tabId: data.metadata?.tabId,

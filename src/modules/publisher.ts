@@ -12,7 +12,7 @@ import { encryptionManager } from './encryption';
 import { validateActivity, detectCorruption } from './activity-validation';
 import { GameLibraryManager } from './game-library';
 
-const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'netflix-tab', 'youtube-tab', 'twitch-tab'];
+const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'video-tab'];
 
 export class ActivityPublisher {
   private lastPublishedState: Partial<Record<string, Activity>> = {};

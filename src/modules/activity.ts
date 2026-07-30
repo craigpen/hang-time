@@ -79,7 +79,7 @@ export class ActivityDetector {
             provenance = 'LOCAL_TWITCH';
           }
 
-          // Validate through datastore
+          // Validate through datastore (createActivity handles create-or-replace)
           const validated = await datastore.createActivity({
             ...activity,
             provenance,
@@ -174,9 +174,7 @@ export class ActivityDetector {
       'twitch-api': false,
       'steam-api': false,
       'discord-api': false,
-      'netflix-tab': false,
-      'youtube-tab': false,
-      'twitch-tab': false,
+      'video-tab': true, // Default enabled for browser video detection
     };
 
     // Check each enabled OAuth service (Spotify, Twitch, Steam, Discord)

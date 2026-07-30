@@ -8,11 +8,14 @@
   "permissions": [
     "tabs",
     "storage",
+    "scripting",
     "webRequest",
     "activeTab",
     "notifications"
   ],
   "host_permissions": [
+    "https://*/*",
+    "http://*/*",
     "https://api.spotify.com/*",
     "https://api.twitch.tv/*",
     "https://api.steampowered.com/*",

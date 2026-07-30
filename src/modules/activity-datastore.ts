@@ -102,7 +102,12 @@ export class ActivityDatastore {
     // Store provenance separately
     await this.setProvenance(validated.id, provenance);
 
-    console.debug('[ActivityDatastore] Activity created with ID:', validated.id, 'provenance:', provenance);
+    console.debug('[ActivityDatastore] Activity created with ID:', validated.id, {
+      provenance,
+      hasProgress: !!validated.metadata?.progress,
+      hasDuration: !!validated.metadata?.duration,
+      metadata: validated.metadata,
+    });
     return validated;
   }
 
@@ -149,7 +154,12 @@ export class ActivityDatastore {
     activities[id] = validated;
     await this.storage.setMyActivities(activities);
 
-    console.debug('[ActivityDatastore] Activity updated:', id);
+    console.debug('[ActivityDatastore] Activity updated:', id, {
+      prevMetadata: current.metadata,
+      newMetadata: validated.metadata,
+      hasProgress: !!validated.metadata?.progress,
+      hasDuration: !!validated.metadata?.duration,
+    });
     return validated;
   }
 

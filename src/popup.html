@@ -217,36 +217,11 @@
       <!-- Browser Tabs Detection -->
       <div class="settings-section">
         <h3>Browser Tabs Detection</h3>
-        <div class="service-row">
-          <input type="checkbox" id="service-netflix-tab-popup" data-service="netflix-tab" class="service-toggle">
-          <div class="service-col1">
-            <img src="public/icons/netflix.png" alt="Netflix" class="service-icon">
-            <span class="service-name">Netflix</span>
-          </div>
-          <div class="service-col2">
-            <div class="service-status" id="status-netflix-tab-popup">Idle</div>
-          </div>
-        </div>
-        <div class="service-row">
-          <input type="checkbox" id="service-youtube-tab-popup" data-service="youtube-tab" class="service-toggle">
-          <div class="service-col1">
-            <img src="public/icons/youtube.png" alt="YouTube" class="service-icon">
-            <span class="service-name">YouTube</span>
-          </div>
-          <div class="service-col2">
-            <div class="service-status" id="status-youtube-tab-popup">Idle</div>
-          </div>
-        </div>
-        <div class="service-row">
-          <input type="checkbox" id="service-twitch-tab-popup" data-service="twitch-tab" class="service-toggle">
-          <div class="service-col1">
-            <img src="public/icons/twitch.png" alt="Twitch.tv" class="service-icon">
-            <span class="service-name">Twitch.tv</span>
-          </div>
-          <div class="service-col2">
-            <div class="service-status" id="status-twitch-tab-popup">Idle</div>
-          </div>
-        </div>
+        <label class="checkbox-label">
+          <input type="checkbox" id="service-video-tab-popup" data-service="video-tab" class="service-toggle">
+          <span>Detect video playback (YouTube, Netflix, Twitch, etc.)</span>
+        </label>
+        <p class="help-text">Automatically detect when you're watching videos and share with friends</p>
       </div>
 
       <!-- Game Discovery -->

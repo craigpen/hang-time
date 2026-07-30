@@ -37,19 +37,19 @@ describe('TimeSyncManager', () => {
 
   describe('publishTimeSync', () => {
     it('should publish time-sync event to relay pool', async () => {
-      await timeSyncManager.publishTimeSync('video123', 150, 3600, true, 'youtube-tab');
+      await timeSyncManager.publishTimeSync('video123', 150, 3600, true, 'video-tab');
 
       expect(mockRelayPool.publish).toHaveBeenCalled();
       const event = mockRelayPool.publish.mock.calls[0][0];
 
       expect(event.kind).toBe(1);
       expect(event.tags).toContainEqual(['type', 'time-sync']);
-      expect(event.tags).toContainEqual(['service', 'youtube-tab']);
+      expect(event.tags).toContainEqual(['service', 'video-tab']);
       expect(event.tags).toContainEqual(['video_id', 'video123']);
     });
 
     it('should include current time and duration in tags', async () => {
-      await timeSyncManager.publishTimeSync('video123', 150, 3600, true, 'youtube-tab');
+      await timeSyncManager.publishTimeSync('video123', 150, 3600, true, 'video-tab');
 
       const event = mockRelayPool.publish.mock.calls[0][0];
       expect(event.tags).toContainEqual(['current_time', '150']);
@@ -66,7 +66,7 @@ describe('TimeSyncManager', () => {
         kind: 1,
         tags: [
           ['type', 'time-sync'],
-          ['service', 'youtube-tab'],
+          ['service', 'video-tab'],
           ['video_id', 'video123'],
           ['current_time', '150'],
           ['duration', '3600'],
@@ -79,7 +79,7 @@ describe('TimeSyncManager', () => {
 
       expect(result).toBeDefined();
       expect(result?.friendIdentifier).toBe('friend123');
-      expect(result?.service).toBe('youtube-tab');
+      expect(result?.service).toBe('video-tab');
       expect(result?.videoId).toBe('video123');
       expect(result?.currentTime).toBe(150);
       expect(result?.duration).toBe(3600);
@@ -132,7 +132,7 @@ describe('TimeSyncManager', () => {
         kind: 1,
         tags: [
           ['type', 'time-sync'],
-          ['service', 'youtube-tab'],
+          ['service', 'video-tab'],
           ['video_id', 'video123'],
           ['current_time', '150'],
           ['duration', '3600'],
@@ -156,7 +156,7 @@ describe('TimeSyncManager', () => {
         kind: 1,
         tags: [
           ['type', 'time-sync'],
-          ['service', 'youtube-tab'],
+          ['service', 'video-tab'],
           ['video_id', 'video123'],
           ['current_time', '150'],
           ['duration', '3600'],
@@ -183,7 +183,7 @@ describe('TimeSyncManager', () => {
         kind: 1,
         tags: [
           ['type', 'time-sync'],
-          ['service', 'youtube-tab'],
+          ['service', 'video-tab'],
           ['video_id', 'video123'],
           ['current_time', '150'],
           ['duration', '3600'],

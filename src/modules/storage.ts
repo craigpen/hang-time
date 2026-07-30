@@ -16,20 +16,8 @@ import {
   DEFAULT_SETTINGS,
   StorageError,
   ActivityHistory,
-  VideoDataMetrics,
-  ServiceVideoDataMetrics,
-  VideoDataFieldMetrics,
 } from '../types';
 
-/**
- * Content script health status for a service in a tab
- */
-export interface ContentScriptHealth {
-  tabId: number;
-  service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab';
-  alive: boolean;
-  lastPing: number; // timestamp
-}
 
 export class StorageManager {
   /**
@@ -253,6 +241,12 @@ export class StorageManager {
 
   async setMyActivities(activities: Partial<Record<string, Activity>>): Promise<void> {
     await this.set(STORAGE_KEYS.MY_ACTIVITIES, activities);
+  }
+
+  async updateMyActivity(activityId: string, activity: Activity): Promise<void> {
+    const myActivities = await this.getMyActivities();
+    myActivities[activityId] = activity;
+    await this.setMyActivities(myActivities);
   }
 
   async getActivityHistory(friendId: string): Promise<Activity[]> {
@@ -581,70 +575,6 @@ export class StorageManager {
   /**
    * Get health status for all content scripts
    */
-  async getContentScriptHealth(): Promise<ContentScriptHealth[]> {
-    return this.get<ContentScriptHealth[]>('content_script_health', []);
-  }
-
-  /**
-   * Update health status for a content script
-   * Creates entry if doesn't exist, updates lastPing and alive status
-   */
-  async updateContentScriptHealth(
-    tabId: number,
-    service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab',
-    alive: boolean
-  ): Promise<void> {
-    const health = await this.getContentScriptHealth();
-
-    // Find existing entry
-    const existing = health.find(h => h.tabId === tabId && h.service === service);
-
-    if (existing) {
-      existing.alive = alive;
-      existing.lastPing = Date.now();
-    } else {
-      health.push({
-        tabId,
-        service,
-        alive,
-        lastPing: Date.now(),
-      });
-    }
-
-    await this.set('content_script_health', health);
-  }
-
-  /**
-   * Clear dead content scripts (no ping for 2+ minutes)
-   * Returns count of removed entries
-   */
-  async clearStaleContentScriptHealth(): Promise<number> {
-    const health = await this.getContentScriptHealth();
-    const now = Date.now();
-    const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
-
-    // Get all open tabs to check existence
-    const openTabs = await chrome.tabs.query({});
-    const openTabIds = new Set(openTabs.map(t => t.id));
-
-    const filtered = health.filter(h => {
-      // Remove if tab no longer exists
-      if (!openTabIds.has(h.tabId)) {
-        return false;
-      }
-
-      // Remove if stale (no ping in 2 minutes)
-      const ageSinceLastPing = now - h.lastPing;
-      return ageSinceLastPing <= STALE_THRESHOLD_MS;
-    });
-
-    const removed = health.length - filtered.length;
-    if (removed > 0) {
-      await this.set('content_script_health', filtered);
-    }
-
-    return removed;
-  }
 
   // ============================================================================
   // INTEGRATION HEALTH (API/OAuth service monitoring)
@@ -674,165 +604,6 @@ export class StorageManager {
   // VIDEO DATA METRICS (Content script reliability tracking)
   // ============================================================================
 
-  /**
-   * Get video data metrics for all services
-   * Auto-resets if last_reset was > 24 hours ago
-   */
-  async getVideoDataMetrics(): Promise<VideoDataMetrics> {
-    const metrics = await this.get<VideoDataMetrics>(STORAGE_KEYS.VIDEO_DATA_METRICS, {});
-    const now = Date.now();
-    const RESET_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-    // Check if any service needs auto-reset (daily reset)
-    let needsSave = false;
-    const updated: VideoDataMetrics = { ...metrics };
-
-    for (const service of ['netflix-tab', 'youtube-tab', 'twitch-tab'] as const) {
-      const serviceMetrics = updated[service];
-      if (serviceMetrics) {
-        const lastReset = serviceMetrics.last_reset || 0;
-        const timeSinceReset = now - lastReset;
-
-        if (timeSinceReset > RESET_INTERVAL_MS) {
-          // Auto-reset after 24 hours
-          await this.resetVideoDataMetrics(service, 'daily');
-          needsSave = true;
-        }
-      }
-    }
-
-    // Return fresh metrics if auto-reset happened
-    if (needsSave) {
-      return this.get<VideoDataMetrics>(STORAGE_KEYS.VIDEO_DATA_METRICS, {});
-    }
-
-    return metrics;
-  }
-
-  /**
-   * Record a video data request and track undefined/invalid fields
-   */
-  async recordVideoDataRequest(
-    service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab',
-    fields: {
-      isPlaying?: boolean | undefined;
-      duration?: number | undefined;
-      currentTime?: number | undefined;
-      netflix_title?: string | undefined;
-    }
-  ): Promise<void> {
-    const metrics = await this.get<VideoDataMetrics>(STORAGE_KEYS.VIDEO_DATA_METRICS, {});
-
-    // Initialize service metrics if not present
-    if (!metrics[service]) {
-      metrics[service] = {
-        total_requests: 0,
-        isPlaying: { undefined: 0, invalid: 0 },
-        duration: { undefined: 0, invalid: 0 },
-        currentTime: { undefined: 0, invalid: 0 },
-        last_reset: Date.now(),
-      };
-    }
-
-    const serviceMetrics = metrics[service]!;
-    serviceMetrics.total_requests++;
-
-    // Track isPlaying: undefined or invalid
-    if (fields.isPlaying === undefined) {
-      serviceMetrics.isPlaying.undefined++;
-    } else if (typeof fields.isPlaying !== 'boolean') {
-      serviceMetrics.isPlaying.invalid++;
-    }
-
-    // Track duration: undefined or invalid (NaN, negative, or 0)
-    if (fields.duration === undefined) {
-      serviceMetrics.duration.undefined++;
-    } else if (typeof fields.duration !== 'number' || isNaN(fields.duration) || fields.duration < 0) {
-      serviceMetrics.duration.invalid++;
-    }
-
-    // Track currentTime: undefined or invalid (NaN or negative)
-    if (fields.currentTime === undefined) {
-      serviceMetrics.currentTime.undefined++;
-    } else if (typeof fields.currentTime !== 'number' || isNaN(fields.currentTime) || fields.currentTime < 0) {
-      serviceMetrics.currentTime.invalid++;
-    }
-
-    // Track Netflix title if present
-    if (service === 'netflix-tab') {
-      if (!serviceMetrics.netflix_title) {
-        serviceMetrics.netflix_title = { undefined: 0, invalid: 0 };
-      }
-
-      if (fields.netflix_title === undefined) {
-        serviceMetrics.netflix_title.undefined++;
-      } else if (typeof fields.netflix_title !== 'string' || fields.netflix_title.length === 0) {
-        serviceMetrics.netflix_title.invalid++;
-      }
-    }
-
-    await this.set(STORAGE_KEYS.VIDEO_DATA_METRICS, metrics);
-  }
-
-  /**
-   * Reset metrics for a service (manual or daily auto-reset)
-   */
-  async resetVideoDataMetrics(service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab', reason: 'manual' | 'daily' = 'manual'): Promise<void> {
-    const metrics = await this.get<VideoDataMetrics>(STORAGE_KEYS.VIDEO_DATA_METRICS, {});
-
-    // Reset to fresh state
-    const emptyMetrics: ServiceVideoDataMetrics = {
-      total_requests: 0,
-      isPlaying: { undefined: 0, invalid: 0 },
-      duration: { undefined: 0, invalid: 0 },
-      currentTime: { undefined: 0, invalid: 0 },
-      last_reset: Date.now(),
-    };
-
-    metrics[service] = emptyMetrics;
-    await this.set(STORAGE_KEYS.VIDEO_DATA_METRICS, metrics);
-
-    const reasonText = reason === 'daily' ? '(daily auto-reset)' : '(manual reset)';
-    console.log(`[Storage] Reset video data metrics for ${service} ${reasonText}`);
-  }
-
-  // ============================================================================
-  // DEBUG & LOGGING
-  // ============================================================================
-
-  /**
-   * Get Netflix extraction logs (debug only)
-   */
-  async getNetflixExtractionLogs(): Promise<string[]> {
-    return this.get<string[]>('netflix_extraction_logs', []);
-  }
-
-  /**
-   * Add Netflix extraction log (debug only)
-   */
-  async addNetflixExtractionLog(log: string): Promise<void> {
-    const logs = await this.getNetflixExtractionLogs();
-    logs.push(log);
-    // Keep only last 100 logs
-    if (logs.length > 100) {
-      logs.shift();
-    }
-    await this.set('netflix_extraction_logs', logs);
-  }
-
-  /**
-   * Get Netflix debug captures (debug only)
-   */
-  async getNetflixDebugCaptures(): Promise<unknown[]> {
-    return this.get<unknown[]>('netflix_debug_captures', []);
-  }
-
-  /**
-   * Set Netflix debug captures (debug only)
-   */
-  async setNetflixDebugCaptures(captures: unknown[]): Promise<void> {
-    await this.set('netflix_debug_captures', captures);
-  }
 
   // ============================================================================
   // BATCH OPERATIONS
@@ -911,6 +682,69 @@ export class StorageManager {
     } catch (error) {
       console.error('[Storage] Import failed:', error);
       throw new StorageError('Failed to import data', { error });
+    }
+  }
+
+  // ============================================================================
+  // HEALTH MONITORING & DEBUG (Legacy)
+  // ============================================================================
+
+  /**
+   * Clear stale content script health entries
+   * Called periodically to clean up old health data
+   */
+  async clearStaleContentScriptHealth(): Promise<void> {
+    try {
+      const health = await this.get<Record<string, any>>(STORAGE_KEYS.CONTENT_SCRIPT_HEALTH, {});
+      const now = Date.now();
+      const oneHourAgo = now - 3600000;
+
+      const cleaned = Object.fromEntries(
+        Object.entries(health).filter(([_, entry]: [string, any]) => {
+          return entry?.timestamp && entry.timestamp > oneHourAgo;
+        })
+      );
+
+      await this.set(STORAGE_KEYS.CONTENT_SCRIPT_HEALTH, cleaned);
+      console.debug('[Storage] Cleared stale content script health entries');
+    } catch (error) {
+      console.error('[Storage] Failed to clear stale health:', error);
+    }
+  }
+
+  /**
+   * Get content script health status
+   */
+  async getContentScriptHealth(): Promise<Record<string, any>> {
+    try {
+      return await this.get<Record<string, any>>(STORAGE_KEYS.CONTENT_SCRIPT_HEALTH, {});
+    } catch (error) {
+      console.error('[Storage] Failed to get content script health:', error);
+      return {};
+    }
+  }
+
+  /**
+   * Get Netflix extraction logs (for debugging)
+   */
+  async getNetflixExtractionLogs(): Promise<string[]> {
+    try {
+      return await this.get<string[]>(STORAGE_KEYS.NETFLIX_EXTRACTION_LOGS, []);
+    } catch (error) {
+      console.error('[Storage] Failed to get Netflix extraction logs:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get Netflix debug captures (for debugging)
+   */
+  async getNetflixDebugCaptures(): Promise<Record<string, any>[]> {
+    try {
+      return await this.get<Record<string, any>[]>(STORAGE_KEYS.NETFLIX_DEBUG_CAPTURES, []);
+    } catch (error) {
+      console.error('[Storage] Failed to get Netflix debug captures:', error);
+      return [];
     }
   }
 }

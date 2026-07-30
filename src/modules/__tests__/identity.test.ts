@@ -93,7 +93,7 @@ describe('IdentityManager', () => {
       const profile = {
         user_id: 'test',
         memorable_identifier: 'TestIdentifier123',
-        services_enabled: { 'spotify-api': false, 'twitch-api': false, 'steam-api': false, 'discord-api': false, 'netflix-tab': false, 'youtube-tab': false, 'twitch-tab': false },
+        services_enabled: { 'spotify-api': false, 'twitch-api': false, 'steam-api': false, 'discord-api': false, 'video-tab': false },
       };
       mockStorageManager.getUserProfile.mockResolvedValueOnce(profile);
 

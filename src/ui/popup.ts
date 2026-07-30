@@ -3,7 +3,7 @@
  * Main extension popup showing active friends
  */
 
-import { Friend, Activity, ExtensionResponse } from '../types';
+import { Friend, Activity, ExtensionResponse, STORAGE_KEYS } from '../types';
 import { StorageManager } from '../modules/storage';
 import { GameLibraryManager } from '../modules/game-library';
 import { MetadataFetcher } from '../modules/metadata-fetcher';
@@ -274,17 +274,37 @@ export class PopupController {
           const activityWrapper = this._createActivityItemWithMessages(activity, friendId);
           activitiesContainer.appendChild(activityWrapper);
         } else {
-          // For existing activities, recreate the row to check for pending invite status changes
+          // For existing activities, only update progress bar and state (don't recreate entire row)
           const existingWrapper = Array.from(oldActivities).find(
             (el) => (el as HTMLElement).dataset.activityId === activityId
           ) as HTMLElement | undefined;
           if (existingWrapper && activity.id && friendId) {
-            // Remove the old activity row and recreate it to reflect pending invite status
-            const oldRow = existingWrapper.querySelector('.activity-item-row') as HTMLElement;
-            if (oldRow) {
-              oldRow.remove();
-              const newRow = this._createActivityRow(activity, friendId);
-              existingWrapper.insertBefore(newRow, existingWrapper.firstChild);
+            const row = existingWrapper.querySelector('.activity-item-row') as HTMLElement;
+            if (row) {
+              // Update progress bar CSS variable only
+              if (activity.metadata?.progress !== undefined && activity.metadata?.duration && activity.metadata.duration > 0) {
+                const progressPercent = Math.min(100, (activity.metadata.progress / activity.metadata.duration) * 100);
+                row.style.setProperty('--progress-percent', `${progressPercent}%`);
+              }
+
+              // Update state icon if state changed
+              const stateIcon = row.querySelector('.activity-state-icon') as HTMLElement;
+              if (stateIcon && activity.state) {
+                if (activity.state === 'playing') {
+                  stateIcon.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="#4CAF50" stroke="none" class="state-icon-svg">
+                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                  `;
+                } else {
+                  stateIcon.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="#9E9E9E" stroke="none" class="state-icon-svg">
+                      <rect x="6" y="4" width="4" height="16"></rect>
+                      <rect x="14" y="4" width="4" height="16"></rect>
+                    </svg>
+                  `;
+                }
+              }
             }
 
             // Reload messages in case new ones arrived
@@ -488,25 +508,23 @@ export class PopupController {
   }
 
   private _createActivityRow(activity: Activity, friendId?: string): HTMLElement {
-    const row = document.createElement('div');
-    row.className = 'activity-item-row';
+    try {
+      const row = document.createElement('div');
+      row.className = 'activity-item-row';
 
-    // Set progress bar positioning via CSS variables (will calculate position after render)
-    if (activity.metadata?.progress !== undefined && activity.metadata?.duration && activity.metadata.duration > 0) {
-      const progressPercent = Math.min(100, (activity.metadata.progress / activity.metadata.duration) * 100);
-      row.style.setProperty('--progress-percent', `${progressPercent}%`);
-
-      // Defer calculation until after layout
-      requestAnimationFrame(() => {
-        const separator = row.querySelector('.activity-separator') as HTMLElement;
-        if (separator) {
-          const rect = separator.getBoundingClientRect();
-          const rowRect = row.getBoundingClientRect();
-          const separatorEnd = rect.right - rowRect.left;
-          row.style.setProperty('--progress-start', `${separatorEnd}px`);
-        }
+      // Set progress bar width
+      console.debug('[Popup] Activity metadata:', {
+        service: activity.service,
+        content: activity.content,
+        progress: activity.metadata?.progress,
+        duration: activity.metadata?.duration,
+        hasMetadata: !!activity.metadata,
       });
-    }
+      if (activity.metadata?.progress !== undefined && activity.metadata?.duration && activity.metadata.duration > 0) {
+        const progressPercent = Math.min(100, (activity.metadata.progress / activity.metadata.duration) * 100);
+        console.log('[Popup] Setting progress bar:', progressPercent, '%');
+        row.style.setProperty('--progress-percent', `${progressPercent}%`);
+      }
 
     // State indicator (on the left) - FIRST
     if (activity.state) {
@@ -517,6 +535,16 @@ export class PopupController {
       if (activity.service === 'steam-api') {
         stateIcon.textContent = '🎮';
         stateIcon.title = 'Playing';
+      } else if (activity.state === 'disconnected') {
+        // Content script disconnected (e.g., after extension restart): show warning icon
+        stateIcon.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="#EF4444" stroke="none" class="state-icon-svg">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12" stroke="#FFF" stroke-width="2"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16" stroke="#FFF" stroke-width="2"></line>
+          </svg>
+        `;
+        stateIcon.title = activity.metadata?.disconnected_reason || 'Disconnected - reload tab';
       } else {
         // Check if data is fresh from content script (only for browser tabs)
         const isDataFresh = activity.is_fresh !== false; // Default to true if not set
@@ -652,7 +680,17 @@ export class PopupController {
 
     row.appendChild(buttonsDiv);
 
-    return row;
+      return row;
+    } catch (error) {
+      console.error('[Popup] Error creating activity row:', error);
+      // Return a minimal row so we don't break the UI
+      const errorRow = document.createElement('div');
+      errorRow.className = 'activity-item-row';
+      const errorText = document.createElement('span');
+      errorText.textContent = `Error: ${activity.content}`;
+      errorRow.appendChild(errorText);
+      return errorRow;
+    }
   }
 
   private _createActivityItemElement(activity: Activity): HTMLElement {
@@ -1105,7 +1143,7 @@ export class PopupController {
     buttonsDiv.appendChild(msgBtn);
 
     // Sync button (video/music only)
-    if (['youtube-tab', 'netflix-tab', 'twitch-tab', 'spotify-api'].includes(activity.service)) {
+    if (['video-tab', 'spotify-api'].includes(activity.service)) {
       const syncBtn = document.createElement('button');
       syncBtn.className = 'activity-action-btn activity-action-sync';
       syncBtn.textContent = '🕐';
@@ -1247,14 +1285,8 @@ export class PopupController {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return;
 
-      // Listen for activity updates from content scripts or background
-      const shouldRefresh =
-        changes.my_activities ||
-        changes['content_script_video_state_netflix-tab'] ||
-        changes['content_script_video_state_youtube-tab'] ||
-        changes['content_script_video_state_twitch-tab'];
-
-      if (shouldRefresh) {
+      // Listen for activity updates from MY_ACTIVITIES (single source of truth)
+      if (changes[STORAGE_KEYS.MY_ACTIVITIES]) {
         console.debug('[Popup] Activity data changed, refreshing...');
         this._loadMyActivity().catch((error) => {
           console.error('[Popup] Failed to refresh after storage change:', error);
@@ -1525,13 +1557,13 @@ export class PopupController {
       const health = await this.storage.getContentScriptHealth();
 
       // Create a map of service -> health entry for quick lookup
-      const healthMap = new Map<'netflix-tab' | 'youtube-tab' | 'twitch-tab', any>();
+      const healthMap = new Map<string, any>();
       for (const entry of health) {
         healthMap.set(entry.service, entry);
       }
 
       // Update status display for each browser tabs service
-      const services: Array<'netflix-tab' | 'youtube-tab' | 'twitch-tab'> = ['video-tab'];
+      const services: string[] = ['video-tab'];
       for (const service of services) {
         const statusEl = document.getElementById(`status-${service}-popup`);
         if (!statusEl) continue;
@@ -1822,7 +1854,7 @@ export class PopupController {
         type: 'GET_BROWSER_ACTIVITIES',
       });
 
-      const browserActivities = response.success && response.data ? response.data : { 'netflix-tab': null, 'youtube-tab': null, 'twitch-tab': null };
+      const browserActivities = response.success && response.data ? response.data : { 'video-tab': null };
 
       for (const service of ['video-tab']) {
         const statusDiv = document.getElementById(`status-${service}-popup`);

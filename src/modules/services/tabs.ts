@@ -20,19 +20,18 @@ export class TabService implements IServiceModule {
   }
 
   /**
-   * Read activity from generic video tracker
+   * Read activity from generic video tracker via MY_ACTIVITIES
    */
   async getCurrentActivity(): Promise<Activity | null> {
     try {
-      const storage = await chrome.storage.local.get(null);
+      // Read from MY_ACTIVITIES (single source of truth)
+      const myActivities = await this.storage.getMyActivities();
 
-      // Check for generic video activity
-      if (storage['content_script_activity_video-tab']) {
-        const activity = this._buildActivity(storage['content_script_activity_video-tab']);
-        if (activity) {
-          this.detectedActivity = activity;
-          return activity;
-        }
+      // Find the video-tab activity
+      const videoActivity = myActivities['video-tab'];
+      if (videoActivity && videoActivity.content) {
+        this.detectedActivity = videoActivity;
+        return videoActivity;
       }
 
       return null;
@@ -65,33 +64,5 @@ export class TabService implements IServiceModule {
    */
   getDetectedActivity(service: string): Activity | null {
     return this.detectedActivity;
-  }
-
-  /**
-   * Convert storage activity data to Activity object
-   */
-  private _buildActivity(data: any): Activity | null {
-    if (!data || !data.content) {
-      return null;
-    }
-
-    return {
-      id: data.id || `video-tab-${Date.now()}`,
-      service: 'video-tab',
-      content: data.content,
-      state: data.state || 'playing',
-      audio: data.audio || 'on',
-      timestamp: data.timestamp || Date.now(),
-      freshness_timestamp: data.timestamp || Date.now(),
-      is_fresh: true,
-      url: data.url,
-      provenance: 'LOCAL_TAB',
-      metadata: {
-        progress: data.metadata?.progress || 0,
-        duration: data.metadata?.duration || 0,
-        domain: data.metadata?.domain,
-        favicon: data.metadata?.favicon,
-      },
-    };
   }
 }
