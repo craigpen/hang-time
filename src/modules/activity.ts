@@ -198,42 +198,18 @@ export class ActivityDetector {
       }
     }
 
-    // Check browser tabs (Netflix, YouTube, Twitch)
-    if (servicesEnabled['netflix-tab'] || servicesEnabled['youtube-tab'] || servicesEnabled['twitch-tab']) {
+    // Check browser tabs (generic video detection)
+    if (servicesEnabled['video-tab']) {
       const tabService = this.services.get('tabs') as any;
       if (tabService) {
         try {
-          // Call getCurrentActivity first to populate the lastDetected map
-          await tabService.getCurrentActivity();
-
-          // Get Netflix activity
-          if (servicesEnabled['netflix-tab']) {
-            const netflixActivity = tabService.getDetectedActivity('netflix-tab');
-            if (netflixActivity) {
-              activities.push(netflixActivity);
-              seenServices.add('netflix-tab');
-            }
-          }
-
-          // Get YouTube activity
-          if (servicesEnabled['youtube-tab']) {
-            const youtubeActivity = tabService.getDetectedActivity('youtube-tab');
-            if (youtubeActivity) {
-              activities.push(youtubeActivity);
-              seenServices.add('youtube-tab');
-            }
-          }
-
-          // Get Twitch activity
-          if (servicesEnabled['twitch-tab']) {
-            const twitchActivity = tabService.getDetectedActivity('twitch-tab');
-            if (twitchActivity) {
-              activities.push(twitchActivity);
-              seenServices.add('twitch-tab');
-            }
+          const videoActivity = await tabService.getCurrentActivity();
+          if (videoActivity) {
+            activities.push(videoActivity);
+            seenServices.add('video-tab');
           }
         } catch (error) {
-          console.error('[Activity] ERROR detecting browser tabs:', error);
+          console.error('[Activity] ERROR detecting browser videos:', error);
         }
       }
     }

@@ -558,17 +558,24 @@ export class PopupController {
       row.appendChild(separator);
     }
 
-    // Favicon (service icon) - SECOND
+    // Favicon (dynamic from site or service icon) - SECOND
     const faviconDiv = document.createElement('div');
     faviconDiv.className = 'activity-item-favicon';
     const img = document.createElement('img');
-    img.src = this._getFaviconUrl(activity.service);
+
+    // Prefer dynamic favicon from metadata (for video-tab), fallback to static service icon
+    const dynamicFavicon = activity.metadata?.favicon;
+    const faviconUrl = dynamicFavicon ?
+      (dynamicFavicon.startsWith('http') ? dynamicFavicon : `https:${dynamicFavicon}`) :
+      this._getFaviconUrl(activity.service);
+
+    img.src = faviconUrl;
     img.alt = activity.service;
+    img.style.borderRadius = '4px'; // Round corners for site favicons
     img.onerror = () => {
-      img.style.display = 'none';
-      const fallback = document.createElement('span');
-      fallback.textContent = this._getActivityBadge(activity.service);
-      faviconDiv.appendChild(fallback);
+      // Fallback to static icon if dynamic favicon fails
+      img.src = this._getFaviconUrl(activity.service);
+      img.onerror = null; // Prevent infinite loop
     };
     faviconDiv.appendChild(img);
     row.appendChild(faviconDiv);
@@ -1524,7 +1531,7 @@ export class PopupController {
       }
 
       // Update status display for each browser tabs service
-      const services: Array<'netflix-tab' | 'youtube-tab' | 'twitch-tab'> = ['netflix-tab', 'youtube-tab', 'twitch-tab'];
+      const services: Array<'netflix-tab' | 'youtube-tab' | 'twitch-tab'> = ['video-tab'];
       for (const service of services) {
         const statusEl = document.getElementById(`status-${service}-popup`);
         if (!statusEl) continue;
@@ -1646,7 +1653,7 @@ export class PopupController {
       }
 
       // Load service toggles for browser tabs
-      const tabServices = ['netflix-tab', 'youtube-tab', 'twitch-tab'];
+      const tabServices = ['video-tab'];
       for (const service of tabServices) {
         const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
         if (toggle && profile.services_enabled) {
@@ -1817,7 +1824,7 @@ export class PopupController {
 
       const browserActivities = response.success && response.data ? response.data : { 'netflix-tab': null, 'youtube-tab': null, 'twitch-tab': null };
 
-      for (const service of ['netflix-tab', 'youtube-tab', 'twitch-tab']) {
+      for (const service of ['video-tab']) {
         const statusDiv = document.getElementById(`status-${service}-popup`);
         if (statusDiv && profile) {
           const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? false;
@@ -2305,7 +2312,7 @@ export class PopupController {
 
     // No current activity - check if service is configured (for OAuth services)
     let isConfigured = false;
-    if (!['netflix-tab', 'youtube-tab', 'twitch-tab', 'steam-api'].includes(service)) {
+    if (!['video-tab', 'steam-api'].includes(service)) {
       // For OAuth services (not browser tab services), check if they have a token
       try {
         const authResponse = await chrome.runtime.sendMessage({
@@ -2319,7 +2326,7 @@ export class PopupController {
     }
 
     // Show appropriate status message
-    if (['netflix-tab', 'youtube-tab', 'twitch-tab'].includes(service)) {
+    if (['video-tab'].includes(service)) {
       // Browser tab services with no activity just show "No activity"
       statusDiv.textContent = 'No activity';
     } else if (!isConfigured) {
@@ -2338,7 +2345,7 @@ export class PopupController {
 
       // Collect service toggles for browser tabs
       const servicesEnabled: Record<string, boolean> = {};
-      const tabServices = ['netflix-tab', 'youtube-tab', 'twitch-tab'];
+      const tabServices = ['video-tab'];
       for (const service of tabServices) {
         const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
         servicesEnabled[service] = toggle?.checked ?? false;

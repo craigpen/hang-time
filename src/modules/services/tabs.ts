@@ -1,62 +1,38 @@
 /**
  * Hang Time - Tab Detection Service
- * Reads tab activities from storage (written by content scripts)
+ * Reads tab activities from generic video tracker
+ * Works with YouTube, Netflix, Twitch, and any video platform
  */
 
 import { Activity, IServiceModule } from '../../types';
 import { StorageManager } from '../storage';
 
 export class TabService implements IServiceModule {
-  private detectedActivities: Map<string, Activity> = new Map();
+  private detectedActivity: Activity | null = null;
 
   constructor(private storage: StorageManager) {}
 
   async isEnabled(): Promise<boolean> {
     const profile = await this.storage.getUserProfile();
     if (!profile) return false;
-    return profile.services_enabled['netflix-tab'] || profile.services_enabled['youtube-tab'] || profile.services_enabled['twitch-tab'];
+    // Check if any video-based tab detection is enabled
+    return profile.services_enabled['video-tab'] ?? true; // Enabled by default
   }
 
   /**
-   * Read activities from storage written by content scripts
-   * Returns the most recently updated activity
+   * Read activity from generic video tracker
    */
   async getCurrentActivity(): Promise<Activity | null> {
     try {
-      // Read all activity storage keys from content scripts
       const storage = await chrome.storage.local.get(null);
-      const activities: Activity[] = [];
 
-      // Check for Netflix activity
-      if (storage['content_script_activity_netflix-tab']) {
-        const activity = this._buildActivity(storage['content_script_activity_netflix-tab'], 'netflix-tab');
+      // Check for generic video activity
+      if (storage['content_script_activity_video-tab']) {
+        const activity = this._buildActivity(storage['content_script_activity_video-tab']);
         if (activity) {
-          activities.push(activity);
-          this.detectedActivities.set('netflix-tab', activity);
+          this.detectedActivity = activity;
+          return activity;
         }
-      }
-
-      // Check for YouTube activity
-      if (storage['content_script_activity_youtube-tab']) {
-        const activity = this._buildActivity(storage['content_script_activity_youtube-tab'], 'youtube-tab');
-        if (activity) {
-          activities.push(activity);
-          this.detectedActivities.set('youtube-tab', activity);
-        }
-      }
-
-      // Check for Twitch activity
-      if (storage['content_script_activity_twitch-tab']) {
-        const activity = this._buildActivity(storage['content_script_activity_twitch-tab'], 'twitch-tab');
-        if (activity) {
-          activities.push(activity);
-          this.detectedActivities.set('twitch-tab', activity);
-        }
-      }
-
-      // Return most recently updated activity
-      if (activities.length > 0) {
-        return activities.reduce((a, b) => (a.timestamp > b.timestamp ? a : b));
       }
 
       return null;
@@ -85,23 +61,23 @@ export class TabService implements IServiceModule {
   }
 
   /**
-   * Get the last detected activity for a specific service
+   * Get the last detected activity
    */
-  getDetectedActivity(service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab'): Activity | null {
-    return this.detectedActivities.get(service) || null;
+  getDetectedActivity(service: string): Activity | null {
+    return this.detectedActivity;
   }
 
   /**
    * Convert storage activity data to Activity object
    */
-  private _buildActivity(data: any, service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab'): Activity | null {
+  private _buildActivity(data: any): Activity | null {
     if (!data || !data.content) {
       return null;
     }
 
     return {
-      id: data.id || `${service}-${Date.now()}`,
-      service,
+      id: data.id || `video-tab-${Date.now()}`,
+      service: 'video-tab',
       content: data.content,
       state: data.state || 'playing',
       audio: data.audio || 'on',
@@ -111,8 +87,10 @@ export class TabService implements IServiceModule {
       url: data.url,
       provenance: 'LOCAL_TAB',
       metadata: {
-        progress: data.currentTime || 0,
-        duration: data.duration || 0,
+        progress: data.metadata?.progress || 0,
+        duration: data.metadata?.duration || 0,
+        domain: data.metadata?.domain,
+        favicon: data.metadata?.favicon,
       },
     };
   }

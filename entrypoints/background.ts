@@ -53,9 +53,48 @@ chrome.runtime.onInstalled.addListener(async (details) => {
       console.log('[Background] Generated user identifier');
     }
   } else if (details.reason === 'update') {
-    console.log('[Background] Extension updated');
+    console.log('[Background] Extension updated, re-injecting content scripts...');
+    await _reInjectContentScripts();
   }
 });
+
+/**
+ * Re-inject content scripts into tabs that match our content script URLs
+ * This ensures orphaned scripts are replaced with fresh ones
+ */
+async function _reInjectContentScripts(): Promise<void> {
+  try {
+    // Query only tabs that match our content script patterns
+    const tabs = await chrome.tabs.query({
+      url: [
+        'https://www.youtube.com/*',
+        'https://youtu.be/*',
+        'https://www.netflix.com/*',
+        'https://www.twitch.tv/*',
+      ],
+    });
+
+    console.debug(`[Background] Found ${tabs.length} tabs matching content script patterns`);
+
+    for (const tab of tabs) {
+      if (!tab.id) continue;
+
+      try {
+        // Re-inject content script
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['dist/chrome-mv3/content-script.js'],
+        });
+        console.debug(`[Background] Re-injected content script into tab ${tab.id}`);
+      } catch (err) {
+        // Tab may no longer exist or injection failed for other reasons
+        console.debug(`[Background] Could not re-inject into tab ${tab.id}:`, err instanceof Error ? err.message : err);
+      }
+    }
+  } catch (err) {
+    console.error('[Background] Failed to re-inject content scripts:', err);
+  }
+}
 
 /**
  * Service worker startup - initialize all systems
@@ -76,6 +115,28 @@ async function initializeExtension(): Promise<void> {
     } catch (error) {
       console.error('[Background] Storage initialization failed:', error);
       throw error;
+    }
+
+    // Re-inject content scripts if we detect orphaned scripts from before restart
+    // Check if there's activity data in storage (indicates scripts were running before restart)
+    try {
+      const myActivities = await storageManager.getMyActivities();
+      const hasRecentActivity = Object.values(myActivities).some((activity: any) => {
+        // Check if activity has a tab-based provenance and was active recently
+        const isTabBased = activity.service?.includes('-tab');
+        const isRecent = (Date.now() - activity.timestamp) < 60000; // within last 60 seconds
+        return isTabBased && isRecent;
+      });
+
+      if (hasRecentActivity) {
+        console.log('[Background] Detected recent tab activity—re-injecting content scripts for orphaned scripts...');
+        await _reInjectContentScripts();
+      } else {
+        console.debug('[Background] No recent tab activity detected, skipping re-injection');
+      }
+    } catch (error) {
+      console.debug('[Background] Content script re-injection check:', error);
+      // Not fatal if check fails
     }
 
     try {
@@ -486,6 +547,38 @@ chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
   port.onDisconnect.addListener(() => {
     console.debug(`[Background] Content script port disconnected: ${port.name}`);
   });
+});
+
+/**
+ * Port-based connection handler for content script ↔ background communication
+ * Allows persistent connection that survives across extension restarts
+ */
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name.startsWith('content-script-')) {
+    const service = port.name.replace('content-script-', '');
+    console.log(`[Background] 🔌 Content script connected (${service})`);
+
+    port.onMessage.addListener(async (message) => {
+      try {
+        if (message.type === 'CONTENT_SCRIPT_ACTIVITY') {
+          await _handleContentScriptActivity(message.data?.key, message.data?.value);
+        }
+      } catch (error) {
+        console.error(`[Background] Port message handler error:`, error);
+      }
+    });
+
+    port.onDisconnect.addListener(() => {
+      console.log(`[Background] 🔌 Content script disconnected (${service})`);
+    });
+
+    // Send a ping to confirm connection
+    try {
+      port.postMessage({ type: 'PONG' });
+    } catch (error) {
+      console.error(`[Background] Failed to send pong:`, error);
+    }
+  }
 });
 
 /**

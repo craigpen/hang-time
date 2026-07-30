@@ -328,6 +328,7 @@ export class ActivityDatastore {
   /**
    * Detect ghost activities (activities from closed tabs)
    * Compares LOCAL_TAB activities against currently open tabs
+   * Skips recently created activities (grace period to stabilize)
    */
   async detectGhosts(): Promise<GhostActivity[]> {
     console.debug('[ActivityDatastore] Detecting ghost activities...');
@@ -350,6 +351,8 @@ export class ActivityDatastore {
 
     const ghosts: GhostActivity[] = [];
     const all = await this.getAllActivities();
+    const now = Date.now();
+    const GRACE_PERIOD_MS = 10000; // 10 second grace period for newly created activities
 
     for (const activity of all) {
       // Get this activity's provenance
@@ -359,8 +362,25 @@ export class ActivityDatastore {
       // API-based activities (LOCAL_STEAM, LOCAL_SPOTIFY, LOCAL_TWITCH) don't correspond to tabs
       // FRIEND and TEST activities are excluded from ghost detection
       if (provenance === 'LOCAL_TAB') {
+        // Skip recently created activities (grace period to stabilize)
+        const age = now - activity.timestamp;
+        if (age < GRACE_PERIOD_MS) {
+          console.debug(`[ActivityDatastore] Skipping grace-period activity: ${activity.service} (age: ${age}ms)`);
+          continue;
+        }
+
         // Activity should have a matching open tab
-        if (!activity.url || !openTabUrls.has(activity.url)) {
+        if (!activity.url) {
+          // No URL means it's incomplete - mark as ghost
+          ghosts.push({
+            id: activity.id,
+            service: activity.service,
+            content: activity.content,
+            lastSeen: activity.timestamp,
+            reason: `No URL for ${activity.service}`,
+          });
+        } else if (!openTabUrls.has(activity.url)) {
+          // URL doesn't match any open tab
           ghosts.push({
             id: activity.id,
             service: activity.service,
