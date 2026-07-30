@@ -287,15 +287,17 @@ export class PopupController {
                 row.style.setProperty('--progress-percent', `${progressPercent}%`);
               }
 
-              // Update state icon if state changed
+              // Update state icon and content text if state changed
               const stateIcon = row.querySelector('.activity-state-icon') as HTMLElement;
+              const contentText = row.querySelector('.activity-content-text') as HTMLElement;
+
               if (stateIcon && activity.state) {
                 // For Steam games, show controller emoji
                 if (activity.service === 'steam-api') {
                   stateIcon.textContent = '🎮';
                   stateIcon.title = 'Playing';
                 } else if (activity.state === 'disconnected') {
-                  // Content script disconnected: show red warning icon
+                  // Content script disconnected: show red warning icon and message
                   stateIcon.innerHTML = `
                     <svg viewBox="0 0 24 24" fill="#EF4444" stroke="none" class="state-icon-svg">
                       <circle cx="12" cy="12" r="10"></circle>
@@ -304,6 +306,13 @@ export class PopupController {
                     </svg>
                   `;
                   stateIcon.title = activity.metadata?.disconnected_reason || 'Disconnected - reload tab';
+
+                  // Update content text to show disconnect message
+                  if (contentText) {
+                    contentText.textContent = 'Disconnected - reload tab';
+                    contentText.style.fontStyle = 'italic';
+                    contentText.style.opacity = '0.7';
+                  }
                 } else {
                   // Check if data is fresh from content script (for browser tabs)
                   const isDataFresh = activity.is_fresh !== false;
@@ -334,20 +343,13 @@ export class PopupController {
                     `;
                     stateIcon.title = 'Paused';
                   }
-                }
-              }
 
-              // Update content text if state changed to disconnected
-              const contentText = row.querySelector('.activity-content-text') as HTMLElement;
-              if (contentText) {
-                if (activity.state === 'disconnected') {
-                  contentText.textContent = 'Disconnected - reload tab';
-                  contentText.style.fontStyle = 'italic';
-                  contentText.style.opacity = '0.7';
-                } else {
-                  contentText.textContent = this._truncateActivityContent(activity.content);
-                  contentText.style.fontStyle = 'normal';
-                  contentText.style.opacity = '1';
+                  // Restore normal content text for non-disconnected states
+                  if (contentText) {
+                    contentText.textContent = this._truncateActivityContent(activity.content);
+                    contentText.style.fontStyle = 'normal';
+                    contentText.style.opacity = '1';
+                  }
                 }
               }
             }
