@@ -1772,8 +1772,9 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
     // Remove any existing activity for this tab before storing the new one (prevent duplicates)
     if (tabId !== undefined) {
       const allActivities = await storageManager.getMyActivities();
+      const tabServices = ['video-tab', 'youtube-tab', 'netflix-tab', 'twitch-tab'];
       for (const [activityId, activity] of Object.entries(allActivities)) {
-        if (activity?.metadata?.tabId === tabId && activity?.service === 'video-tab') {
+        if (activity?.metadata?.tabId === tabId && tabServices.includes(activity?.service)) {
           // Different activity from same tab - remove the old one
           if (activity.id !== value.id) {
             console.debug(`[Background] 🗑️  Removing old activity for tab ${tabId}: ${activity.id}`);
