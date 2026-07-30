@@ -181,6 +181,68 @@ export class MessagingManager {
   }
 
   /**
+   * Send friend request message via kind-4 (encrypted)
+   * Used when adding a friend to notify them (works even if they haven't added us yet)
+   */
+  async sendFriendRequestMessage(recipientPubkey: string, senderDisplayName: string): Promise<void> {
+    try {
+      const userProfile = await this.storageManager.getUserProfile();
+      if (!userProfile) {
+        throw new Error('User profile not found');
+      }
+
+      const pubkey = await this.identityManager.getPubkey();
+      const secretKey = await this.identityManager.getSecretKey();
+
+      // Create friend request message
+      const message: ActivityMessage = {
+        type: 'friend_request',
+        activity_id: `friend_request_${Date.now()}`,
+        timestamp: Date.now(),
+      };
+
+      // Serialize and encrypt
+      const plaintext = JSON.stringify(message);
+      const encryptedContent = encryptionManager.encrypt(plaintext, recipientPubkey, secretKey);
+
+      const created_at = Math.floor(Date.now() / 1000);
+      const kind = 4;
+
+      // Create kind-4 event with message_type tag
+      const tags: Array<[string, string]> = [
+        ['p', recipientPubkey],
+        ['message_type', 'friend_request'],
+      ];
+
+      const event: NostrEvent = {
+        id: '',
+        pubkey,
+        created_at,
+        kind,
+        tags,
+        content: encryptedContent,
+      };
+
+      // Compute event ID and sign
+      const eventData = [0, pubkey, created_at, kind, event.tags, encryptedContent];
+      const canonicalJson = JSON.stringify(eventData);
+      const eventId = await encryptionManager.sha256(canonicalJson);
+      event.id = eventId.substring(0, 64);
+      event.sig = encryptionManager.signEvent(event.id, secretKey);
+
+      // Publish to relays
+      const publishConfig = userProfile?.publisher_config;
+      console.log(`[Messaging] 📤 Publishing kind-4 friend request to ${recipientPubkey.substring(0, 8)}...`);
+      await this.relayPool.publish(event, publishConfig);
+
+      console.debug('[Messaging] Friend request message sent');
+    } catch (error) {
+      console.error('[Messaging] Failed to send friend request message:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Internal: send encrypted activity message via kind-4
    */
   private async _sendActivityMessage(recipientFriend: Friend, message: ActivityMessage): Promise<void> {

@@ -877,17 +877,17 @@ async function _addFriend(identifier?: string, localName?: string): Promise<Exte
     // Subscribe to friend's events (for receiving accept/decline responses)
     await _subscribeToFriend(identifier);
 
-    // Publish friend request notification
+    // Publish friend request message (kind-4, encrypted)
     try {
-      console.log(`[Background] Preparing to send friend request to ${localName} (${identifier})`);
+      console.log(`[Background] Sending friend request message to ${localName} (${friend.pubkey.substring(0, 8)}...)`);
       const messagingManager = getMessagingManager();
-      console.log(`[Background] Got messagingManager, calling sendFriendRequest`);
-      await messagingManager.sendFriendRequest(identifier, friend.pubkey, localName);
-      console.log(`[Background] 📤 Friend request sent to ${localName}`);
+      const userProfile = await storageManager.getUserProfile();
+      const senderDisplayName = userProfile?.nickname || userProfile?.memorable_identifier || 'Friend';
+      await messagingManager.sendFriendRequestMessage(friend.pubkey, senderDisplayName);
+      console.log(`[Background] 📤 Friend request message sent to ${localName}`);
     } catch (error) {
-      console.error('[Background] Failed to send friend request notification:', error);
-      console.error('[Background] Full error:', error);
-      // Don't fail the add operation if notification publish fails
+      console.error('[Background] Failed to send friend request message:', error);
+      // Don't fail the add operation if message publish fails
     }
 
     return { success: true, data: friend };
@@ -1308,14 +1308,23 @@ async function _subscribeToIncomingMessages(): Promise<void> {
       console.debug(`[Message] Received kind-4 message from ${event.pubkey.substring(0, 8)}...`);
 
       try {
+        // Check message type tag
+        const messageType = event.tags.find((t) => t[0] === 'message_type')?.[1];
+
         // Find which friend this is from
         const friends = await storageManager.getFriends();
         const sender = friends.find((f) => f.pubkey === event.pubkey);
 
         if (sender) {
+          // Known friend - handle normally
           await _handleMessageEvent(sender.identifier, event);
+        } else if (messageType === 'friend_request') {
+          // Friend request from unknown sender - create as pending friend
+          console.log(`[Message] 🔔 Friend Request: Received from ${event.pubkey.substring(0, 8)}...`);
+          await _handleFriendRequestFromUnknownSender(event);
         } else {
-          console.debug(`[Message] Message from unknown sender: ${event.pubkey.substring(0, 8)}...`);
+          // Unknown message type from unknown sender - ignore
+          console.debug(`[Message] Ignoring message from unknown sender (type=${messageType}): ${event.pubkey.substring(0, 8)}...`);
         }
       } catch (error) {
         console.error(`[Message] Error handling incoming message:`, error);
@@ -1325,6 +1334,77 @@ async function _subscribeToIncomingMessages(): Promise<void> {
     console.debug(`[Message] Subscribed to incoming kind-4 messages for user ${userPubkey.substring(0, 8)}...`);
   } catch (error) {
     console.error(`[Message] Failed to subscribe to incoming messages:`, error);
+  }
+}
+
+/**
+ * Handle friend request from unknown sender
+ * Creates sender as pending friend and shows notification
+ */
+async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise<void> {
+  try {
+    const messagingManager = getMessagingManager();
+    const friendManager = getFriendManager();
+
+    // Decrypt the message to get sender info
+    const message = await messagingManager.receiveMessage(
+      {
+        id: `temp_${event.pubkey}`,
+        identifier: event.pubkey, // Will be updated
+        pubkey: event.pubkey,
+        local_name: event.pubkey.substring(0, 8),
+        added_at: Date.now(),
+        last_seen: Date.now(),
+        muted: false,
+        hidden_services: [],
+        current_activities: {},
+        state: 'pending',
+      } as Friend,
+      event.content,
+      event.created_at * 1000
+    );
+
+    if (!message || message.type !== 'friend_request') {
+      console.warn('[Message] Failed to decrypt or invalid friend_request message');
+      return;
+    }
+
+    // Create sender as pending friend
+    // We'll derive identifier from pubkey (for now, just use pubkey as identifier)
+    // In reality, they should also send their identifier in the message
+    const senderIdentifier = event.pubkey; // TODO: decrypt from message or tags
+    const senderLocalName = event.pubkey.substring(0, 12);
+
+    const existingFriend = await friendManager.getFriendByIdentifier(senderIdentifier);
+    if (existingFriend) {
+      console.log(`[Message] Friend already exists: ${senderIdentifier}`);
+      return;
+    }
+
+    // Create as pending friend
+    const newFriend = await friendManager.addFriend(senderIdentifier, senderLocalName);
+    console.log(`[Message] ✅ Created pending friend from request: ${senderLocalName}`);
+
+    // Subscribe to new friend
+    await _subscribeToFriend(senderIdentifier);
+
+    // Show notification
+    const notificationManager = getNotificationManager();
+    await notificationManager.notifyFriendRequest(newFriend.id, senderLocalName);
+
+    // Notify popup
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'FRIEND_REQUEST_RECEIVED',
+        data: { friendId: newFriend.id, senderDisplayName: senderLocalName },
+      }).catch(() => {
+        // Popup not open
+      });
+    } catch (error) {
+      console.debug('[Message] Could not notify popup:', error instanceof Error ? error.message : error);
+    }
+  } catch (error) {
+    console.error('[Message] Failed to handle friend request from unknown sender:', error);
   }
 }
 
