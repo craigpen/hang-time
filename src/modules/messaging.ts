@@ -194,10 +194,15 @@ export class MessagingManager {
       const pubkey = await this.identityManager.getPubkey();
       const secretKey = await this.identityManager.getSecretKey();
 
-      // Create friend request message
+      // Create friend request message with sender info
       const message: ActivityMessage = {
         type: 'friend_request',
         activity_id: `friend_request_${Date.now()}`,
+        content: JSON.stringify({
+          sender_identifier: userProfile.memorable_identifier,
+          sender_display_name: userProfile.nickname || userProfile.memorable_identifier,
+          sender_pubkey: pubkey,
+        }),
         timestamp: Date.now(),
       };
 

@@ -21,6 +21,7 @@ import { SpotifyService } from '../src/modules/services/spotify';
 import { TwitchService } from '../src/modules/services/twitch';
 import { initializeMetadataFetcher, metadataFetcher } from '../src/modules/metadata-fetcher';
 import { getActivityVerb, generateActivityId } from '../src/modules/activity-utils';
+import { encryptionManager } from '../src/modules/encryption';
 import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } from '../src/types';
 
 // ============================================================================
@@ -1347,61 +1348,65 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
     const friendManager = getFriendManager();
 
     // Decrypt the message to get sender info
-    const message = await messagingManager.receiveMessage(
-      {
-        id: `temp_${event.pubkey}`,
-        identifier: event.pubkey, // Will be updated
-        pubkey: event.pubkey,
-        local_name: event.pubkey.substring(0, 8),
-        added_at: Date.now(),
-        last_seen: Date.now(),
-        muted: false,
-        hidden_services: [],
-        current_activities: {},
-        state: 'pending',
-      } as Friend,
-      event.content,
-      event.created_at * 1000
-    );
-
-    if (!message || message.type !== 'friend_request') {
-      console.warn('[Message] Failed to decrypt or invalid friend_request message');
-      return;
-    }
-
-    // Create sender as pending friend
-    // We'll derive identifier from pubkey (for now, just use pubkey as identifier)
-    // In reality, they should also send their identifier in the message
-    const senderIdentifier = event.pubkey; // TODO: decrypt from message or tags
-    const senderLocalName = event.pubkey.substring(0, 12);
-
-    const existingFriend = await friendManager.getFriendByIdentifier(senderIdentifier);
-    if (existingFriend) {
-      console.log(`[Message] Friend already exists: ${senderIdentifier}`);
-      return;
-    }
-
-    // Create as pending friend
-    const newFriend = await friendManager.addFriend(senderIdentifier, senderLocalName);
-    console.log(`[Message] ✅ Created pending friend from request: ${senderLocalName}`);
-
-    // Subscribe to new friend
-    await _subscribeToFriend(senderIdentifier);
-
-    // Show notification
-    const notificationManager = getNotificationManager();
-    await notificationManager.notifyFriendRequest(newFriend.id, senderLocalName);
-
-    // Notify popup
     try {
-      await chrome.runtime.sendMessage({
-        type: 'FRIEND_REQUEST_RECEIVED',
-        data: { friendId: newFriend.id, senderDisplayName: senderLocalName },
-      }).catch(() => {
-        // Popup not open
-      });
-    } catch (error) {
-      console.debug('[Message] Could not notify popup:', error instanceof Error ? error.message : error);
+      const userProfile = await storageManager.getUserProfile();
+      if (!userProfile) {
+        console.warn('[Message] User profile not found, cannot decrypt');
+        return;
+      }
+
+      const secretKey = await identityManager.getSecretKey();
+      const plaintext = encryptionManager.decrypt(event.content, userProfile.pubkey, secretKey);
+      const message = JSON.parse(plaintext);
+
+      if (message.type !== 'friend_request') {
+        console.warn('[Message] Invalid message type for friend request');
+        return;
+      }
+
+      // Extract sender info from the decrypted message
+      const senderInfo = JSON.parse(message.content);
+      const senderIdentifier = senderInfo.sender_identifier;
+      const senderDisplayName = senderInfo.sender_display_name || senderInfo.sender_identifier;
+
+      if (!senderIdentifier) {
+        console.warn('[Message] Friend request missing sender_identifier');
+        return;
+      }
+
+      console.log(`[Message] 🔔 Friend Request from ${senderDisplayName} (${senderIdentifier})`);
+
+      const existingFriend = await friendManager.getFriendByIdentifier(senderIdentifier);
+      if (existingFriend) {
+        console.log(`[Message] ℹ️  Friend already exists: ${senderIdentifier}`);
+        return;
+      }
+
+      // Create as pending friend
+      const newFriend = await friendManager.addFriend(senderIdentifier, senderDisplayName);
+      console.log(`[Message] ✅ Created pending friend from request: ${senderDisplayName}`);
+
+      // Subscribe to new friend
+      await _subscribeToFriend(senderIdentifier);
+
+      // Show notification
+      const notificationManager = getNotificationManager();
+      await notificationManager.notifyFriendRequest(newFriend.id, senderDisplayName);
+
+      // Notify popup
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'FRIEND_REQUEST_RECEIVED',
+          data: { friendId: newFriend.id, senderDisplayName },
+        }).catch(() => {
+          // Popup not open
+        });
+      } catch (error) {
+        console.debug('[Message] Could not notify popup:', error instanceof Error ? error.message : error);
+      }
+    } catch (decryptError) {
+      console.error('[Message] Failed to decrypt friend request:', decryptError);
+      return;
     }
   } catch (error) {
     console.error('[Message] Failed to handle friend request from unknown sender:', error);
