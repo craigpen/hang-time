@@ -52,15 +52,11 @@ export class ActivityDetector {
 
   async detectAndPublish(): Promise<void> {
     try {
-      console.debug('[Activity] Detection cycle starting...');
       const allActivities = await this.detectAllActiveActivities();
 
       if (allActivities.length === 0) {
-        console.debug('[Activity] No active activities detected');
         return;
       }
-
-      console.log(`[Activity] 🎬 Detected ${allActivities.length} active service(s): ${allActivities.map(a => a.service).join(', ')}`);
 
       // Validate activities through datastore before storing
       const datastore = getActivityDatastore();

@@ -68,14 +68,9 @@ let receivedFreshContentScriptConnection = false;
  * If an activity exists but no fresh script has connected within 3 seconds, mark as disconnected
  */
 async function _checkForOrphanedActivity(): Promise<void> {
-  console.log(`[Background] ⏰ 3-second check: Fresh connection flag = ${receivedFreshContentScriptConnection}`);
-
   if (receivedFreshContentScriptConnection) {
-    console.log('[Background] ✅ Fresh script already connected, NOT marking as disconnected');
     return;
   }
-
-  console.log('[Background] ⚠️  No fresh script connected yet, will mark as disconnected');
 
   // No fresh connection - check if there's an activity to mark as disconnected
   try {
@@ -85,8 +80,6 @@ async function _checkForOrphanedActivity(): Promise<void> {
     const videoActivity = Object.values(myActivities).find(
       (activity: any) => activity?.service === 'video-tab'
     ) as any;
-
-    console.log('[Background] Video activity exists:', !!videoActivity, 'state:', videoActivity?.state);
 
     if (videoActivity && videoActivity.state !== 'disconnected') {
       await _markActivityAsDisconnected(0);

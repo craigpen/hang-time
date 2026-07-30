@@ -1,7 +1,3 @@
-(function() {
-  console.log('[ContentScript] >>>>>> SCRIPT EXECUTING AT:', window.location.href, 'time:', new Date().toISOString());
-})();
-
 /**
  * Hang Time - Generic Video Content Script
  * Detects any <video> element on any platform
@@ -234,15 +230,6 @@ class GenericVideoTracker {
             value: activity,
           },
         });
-        console.log(
-          `[ContentScript] ✅ Sent activity: ${title} (${currentTime}/${duration}s) favicon: ${favicon}`,
-          {
-            metadata: activity.metadata,
-            hasDuration: activity.metadata?.duration !== undefined,
-            hasProgress: activity.metadata?.progress !== undefined,
-            hasFavicon: activity.metadata?.favicon !== undefined,
-          }
-        );
       } catch (err) {
         console.debug('[ContentScript] Port send failed:', err);
       }
@@ -281,14 +268,11 @@ class GenericVideoTracker {
       if (favicon && favicon.hasAttribute('href')) {
         const href = favicon.getAttribute('href') || '';
         if (href) {
-          console.debug('[ContentScript] Found favicon:', href);
           return href;
         }
       }
     }
 
-    // Fallback to common favicon location
-    console.debug('[ContentScript] Using fallback favicon: /favicon.ico');
     return '/favicon.ico';
   }
 
