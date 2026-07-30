@@ -114,6 +114,16 @@ export class NotificationManager {
         requireInteraction: true,
       });
 
+      // Setup click handler to open popup
+      chrome.notifications.onClicked.addListener((clickedNotificationId) => {
+        if (clickedNotificationId === notificationId) {
+          // Open the extension popup
+          chrome.action.openPopup();
+          // Clear the notification
+          chrome.notifications.clear(notificationId);
+        }
+      });
+
       console.debug('[Notifications] Friend request notification sent for', senderDisplayName);
     } catch (error) {
       console.error('[Notifications] Failed to send friend request notification:', error);
