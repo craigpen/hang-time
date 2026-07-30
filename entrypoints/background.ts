@@ -991,6 +991,9 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
     console.debug('[Background] Saving settings - received steam_id:', data.steam_id);
 
     // Update profile with new settings
+    if (data.nickname !== undefined) {
+      profile.nickname = data.nickname;
+    }
     if (data.discord_info !== undefined) {
       profile.discord_info = data.discord_info;
     }
@@ -1015,6 +1018,17 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
     // Save updated profile
     await storageManager.setUserProfile(profile);
     console.debug('[Background] Settings saved');
+
+    // If nickname or discord info changed, republish profile to Nostr
+    if (data.nickname !== undefined || data.discord_info !== undefined) {
+      try {
+        if (activityPublisher) {
+          await activityPublisher.publishProfile();
+        }
+      } catch (error) {
+        console.warn('[Background] Failed to publish profile after settings change:', error);
+      }
+    }
 
     return { success: true };
   } catch (error) {

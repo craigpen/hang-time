@@ -1697,6 +1697,12 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         idDisplay.textContent = profile.memorable_identifier;
       }
 
+      // Load nickname
+      const nicknameInput = document.getElementById('nickname-popup') as HTMLInputElement;
+      if (nicknameInput && profile.nickname) {
+        nicknameInput.value = profile.nickname;
+      }
+
       // Load Discord info
       const discordInput = document.getElementById('discord-info-popup') as HTMLInputElement;
       if (discordInput && profile.discord_info) {
@@ -1988,6 +1994,12 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       });
     });
 
+    // Nickname input changes
+    const nicknameInput = document.getElementById('nickname-popup') as HTMLInputElement;
+    if (nicknameInput) {
+      nicknameInput.addEventListener('change', () => this._saveSettingsPanel());
+    }
+
     // Discord input changes
     const discordInput = document.getElementById('discord-info-popup') as HTMLInputElement;
 
@@ -2175,6 +2187,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
 
   private async _saveSettingsPanel(): Promise<void> {
     try {
+      const nicknameInput = (document.getElementById('nickname-popup') as HTMLInputElement)?.value.trim() || '';
       const discordInput = (document.getElementById('discord-info-popup') as HTMLInputElement)?.value || '';
       const steamIdInput = (document.getElementById('steam-id-popup') as HTMLInputElement)?.value.trim() || '';
       const steamApiKeyInput = (document.getElementById('steam-api-key-popup') as HTMLInputElement)?.value.trim() || '';
@@ -2224,6 +2237,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       await chrome.runtime.sendMessage({
         type: 'SAVE_SETTINGS',
         data: {
+          nickname: nicknameInput || undefined,
           discord_info: discordInput,
           steam_id: steamIdInput || undefined,
           steam_api_key: steamApiKeyInput || undefined,

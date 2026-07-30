@@ -90,6 +90,9 @@ export class ActivityPublisher {
 
       // Build profile tags
       const tags: Array<[string, string]> = [];
+      if (profile.nickname) {
+        tags.push(['nickname', profile.nickname]);
+      }
       if (profile.discord_info) {
         tags.push(['discord_link', profile.discord_info]);
       }
@@ -112,7 +115,7 @@ export class ActivityPublisher {
       event.sig = encryptionManager.signEvent(event.id, await this.identityManager.getSecretKey());
 
       // Publish to relays
-      console.log(`[Publisher] 📤 Publishing kind-0 profile (discord: ${profile.discord_info ? 'yes' : 'no'})`);
+      console.log(`[Publisher] 📤 Publishing kind-0 profile (nickname: ${profile.nickname || 'none'}, discord: ${profile.discord_info ? 'yes' : 'no'})`);
       const config = profile?.publisher_config;
       await this.relayPool.publish(event, config);
       console.debug('[Publisher] Profile published successfully');
