@@ -336,6 +336,20 @@ export class PopupController {
                   }
                 }
               }
+
+              // Update content text if state changed to disconnected
+              const contentText = row.querySelector('.activity-content-text') as HTMLElement;
+              if (contentText) {
+                if (activity.state === 'disconnected') {
+                  contentText.textContent = 'Disconnected - reload tab';
+                  contentText.style.fontStyle = 'italic';
+                  contentText.style.opacity = '0.7';
+                } else {
+                  contentText.textContent = this._truncateActivityContent(activity.content);
+                  contentText.style.fontStyle = 'normal';
+                  contentText.style.opacity = '1';
+                }
+              }
             }
 
             // Reload messages in case new ones arrived
@@ -642,7 +656,14 @@ export class PopupController {
     // Content text - THIRD
     const contentText = document.createElement('span');
     contentText.className = 'activity-content-text';
-    contentText.textContent = this._truncateActivityContent(activity.content);
+    // Show disconnect message if state is disconnected, otherwise show content
+    if (activity.state === 'disconnected') {
+      contentText.textContent = 'Disconnected - reload tab';
+      contentText.style.fontStyle = 'italic';
+      contentText.style.opacity = '0.7';
+    } else {
+      contentText.textContent = this._truncateActivityContent(activity.content);
+    }
     row.appendChild(contentText);
 
     // Action buttons container
