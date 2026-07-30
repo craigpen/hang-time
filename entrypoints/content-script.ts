@@ -89,13 +89,22 @@ class GenericVideoTracker {
 
     // Attach event listeners to video element
     const playHandler = () => this._sendPlaybackUpdate();
+    const pauseHandler = () => {
+      // Only send pause update if tab is in foreground (user explicitly paused)
+      // Ignore pause events when backgrounded (browser-initiated pauses)
+      if (!document.hidden) {
+        this._sendPlaybackUpdate();
+      }
+    };
     const emptiedHandler = () => this._onVideoEmptied();
 
     this.activeVideoElement.addEventListener('play', playHandler);
+    this.activeVideoElement.addEventListener('pause', pauseHandler);
     this.activeVideoElement.addEventListener('emptied', emptiedHandler);
 
     // Store handlers for cleanup
     this.eventListeners.set('play', playHandler);
+    this.eventListeners.set('pause', pauseHandler);
     this.eventListeners.set('emptied', emptiedHandler);
 
     // Initial report for the currently loaded video
