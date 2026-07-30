@@ -1918,6 +1918,28 @@ chrome.runtime.onSuspend?.addListener(async () => {
   await cleanupOnUnload();
 });
 
+// Clean up activities when tabs are closed
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  try {
+    const allActivities = await storageManager.getMyActivities();
+    let removed = false;
+
+    for (const [activityId, activity] of Object.entries(allActivities)) {
+      if (activity?.metadata?.tabId === tabId && activity?.service === 'video-tab') {
+        console.debug(`[Background] 🗑️  Removing activity for closed tab ${tabId}: ${activity.id}`);
+        delete allActivities[activityId];
+        removed = true;
+      }
+    }
+
+    if (removed) {
+      await storageManager.setMyActivities(allActivities);
+    }
+  } catch (error) {
+    console.error(`[Background] Error cleaning up activity for closed tab ${tabId}:`, error);
+  }
+});
+
 // ============================================================================
 // STARTUP
 // ============================================================================
