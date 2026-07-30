@@ -265,59 +265,68 @@ class GenericVideoTracker {
 
   private _getNetflixTitle(): string | null {
     try {
-      // Try h2 tags first (React renders title here)
-      const h2Elements = document.querySelectorAll('h2');
-      for (const h2 of h2Elements) {
-        const text = h2.textContent?.trim();
-        if (text && this._isValidNetflixTitle(text)) {
-          return text;
-        }
+      // Try multiple times immediately - Netflix React might not be fully rendered yet
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const title = this._tryExtractNetflixTitle();
+        if (title) return title;
       }
-
-      // Fallback to data-uia attribute
-      const titleElements = document.querySelectorAll("[data-uia='video-title']");
-      for (const titleElement of titleElements) {
-        const fullText = titleElement.textContent?.trim() || '';
-        if (!fullText) continue;
-
-        // Parse episode info from the text
-        const parts = fullText.split(/\s+(?=Rated|Audio|Subtitles|CC|Closed|Available|IMDb|\d+%)/i);
-        let title = parts[0].trim();
-
-        if (/^Rated|^PG|^R$|^NC-17|^G$|^TV-|^\d+%|^IMDb|^Audio|^Subtitles|^CC|^Closed|^Available/i.test(title)) {
-          continue;
-        }
-
-        const episodeMatch = title.match(/\s*([SE]\d+(?:E\d+)?)\s*/i);
-        const episode = episodeMatch ? episodeMatch[1] : null;
-
-        if (episode) {
-          title = title.substring(0, episodeMatch.index).trim();
-        }
-
-        const titleWords = title.split(/\s+/);
-        if (titleWords.length > 1) {
-          const firstWord = titleWords[0].toLowerCase();
-          while (titleWords.length > 1 && titleWords[titleWords.length - 1].toLowerCase() === firstWord) {
-            titleWords.pop();
-          }
-          title = titleWords.join(' ');
-        }
-
-        title = title.trim();
-
-        if (title && title.length > 2) {
-          const result = episode ? `${title} ${episode}` : title;
-          if (this._isValidNetflixTitle(result)) {
-            return result;
-          }
-        }
-      }
-
       return null;
     } catch (error) {
       return null;
     }
+  }
+
+  private _tryExtractNetflixTitle(): string | null {
+    // Try h2 tags first (React renders title here)
+    const h2Elements = document.querySelectorAll('h2');
+    for (const h2 of h2Elements) {
+      const text = h2.textContent?.trim();
+      if (text && this._isValidNetflixTitle(text)) {
+        return text;
+      }
+    }
+
+    // Fallback to data-uia attribute
+    const titleElements = document.querySelectorAll("[data-uia='video-title']");
+    for (const titleElement of titleElements) {
+      const fullText = titleElement.textContent?.trim() || '';
+      if (!fullText) continue;
+
+      // Parse episode info from the text
+      const parts = fullText.split(/\s+(?=Rated|Audio|Subtitles|CC|Closed|Available|IMDb|\d+%)/i);
+      let title = parts[0].trim();
+
+      if (/^Rated|^PG|^R$|^NC-17|^G$|^TV-|^\d+%|^IMDb|^Audio|^Subtitles|^CC|^Closed|^Available/i.test(title)) {
+        continue;
+      }
+
+      const episodeMatch = title.match(/\s*([SE]\d+(?:E\d+)?)\s*/i);
+      const episode = episodeMatch ? episodeMatch[1] : null;
+
+      if (episode) {
+        title = title.substring(0, episodeMatch.index).trim();
+      }
+
+      const titleWords = title.split(/\s+/);
+      if (titleWords.length > 1) {
+        const firstWord = titleWords[0].toLowerCase();
+        while (titleWords.length > 1 && titleWords[titleWords.length - 1].toLowerCase() === firstWord) {
+          titleWords.pop();
+        }
+        title = titleWords.join(' ');
+      }
+
+      title = title.trim();
+
+      if (title && title.length > 2) {
+        const result = episode ? `${title} ${episode}` : title;
+        if (this._isValidNetflixTitle(result)) {
+          return result;
+        }
+      }
+    }
+
+    return null;
   }
 
   private _isValidNetflixTitle(title: string | null | undefined): boolean {
