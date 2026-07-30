@@ -16,6 +16,7 @@ class GenericVideoTracker {
   private lastReportedTime: number = 0;
   private lastReportTimestamp: number = 0; // Rate limit duplicate reports
   private videoSearchTimeout: NodeJS.Timeout | null = null; // Debounce video search
+  private cachedNetflixTitle: string | null = null; // Cache extracted Netflix title to prevent overwrites
 
   constructor() {
     console.log('[ContentScript] ✅ Generic video tracker initialized');
@@ -82,6 +83,7 @@ class GenericVideoTracker {
     // Switched to a new video element - clean up old listeners
     if (this.activeVideoElement) {
       this._removeVideoListeners();
+      this.cachedNetflixTitle = null; // Clear title cache for new video
     }
 
     this.activeVideoElement = currentVideo;
@@ -147,6 +149,7 @@ class GenericVideoTracker {
     console.log('[ContentScript] Video emptied - ready to hook new video');
     this._removeVideoListeners();
     this.activeVideoElement = null;
+    this.cachedNetflixTitle = null; // Clear title cache for new video
 
     // Check for new video on next DOM update
     setTimeout(() => this._findAndHookVideo(), 100);
@@ -247,7 +250,17 @@ class GenericVideoTracker {
   private _getVideoTitle(): string {
     // Netflix needs special handling to extract title from DOM
     if (window.location.hostname.includes('netflix.com')) {
-      return this._getNetflixTitle() || 'Netflix Video';
+      // Return cached title if we have one (don't overwrite valid titles with fallback)
+      if (this.cachedNetflixTitle) {
+        return this.cachedNetflixTitle;
+      }
+      // Try to extract new title
+      const title = this._getNetflixTitle();
+      if (title) {
+        this.cachedNetflixTitle = title; // Cache the valid title
+        return title;
+      }
+      return 'Netflix Video';
     }
 
     // For other platforms, use document.title
