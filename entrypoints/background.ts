@@ -590,6 +590,12 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'RENAME_FRIEND':
       return _renameFriend(message.data?.friendId, message.data?.newName);
 
+    case 'ACCEPT_FRIEND_REQUEST':
+      return _acceptFriendRequest(message.data?.friendId);
+
+    case 'DECLINE_FRIEND_REQUEST':
+      return _declineFriendRequest(message.data?.friendId);
+
     case 'SEND_MESSAGE':
       return _sendMessage(message.data?.activity, message.data?.friendId, message.data?.content);
 
@@ -918,6 +924,79 @@ async function _renameFriend(friendId?: string, newName?: string): Promise<Exten
     return { success: true };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to rename friend' };
+  }
+}
+
+async function _acceptFriendRequest(friendId?: string): Promise<ExtensionResponse> {
+  if (!friendId) {
+    return { success: false, error: 'friendId required' };
+  }
+
+  try {
+    const friendManager = getFriendManager();
+    const friend = await friendManager.getFriend(friendId);
+    if (!friend) {
+      return { success: false, error: 'Friend not found' };
+    }
+
+    // Accept the friend request
+    await friendManager.acceptFriendRequest(friendId);
+
+    // Send acceptance notification back to the friend
+    const messagingManager = getMessagingManager();
+    const dummyActivity: Activity = {
+      id: `accept_${friendId}`,
+      service: 'friend-request',
+      content: 'Friend request acceptance',
+      timestamp: Date.now(),
+      freshness_timestamp: Date.now(),
+      audio: 'off',
+      metadata: {},
+    };
+    await messagingManager.sendJoinAccepted(dummyActivity, friend);
+
+    console.log(`[Background] ✅ Accepted friend request from: ${friend.local_name}`);
+    return { success: true };
+  } catch (error) {
+    console.error('[Background] Failed to accept friend request:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to accept friend request' };
+  }
+}
+
+async function _declineFriendRequest(friendId?: string): Promise<ExtensionResponse> {
+  if (!friendId) {
+    return { success: false, error: 'friendId required' };
+  }
+
+  try {
+    const friendManager = getFriendManager();
+    const friend = await friendManager.getFriend(friendId);
+    if (!friend) {
+      return { success: false, error: 'Friend not found' };
+    }
+
+    // Send decline notification to the friend
+    const messagingManager = getMessagingManager();
+    const dummyActivity: Activity = {
+      id: `decline_${friendId}`,
+      service: 'friend-request',
+      content: 'Friend request decline',
+      timestamp: Date.now(),
+      freshness_timestamp: Date.now(),
+      audio: 'off',
+      metadata: {},
+    };
+    await messagingManager.sendJoinDeclined(dummyActivity, friend);
+
+    // Remove the friend from the list
+    await friendManager.removeFriend(friendId);
+    activeSubscriptions.delete(friend.pubkey);
+
+    console.log(`[Background] ❌ Declined friend request from: ${friend.local_name}`);
+    return { success: true };
+  } catch (error) {
+    console.error('[Background] Failed to decline friend request:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to decline friend request' };
   }
 }
 

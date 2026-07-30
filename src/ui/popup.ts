@@ -198,10 +198,36 @@ export class PopupController {
     }
     selfElement.classList.toggle('expanded', selfExpanded);
 
+    // Create or update the Friend Activity header (positioned after My Activity)
+    let headerElement = this.friendsList!.querySelector('[data-header="friends-header"]') as HTMLElement | null;
+    if (!headerElement) {
+      headerElement = document.createElement('div');
+      headerElement.className = 'friends-header';
+      headerElement.setAttribute('data-header', 'friends-header');
+      headerElement.innerHTML = `
+        <h2>Friend Activity</h2>
+        <div class="friends-header-actions">
+          <button id="show-inactive-btn" class="btn-icon-small btn-toggle-inactive" title="Toggle offline friends">●</button>
+          <button id="add-friend-btn" class="btn-icon-small btn-add-friend" title="Add a friend">✚</button>
+        </div>
+      `;
+      this.friendsList!.appendChild(headerElement);
+
+      // Re-attach event listeners after creating header
+      const inactiveBtnNew = headerElement.querySelector('#show-inactive-btn');
+      const addFriendBtnNew = headerElement.querySelector('#add-friend-btn');
+      if (inactiveBtnNew) {
+        inactiveBtnNew.addEventListener('click', () => this._toggleShowInactiveFriends());
+      }
+      if (addFriendBtnNew) {
+        addFriendBtnNew.addEventListener('click', () => this._showAddFriendModal());
+      }
+    }
+
     // Show "no friends" placeholder
     if (!friends || friends.length === 0) {
       this.noFriendsPlaceholder!.style.display = 'block';
-      // Remove all existing friend elements (keep only self)
+      // Remove all existing friend elements (keep only self and header)
       existingElements.forEach((element, friendId) => {
         if (friendId !== 'self') {
           element.remove();
@@ -210,28 +236,46 @@ export class PopupController {
     } else {
       this.noFriendsPlaceholder!.style.display = 'none';
 
+      // Sort friends: pending first, then active
+      const pendingFriends = friends.filter(f => f.state === 'pending');
+      const activeFriends = friends.filter(f => f.state === 'active');
+      const sortedFriends = [...pendingFriends, ...activeFriends];
+
       // Update existing friends and add new ones
-      for (const friend of friends) {
+      for (const friend of sortedFriends) {
         const isExpanded = this.expandedFriendsState.get(friend.id) ?? true;
-        // Aggressive deduplication: only show one activity per unique ID, prefer newest
-        const dedupActivities = this._deduplicateActivities(Object.values(friend.current_activities || {}));
-        // Sort by type: videos, streams, games, etc.
-        const activities = this._sortActivitiesByType(dedupActivities);
 
-        let friendElement = existingElements.get(friend.id);
-        if (!friendElement) {
-          // Create new friend element
-          friendElement = this._createFriendItem(friend.id, friend.local_name, activities, isExpanded);
-          friendElement.setAttribute('data-friend-id', friend.id);
-          this.friendsList!.appendChild(friendElement);
+        // Check if this is a pending friend
+        if (friend.state === 'pending') {
+          // Create pending friend element with accept/decline buttons
+          let friendElement = existingElements.get(friend.id);
+          if (!friendElement) {
+            friendElement = this._createPendingFriendItem(friend.id, friend.local_name);
+            friendElement.setAttribute('data-friend-id', friend.id);
+            this.friendsList!.appendChild(friendElement);
+          }
+          friendElement.classList.add('pending');
         } else {
-          // Update existing friend element in place
-          this._updateFriendItem(friendElement, friend.id, friend.local_name, activities, isExpanded);
-        }
+          // Active friend: show activities
+          const dedupActivities = this._deduplicateActivities(Object.values(friend.current_activities || {}));
+          const activities = this._sortActivitiesByType(dedupActivities);
 
-        const isIdle = Object.keys(friend.current_activities || {}).length === 0;
-        friendElement.classList.toggle('idle', isIdle);
-        friendElement.classList.toggle('expanded', isExpanded);
+          let friendElement = existingElements.get(friend.id);
+          if (!friendElement) {
+            // Create new friend element
+            friendElement = this._createFriendItem(friend.id, friend.local_name, activities, isExpanded);
+            friendElement.setAttribute('data-friend-id', friend.id);
+            this.friendsList!.appendChild(friendElement);
+          } else {
+            // Update existing friend element in place
+            this._updateFriendItem(friendElement, friend.id, friend.local_name, activities, isExpanded);
+          }
+
+          const isIdle = Object.keys(friend.current_activities || {}).length === 0;
+          friendElement.classList.toggle('idle', isIdle);
+          friendElement.classList.toggle('expanded', isExpanded);
+          friendElement.classList.remove('pending');
+        }
       }
 
       // Remove friends that are no longer displayed
@@ -479,6 +523,64 @@ export class PopupController {
         this._resizePopupToFitContent();
       }
     });
+
+    return item;
+  }
+
+  private _createPendingFriendItem(id: string, name: string): HTMLElement {
+    const item = document.createElement('div');
+    item.className = 'friend-item pending-friend-item';
+    item.dataset.friendId = id;
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'friend-header';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'friend-name';
+    nameSpan.textContent = this._escapeHtml(name);
+
+    const statusSpan = document.createElement('span');
+    statusSpan.className = 'friend-status pending-status';
+    statusSpan.textContent = 'Pending';
+
+    header.appendChild(nameSpan);
+    header.appendChild(statusSpan);
+    item.appendChild(header);
+
+    // Pending message and buttons
+    const messageContainer = document.createElement('div');
+    messageContainer.className = 'pending-message-container';
+
+    const message = document.createElement('div');
+    message.className = 'pending-message';
+    message.textContent = `${name} added you as a friend`;
+
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.className = 'pending-buttons';
+
+    const acceptBtn = document.createElement('button');
+    acceptBtn.className = 'btn-accept-friend';
+    acceptBtn.textContent = 'Accept';
+    acceptBtn.onclick = (e) => {
+      e.stopPropagation();
+      this._handleAcceptFriendRequest(id, name);
+    };
+
+    const declineBtn = document.createElement('button');
+    declineBtn.className = 'btn-decline-friend';
+    declineBtn.textContent = 'Decline';
+    declineBtn.onclick = (e) => {
+      e.stopPropagation();
+      this._handleDeclineFriendRequest(id, name);
+    };
+
+    buttonsContainer.appendChild(acceptBtn);
+    buttonsContainer.appendChild(declineBtn);
+
+    messageContainer.appendChild(message);
+    messageContainer.appendChild(buttonsContainer);
+    item.appendChild(messageContainer);
 
     return item;
   }
@@ -914,6 +1016,44 @@ export class PopupController {
         this.refreshFriends().catch(() => {});
       } else {
         this._showError(response?.error || 'Failed to rename friend');
+      }
+    });
+  }
+
+  private _handleAcceptFriendRequest(friendId: string, friendName: string): void {
+    if (!confirm(`Accept ${friendName} as a friend? Note: You can have duplicates if you both add each other simultaneously.`)) {
+      return;
+    }
+
+    chrome.runtime.sendMessage({
+      type: 'ACCEPT_FRIEND_REQUEST',
+      data: { friendId },
+    }, (response) => {
+      if (response?.success) {
+        console.debug(`[Popup] Accepted friend request from: ${friendName}`);
+        this._showSuccess(`You're now friends with ${friendName}!`);
+        this.refreshFriends().catch(() => {});
+      } else {
+        this._showError(response?.error || 'Failed to accept friend request');
+      }
+    });
+  }
+
+  private _handleDeclineFriendRequest(friendId: string, friendName: string): void {
+    if (!confirm(`Decline friend request from ${friendName}? They will be removed from your list.`)) {
+      return;
+    }
+
+    chrome.runtime.sendMessage({
+      type: 'DECLINE_FRIEND_REQUEST',
+      data: { friendId },
+    }, (response) => {
+      if (response?.success) {
+        console.debug(`[Popup] Declined friend request from: ${friendName}`);
+        this._showSuccess(`Declined friend request from ${friendName}`);
+        this.refreshFriends().catch(() => {});
+      } else {
+        this._showError(response?.error || 'Failed to decline friend request');
       }
     });
   }

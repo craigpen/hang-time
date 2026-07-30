@@ -1623,6 +1623,66 @@ body {
   opacity: 0.65;
 }
 
+.friend-item.pending {
+  background-color: var(--bg-secondary);
+  opacity: 0.85;
+}
+
+.friend-item.pending-friend-item {
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pending-status {
+  color: #f39c12 !important;
+  background-color: rgba(243, 156, 18, 0.2) !important;
+}
+
+.pending-message-container {
+  padding: 8px 14px;
+  background-color: var(--bg-tertiary);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pending-message {
+  color: var(--text-secondary);
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+.pending-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.btn-accept-friend,
+.btn-decline-friend {
+  padding: 6px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.btn-accept-friend:hover {
+  background-color: #27ae60;
+  border-color: #27ae60;
+  color: white;
+}
+
+.btn-decline-friend:hover {
+  background-color: #e74c3c;
+  border-color: #e74c3c;
+  color: white;
+}
+
 .friend-header {
   display: flex;
   align-items: center;
