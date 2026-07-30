@@ -879,11 +879,14 @@ async function _addFriend(identifier?: string, localName?: string): Promise<Exte
 
     // Publish friend request notification
     try {
+      console.log(`[Background] Preparing to send friend request to ${localName} (${identifier})`);
       const messagingManager = getMessagingManager();
+      console.log(`[Background] Got messagingManager, calling sendFriendRequest`);
       await messagingManager.sendFriendRequest(identifier, friend.pubkey, localName);
       console.log(`[Background] 📤 Friend request sent to ${localName}`);
     } catch (error) {
       console.error('[Background] Failed to send friend request notification:', error);
+      console.error('[Background] Full error:', error);
       // Don't fail the add operation if notification publish fails
     }
 
