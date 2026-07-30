@@ -59,33 +59,42 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 });
 
 /**
- * Track if we received a fresh content script connection after startup
+ * Track fresh content script connections per tab
+ * Tab ID -> timestamp of last connection
  */
-let receivedFreshContentScriptConnection = false;
+const freshConnectionTimestamps = new Map<number, number>();
 
 /**
  * Check if content script reconnected after startup
  * If an activity exists but no fresh script has connected within 3 seconds, mark as disconnected
  */
 async function _checkForOrphanedActivity(): Promise<void> {
-  if (receivedFreshContentScriptConnection) {
-    return;
+  // Clear stale connections (older than 3 seconds)
+  const now = Date.now();
+  const staleCutoff = now - 3000;
+
+  for (const [tabId, timestamp] of freshConnectionTimestamps.entries()) {
+    if (timestamp < staleCutoff) {
+      freshConnectionTimestamps.delete(tabId);
+    }
   }
 
-  // No fresh connection - check if there's an activity to mark as disconnected
-  try {
-    const myActivities = await storageManager.getMyActivities();
+  // If we have no fresh connections at all, mark activity as disconnected
+  if (freshConnectionTimestamps.size === 0) {
+    try {
+      const myActivities = await storageManager.getMyActivities();
 
-    // Find video-tab activity
-    const videoActivity = Object.values(myActivities).find(
-      (activity: any) => activity?.service === 'video-tab'
-    ) as any;
+      // Find video-tab activity
+      const videoActivity = Object.values(myActivities).find(
+        (activity: any) => activity?.service === 'video-tab'
+      ) as any;
 
-    if (videoActivity && videoActivity.state !== 'disconnected') {
-      await _markActivityAsDisconnected(0);
+      if (videoActivity && videoActivity.state !== 'disconnected') {
+        await _markActivityAsDisconnected(0);
+      }
+    } catch (err) {
+      console.error('[Background] Error checking orphaned activity:', err);
     }
-  } catch (err) {
-    console.error('[Background] Error checking orphaned activity:', err);
   }
 }
 
@@ -458,8 +467,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
     if (tabId !== undefined) {
       activeContentScriptPorts.set(tabId, port);
-      receivedFreshContentScriptConnection = true; // Mark that we got a fresh connection
-      console.log(`[Background] 🔌 Content script FRESH connection (${service}) for tab ${tabId} - FLAG SET TO TRUE`);
+      freshConnectionTimestamps.set(tabId, Date.now()); // Track this tab's fresh connection
     } else {
       console.warn(`[Background] Content script connected but no tab ID: ${service}`);
     }
