@@ -476,24 +476,8 @@ if (isContextValid()) {
       console.error('[ContentScript] Extension context lost—orphaned script detected');
       (window as any).hangTimeExtensionLoaded = false;
 
-      // Notify background that this script is going orphaned via sendMessage (more reliable than port)
-      try {
-        chrome.runtime.sendMessage(
-          {
-            type: 'CONTENT_SCRIPT_ORPHANED',
-            data: {
-              service: 'video-tab',
-              timestamp: Date.now(),
-            },
-          },
-          () => {
-            // Ignore response - this is fire-and-forget
-          }
-        );
-      } catch (err) {
-        console.debug('[ContentScript] Failed to notify background of orphaned state:', err);
-      }
-
+      // Background will detect this via _checkForOrphanedActivity() periodic check
+      // Don't try to send message - extension context is already invalid
       if (globalMonitorInterval) {
         clearInterval(globalMonitorInterval);
         globalMonitorInterval = null;
