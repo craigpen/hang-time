@@ -263,12 +263,12 @@ export class PopupController {
           let friendElement = existingElements.get(friend.id);
           if (!friendElement) {
             // Create new friend element
-            friendElement = this._createFriendItem(friend.id, friend.local_name, activities, isExpanded);
+            friendElement = this._createFriendItem(friend.id, friend.local_name, activities, isExpanded, friend);
             friendElement.setAttribute('data-friend-id', friend.id);
             this.friendsList!.appendChild(friendElement);
           } else {
             // Update existing friend element in place
-            this._updateFriendItem(friendElement, friend.id, friend.local_name, activities, isExpanded);
+            this._updateFriendItem(friendElement, friend.id, friend.local_name, activities, isExpanded, friend);
           }
 
           const isIdle = Object.keys(friend.current_activities || {}).length === 0;
@@ -296,8 +296,20 @@ export class PopupController {
     friendId: string,
     name: string,
     activities: Activity[],
-    isExpanded: boolean
+    isExpanded: boolean,
+    friend?: Friend
   ): void {
+    // Update status text if friend info provided
+    if (friend) {
+      const statusSpan = element.querySelector('.friend-status') as HTMLElement;
+      if (statusSpan) {
+        const statusText = this._getStatusText(friend);
+        statusSpan.textContent = statusText;
+        // Add class for "Last seen" styling
+        statusSpan.classList.toggle('last-seen', statusText.includes('Last seen'));
+      }
+    }
+
     // Update the activities container only if content changed
     const activitiesContainer = element.querySelector('.friend-activities') as HTMLElement;
     if (activitiesContainer) {
@@ -427,13 +439,26 @@ export class PopupController {
     }
   }
 
-  private _createFriendItem(id: string, name: string, activities: Activity[], isExpanded: boolean): HTMLElement {
+  private _getStatusText(friend: Friend): string {
+    const daysSinceLastSeen = Math.ceil((Date.now() - friend.last_seen) / (1000 * 60 * 60 * 24));
+
+    // If 30+ days, show "Last seen X days ago"
+    if (daysSinceLastSeen >= 30) {
+      return `Last seen ${daysSinceLastSeen}d ago`;
+    }
+
+    // Otherwise, show Active/Inactive based on current activities
+    const isActive = Object.keys(friend.current_activities || {}).length > 0;
+    return isActive ? 'Active' : 'Inactive';
+  }
+
+  private _createFriendItem(id: string, name: string, activities: Activity[], isExpanded: boolean, friend?: Friend): HTMLElement {
     const item = document.createElement('div');
     item.className = 'friend-item';
     item.dataset.friendId = id;
 
     const isInactive = activities.length === 0;
-    const statusText = isInactive ? 'Inactive' : 'Active';
+    const statusText = friend ? this._getStatusText(friend) : (isInactive ? 'Inactive' : 'Active');
 
     // Header with caret
     const header = document.createElement('div');
@@ -477,6 +502,9 @@ export class PopupController {
 
     const statusSpan = document.createElement('span');
     statusSpan.className = 'friend-status';
+    if (statusText.includes('Last seen')) {
+      statusSpan.classList.add('last-seen');
+    }
     statusSpan.textContent = statusText;
 
     header.appendChild(caret);
