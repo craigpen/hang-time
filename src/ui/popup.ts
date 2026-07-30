@@ -220,7 +220,7 @@ export class PopupController {
         inactiveBtnNew.addEventListener('click', () => this._toggleShowInactiveFriends());
       }
       if (addFriendBtnNew) {
-        addFriendBtnNew.addEventListener('click', () => this._showAddFriendModal());
+        addFriendBtnNew.addEventListener('click', () => this._showAddFriendForm());
       }
     }
 
