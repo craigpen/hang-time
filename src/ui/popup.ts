@@ -290,19 +290,50 @@ export class PopupController {
               // Update state icon if state changed
               const stateIcon = row.querySelector('.activity-state-icon') as HTMLElement;
               if (stateIcon && activity.state) {
-                if (activity.state === 'playing') {
+                // For Steam games, show controller emoji
+                if (activity.service === 'steam-api') {
+                  stateIcon.textContent = '🎮';
+                  stateIcon.title = 'Playing';
+                } else if (activity.state === 'disconnected') {
+                  // Content script disconnected: show red warning icon
                   stateIcon.innerHTML = `
-                    <svg viewBox="0 0 24 24" fill="#4CAF50" stroke="none" class="state-icon-svg">
-                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    <svg viewBox="0 0 24 24" fill="#EF4444" stroke="none" class="state-icon-svg">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="12" y1="8" x2="12" y2="12" stroke="#FFF" stroke-width="2"></line>
+                      <line x1="12" y1="16" x2="12.01" y2="16" stroke="#FFF" stroke-width="2"></line>
                     </svg>
                   `;
+                  stateIcon.title = activity.metadata?.disconnected_reason || 'Disconnected - reload tab';
                 } else {
-                  stateIcon.innerHTML = `
-                    <svg viewBox="0 0 24 24" fill="#9E9E9E" stroke="none" class="state-icon-svg">
-                      <rect x="6" y="4" width="4" height="16"></rect>
-                      <rect x="14" y="4" width="4" height="16"></rect>
-                    </svg>
-                  `;
+                  // Check if data is fresh from content script (for browser tabs)
+                  const isDataFresh = activity.is_fresh !== false;
+
+                  if (!isDataFresh) {
+                    // Stale data: show moon icon in yellow
+                    stateIcon.innerHTML = `
+                      <svg viewBox="0 0 24 24" fill="none" stroke="#FEF3C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="state-icon-svg">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                      </svg>
+                    `;
+                    stateIcon.title = 'Content script unavailable (tab may be backgrounded)';
+                  } else if (activity.state === 'playing') {
+                    // Fresh playing: green play icon
+                    stateIcon.innerHTML = `
+                      <svg viewBox="0 0 24 24" fill="#4CAF50" stroke="none" class="state-icon-svg">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                      </svg>
+                    `;
+                    stateIcon.title = 'Playing';
+                  } else {
+                    // Fresh paused: gray pause icon
+                    stateIcon.innerHTML = `
+                      <svg viewBox="0 0 24 24" fill="#9E9E9E" stroke="none" class="state-icon-svg">
+                        <rect x="6" y="4" width="4" height="16"></rect>
+                        <rect x="14" y="4" width="4" height="16"></rect>
+                      </svg>
+                    `;
+                    stateIcon.title = 'Paused';
+                  }
                 }
               }
             }
