@@ -623,7 +623,17 @@ export class StorageManager {
     const now = Date.now();
     const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
 
+    // Get all open tabs to check existence
+    const openTabs = await chrome.tabs.query({});
+    const openTabIds = new Set(openTabs.map(t => t.id));
+
     const filtered = health.filter(h => {
+      // Remove if tab no longer exists
+      if (!openTabIds.has(h.tabId)) {
+        return false;
+      }
+
+      // Remove if stale (no ping in 2 minutes)
       const ageSinceLastPing = now - h.lastPing;
       return ageSinceLastPing <= STALE_THRESHOLD_MS;
     });

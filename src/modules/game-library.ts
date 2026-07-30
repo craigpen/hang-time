@@ -7,6 +7,7 @@ import { OwnedGame, STORAGE_KEYS, NostrEvent, NostrError } from '../types';
 import { StorageManager } from './storage';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
+import { encryptionManager } from './encryption';
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -301,24 +302,34 @@ export class GameLibraryManager {
       const steamId = profile?.steam_config?.steam_id || '';
 
       // Create Nostr event
+      const created_at = Math.floor(Date.now() / 1000);
+      const content = JSON.stringify({
+        appIds,
+        count: library.length,
+        timestamp: Date.now(),
+      });
+
       const event: NostrEvent = {
-        id: '', // Will be set by signing function
+        id: '',
         pubkey,
-        created_at: Math.floor(Date.now() / 1000),
+        created_at,
         kind: 1,
         tags: [
           ['t', 'game-library'],
           ['steam-id', steamId],
         ],
-        content: JSON.stringify({
-          appIds,
-          count: library.length,
-          timestamp: Date.now(),
-        }),
+        content,
       };
 
-      // Note: In production, we'd need to sign this event with the secret key
-      // For MVP, we'll skip signing and let the relay handle it
+      // Compute event ID (SHA256 of canonical JSON)
+      const eventData = [0, pubkey, created_at, 1, event.tags, content];
+      const canonicalJson = JSON.stringify(eventData);
+      const eventId = await encryptionManager.sha256(canonicalJson);
+      event.id = eventId.substring(0, 64);
+
+      // Sign the event
+      event.sig = encryptionManager.signEvent(event.id, secretKey);
+
       console.debug(`[GameLibrary] Publishing ${appIds.length} games to Nostr`);
 
       await this.relayPool.publish(event);

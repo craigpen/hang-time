@@ -4,6 +4,8 @@
  * Detects service and runs appropriate handlers
  */
 
+import { generateActivityId } from '../src/modules/activity-utils';
+
 type Service = 'netflix-tab' | 'youtube-tab' | 'twitch-tab';
 
 interface VideoState {
@@ -16,6 +18,8 @@ interface VideoState {
 class UnifiedContentScript {
   private service: Service | null = null;
   private port: chrome.runtime.Port | null = null;
+  private lastReportedTime: number = 0;
+  private lastReportedState: 'playing' | 'paused' = 'playing';
   private videoState: VideoState = {
     videoId: null,
     currentTime: 0,
@@ -51,133 +55,125 @@ class UnifiedContentScript {
 
     console.debug(`[ContentScript] Initializing for ${this.service}`);
 
-    // Establish persistent port connection with reconnection on extension reload
-    this._connectToExtension();
+    // Set up health reporting to storage (visibility change + periodic heartbeat)
+    this._setupHealthReporting();
 
-    // Set up message listeners for tab.sendMessage queries
-    this._setupMessageListener();
+    // Set up video state reporting to storage
+    this._setupVideoStateReporting();
 
     // Start video monitoring for all services
     this._startVideoMonitoring();
   }
 
-  private _connectToExtension(retryCount: number = 0): void {
-    try {
-      this.port = chrome.runtime.connect({ name: `${this.service}-content` });
-      console.log(`[ContentScript] ✅ Connected to extension via port`);
 
-      // Listen for messages on the port
-      this.port.onMessage.addListener((message: any) => {
-        try {
-          console.debug(`[ContentScript] Received port message: ${message.type}`);
-          this._handleMessageForPort(message, (response: any) => {
-            try {
-              if (this.port) {
-                this.port.postMessage({ type: message.type, response });
-                console.debug(`[ContentScript] Responded to ${message.type} via port`);
-              }
-            } catch (error) {
-              console.error(`[ContentScript] Failed to send port response:`, error instanceof Error ? error.message : error);
-            }
-          });
-        } catch (error) {
-          console.error(`[ContentScript] Error handling port message:`, error instanceof Error ? error.message : error);
-        }
-      });
-
-      // Handle disconnection (e.g., extension reload)
-      this.port.onDisconnect.addListener(() => {
-        console.warn('[ContentScript] ⚠️  Disconnected from extension (extension reload?), attempting reconnect in 1s...');
-        this.port = null;
-        setTimeout(() => this._connectToExtension(0), 1000);
-      });
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(`[ContentScript] ❌ Failed to connect to extension (attempt ${retryCount + 1}):`, error);
-
-      const delay = errorMsg.includes('Extension context invalidated') ? 2000 : 1000;
-      const maxRetries = 10;
-
-      if (retryCount < maxRetries) {
-        console.log(`[ContentScript] Retrying connection in ${delay}ms... (${retryCount + 1}/${maxRetries})`);
-        setTimeout(() => this._connectToExtension(retryCount + 1), delay);
-      } else {
-        console.error(`[ContentScript] ❌ Failed to connect after ${maxRetries} retries. Giving up.`);
-      }
-    }
-  }
-
-  private _handleMessageForPort(message: any, sendResponse: (response: any) => void): void {
-    try {
-      switch (message.type) {
-        case 'GET_NETFLIX_TITLE':
-          this._handleGetNetflixTitle(sendResponse);
-          break;
-        case 'GET_VIDEO_STATE':
-          this._handleGetVideoState(sendResponse);
-          break;
-        case 'GET_VIDEO_POSITION':
-          this._handleGetVideoPosition(sendResponse);
-          break;
-        case 'SYNC_VIDEO':
-          this._handleSyncVideo(message.data?.targetTime, sendResponse);
-          break;
-        default:
-          console.debug(`[ContentScript] Unknown port message type: ${message.type}`);
-          sendResponse({ success: false, error: 'Unknown message type' });
-      }
-    } catch (error) {
-      console.error('[ContentScript] Error handling port message:', error);
-      sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
-    }
-  }
-
-  private _setupMessageListener(): void {
-    chrome.runtime.onMessage.addListener((message: any, sender, sendResponse) => {
-      console.debug(`[ContentScript] Message received: ${message?.type}`);
-
-      try {
-        switch (message.type) {
-          case 'HEALTH_CHECK':
-            this._handleHealthCheck(sendResponse);
-            break;
-
-          case 'GET_VIDEO_STATE':
-            this._handleGetVideoState(sendResponse);
-            break;
-
-          case 'GET_VIDEO_POSITION':
-            this._handleGetVideoPosition(sendResponse);
-            break;
-
-          case 'SYNC_VIDEO':
-            this._handleSyncVideo(message.data?.targetTime, sendResponse);
-            break;
-
-          case 'GET_NETFLIX_TITLE':
-            this._handleGetNetflixTitle(sendResponse);
-            break;
-
-          default:
-            console.debug(`[ContentScript] Unknown message type: ${message.type}`);
-            // Don't respond to unknown types
-            return false;
-        }
-
-        return true; // Will respond asynchronously
-      } catch (error) {
-        console.error('[ContentScript] Error handling message:', error);
-        sendResponse({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
-        return true;
-      }
+  private _setupHealthReporting(): void {
+    // Report health to storage on tab visibility change (sleep/wake)
+    document.addEventListener('visibilitychange', () => {
+      console.log(`[ContentScript] Tab ${document.hidden ? 'hidden' : 'visible'}`);
+      this._reportHealth();
     });
+
+    // Periodic health heartbeat every 30 seconds
+    setInterval(() => {
+      this._reportHealth();
+    }, 30000);
+
+    // Initial health report
+    this._reportHealth();
   }
 
-  private _handleHealthCheck(sendResponse: (response: any) => void): void {
-    sendResponse({
-      success: true,
+  private async _reportHealth(): void {
+    const healthKey = `content_script_health_${this.service}`;
+    const health = {
       service: this.service,
+      alive: true,
       timestamp: Date.now(),
+      visibility: document.hidden ? 'hidden' : 'visible',
+    };
+
+    await this._sendActivityMessage(healthKey, health);
+    console.debug(`[ContentScript] 📊 Reported health (${health.visibility})`);
+  }
+
+  private _setupVideoStateReporting(): void {
+    // Write complete activity data to storage
+    // Background monitors storage and uses for publishing
+    this._reportActivity();
+
+    // Update on visibility changes (tab wake-up)
+    document.addEventListener('visibilitychange', () => {
+      this._reportActivity();
+    });
+
+    // Periodic updates every 2 seconds
+    setInterval(() => {
+      this._reportActivity();
+    }, 2000);
+  }
+
+  private async _reportActivity(): Promise<void> {
+    const video = this._getVideoElement();
+    if (!video) {
+      console.debug(`[ContentScript] No video element found for ${this.service}`);
+      return;
+    }
+
+    // Get title (Netflix needs special handling)
+    let title = 'Video';
+    if (this.service === 'netflix-tab') {
+      // Try to get cached title first
+      title = await this._getNetflixTitleFromStorage();
+      // If no cached title, extract it from DOM
+      if (!title) {
+        title = await this._extractNetflixTitle();
+        if (title) {
+          await this._storeNetflixTitle(title);
+        }
+      }
+      title = title || 'Netflix Video';
+    } else if (this.service === 'youtube-tab') {
+      title = document.title.replace(' - YouTube', '').trim() || 'YouTube Video';
+    } else if (this.service === 'twitch-tab') {
+      title = document.title.replace(' on Twitch', '').trim() || 'Twitch Stream';
+    }
+
+    const activityKey = `content_script_activity_${this.service}`;
+    const isPlaying = this._isVideoPlaying(video);
+    const state = isPlaying ? 'playing' : 'paused';
+    this.lastReportedTime = video.currentTime;
+    this.lastReportedState = state;
+
+    // Use stable ID based on page URL, not timestamp
+    // This ensures the same video always has the same activity ID
+    const stableId = generateActivityId(this.service, window.location.href);
+
+    // For live streams (duration = 0), use currentTime as duration to avoid validation errors
+    const duration = video.duration || video.currentTime || 0;
+
+    const activity = {
+      id: stableId,
+      service: this.service,
+      content: title,
+      state: state,
+      audio: 'on',
+      currentTime: video.currentTime,
+      duration: duration,
+      timestamp: Date.now(),
+      url: window.location.href,
+    };
+
+    console.debug(`[ContentScript] 🎥 isPlaying=${isPlaying}, state=${state}, title=${title}`);
+
+    await this._sendActivityMessage(activityKey, activity);
+    console.debug(`[ContentScript] 📺 Activity: ${activity.content} (${state})`);
+  }
+
+  private async _getNetflixTitleFromStorage(): Promise<string | null> {
+    return new Promise((resolve) => {
+      chrome.storage.local.get('netflix_title_data', (result) => {
+        const data = result['netflix_title_data'];
+        resolve(data?.value || null);
+      });
     });
   }
 
@@ -263,6 +259,42 @@ class UnifiedContentScript {
 
   private _getVideoElement(): HTMLVideoElement | null {
     return document.querySelector('video');
+  }
+
+  private async _sendActivityMessage(key: string, value: any): Promise<void> {
+    try {
+      return await new Promise<void>((resolve) => {
+        console.debug(`[ContentScript] 📨 Sending message for key: ${key}`);
+        chrome.runtime.sendMessage(
+          { type: 'CONTENT_SCRIPT_ACTIVITY', data: { key, value } },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              console.warn(`[ContentScript] ⚠️  Message failed: ${chrome.runtime.lastError.message}`);
+            } else if (response?.success) {
+              console.debug(`[ContentScript] ✅ Background confirmed: ${key}`);
+            } else {
+              console.debug(`[ContentScript] Response received but not success: ${JSON.stringify(response)}`);
+            }
+            resolve();
+          }
+        );
+      });
+    } catch (error) {
+      console.error(`[ContentScript] ❌ Failed to send message:`, error instanceof Error ? error.message : error);
+    }
+  }
+
+  private _isVideoPlaying(video: HTMLVideoElement): boolean {
+    // Primary: check paused property
+    if (!video.paused) {
+      return true;
+    }
+
+    // Fallback for live streams (Twitch): check if currentTime is advancing
+    const currentTime = video.currentTime;
+    const isAdvancing = currentTime > this.lastReportedTime;
+
+    return isAdvancing;
   }
 
   private _startVideoMonitoring(): void {

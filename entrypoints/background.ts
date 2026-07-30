@@ -178,6 +178,7 @@ async function initializeExtension(): Promise<void> {
     activityDetector.registerService('twitch-api', new TwitchService(storageManager));
     activityDetector.registerService('steam-api', new SteamService(storageManager));
     // TODO: Register 'discord-api' when DiscordService is implemented
+    // TabService now reads from storage (written by content scripts)
     activityDetector.registerService('tabs', new TabService(storageManager));
 
     console.debug('[Background] Services registered');
@@ -269,12 +270,16 @@ function _startPeriodicCleanup(): void {
       // Remove stale Netflix titles (24+ hours old)
       const staleNetflixTitles = await storageManager.removeStaleNetflixTitle();
 
-      if (corruptedRemoved > 0 || ghostsRemoved > 0 || expiredInvites > 0 || staleNetflixTitles > 0) {
+      // Clean up stale video state and health entries from closed tabs
+      const staleVideoStates = await _cleanupStaleStorageEntries();
+
+      if (corruptedRemoved > 0 || ghostsRemoved > 0 || expiredInvites > 0 || staleNetflixTitles > 0 || staleVideoStates > 0) {
         console.log('[Background] 🧹 Cleanup cycle complete:', {
           corruptedRemoved,
           ghostsRemoved,
           expiredInvites,
           staleNetflixTitles,
+          staleVideoStates,
         });
       } else {
         console.debug('[Background] Cleanup cycle: no issues found');
@@ -288,61 +293,118 @@ function _startPeriodicCleanup(): void {
 }
 
 /**
+ * Clean up stale storage entries from content scripts
+ * Removes video state and health data for closed tabs and stale entries
+ */
+async function _cleanupStaleStorageEntries(): Promise<number> {
+  const storage = await chrome.storage.local.get(null);
+  const openTabs = await chrome.tabs.query({});
+  const openTabIds = new Set(openTabs.map(t => t.id));
+  const now = Date.now();
+  const STALE_THRESHOLD_MS = 60 * 1000; // 1 minute
+
+  let cleaned = 0;
+  const keysToRemove: string[] = [];
+
+  for (const key in storage) {
+    // Check for stale video state (older than 1 minute)
+    if (key.startsWith('content_script_video_state_')) {
+      const value = storage[key];
+      if (value?.timestamp && now - value.timestamp > STALE_THRESHOLD_MS) {
+        keysToRemove.push(key);
+        cleaned++;
+      }
+    }
+
+    // Check for stale health entries (handled separately but check here too)
+    if (key.startsWith('content_script_health_')) {
+      const value = storage[key];
+      if (value?.timestamp && now - value.timestamp > 2 * 60 * 1000) {
+        keysToRemove.push(key);
+        cleaned++;
+      }
+    }
+  }
+
+  if (keysToRemove.length > 0) {
+    await chrome.storage.local.remove(keysToRemove);
+  }
+
+  return cleaned;
+}
+
+/**
  * Content Script Health Monitoring
- * Pings each content script every 30 seconds to check responsiveness
- * Tracks which services are healthy in which tabs
+ * Listens to storage updates from content scripts
+ * Tracks which services are healthy
  */
 function _startContentScriptHealthCheck(): void {
-  const HEALTH_CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
-  const SERVICES: Array<'netflix-tab' | 'youtube-tab' | 'twitch-tab'> = ['netflix-tab', 'youtube-tab', 'twitch-tab'];
+  // Listen to storage changes from content scripts
+  chrome.storage.onChanged.addListener(async (changes, areaName) => {
+    if (areaName !== 'local') return;
 
+    // Check for health updates from content scripts
+    for (const key in changes) {
+      if (key.startsWith('content_script_health_')) {
+        const service = key.replace('content_script_health_', '') as 'netflix-tab' | 'youtube-tab' | 'twitch-tab';
+        const health = changes[key].newValue;
+
+        if (health && health.service && health.timestamp) {
+          console.debug(`[Background] 📊 Health update from ${service}: ${health.visibility}`);
+        }
+      }
+
+      // Check for activity updates from content scripts
+      if (key.startsWith('content_script_activity_')) {
+        const service = key.replace('content_script_activity_', '') as 'netflix-tab' | 'youtube-tab' | 'twitch-tab';
+        const activity = changes[key].newValue;
+
+        if (activity && activity.service && activity.content) {
+          console.debug(`[Background] 📺 Activity update from ${service}: ${activity.content}`);
+
+          // Update my_activities with the complete activity data
+          if (storageManager) {
+            try {
+              const activities = await storageManager.getMyActivities();
+              const activityId = activity.id || `${service}-${activity.timestamp}`;
+              activities[activityId] = {
+                id: activityId,
+                service: activity.service,
+                content: activity.content,
+                state: activity.state || 'playing',
+                audio: activity.audio || 'on',
+                timestamp: activity.timestamp,
+                freshness_timestamp: activity.timestamp,
+                is_fresh: true,
+                url: activity.url, // Include URL so ghost detection works
+                metadata: {
+                  progress: activity.currentTime || 0,
+                  duration: activity.duration || 0,
+                },
+              };
+              await storageManager.setMyActivities(activities);
+            } catch (error) {
+              console.error(`[Background] Failed to update activities from storage:`, error);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Periodic cleanup of stale entries (every 60 seconds)
   setInterval(async () => {
     try {
-      const tabs = await chrome.tabs.query({ windowType: 'normal' });
-
-      for (const tab of tabs) {
-        if (!tab.id || !tab.url) continue;
-
-        // Determine which service this tab is for
-        let service: 'netflix-tab' | 'youtube-tab' | 'twitch-tab' | null = null;
-        if (tab.url.includes('netflix.com')) {
-          service = 'netflix-tab';
-        } else if (tab.url.includes('youtube.com') || tab.url.includes('youtu.be')) {
-          service = 'youtube-tab';
-        } else if (tab.url.includes('twitch.tv')) {
-          service = 'twitch-tab';
-        }
-
-        if (!service) continue;
-
-        // Ping the content script
-        try {
-          const response = await chrome.tabs.sendMessage(tab.id, { type: 'HEALTH_CHECK' });
-          if (response && response.success) {
-            await storageManager.updateContentScriptHealth(tab.id, service, true);
-            console.debug(`[Background] ✅ ${service} tab ${tab.id} healthy`);
-          } else {
-            await storageManager.updateContentScriptHealth(tab.id, service, false);
-            console.warn(`[Background] ⚠️  ${service} tab ${tab.id} unhealthy (no response)`);
-          }
-        } catch (error) {
-          // Content script not responding
-          await storageManager.updateContentScriptHealth(tab.id, service, false);
-          console.debug(`[Background] ⚠️  ${service} tab ${tab.id} not responding`);
-        }
-      }
-
-      // Clean up stale entries (2+ minutes without ping)
       const staleRemoved = await storageManager.clearStaleContentScriptHealth();
       if (staleRemoved > 0) {
-        console.debug(`[Background] Cleared ${staleRemoved} stale content script health entries`);
+        console.debug(`[Background] Cleaned up ${staleRemoved} stale health entries`);
       }
     } catch (error) {
-      console.error('[Background] Health check cycle failed:', error);
+      console.error('[Background] Health cleanup failed:', error);
     }
-  }, HEALTH_CHECK_INTERVAL_MS);
+  }, 60000);
 
-  console.debug('[Background] Content script health monitoring started (every 30 seconds)');
+  console.log('[Background] Content script health monitoring started (storage-based)');
 }
 
 /**
@@ -420,36 +482,9 @@ function _startIntegrationHealthCheck(): void {
 chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
   console.log(`[Background] 🔌 Port connected: ${port.name}`);
 
-  // Handle messages coming through the port
-  port.onMessage.addListener(async (message: any) => {
-    try {
-      if (!message || !message.type) {
-        port.postMessage({ success: false, error: 'Invalid message format' });
-        return;
-      }
-
-      console.debug(`[Background] Port message: ${message.type} (from ${port.name})`);
-
-      // Ensure initialized
-      if (!initialized) {
-        await initializeExtension();
-      }
-
-      // Route through main message handler
-      const response: ExtensionResponse = await _handleMessage(message as ExtensionMessage);
-      port.postMessage(response);
-    } catch (error) {
-      console.error(`[Background] Port handler error:`, error);
-      port.postMessage({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  });
-
-  // Handle disconnection
+  // Port disconnection is now a no-op (no longer using port for communication)
   port.onDisconnect.addListener(() => {
-    console.log(`[Background] 🔌 Port disconnected: ${port.name}`);
+    console.debug(`[Background] Content script port disconnected: ${port.name}`);
   });
 });
 
@@ -585,6 +620,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
 
     case 'REFRESH_GAME_LIBRARY':
       return _refreshGameLibrary();
+
+    case 'CONTENT_SCRIPT_ACTIVITY':
+      return _handleContentScriptActivity(message.data?.key, message.data?.value);
 
     default:
       return {
@@ -1493,6 +1531,43 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
     }
   } catch (error) {
     console.error('[Message] Failed to handle message event:', error);
+  }
+}
+
+async function _handleContentScriptActivity(key: string, value: any): Promise<ExtensionResponse> {
+  try {
+    // Verify we have all required fields before writing
+    if (key.startsWith('content_script_activity_') && value) {
+      const requiredFields = ['id', 'service', 'content', 'state', 'timestamp'];
+      const missingFields = requiredFields.filter(field => !(field in value));
+      if (missingFields.length > 0) {
+        console.warn(`[Background] ⚠️  Activity missing fields: ${missingFields.join(', ')}`, value);
+      }
+    }
+
+    // Write complete object to storage (never partial updates)
+    await chrome.storage.local.set({ [key]: value });
+    console.debug(`[Background] ✅ Wrote to storage: ${key}`, {
+      fields: value ? Object.keys(value) : 'null',
+      service: value?.service,
+      content: value?.content?.substring(0, 50)
+    });
+
+    // If this is an activity update, trigger detection cycle to process it
+    if (key.startsWith('content_script_activity_')) {
+      console.debug(`[Background] 🔄 Triggering activity detection from content script update`);
+      await activityDetector.detectAndPublish().catch((error) => {
+        console.error('[Background] Error in detectAndPublish:', error);
+      });
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Background] Failed to handle content script activity:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
   }
 }
 

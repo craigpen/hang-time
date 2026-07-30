@@ -1240,8 +1240,15 @@ export class PopupController {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return;
 
-      if (changes.my_activities) {
-        console.debug('[Popup] MY_ACTIVITIES changed, refreshing...');
+      // Listen for activity updates from content scripts or background
+      const shouldRefresh =
+        changes.my_activities ||
+        changes['content_script_video_state_netflix-tab'] ||
+        changes['content_script_video_state_youtube-tab'] ||
+        changes['content_script_video_state_twitch-tab'];
+
+      if (shouldRefresh) {
+        console.debug('[Popup] Activity data changed, refreshing...');
         this._loadMyActivity().catch((error) => {
           console.error('[Popup] Failed to refresh after storage change:', error);
         });
