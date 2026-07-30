@@ -475,7 +475,7 @@ chrome.runtime.onConnect.addListener((port) => {
     port.onMessage.addListener(async (message) => {
       try {
         if (message.type === 'CONTENT_SCRIPT_ACTIVITY') {
-          await _handleContentScriptActivity(message.data?.key, message.data?.value);
+          await _handleContentScriptActivity(message.data?.key, message.data?.value, tabId);
         } else if (message.type === 'CONTENT_SCRIPT_ORPHANED') {
           console.log(`[Background] Content script orphaned for tab ${tabId}`);
           _markActivityAsDisconnected(tabId);
@@ -637,7 +637,7 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
       return _refreshGameLibrary();
 
     case 'CONTENT_SCRIPT_ACTIVITY':
-      return _handleContentScriptActivity(message.data?.key, message.data?.value);
+      return _handleContentScriptActivity(message.data?.key, message.data?.value, message.data?.tabId);
 
     case 'CONTENT_SCRIPT_ORPHANED':
       // Orphaned content script notifying that it lost context
@@ -1568,7 +1568,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
   }
 }
 
-async function _handleContentScriptActivity(key: string, value: any): Promise<ExtensionResponse> {
+async function _handleContentScriptActivity(key: string, value: any, tabId?: number): Promise<ExtensionResponse> {
   try {
     // Verify we have all required fields before writing
     if (key.startsWith('content_script_activity_') && value) {
@@ -1579,13 +1579,36 @@ async function _handleContentScriptActivity(key: string, value: any): Promise<Ex
       }
     }
 
+    // Remove any existing activity for this tab before storing the new one (prevent duplicates)
+    if (tabId !== undefined) {
+      const allActivities = await storageManager.getMyActivities();
+      for (const [activityId, activity] of Object.entries(allActivities)) {
+        if (activity?.metadata?.tabId === tabId && activity?.service === 'video-tab') {
+          // Different activity from same tab - remove the old one
+          if (activity.id !== value.id) {
+            console.debug(`[Background] 🗑️  Removing old activity for tab ${tabId}: ${activity.id}`);
+            delete allActivities[activityId];
+          }
+        }
+      }
+      await storageManager.setMyActivities(allActivities);
+    }
+
     // Store content script activity directly in MY_ACTIVITIES collection (single source of truth)
     const activityId = value.id || generateActivityId(value.service, value.url || '');
+
+    // Add tabId to metadata for duplicate detection
+    if (tabId !== undefined) {
+      value.metadata = value.metadata || {};
+      value.metadata.tabId = tabId;
+    }
+
     await storageManager.updateMyActivity(activityId, value);
     console.debug(`[Background] ✅ Stored activity in MY_ACTIVITIES:`, {
       id: activityId,
       service: value?.service,
-      content: value?.content?.substring(0, 50)
+      content: value?.content?.substring(0, 50),
+      tabId: tabId
     });
 
     // If this is an activity update, trigger detection cycle to process it
