@@ -689,30 +689,7 @@ export class StorageManager {
   // HEALTH MONITORING & DEBUG (Legacy)
   // ============================================================================
 
-  /**
-   * Clear stale content script health entries
-   * Called periodically to clean up old health data
-   */
-  async clearStaleContentScriptHealth(): Promise<void> {
-    try {
-      const health = await this.get<Record<string, any>>(STORAGE_KEYS.CONTENT_SCRIPT_HEALTH, {});
-      const now = Date.now();
-      const oneHourAgo = now - 3600000;
-
-      const cleaned = Object.fromEntries(
-        Object.entries(health).filter(([_, entry]: [string, any]) => {
-          return entry?.timestamp && entry.timestamp > oneHourAgo;
-        })
-      );
-
-      await this.set(STORAGE_KEYS.CONTENT_SCRIPT_HEALTH, cleaned);
-      console.debug('[Storage] Cleared stale content script health entries');
-    } catch (error) {
-      console.error('[Storage] Failed to clear stale health:', error);
-    }
-  }
-
-  /**
+/**
    * Get content script health status
    */
   async getContentScriptHealth(): Promise<Record<string, any>> {
