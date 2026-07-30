@@ -247,12 +247,15 @@ export class PopupController {
 
         // Check if this is a pending friend
         if (friend.state === 'pending') {
+          console.debug(`[Popup] Rendering pending friend: ${friend.local_name} (state=${friend.state})`);
           // Create pending friend element with accept/decline buttons
           let friendElement = existingElements.get(friend.id);
           if (!friendElement) {
+            console.debug(`[Popup] Creating new pending friend element for ${friend.local_name}`);
             friendElement = this._createPendingFriendItem(friend.id, friend.local_name);
             friendElement.setAttribute('data-friend-id', friend.id);
             this.friendsList!.appendChild(friendElement);
+            console.debug(`[Popup] Appended pending friend to DOM`);
           }
           friendElement.classList.add('pending');
         } else {

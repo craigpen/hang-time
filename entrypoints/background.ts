@@ -942,6 +942,15 @@ async function _acceptFriendRequest(friendId?: string): Promise<ExtensionRespons
       return { success: false, error: 'Friend not found' };
     }
 
+    // Handle based on current state
+    if (friend.state === 'active') {
+      // Already friends, just confirm
+      console.log(`[Background] ℹ️  ${friend.local_name} already in active state`);
+      return { success: true, message: 'Already friends' };
+    } else if (friend.state !== 'pending') {
+      return { success: false, error: `Cannot accept friend in state: ${friend.state}` };
+    }
+
     // Accept the friend request
     await friendManager.acceptFriendRequest(friendId);
 
@@ -1417,11 +1426,19 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
     console.debug(`[Background] Received invite notification from ${friend.local_name}`);
     if (typeTag === 'friend_request') {
       // Friend request notification - prompt user to accept/decline
-      const notificationManager = getNotificationManager();
       const senderDisplayName = event.tags.find((t) => t[0] === 'sender_display_name')?.[1] || friend.local_name;
 
-      console.log(`[Background] 🔔 Friend Request: Received from ${senderDisplayName}`);
-      await notificationManager.notifyFriendRequest(friend.id, senderDisplayName);
+      console.log(`[Background] 🔔 Friend Request: Received from ${senderDisplayName} (state=${friend.state})`);
+
+      // Only show notification if friend is pending (not if already active)
+      if (friend.state === 'pending') {
+        const notificationManager = getNotificationManager();
+        await notificationManager.notifyFriendRequest(friend.id, senderDisplayName);
+        console.log(`[Background] ✅ Showing friend request notification for ${senderDisplayName}`);
+      } else if (friend.state === 'active') {
+        // Already friends - just log it
+        console.debug(`[Background] ℹ️  Friend request from ${senderDisplayName}, but already friends (active)`);
+      }
 
       // Try to notify popup if it's open
       try {
