@@ -239,7 +239,12 @@ class GenericVideoTracker {
   }
 
   private _getVideoTitle(): string {
-    // Try to get a meaningful title from the page
+    // Netflix needs special handling to extract title from DOM
+    if (window.location.hostname.includes('netflix.com')) {
+      return this._getNetflixTitle() || 'Netflix Video';
+    }
+
+    // For other platforms, use document.title
     let title = document.title;
 
     // Strip common platform branding
@@ -250,6 +255,112 @@ class GenericVideoTracker {
       .replace(/^▶ /, '');
 
     return title.trim() || 'Video';
+  }
+
+  private _getNetflixTitle(): string | null {
+    try {
+      // Try h2 tags first (React renders title here)
+      const h2Elements = document.querySelectorAll('h2');
+      for (const h2 of h2Elements) {
+        const text = h2.textContent?.trim();
+        if (text && this._isValidNetflixTitle(text)) {
+          return text;
+        }
+      }
+
+      // Fallback to data-uia attribute
+      const titleElements = document.querySelectorAll("[data-uia='video-title']");
+      for (const titleElement of titleElements) {
+        const fullText = titleElement.textContent?.trim() || '';
+        if (!fullText) continue;
+
+        // Parse episode info from the text
+        const parts = fullText.split(/\s+(?=Rated|Audio|Subtitles|CC|Closed|Available|IMDb|\d+%)/i);
+        let title = parts[0].trim();
+
+        if (/^Rated|^PG|^R$|^NC-17|^G$|^TV-|^\d+%|^IMDb|^Audio|^Subtitles|^CC|^Closed|^Available/i.test(title)) {
+          continue;
+        }
+
+        const episodeMatch = title.match(/\s*([SE]\d+(?:E\d+)?)\s*/i);
+        const episode = episodeMatch ? episodeMatch[1] : null;
+
+        if (episode) {
+          title = title.substring(0, episodeMatch.index).trim();
+        }
+
+        const titleWords = title.split(/\s+/);
+        if (titleWords.length > 1) {
+          const firstWord = titleWords[0].toLowerCase();
+          while (titleWords.length > 1 && titleWords[titleWords.length - 1].toLowerCase() === firstWord) {
+            titleWords.pop();
+          }
+          title = titleWords.join(' ');
+        }
+
+        title = title.trim();
+
+        if (title && title.length > 2) {
+          const result = episode ? `${title} ${episode}` : title;
+          if (this._isValidNetflixTitle(result)) {
+            return result;
+          }
+        }
+      }
+
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  private _isValidNetflixTitle(title: string | null | undefined): boolean {
+    if (!title || typeof title !== 'string') return false;
+    if (title.length < 2 || title.length > 200) return false;
+
+    const lower = title.toLowerCase();
+
+    // Contamination checks
+    if (title.includes('•')) return false;
+    if (title.includes('invited you to')) return false;
+    if (/[\x00-\x1F\x7F]/.test(title)) return false;
+
+    if (lower.includes('error') || lower.includes('failed')) return false;
+
+    // UI elements that aren't titles
+    if (
+      title === 'Netflix' ||
+      title === 'Loading' ||
+      title === '' ||
+      lower === 'play' ||
+      lower === 'pause' ||
+      lower === 'skip' ||
+      lower === 'replay'
+    ) {
+      return false;
+    }
+
+    if (
+      lower.includes('audio description') ||
+      lower.includes('closed captions') ||
+      lower.includes('subtitles') ||
+      lower.includes('cc available') ||
+      lower.includes('dubbed') ||
+      lower.includes('original audio') ||
+      lower.includes('volume') ||
+      lower.includes('fullscreen') ||
+      lower.includes('settings') ||
+      lower.includes('next episode') ||
+      lower.includes('previous episode') ||
+      lower.includes('privacy') ||
+      lower.includes('preference') ||
+      lower.includes('modal') ||
+      lower.includes('dialog')
+    ) {
+      return false;
+    }
+
+    return true;
   }
 
   private _getFavicon(): string {
