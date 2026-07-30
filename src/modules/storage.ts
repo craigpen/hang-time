@@ -690,18 +690,6 @@ export class StorageManager {
   // ============================================================================
 
 /**
-   * Get content script health status
-   */
-  async getContentScriptHealth(): Promise<Record<string, any>> {
-    try {
-      return await this.get<Record<string, any>>(STORAGE_KEYS.CONTENT_SCRIPT_HEALTH, {});
-    } catch (error) {
-      console.error('[Storage] Failed to get content script health:', error);
-      return {};
-    }
-  }
-
-  /**
    * Get Netflix extraction logs (for debugging)
    */
   async getNetflixExtractionLogs(): Promise<string[]> {

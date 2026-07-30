@@ -1583,70 +1583,7 @@ export class PopupController {
     }
   }
 
-  private async _updateContentScriptHealthDisplay(): Promise<void> {
-    try {
-      const health = await this.storage.getContentScriptHealth();
-
-      // Create a map of service -> health entry for quick lookup
-      const healthMap = new Map<string, any>();
-      for (const entry of health) {
-        healthMap.set(entry.service, entry);
-      }
-
-      // Update status display for each browser tabs service
-      const services: string[] = ['video-tab'];
-      for (const service of services) {
-        const statusEl = document.getElementById(`status-${service}-popup`);
-        if (!statusEl) continue;
-
-        const entry = healthMap.get(service);
-        if (!entry) {
-          statusEl.textContent = '⚠️ Not detected';
-          statusEl.style.color = '#f59e0b';
-          continue;
-        }
-
-        const now = Date.now();
-        const timeSinceLastPing = now - entry.lastPing;
-        const secondsAgo = Math.floor(timeSinceLastPing / 1000);
-        const minutesAgo = Math.floor(timeSinceLastPing / (60 * 1000));
-
-        if (entry.alive) {
-          // Healthy
-          let timeStr = '';
-          if (secondsAgo < 60) {
-            timeStr = `${secondsAgo}s ago`;
-          } else {
-            timeStr = `${minutesAgo}m ago`;
-          }
-          statusEl.textContent = `✅ Active (${timeStr})`;
-          statusEl.style.color = '#10b981'; // green
-        } else {
-          // Unhealthy
-          let timeStr = '';
-          if (secondsAgo < 60) {
-            timeStr = `${secondsAgo}s ago`;
-          } else {
-            timeStr = `${minutesAgo}m ago`;
-          }
-          statusEl.textContent = `⚠️ Unavailable (${timeStr})`;
-          statusEl.style.color = '#ef4444'; // red
-
-          // Add help text
-          const helpText = document.createElement('div');
-          helpText.style.fontSize = '0.75rem';
-          helpText.style.marginTop = '2px';
-          helpText.style.color = '#6b7280';
-          helpText.textContent = 'Refresh page to restore';
-          statusEl.appendChild(helpText);
-        }
-      }
-    } catch (error) {
-      console.error('[Popup] Failed to load content script health:', error);
-    }
-  }
-
-  private async _updateIntegrationHealthDisplays(): Promise<void> {
+private async _updateIntegrationHealthDisplays(): Promise<void> {
     try {
       const profile = await this.storage.getUserProfile();
       if (!profile) return;
@@ -1799,9 +1736,6 @@ export class PopupController {
 
       // Load OAuth status
       await this._loadOAuthStatusInPanel();
-
-      // Load content script health status
-      await this._updateContentScriptHealthDisplay();
 
       // Load game discovery setting
       const gameDiscoveryToggle = document.getElementById('game-discovery-enabled-popup') as HTMLInputElement;
