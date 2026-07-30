@@ -67,10 +67,17 @@ class GenericVideoTracker {
       return; // No videos found
     }
 
-    // Prioritize visible videos over hidden ones (handles ads, previews)
-    const currentVideo =
-      videoElements.find((v) => v.offsetWidth > 0 && v.offsetHeight > 0) ||
-      videoElements[0];
+    // Filter videos: prioritize by visibility, then by duration (skip ads < 60s)
+    const visibleVideos = videoElements.filter((v) => v.offsetWidth > 0 && v.offsetHeight > 0);
+
+    // Prefer videos with known duration > 60 seconds (skip ads)
+    const mainContentVideos = visibleVideos.filter((v) => v.duration > 0 && v.duration >= 60);
+
+    // Priority order:
+    // 1. Main content video (visible, duration >= 60s)
+    // 2. Fallback to any visible video (duration might not be loaded yet)
+    // 3. Fallback to first video (worst case)
+    const currentVideo = mainContentVideos[0] || visibleVideos[0] || videoElements[0];
 
     if (!currentVideo || currentVideo === this.activeVideoElement) {
       return; // Same video or none found
@@ -162,6 +169,20 @@ class GenericVideoTracker {
     const currentTime = Math.floor(this.activeVideoElement.currentTime || 0);
     const isPaused = this.activeVideoElement.paused;
 
+    // Skip ads: if duration is known and < 60 seconds, this is likely an ad
+    // Unhook from it and look for the next video
+    if (duration > 0 && duration < 60) {
+      console.debug('[ContentScript] Detected ad video (duration < 60s), unhoking and searching for main content:', {
+        title,
+        duration,
+      });
+      this._removeVideoListeners();
+      this.activeVideoElement = null;
+      // Search for the next video immediately
+      setTimeout(() => this._findAndHookVideo(), 100);
+      return;
+    }
+
     // Rate limit position updates (max 1 per second), but allow state changes immediately
     const now = Date.now();
     const positionChanged = Math.abs(currentTime - this.lastReportedTime) >= 2;
@@ -182,15 +203,6 @@ class GenericVideoTracker {
         console.debug('[ContentScript] Skipping Twitch non-stream page:', url);
         return;
       }
-    }
-
-    // Filter out ads and very short videos (typically < 60 seconds)
-    if (duration > 0 && duration < 60) {
-      console.debug('[ContentScript] Skipping short video (likely ad):', {
-        title,
-        duration,
-      });
-      return;
     }
 
     // Generate stable activity ID based on URL (same video = same ID)
