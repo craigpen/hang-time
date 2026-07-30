@@ -100,6 +100,9 @@ export class IdentityManager {
         'twitch-api': false,
         'steam-api': false,
         'discord-api': false,
+        'youtube-tab': true,
+        'netflix-tab': true,
+        'twitch-tab': true,
         'video-tab': true,
       },
       notification_preferences: {

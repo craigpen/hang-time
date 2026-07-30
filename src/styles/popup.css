@@ -2195,14 +2195,14 @@ body {
 
 .game-genres {
   font-size: 0.85em;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
 .game-genres span {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .game-friends {
@@ -2221,7 +2221,7 @@ body {
 
 .friends-list {
   flex: 1;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   min-width: 0;
   word-break: break-word;
 }

@@ -262,10 +262,15 @@ async function initializeExtension(): Promise<void> {
     await metadataFetcher.startBackgroundFetcher();
     console.debug('[Background] Metadata background fetcher started');
 
-    // Queue all games for metadata fetching
+    // Check for games missing metadata and queue them
     if (userGames.length > 0) {
-      await metadataFetcher.scheduleBackgroundRefresh(userGames.map(g => g.appId));
-      console.debug(`[Background] Scheduled ${userGames.length} games for metadata fetching`);
+      const gamesNeedingMetadata = await _findGamesMissingMetadata(userGames);
+      if (gamesNeedingMetadata.length > 0) {
+        console.debug(`[Background] Found ${gamesNeedingMetadata.length}/${userGames.length} games missing metadata, scheduling fetch`);
+        await metadataFetcher.scheduleBackgroundRefresh(gamesNeedingMetadata);
+      } else {
+        console.debug(`[Background] All ${userGames.length} games have metadata`);
+      }
     }
 
     // Initialize activity detector
@@ -862,7 +867,20 @@ async function _addFriend(identifier?: string, localName?: string): Promise<Exte
   try {
     const friendManager = getFriendManager();
     const friend = await friendManager.addFriend(identifier, localName);
+
+    // Subscribe to friend's events (for receiving accept/decline responses)
     await _subscribeToFriend(identifier);
+
+    // Publish friend request notification
+    try {
+      const messagingManager = getMessagingManager();
+      await messagingManager.sendFriendRequest(identifier, friend.pubkey, localName);
+      console.log(`[Background] 📤 Friend request sent to ${localName}`);
+    } catch (error) {
+      console.error('[Background] Failed to send friend request notification:', error);
+      // Don't fail the add operation if notification publish fails
+    }
+
     return { success: true, data: friend };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to add friend' };
@@ -1228,23 +1246,32 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
     console.debug(`[Friend] Details - pubkey: ${event.pubkey.substring(0, 8)}..., tags: ${JSON.stringify(event.tags.slice(0, 3))}`);
 
     try {
+      // Fetch current friend state to check if active or pending
+      const currentFriend = await friendManager.getFriendByIdentifier(friendIdentifier);
+      const isPending = currentFriend?.state === 'pending';
+
       if (event.kind === 0) {
-        // Profile event
+        // Profile event (always accept for both pending and active)
         await _handleProfileEvent(event);
       } else if (event.kind === 1) {
-        // Check if this is a game-library event (tag t=game-library)
-        const isGameLibraryEvent = event.tags.find((t) => t[0] === 't' && t[1] === 'game-library');
+        // Activity/notification events - only process if friend is active
+        if (!isPending) {
+          // Check if this is a game-library event (tag t=game-library)
+          const isGameLibraryEvent = event.tags.find((t) => t[0] === 't' && t[1] === 'game-library');
 
-        if (isGameLibraryEvent) {
-          // Route to game library manager
-          const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
-          await gameLibraryManager.handleGameLibraryEvent(event);
+          if (isGameLibraryEvent) {
+            // Route to game library manager
+            const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
+            await gameLibraryManager.handleGameLibraryEvent(event);
+          } else {
+            // Activity event
+            await _handleActivityEvent(friendIdentifier, event);
+          }
         } else {
-          // Activity event
-          await _handleActivityEvent(friendIdentifier, event);
+          console.debug(`[Friend] Skipping kind-1 from pending friend ${friendIdentifier}`);
         }
       } else if (event.kind === 4) {
-        // Chat message
+        // Kind-4 messages (always accept for both pending and active)
         console.debug(`[Message] Handling incoming kind-4`);
         await _handleMessageEvent(friendIdentifier, event);
       } else {
@@ -1292,7 +1319,26 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
   if (isNotificationTag === 'true') {
     // Handle notification event
     console.debug(`[Background] Received invite notification from ${friend.local_name}`);
-    if (typeTag === 'invite') {
+    if (typeTag === 'friend_request') {
+      // Friend request notification - prompt user to accept/decline
+      const notificationManager = getNotificationManager();
+      const senderDisplayName = event.tags.find((t) => t[0] === 'sender_display_name')?.[1] || friend.local_name;
+
+      console.log(`[Background] 🔔 Friend Request: Received from ${senderDisplayName}`);
+      await notificationManager.notifyFriendRequest(friend.id, senderDisplayName);
+
+      // Try to notify popup if it's open
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'FRIEND_REQUEST_RECEIVED',
+          data: { friendId: friend.id, senderDisplayName },
+        }).catch((error) => {
+          console.debug('[Background] Popup not open for friend request notification');
+        });
+      } catch (error) {
+        console.debug('[Background] Could not notify popup of friend request:', error instanceof Error ? error.message : error);
+      }
+    } else if (typeTag === 'invite') {
       // Rate limit: only notify if 20+ seconds have passed since last notification
       if (!shouldNotifyForInvite(event.id)) {
         console.debug(`[Background] Invite ${event.id.substring(0, 8)}... rate limited (< 20s since last notify), skipping notification`);
@@ -1533,6 +1579,16 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
       return;
     }
 
+    // Check message_type tag to route to appropriate handler
+    const messageType = event.tags.find((t) => t[0] === 'message_type')?.[1];
+
+    if (messageType === 'friend_request') {
+      // Handle friend request acceptance/decline
+      await _handleFriendRequestResponse(friend, event);
+      return;
+    }
+
+    // Handle other message types (chat, activity invites, etc.)
     const messagingManager = getMessagingManager();
     const timestamp = event.created_at * 1000;
 
@@ -1565,6 +1621,47 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
     }
   } catch (error) {
     console.error('[Message] Failed to handle message event:', error);
+  }
+}
+
+/**
+ * Handle friend request acceptance/decline responses
+ */
+async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): Promise<void> {
+  try {
+    const messagingManager = getMessagingManager();
+    const timestamp = event.created_at * 1000;
+
+    // Decrypt the message to get the response type
+    const message = await messagingManager.receiveMessage(friend, event.content, timestamp);
+
+    if (!message) {
+      console.warn('[FriendRequest] Failed to decrypt friend request response from', friend.local_name);
+      return;
+    }
+
+    const friendManager = getFriendManager();
+
+    if (message.type === 'join_accepted') {
+      // Friend accepted the request - transition from pending to active
+      await friendManager.acceptFriendRequest(friend.id);
+      console.log(`[FriendRequest] ✅ ${friend.local_name} accepted your friend request`);
+
+      // Notify the user
+      const notificationManager = getNotificationManager();
+      await notificationManager.notify(
+        `${friend.local_name} accepted your friend request`,
+        'You are now friends!'
+      );
+    } else if (message.type === 'join_declined') {
+      // Friend declined - remove them from the friend list
+      await friendManager.removeFriend(friend.id);
+      console.log(`[FriendRequest] ❌ ${friend.local_name} declined your friend request (removed from list)`);
+    } else {
+      console.warn('[FriendRequest] Unexpected message type in friend request:', message.type);
+    }
+  } catch (error) {
+    console.error('[FriendRequest] Failed to handle friend request response:', error);
   }
 }
 
@@ -1758,15 +1855,52 @@ async function _refreshGameLibrary(): Promise<ExtensionResponse> {
     const userGames = await gameLibraryManager.fetchMyGameLibrary();
     console.debug(`[Background] Fetched ${userGames.length} games from Steam`);
 
-    // Schedule games for metadata fetching (respects rate limiting)
-    const appIds = userGames.map(g => g.appId);
-    await metadataFetcher.scheduleBackgroundRefresh(appIds);
-    console.debug(`[Background] Scheduled ${appIds.length} games for metadata fetching`);
-
-    return { success: true, data: { gamesRefreshed: userGames.length } };
+    // Check which games are missing metadata and queue only those
+    const gamesNeedingMetadata = await _findGamesMissingMetadata(userGames);
+    if (gamesNeedingMetadata.length > 0) {
+      console.debug(`[Background] Queuing ${gamesNeedingMetadata.length}/${userGames.length} games missing metadata for fetching`);
+      await metadataFetcher.scheduleBackgroundRefresh(gamesNeedingMetadata);
+      return { success: true, data: { gamesRefreshed: userGames.length, queuedForMetadata: gamesNeedingMetadata.length } };
+    } else {
+      console.debug(`[Background] All ${userGames.length} games already have metadata`);
+      return { success: true, data: { gamesRefreshed: userGames.length, queuedForMetadata: 0 } };
+    }
   } catch (error) {
     console.error('[Background] Game library refresh error:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Failed to refresh game library' };
+  }
+}
+
+/**
+ * Find games that are missing metadata (name, genres, etc.)
+ * Used to resume interrupted metadata fetching after extension reload
+ */
+async function _findGamesMissingMetadata(games: any[]): Promise<number[]> {
+  try {
+    // Get cached metadata from storage
+    const metadataCache = await storageManager.get<Record<number, any>>(
+      'game_metadata_cache',
+      {}
+    );
+
+    // Find games missing metadata (no entry or missing name)
+    const missing: number[] = [];
+    for (const game of games) {
+      const meta = metadataCache[game.appId];
+      if (!meta || !meta.name) {
+        missing.push(game.appId);
+      }
+    }
+
+    if (missing.length > 0) {
+      console.debug(`[Background] ${missing.length} games missing metadata: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '...' : ''}`);
+    }
+
+    return missing;
+  } catch (error) {
+    console.warn('[Background] Error checking for games missing metadata:', error);
+    // On error, return empty list (don't interrupt initialization)
+    return [];
   }
 }
 

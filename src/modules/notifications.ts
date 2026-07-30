@@ -95,6 +95,32 @@ export class NotificationManager {
   }
 
   /**
+   * Notify about a friend request
+   */
+  async notifyFriendRequest(friendId: string, senderDisplayName: string): Promise<void> {
+    try {
+      const profile = await this.storage.getUserProfile();
+      if (!profile?.notification_preferences?.join_suggestion) {
+        return;
+      }
+
+      const notificationId = `friend_request_${friendId}_${Date.now()}`;
+      chrome.notifications.create(notificationId, {
+        type: 'basic',
+        iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
+        title: `${senderDisplayName} added you as a friend`,
+        message: 'Click to accept or decline',
+        contextMessage: 'Click to open Hang Time',
+        requireInteraction: true,
+      });
+
+      console.debug('[Notifications] Friend request notification sent for', senderDisplayName);
+    } catch (error) {
+      console.error('[Notifications] Failed to send friend request notification:', error);
+    }
+  }
+
+  /**
    * Notify about an invite with activity-specific verb and Discord coordination info
    * Verb: 'play' for games, 'watch' for video/streams, 'listen' for audio
    */

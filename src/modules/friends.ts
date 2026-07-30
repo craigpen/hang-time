@@ -67,6 +67,7 @@ export class FriendManager {
       muted: false,
       hidden_services: [],
       current_activities: {},
+      state: 'pending', // Pending friend request acceptance
     };
 
     await this.storage.addFriend(friend);
@@ -86,6 +87,23 @@ export class FriendManager {
 
     await this.storage.removeFriend(friendId);
     secureLog.debug('FriendManager', `Removed friend: ${friend.local_name}`);
+  }
+
+  /**
+   * Accept pending friend request (transition from pending to active)
+   */
+  async acceptFriendRequest(friendId: string): Promise<void> {
+    const friend = await this.getFriend(friendId);
+    if (!friend) {
+      throw new Error(`Friend not found: ${friendId}`);
+    }
+
+    if (friend.state !== 'pending') {
+      throw new Error(`Friend is not pending: ${friend.local_name}`);
+    }
+
+    await this.storage.updateFriend(friendId, { state: 'active' });
+    secureLog.debug('FriendManager', `Accepted friend request: ${friend.local_name}`);
   }
 
   /**

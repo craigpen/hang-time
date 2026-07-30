@@ -12,7 +12,7 @@ import { encryptionManager } from './encryption';
 import { validateActivity, detectCorruption } from './activity-validation';
 import { GameLibraryManager } from './game-library';
 
-const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'video-tab'];
+const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
 
 export class ActivityPublisher {
   private lastPublishedState: Partial<Record<string, Activity>> = {};
@@ -214,6 +214,8 @@ export class ActivityPublisher {
       // Use only valid activities for publishing
       const currentActivitiesForPublishing = validActivities;
 
+      console.log(`[Publisher] Publishing cycle: ${Object.keys(currentActivitiesForPublishing).length} activities total (${Object.values(currentActivitiesForPublishing).map(a => a?.service).join(', ')})`);
+
       // If delta publishing, only publish changed fields (no full refresh)
       if (config.delta_publishing) {
         const changedActivities = await this._getActivityDeltas(currentActivitiesForPublishing);
@@ -338,14 +340,11 @@ export class ActivityPublisher {
     mode: 'changed' | 'all' | 'atomic',
     config?: any
   ): Promise<void> {
-    const servicesToPublish = mode === 'all' || mode === 'atomic'
-      ? SERVICES_TO_PUBLISH.filter(s => activities[s])
-      : Object.keys(activities) as ServiceName[];
-
-    // Collect activities to bundle
-    const activitiesToPublish: Activity[] = servicesToPublish
-      .map(service => activities[service])
-      .filter((a): a is Activity => !!a);
+    // Activities are keyed by activity ID, not service name
+    // For 'all'/'atomic': filter to only SERVICES_TO_PUBLISH; for 'changed': use all activities
+    const activitiesToPublish: Activity[] = mode === 'all' || mode === 'atomic'
+      ? Object.values(activities).filter((a): a is Activity => !!a && SERVICES_TO_PUBLISH.includes(a.service))
+      : Object.values(activities).filter((a): a is Activity => !!a);
 
     if (activitiesToPublish.length === 0) {
       console.debug('[Publisher] No activities to publish');

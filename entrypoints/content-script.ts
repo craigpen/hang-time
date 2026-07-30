@@ -210,12 +210,22 @@ class GenericVideoTracker {
       }
     }
 
+    // Detect platform-specific service based on domain
+    let service: 'youtube-tab' | 'netflix-tab' | 'twitch-tab' | 'video-tab' = 'video-tab';
+    if (domain.includes('youtube.com') || domain.includes('youtu.be')) {
+      service = 'youtube-tab';
+    } else if (domain.includes('netflix.com')) {
+      service = 'netflix-tab';
+    } else if (domain.includes('twitch.tv')) {
+      service = 'twitch-tab';
+    }
+
     // Generate stable activity ID based on URL (same video = same ID)
-    const activityId = generateActivityId('video-tab', url);
+    const activityId = generateActivityId(service, url);
 
     const activity = {
       id: activityId,
-      service: 'video-tab',
+      service: service,
       content: title,
       state: isPaused ? 'paused' : 'playing',
       audio: 'on',

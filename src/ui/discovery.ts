@@ -515,7 +515,7 @@ export class DiscoveryTabController {
             <span>${this._escapeHtml(genres)}${modes ? ' • ' + this._escapeHtml(modes) : ''}</span>
           </div>
           <div class="game-friends">
-            <span class="friends-count">${game.friendCount} ${game.friendCount === 1 ? 'friend' : 'friends'} own:</span>
+            <span class="friends-count">Owned by:</span>
             <span class="friends-list">${this._escapeHtml(friendNamesText)}</span>
           </div>
         </div>
@@ -553,7 +553,19 @@ export class DiscoveryTabController {
 
     resultsContainer.innerHTML = `
       <div class="loading-skeleton">
-        <p>Loading games...</p>
+        <div style="text-align: center; padding: 40px 20px;">
+          <div style="font-size: 24px; margin-bottom: 16px;">⏳</div>
+          <p style="margin: 8px 0; font-size: 14px; font-weight: 500;">Building game cache...</p>
+          <p style="margin: 4px 0; font-size: 12px; opacity: 0.7;">Fetching metadata for your games</p>
+          <div style="margin-top: 16px;">
+            <div style="display: inline-block; width: 24px; height: 24px; border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid #4a9eff; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+          </div>
+        </div>
+        <style>
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        </style>
       </div>
     `;
   }

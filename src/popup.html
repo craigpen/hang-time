@@ -28,8 +28,6 @@
 
     <!-- Friends List Tab -->
     <div id="friends-tab" class="tab-content active">
-      <!-- Friends populated by JS (includes "My Activity" first, then friends) -->
-      <div id="friends-list" class="friends-list"></div>
       <!-- Friends Section Header -->
       <div class="friends-header" id="friends-header">
         <h2>Friend Activity</h2>
@@ -38,6 +36,8 @@
           <button id="add-friend-btn" class="btn-icon-small btn-add-friend" title="Add a friend">✚</button>
         </div>
       </div>
+      <!-- Friends populated by JS (includes "My Activity" first, then friends) -->
+      <div id="friends-list" class="friends-list"></div>
       <!-- No friends placeholder -->
       <div id="no-friends" class="no-friends-placeholder" style="display: none;">
         <p>No friends yet. Add one to get started!</p>
@@ -198,92 +198,135 @@
       </div>
     </div>
     <div class="settings-panel-content">
-      <!-- User Identifier -->
+      <!-- PROFILE SECTION -->
       <div class="settings-section">
-        <h3>Your Identity</h3>
-        <div class="identifier-group">
-          <span id="user-identifier-popup" class="identifier-text">Loading...</span>
-          <button id="copy-id-popup-btn" class="btn-copy" title="Copy to clipboard">📋</button>
+        <h3>Profile</h3>
+
+        <!-- Your Identity -->
+        <div>
+          <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.9em;">Your Identity</label>
+          <div class="identifier-group">
+            <span id="user-identifier-popup" class="identifier-text">Loading...</span>
+            <button id="copy-id-popup-btn" class="btn-copy" title="Copy to clipboard">📋</button>
+          </div>
+          <p class="help-text">Your unique identifier for publishing activity to friends on Nostr. Share this with friends so they can add you. Generated once on install—cannot be changed.</p>
+        </div>
+
+        <!-- Discord -->
+        <div style="margin-top: 16px;">
+          <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.9em;">Discord (Optional)</label>
+          <input type="text" id="discord-info-popup" placeholder="https://discord.gg/abc123" class="form-input">
+          <p class="help-text">Server invite link for voice/chat during co-play. Get from Discord: Right-click server → Invite → Copy invite link</p>
         </div>
       </div>
 
-      <!-- Discord -->
+      <!-- ACTIVITY SOURCES SECTION -->
       <div class="settings-section">
-        <h3>Discord (Optional)</h3>
-        <input type="text" id="discord-info-popup" placeholder="https://discord.gg/abc123" class="form-input">
-        <p class="help-text">Server invite link for voice/chat during co-play. Get from: Right-click server → Invite → Copy invite link</p>
-      </div>
+        <h3>Activity Sources</h3>
 
-      <!-- Browser Tabs Detection -->
-      <div class="settings-section">
-        <h3>Browser Tabs Detection</h3>
-        <label class="checkbox-label">
-          <input type="checkbox" id="service-video-tab-popup" data-service="video-tab" class="service-toggle">
-          <span>Detect video playback (YouTube, Netflix, Twitch, etc.)</span>
-        </label>
-        <p class="help-text">Automatically detect when you're watching videos and share with friends</p>
-      </div>
+        <!-- Service Integrations Subsection -->
+        <div style="margin-bottom: 20px;">
+          <h4 style="margin: 0 0 12px 0; font-size: 0.9em; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">API Integrations</h4>
 
-      <!-- Game Discovery -->
-      <div class="settings-section">
-        <h3>Game Discovery</h3>
-        <label class="checkbox-label">
-          <input type="checkbox" id="game-discovery-enabled-popup">
-          <span>Enable Game Discovery</span>
-        </label>
-        <p class="help-text">Share your Steam game library with friends on Nostr and discover games you have in common</p>
-      </div>
-
-      <!-- Service Integrations -->
-      <div class="settings-section">
-        <h3>Service Integrations</h3>
-
-        <div class="service-row">
-          <input type="checkbox" id="service-spotify-api-enabled" class="service-enable-toggle" data-service="spotify-api" checked>
-          <div class="service-col1">
-            <img src="public/icons/spotify.png" alt="Spotify" class="service-icon">
-            <span class="service-name">Spotify</span>
-          </div>
-          <div class="service-col2">
-            <div class="service-status" id="status-spotify-api-popup">Not Connected</div>
-          </div>
-          <div class="service-col3">
-            <div id="spotify-api-auth-popup-container" class="service-actions"></div>
-          </div>
-        </div>
-
-        <div class="service-row">
-          <input type="checkbox" id="service-twitch-api-enabled" class="service-enable-toggle" data-service="twitch-api" checked>
-          <div class="service-col1">
-            <img src="public/icons/twitch.png" alt="Twitch" class="service-icon">
-            <span class="service-name">Twitch</span>
-          </div>
-          <div class="service-col2">
-            <div class="service-status" id="status-twitch-api-popup">Not Connected</div>
-          </div>
-          <div class="service-col3">
-            <div id="twitch-api-auth-popup-container" class="service-actions"></div>
-          </div>
-        </div>
-
-        <div class="service-row">
-          <input type="checkbox" id="service-steam-api-enabled" class="service-enable-toggle" data-service="steam-api" checked>
-          <div class="service-col1">
-            <img src="public/icons/steam.png" alt="Steam" class="service-icon">
-            <span class="service-name">Steam</span>
-          </div>
-          <div class="service-col2">
-            <div class="service-status" id="status-steam-api-popup">Not Configured</div>
-          </div>
-          <div class="service-col3">
-            <div class="service-actions">
-              <button id="steam-configure-btn" class="btn-configure">Configure</button>
+          <div class="service-row">
+            <input type="checkbox" id="service-spotify-api-enabled" class="service-enable-toggle" data-service="spotify-api" checked>
+            <div class="service-col1">
+              <img src="public/icons/spotify.png" alt="Spotify" class="service-icon">
+              <span class="service-name">Spotify</span>
+            </div>
+            <div class="service-col2">
+              <div class="service-status" id="status-spotify-api-popup">Not Connected</div>
+            </div>
+            <div class="service-col3">
+              <div id="spotify-api-auth-popup-container" class="service-actions"></div>
             </div>
           </div>
+
+          <div class="service-row">
+            <input type="checkbox" id="service-twitch-api-enabled" class="service-enable-toggle" data-service="twitch-api" checked>
+            <div class="service-col1">
+              <img src="public/icons/twitch.png" alt="Twitch" class="service-icon">
+              <span class="service-name">Twitch</span>
+            </div>
+            <div class="service-col2">
+              <div class="service-status" id="status-twitch-api-popup">Not Connected</div>
+            </div>
+            <div class="service-col3">
+              <div id="twitch-api-auth-popup-container" class="service-actions"></div>
+            </div>
+          </div>
+
+          <div class="service-row">
+            <input type="checkbox" id="service-steam-api-enabled" class="service-enable-toggle" data-service="steam-api" checked>
+            <div class="service-col1">
+              <img src="public/icons/steam.png" alt="Steam" class="service-icon">
+              <span class="service-name">Steam</span>
+            </div>
+            <div class="service-col2">
+              <div class="service-status" id="status-steam-api-popup">Not Configured</div>
+            </div>
+          </div>
+
+          <!-- Steam Configuration (Inline) -->
+          <div style="margin-top: 12px; margin-left: 36px; padding: 12px; background: var(--bg-secondary); border-radius: 4px;">
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9em;">Steam ID</label>
+              <p class="help-text" style="margin-bottom: 8px;">Find your 64-bit Steam ID at <a href="https://steamid.xyz" target="_blank" style="color: var(--accent-primary); text-decoration: none;">steamid.xyz</a></p>
+              <input type="text" id="steam-id-popup" placeholder="e.g. 76561198024691357" class="form-input" style="font-size: 0.85em;">
+            </div>
+
+            <div>
+              <label style="display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9em;">Web API Key</label>
+              <p class="help-text" style="margin-bottom: 8px;">Get from <a href="https://steamcommunity.com/dev/apikey" target="_blank" style="color: var(--accent-primary); text-decoration: none;">steamcommunity.com/dev/apikey</a></p>
+              <div style="display: flex; gap: 6px;">
+                <input type="password" id="steam-api-key-popup" placeholder="Enter your Steam Web API key" class="form-input" style="flex: 1; font-size: 0.85em;">
+                <button id="steam-toggle-key-visibility" class="btn-icon-small" title="Toggle visibility" style="flex-shrink: 0;">👁️</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Game Discovery under Steam -->
+          <div style="margin-top: 12px; padding-left: 36px;">
+            <label class="checkbox-label">
+              <input type="checkbox" id="game-discovery-enabled-popup">
+              <span>Enable Game Discovery</span>
+            </label>
+            <p class="help-text" style="margin-left: 24px;">Share your Steam library and discover games you have in common with friends</p>
+          </div>
+        </div>
+
+        <!-- Browser Tabs Detection Subsection -->
+        <div>
+          <h4 style="margin: 0 0 12px 0; font-size: 0.9em; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">Browser Tabs</h4>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="service-youtube-tab-popup" data-service="youtube-tab" class="service-toggle">
+            <span>YouTube</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="service-netflix-tab-popup" data-service="netflix-tab" class="service-toggle">
+            <span>Netflix</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="service-twitch-tab-popup" data-service="twitch-tab" class="service-toggle">
+            <span>Twitch (Web)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="service-video-tab-popup" data-service="video-tab" class="service-toggle">
+            <span>Other Video Sites</span>
+          </label>
+          <p class="help-text">Automatically detect when you're watching videos and share with friends</p>
+
+          <!-- URL Ignore List -->
+          <div style="margin-top: 12px;">
+            <label style="display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9em;">Ignore URLs (one per line)</label>
+            <p class="help-text" style="margin-bottom: 8px;">Domains/patterns to skip. Use * as wildcard for entire domain (e.g., youtube.com/watch?v=*)</p>
+            <textarea id="url-ignore-list-popup" placeholder="e.g., youtube.com/watch?v=*&#10;or use * for entire domain" class="form-input" style="font-family: monospace; font-size: 0.85em; height: 80px; resize: vertical;"></textarea>
+          </div>
         </div>
       </div>
 
-      <!-- Notifications -->
+      <!-- NOTIFICATIONS SECTION -->
       <div class="settings-section">
         <h3>Notifications</h3>
         <label class="checkbox-label">
@@ -291,103 +334,14 @@
           <span>Friend came online</span>
         </label>
         <label class="checkbox-label">
-          <input type="checkbox" id="notif-new-message-popup" checked>
-          <span>New message received</span>
-        </label>
-        <label class="checkbox-label">
           <input type="checkbox" id="notif-join-suggestion-popup">
           <span>Suggest joining friend's activity</span>
         </label>
       </div>
 
-      <!-- Test Notifications (Debug) -->
+      <!-- APPEARANCE SECTION -->
       <div class="settings-section">
-        <h3>Test Notifications (Debug)</h3>
-        <button id="test-notification-btn" class="btn-backup">Send Test Notification</button>
-        <p class="help-text">Click to verify notifications are working</p>
-      </div>
-
-      <!-- Publishing Config (Debug) -->
-      <div class="settings-section">
-        <h3>Publishing (Debug)</h3>
-
-        <!-- Basic Settings -->
-        <label class="checkbox-label">
-          <input type="checkbox" id="pub-enabled-popup" checked>
-          <span>Enable Publishing</span>
-        </label>
-        <label class="label-with-input">
-          <span>Size</span>
-          <select id="pub-size-popup">
-            <option value="full">Full (Bundled)</option>
-            <option value="atomic">Atomic (Individual)</option>
-          </select>
-        </label>
-        <label class="label-with-input">
-          <span>Scope</span>
-          <select id="pub-scope-popup">
-            <option value="updates">Updates Only</option>
-            <option value="all">All Services</option>
-          </select>
-        </label>
-        <label class="label-with-input">
-          <span>Rate (ms)</span>
-          <input type="number" id="pub-rate-popup" min="1000" step="1000" value="12000">
-        </label>
-
-        <!-- Advanced Settings -->
-        <div class="settings-subsection">
-          <h4>Advanced</h4>
-
-          <label class="checkbox-label">
-            <input type="checkbox" id="pub-compression-popup">
-            <span>Compression (batch services)</span>
-          </label>
-
-          <label class="checkbox-label">
-            <input type="checkbox" id="pub-delta-popup">
-            <span>Delta Publishing (changed fields only)</span>
-          </label>
-
-          <label class="checkbox-label">
-            <input type="checkbox" id="pub-verbose-popup">
-            <span>Verbose Logging (show event JSON)</span>
-          </label>
-
-          <label class="label-with-input">
-            <span>Retry Backoff (ms)</span>
-            <input type="number" id="pub-retry-popup" min="100" step="100" value="1000">
-          </label>
-
-          <div class="relay-selection">
-            <span>Relays to Use</span>
-            <label class="checkbox-label checkbox-inline">
-              <input type="checkbox" id="relay-nos-lol-popup" data-relay="nos.lol" checked>
-              <span>nos.lol</span>
-            </label>
-            <label class="checkbox-label checkbox-inline">
-              <input type="checkbox" id="relay-damus-popup" data-relay="relay.damus.io" checked>
-              <span>relay.damus.io</span>
-            </label>
-            <label class="checkbox-label checkbox-inline">
-              <input type="checkbox" id="relay-snort-popup" data-relay="relay.snort.social" checked>
-              <span>relay.snort.social</span>
-            </label>
-            <label class="checkbox-label checkbox-inline">
-              <input type="checkbox" id="relay-mom-popup" data-relay="nostr.mom" checked>
-              <span>nostr.mom</span>
-            </label>
-            <label class="checkbox-label checkbox-inline">
-              <input type="checkbox" id="relay-mostr-popup" data-relay="relay.mostr.pub" checked>
-              <span>relay.mostr.pub</span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Theme -->
-      <div class="settings-section">
-        <h3>Theme</h3>
+        <h3>Appearance</h3>
         <label class="radio-label">
           <input type="radio" name="theme-popup" value="auto" checked>
           <span>Auto (System)</span>
@@ -402,15 +356,110 @@
         </label>
       </div>
 
-      <!-- Backup & Restore -->
+      <!-- ADVANCED SECTION (Collapsible) -->
       <div class="settings-section">
-        <h3>Backup & Restore</h3>
-        <div class="backup-buttons">
-          <button id="export-settings-popup-btn" class="btn-backup">📥 Export</button>
-          <button id="import-settings-popup-btn" class="btn-backup">📤 Import</button>
-          <input type="file" id="import-file-popup-input" accept=".json" style="display: none;" />
+        <div style="display: flex; align-items: center; cursor: pointer; user-select: none; margin-bottom: 0;" onclick="const content = this.parentElement.querySelector('.advanced-content'); const isHidden = content.style.display === 'none'; content.style.display = isHidden ? 'block' : 'none'; this.querySelector('.advanced-toggle').textContent = isHidden ? '▼' : '▶';">
+          <span class="advanced-toggle" style="margin-right: 8px; font-size: 0.9em; font-weight: bold;">▼</span>
+          <h3 style="margin: 0;">Advanced</h3>
         </div>
-        <p class="help-text">Download your settings to backup. Import to restore.</p>
+
+        <div class="advanced-content">
+          <!-- Test Notifications -->
+          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <h4 style="margin: 0 0 12px 0;">Test Local Notifications</h4>
+            <p class="help-text" style="margin-bottom: 12px;">Click to verify local notifications are working</p>
+            <button id="test-notification-btn" class="btn-backup">Send Test Notification</button>
+          </div>
+
+          <!-- Publishing Config -->
+          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <h4 style="margin: 0 0 12px 0;">Publishing Config</h4>
+
+            <!-- Basic Settings -->
+            <label class="checkbox-label">
+              <input type="checkbox" id="pub-enabled-popup" checked>
+              <span>Enable Publishing</span>
+            </label>
+            <label class="label-with-input">
+              <span>Size</span>
+              <select id="pub-size-popup">
+                <option value="full">Full (Bundled)</option>
+                <option value="atomic">Atomic (Individual)</option>
+              </select>
+            </label>
+            <label class="label-with-input">
+              <span>Scope</span>
+              <select id="pub-scope-popup">
+                <option value="updates">Updates Only</option>
+                <option value="all">All Services</option>
+              </select>
+            </label>
+            <label class="label-with-input">
+              <span>Rate (ms)</span>
+              <input type="number" id="pub-rate-popup" min="1000" step="1000" value="12000">
+            </label>
+
+            <!-- Advanced Settings -->
+            <div class="settings-subsection">
+              <h5 style="margin: 12px 0 8px 0; font-size: 0.85em; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">Advanced</h5>
+
+              <label class="checkbox-label">
+                <input type="checkbox" id="pub-compression-popup">
+                <span>Compression (batch services)</span>
+              </label>
+
+              <label class="checkbox-label">
+                <input type="checkbox" id="pub-delta-popup">
+                <span>Delta Publishing (changed fields only)</span>
+              </label>
+
+              <label class="checkbox-label">
+                <input type="checkbox" id="pub-verbose-popup">
+                <span>Verbose Logging (show event JSON)</span>
+              </label>
+
+              <label class="label-with-input">
+                <span>Retry Backoff (ms)</span>
+                <input type="number" id="pub-retry-popup" min="100" step="100" value="1000">
+              </label>
+
+              <div class="relay-selection">
+                <span>Relays to Use</span>
+                <label class="checkbox-label checkbox-inline">
+                  <input type="checkbox" id="relay-nos-lol-popup" data-relay="nos.lol" checked>
+                  <span>nos.lol</span>
+                </label>
+                <label class="checkbox-label checkbox-inline">
+                  <input type="checkbox" id="relay-damus-popup" data-relay="relay.damus.io" checked>
+                  <span>relay.damus.io</span>
+                </label>
+                <label class="checkbox-label checkbox-inline">
+                  <input type="checkbox" id="relay-snort-popup" data-relay="relay.snort.social" checked>
+                  <span>relay.snort.social</span>
+                </label>
+                <label class="checkbox-label checkbox-inline">
+                  <input type="checkbox" id="relay-mom-popup" data-relay="nostr.mom" checked>
+                  <span>nostr.mom</span>
+                </label>
+                <label class="checkbox-label checkbox-inline">
+                  <input type="checkbox" id="relay-mostr-popup" data-relay="relay.mostr.pub" checked>
+                  <span>relay.mostr.pub</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Backup & Restore -->
+          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <h4 style="margin: 0 0 12px 0;">Backup & Restore</h4>
+            <div class="backup-buttons">
+              <button id="export-settings-popup-btn" class="btn-backup">📥 Export</button>
+              <button id="import-settings-popup-btn" class="btn-backup">📤 Import</button>
+              <input type="file" id="import-file-popup-input" accept=".json" style="display: none;" />
+            </div>
+            <p class="help-text">Download your settings to backup. Import to restore.</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>

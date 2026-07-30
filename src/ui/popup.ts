@@ -185,15 +185,16 @@ export class PopupController {
     // Handle "My Activity" (self)
     let selfElement = existingElements.get('self');
     const selfExpanded = this.expandedFriendsState.get('self') ?? true;
+    const sortedUserActivities = this._sortActivitiesByType(this.userActivities);
     if (!selfElement) {
       // Create new self element
-      selfElement = this._createFriendItem('self', 'My Activity', this.userActivities, selfExpanded);
+      selfElement = this._createFriendItem('self', 'My Activity', sortedUserActivities, selfExpanded);
       selfElement.classList.add('user-item');
       selfElement.setAttribute('data-friend-id', 'self');
       this.friendsList!.insertBefore(selfElement, this.friendsList!.firstChild);
     } else {
       // Update self element in place
-      this._updateFriendItem(selfElement, 'self', 'My Activity', this.userActivities, selfExpanded);
+      this._updateFriendItem(selfElement, 'self', 'My Activity', sortedUserActivities, selfExpanded);
     }
     selfElement.classList.toggle('expanded', selfExpanded);
 
@@ -213,7 +214,9 @@ export class PopupController {
       for (const friend of friends) {
         const isExpanded = this.expandedFriendsState.get(friend.id) ?? true;
         // Aggressive deduplication: only show one activity per unique ID, prefer newest
-        const activities = this._deduplicateActivities(Object.values(friend.current_activities || {}));
+        const dedupActivities = this._deduplicateActivities(Object.values(friend.current_activities || {}));
+        // Sort by type: videos, streams, games, etc.
+        const activities = this._sortActivitiesByType(dedupActivities);
 
         let friendElement = existingElements.get(friend.id);
         if (!friendElement) {
@@ -1293,6 +1296,33 @@ export class PopupController {
     return Array.from(seen.values());
   }
 
+  /**
+   * Sort activities by type: videos first, streams second, games last
+   */
+  private _sortActivitiesByType(activities: Activity[]): Activity[] {
+    const typeOrder: { [key: string]: number } = {
+      // Videos first
+      'youtube-tab': 0,
+      'netflix-tab': 1,
+      'video-tab': 2,
+      // Streams second
+      'twitch-tab': 3,
+      'twitch-api': 4,
+      // Music third
+      'spotify-api': 5,
+      // Games last
+      'steam-api': 6,
+      // Other
+      'discord-api': 7,
+    };
+
+    return [...activities].sort((a, b) => {
+      const orderA = typeOrder[a.service] ?? 99;
+      const orderB = typeOrder[b.service] ?? 99;
+      return orderA - orderB;
+    });
+  }
+
   private _setupMessageListener(): void {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.type === 'NEW_MESSAGE') {
@@ -1673,8 +1703,18 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         discordInput.value = profile.discord_info;
       }
 
+      // Load Steam configuration
+      const steamIdInput = document.getElementById('steam-id-popup') as HTMLInputElement;
+      const steamApiKeyInput = document.getElementById('steam-api-key-popup') as HTMLInputElement;
+      if (steamIdInput && profile.steam_config?.steam_id) {
+        steamIdInput.value = profile.steam_config.steam_id;
+      }
+      if (steamApiKeyInput && profile.steam_config?.api_key) {
+        steamApiKeyInput.value = profile.steam_config.api_key;
+      }
+
       // Load service toggles for browser tabs
-      const tabServices = ['video-tab'];
+      const tabServices = ['youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
       for (const service of tabServices) {
         const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
         if (toggle && profile.services_enabled) {
@@ -1920,10 +1960,23 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       });
     }
 
-    // Steam configure button
-    const steamConfigureBtn = document.getElementById('steam-configure-btn');
-    if (steamConfigureBtn) {
-      steamConfigureBtn.addEventListener('click', () => this._showSteamConfigureModal());
+    // Steam configuration inputs
+    const steamIdInput = document.getElementById('steam-id-popup') as HTMLInputElement;
+    const steamApiKeyInput = document.getElementById('steam-api-key-popup') as HTMLInputElement;
+    const steamToggleVisibility = document.getElementById('steam-toggle-key-visibility') as HTMLButtonElement;
+
+    if (steamIdInput) {
+      steamIdInput.addEventListener('change', () => this._saveSettingsPanel());
+    }
+    if (steamApiKeyInput) {
+      steamApiKeyInput.addEventListener('change', () => this._saveSettingsPanel());
+    }
+    if (steamToggleVisibility) {
+      steamToggleVisibility.addEventListener('click', () => {
+        if (steamApiKeyInput) {
+          steamApiKeyInput.type = steamApiKeyInput.type === 'password' ? 'text' : 'password';
+        }
+      });
     }
 
     // Theme selector
@@ -2036,241 +2089,6 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
     }
   }
 
-  private async _showSteamConfigureModal(): Promise<void> {
-    // Load existing config
-    const profile = await this.storage.getUserProfile();
-    const existingKey = profile?.steam_config?.api_key || '';
-
-    const modal = document.createElement('div');
-    modal.className = 'steam-configure-modal-overlay';
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    `;
-
-    const modalContent = document.createElement('div');
-    modalContent.className = 'steam-configure-modal-content';
-    modalContent.style.cssText = `
-      background: var(--bg-primary);
-      border-radius: 8px;
-      padding: 24px;
-      width: 90%;
-      max-width: 500px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    `;
-
-    // Title
-    const title = document.createElement('h3');
-    title.textContent = existingKey ? 'Update Steam API Key' : 'Configure Steam';
-    title.style.marginBottom = '16px';
-    modalContent.appendChild(title);
-
-    // API Key input
-    const apiKeyLabel = document.createElement('label');
-    apiKeyLabel.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 500;';
-    apiKeyLabel.textContent = 'Steam Web API Key:';
-    modalContent.appendChild(apiKeyLabel);
-
-    // Input container for key + toggle button
-    const inputContainer = document.createElement('div');
-    inputContainer.style.cssText = 'display: flex; gap: 8px; margin-bottom: 16px;';
-
-    const apiKeyInput = document.createElement('input');
-    apiKeyInput.type = 'password';
-    apiKeyInput.placeholder = 'Enter your Steam Web API key';
-    apiKeyInput.value = existingKey;
-    apiKeyInput.style.cssText = `
-      flex: 1;
-      padding: 8px 12px;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-      box-sizing: border-box;
-    `;
-    inputContainer.appendChild(apiKeyInput);
-
-    // Toggle password visibility button
-    const toggleVisibilityBtn = document.createElement('button');
-    toggleVisibilityBtn.type = 'button';
-    toggleVisibilityBtn.textContent = '👁️';
-    toggleVisibilityBtn.title = 'Toggle password visibility';
-    toggleVisibilityBtn.style.cssText = `
-      padding: 8px 12px;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-      cursor: pointer;
-      font-size: 1rem;
-    `;
-    toggleVisibilityBtn.addEventListener('click', () => {
-      apiKeyInput.type = apiKeyInput.type === 'password' ? 'text' : 'password';
-    });
-    inputContainer.appendChild(toggleVisibilityBtn);
-    modalContent.appendChild(inputContainer);
-
-    // Steam ID input
-    const steamIdLabel = document.createElement('label');
-    steamIdLabel.style.cssText = 'display: block; margin-bottom: 8px; font-weight: 500;';
-    steamIdLabel.textContent = 'Steam ID (optional):';
-    modalContent.appendChild(steamIdLabel);
-
-    const steamIdInput = document.createElement('input');
-    steamIdInput.type = 'text';
-    steamIdInput.placeholder = 'e.g. 76561198024691357 or find at steamid.xyz';
-    steamIdInput.value = profile?.steam_config?.steam_id || '';
-    steamIdInput.style.cssText = `
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-      margin-bottom: 16px;
-      box-sizing: border-box;
-      font-size: 0.85rem;
-    `;
-    modalContent.appendChild(steamIdInput);
-
-    const steamIdHelp = document.createElement('div');
-    steamIdHelp.style.cssText = `
-      font-size: 0.75rem;
-      color: #6b7280;
-      margin-bottom: 16px;
-    `;
-    steamIdHelp.textContent = 'Find your Steam ID at steamid.xyz (64-bit format)';
-    modalContent.appendChild(steamIdHelp);
-
-    // Status display
-    const statusDiv = document.createElement('div');
-    statusDiv.style.cssText = `
-      padding: 12px;
-      border-radius: 4px;
-      margin-bottom: 16px;
-      display: none;
-      font-size: 0.9rem;
-    `;
-    modalContent.appendChild(statusDiv);
-
-    // Buttons container
-    const buttonContainer = document.createElement('div');
-    buttonContainer.style.cssText = 'display: flex; gap: 8px; justify-content: flex-end;';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.className = 'btn-secondary';
-    cancelBtn.addEventListener('click', () => modal.remove());
-    buttonContainer.appendChild(cancelBtn);
-
-    const saveBtn = document.createElement('button');
-    saveBtn.textContent = 'Save';
-    saveBtn.className = 'btn-primary';
-    saveBtn.addEventListener('click', async () => {
-      const apiKey = apiKeyInput.value.trim();
-      if (!apiKey) {
-        statusDiv.style.display = 'block';
-        statusDiv.style.background = '#fee2e2';
-        statusDiv.style.color = '#991b1b';
-        statusDiv.textContent = 'API key required';
-        return;
-      }
-
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Verifying...';
-
-      try {
-        const steamIdValue = steamIdInput.value.trim() || undefined;
-
-        // Validate steamid format if provided
-        if (steamIdValue) {
-          if (!/^\d+$/.test(steamIdValue)) {
-            throw new Error('Steam ID must be numeric (64-bit format)');
-          }
-          if (steamIdValue.length !== 17) {
-            throw new Error('Steam ID should be 17 digits (64-bit format)');
-          }
-        }
-
-        // Verify the API key by calling Steam API
-        const steamApiUrl = 'https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/';
-        const testSteamId = steamIdValue || '76561198';
-        const verifyResponse = await fetch(`${steamApiUrl}?key=${apiKey}&steamids=${testSteamId}`, {
-          method: 'GET',
-          mode: 'cors',
-        });
-
-        if (!verifyResponse.ok) {
-          throw new Error(`Steam API returned ${verifyResponse.status}`);
-        }
-
-        const data = await verifyResponse.json();
-
-        // Valid key returns a response object
-        if (!data.response) {
-          throw new Error('Invalid API key');
-        }
-
-        // If steamid was provided, verify it exists and extract personaname
-        let personaname: string | undefined;
-        if (steamIdValue) {
-          if (data.response.players && data.response.players.length > 0) {
-            personaname = data.response.players[0].personaname;
-          } else {
-            throw new Error('Steam ID not found or account is private');
-          }
-        }
-
-        // API key and steamid are valid, save them
-        const userProfile = await this.storage.getUserProfile();
-        if (userProfile) {
-          userProfile.steam_config = {
-            enabled: true,
-            connection_type: 'api_key',
-            api_key: apiKey,
-            steam_id: steamIdValue,
-            steam_username: personaname,
-            last_verified: Date.now(),
-          };
-          await this.storage.setUserProfile(userProfile);
-
-          // Show success message
-          statusDiv.style.display = 'block';
-          statusDiv.style.background = '#dcfce7';
-          statusDiv.style.color = '#166534';
-          statusDiv.textContent = 'API key verified and saved';
-
-          setTimeout(() => {
-            modal.remove();
-            // Refresh status display
-            this._updateServiceStatus('steam-api');
-            toastManager.show('Steam API key verified and saved');
-          }, 1500);
-        }
-      } catch (error) {
-        console.error('[Popup] Failed to verify/save Steam config:', error);
-        statusDiv.style.display = 'block';
-        statusDiv.style.background = '#fee2e2';
-        statusDiv.style.color = '#991b1b';
-        statusDiv.textContent = error instanceof Error ? error.message : 'Failed to verify API key. Check that it\'s correct.';
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save';
-      }
-    });
-    buttonContainer.appendChild(saveBtn);
-
-    modalContent.appendChild(buttonContainer);
-    modal.appendChild(modalContent);
-    document.body.appendChild(modal);
-  }
 
   private async _updateServiceStatus(service: string): Promise<void> {
     const isEnabled = this.serviceIntegrationEnabled.get(service) ?? true;
@@ -2358,12 +2176,14 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
   private async _saveSettingsPanel(): Promise<void> {
     try {
       const discordInput = (document.getElementById('discord-info-popup') as HTMLInputElement)?.value || '';
+      const steamIdInput = (document.getElementById('steam-id-popup') as HTMLInputElement)?.value.trim() || '';
+      const steamApiKeyInput = (document.getElementById('steam-api-key-popup') as HTMLInputElement)?.value.trim() || '';
 
-      console.debug('[Popup] Saving settings - discord:', discordInput);
+      console.debug('[Popup] Saving settings - discord:', discordInput, 'steam-id:', steamIdInput ? 'set' : 'empty', 'steam-key:', steamApiKeyInput ? 'set' : 'empty');
 
       // Collect service toggles for browser tabs
       const servicesEnabled: Record<string, boolean> = {};
-      const tabServices = ['video-tab'];
+      const tabServices = ['youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
       for (const service of tabServices) {
         const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
         servicesEnabled[service] = toggle?.checked ?? false;
@@ -2378,7 +2198,6 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
 
       // Collect notification preferences
       const notifFriendOnline = (document.getElementById('notif-friend-online-popup') as HTMLInputElement)?.checked ?? true;
-      const notifNewMessage = (document.getElementById('notif-new-message-popup') as HTMLInputElement)?.checked ?? true;
       const notifJoinSuggestion = (document.getElementById('notif-join-suggestion-popup') as HTMLInputElement)?.checked ?? false;
 
       // Collect publisher config
@@ -2406,10 +2225,11 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         type: 'SAVE_SETTINGS',
         data: {
           discord_info: discordInput,
+          steam_id: steamIdInput || undefined,
+          steam_api_key: steamApiKeyInput || undefined,
           services_enabled: servicesEnabled,
           notification_preferences: {
             friend_online: notifFriendOnline,
-            new_message: notifNewMessage,
             join_suggestion: notifJoinSuggestion,
           },
           publisher_config: {

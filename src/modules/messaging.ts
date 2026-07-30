@@ -28,6 +28,50 @@ export class MessagingManager {
   ) {}
 
   /**
+   * Send a friend request notification (kind-1, unencrypted)
+   * Published when user adds a friend to prompt reciprocal add
+   */
+  async sendFriendRequest(recipientIdentifier: string, recipientPubkey: string, recipientDisplayName: string): Promise<void> {
+    const userProfile = await this.storageManager.getUserProfile();
+    if (!userProfile) {
+      throw new Error('User profile not found');
+    }
+
+    const pubkey = await this.identityManager.getPubkey();
+    const created_at = Math.floor(Date.now() / 1000);
+
+    // Build tags with friend request metadata
+    const tags = [
+      ['is_notification', 'true'],
+      ['type', 'friend_request'],
+      ['recipient', recipientPubkey],
+      ['sender_identifier', userProfile.memorable_identifier],
+      ['sender_display_name', userProfile.nickname || userProfile.memorable_identifier],
+    ];
+
+    // Create kind-1 friend request event
+    const event: NostrEvent = {
+      id: '',
+      pubkey,
+      created_at,
+      kind: 1,
+      tags,
+      content: `${userProfile.nickname || userProfile.memorable_identifier} added you as a friend`,
+    };
+
+    // Compute event ID and sign
+    const eventData = [0, pubkey, created_at, 1, event.tags, event.content];
+    const canonicalJson = JSON.stringify(eventData);
+    const eventId = await encryptionManager.sha256(canonicalJson);
+    event.id = eventId.substring(0, 64);
+    event.sig = encryptionManager.signEvent(event.id, await this.identityManager.getSecretKey());
+
+    // Publish to relays
+    console.log(`[Messaging] 📤 Publishing friend request to ${recipientDisplayName} (${recipientPubkey.substring(0, 8)}...)`);
+    await this.relayPool.publish(event, userProfile.publisher_config);
+  }
+
+  /**
    * Send an invite notification to a friend about an activity (kind-1, unencrypted)
    */
   async sendInvite(activity: Activity, recipientFriend: Friend): Promise<void> {
@@ -156,13 +200,22 @@ export class MessagingManager {
       const created_at = Math.floor(Date.now() / 1000);
       const kind = 4; // Kind 4 = encrypted direct message
 
-      // Create kind-4 event with recipient tag
+      // Create kind-4 event with recipient tag and message type
+      const tags: Array<[string, string]> = [['p', recipientFriend.pubkey]];
+
+      // Add message_type tag for routing (friend_request for accept/decline, chat for future chat)
+      if (message.type === 'join_accepted' || message.type === 'join_declined') {
+        tags.push(['message_type', 'friend_request']);
+      } else if (message.type === 'chat') {
+        tags.push(['message_type', 'chat']);
+      }
+
       const event: NostrEvent = {
         id: '', // Will be computed
         pubkey,
         created_at,
         kind,
-        tags: [['p', recipientFriend.pubkey]],
+        tags,
         content: encryptedContent,
       };
 

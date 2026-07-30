@@ -31,6 +31,7 @@ export interface UserProfile {
   pubkey: string; // Hex public key for Nostr (64 chars)
   secret_key: string; // Hex secret key for signing events (128 chars)
   created_at: number;
+  nickname?: string; // Display name for friend requests (published in profile)
   discord_info?: string;
   steam_id?: string;
   services_enabled: {
@@ -38,9 +39,10 @@ export interface UserProfile {
     'twitch-api': boolean;
     'steam-api': boolean;
     'discord-api': boolean;
-    'netflix-tab': boolean;
     'youtube-tab': boolean;
+    'netflix-tab': boolean;
     'twitch-tab': boolean;
+    'video-tab': boolean;
   };
   notification_preferences: {
     friend_online: boolean;
@@ -96,7 +98,8 @@ export interface UserProfile {
   };
 }
 
-export type ServiceName = 'spotify-api' | 'twitch-api' | 'steam-api' | 'discord-api' | 'video-tab';
+export type ServiceName = 'spotify-api' | 'twitch-api' | 'steam-api' | 'discord-api'
+  | 'youtube-tab' | 'netflix-tab' | 'twitch-tab' | 'video-tab';
 
 // ============================================================================
 // OAUTH & TOKENS
@@ -130,6 +133,7 @@ export interface Friend {
   muted: boolean;
   hidden_services: ServiceName[];
   current_activities: Partial<Record<ServiceName, Activity>>;
+  state: 'pending' | 'active'; // pending = invite sent, awaiting accept; active = mutual friends
 }
 
 export interface FriendList extends Array<Friend> {}

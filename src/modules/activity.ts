@@ -170,7 +170,10 @@ export class ActivityDetector {
       'twitch-api': false,
       'steam-api': false,
       'discord-api': false,
-      'video-tab': true, // Default enabled for browser video detection
+      'youtube-tab': true,
+      'netflix-tab': true,
+      'twitch-tab': true,
+      'video-tab': true,
     };
 
     // Check each enabled OAuth service (Spotify, Twitch, Steam, Discord)
@@ -192,19 +195,22 @@ export class ActivityDetector {
       }
     }
 
-    // Check browser tabs (generic video detection)
-    if (servicesEnabled['video-tab']) {
-      const tabService = this.services.get('tabs') as any;
-      if (tabService) {
-        try {
-          const videoActivity = await tabService.getCurrentActivity();
-          if (videoActivity) {
+    // Check browser tabs (platform-specific video detection)
+    const tabService = this.services.get('tabs') as any;
+    if (tabService) {
+      try {
+        const videoActivity = await tabService.getCurrentActivity();
+        if (videoActivity) {
+          // Check if this specific service is enabled (youtube-tab, netflix-tab, twitch-tab, or video-tab)
+          const serviceEnabled = servicesEnabled[videoActivity.service as ServiceName];
+          if (serviceEnabled !== false) {
+            // Default to enabled if not explicitly disabled
             activities.push(videoActivity);
-            seenServices.add('video-tab');
+            seenServices.add(videoActivity.service);
           }
-        } catch (error) {
-          console.error('[Activity] ERROR detecting browser videos:', error);
         }
+      } catch (error) {
+        console.error('[Activity] ERROR detecting browser videos:', error);
       }
     }
 
