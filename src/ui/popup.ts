@@ -2403,10 +2403,34 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       }
     }
 
-    // No current activity - check if service is configured (for OAuth services)
+    // No current activity - check if service is configured
     let isConfigured = false;
-    if (!['video-tab', 'steam-api'].includes(service)) {
-      // For OAuth services (not browser tab services), check if they have a token
+
+    if (service === 'steam-api') {
+      // For Steam, check if both ID and API key are configured
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: 'GET_USER_IDENTIFIER',
+        });
+        const profile = response.data;
+        isConfigured = !!(profile?.steam_config?.steam_id && profile?.steam_config?.api_key);
+        if (!isConfigured) {
+          statusDiv.textContent = 'Not configured';
+          statusDiv.style.color = 'var(--text-secondary)';
+        } else {
+          statusDiv.textContent = 'Configured, no activity';
+          statusDiv.style.color = 'var(--text-secondary)';
+        }
+        return;
+      } catch (error) {
+        console.error('[Popup] Failed to check Steam config:', error);
+      }
+    } else if (['video-tab'].includes(service)) {
+      // Browser tab services with no activity just show "No activity"
+      statusDiv.textContent = 'No activity';
+      return;
+    } else {
+      // For OAuth services, check if they have a token
       try {
         const authResponse = await chrome.runtime.sendMessage({
           type: 'GET_OAUTH_STATUS',
@@ -2418,12 +2442,8 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       }
     }
 
-    // Show appropriate status message
-    if (['video-tab'].includes(service)) {
-      // Browser tab services with no activity just show "No activity"
-      statusDiv.textContent = 'No activity';
-    } else if (!isConfigured) {
-      // OAuth/Steam services with no token show "Not configured"
+    // Show appropriate status message for OAuth services
+    if (!isConfigured) {
       statusDiv.textContent = 'Not configured';
     } else {
       statusDiv.textContent = 'No activity';
