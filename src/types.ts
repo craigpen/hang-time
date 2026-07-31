@@ -200,8 +200,10 @@ export interface PendingInvite {
   eventId: string; // Nostr event ID for deduplication
   activity: Activity; // The activity being invited to
   friendId: string; // Who we're inviting
-  state: 'pending_publish' | 'published' | 'failed'; // Publish state
-  sentAt: number; // When we first tried to send
+  state: 'pending' | 'relay_accepted' | 'failed'; // unified state: pending (not yet confirmed by relay), relay_accepted (relay confirmed, awaiting friend response), failed (after max retries)
+  sentAt: number; // When we first attempted to send
+  relay_accepted_at?: number; // When relay confirmed receipt
+  friend_responded_at?: number; // When friend's response was detected (marks completion)
   retryCount: number; // Number of retry attempts
   lastRetryAt?: number; // When we last retried
   lastError?: string; // Last error message from relay
@@ -213,8 +215,10 @@ export interface PendingMessage {
   friendId: string; // Recipient friend ID
   activityId: string; // Associated activity ID
   content?: string; // Message content (for chat and friend_request)
-  state: 'pending_publish' | 'published' | 'failed'; // Publish state
-  sentAt: number; // When we first tried to send
+  state: 'pending' | 'relay_accepted' | 'failed'; // unified state: pending (not yet confirmed by relay), relay_accepted (relay confirmed; completion depends on type), failed (after max retries)
+  sentAt: number; // When we first attempted to send
+  relay_accepted_at?: number; // When relay confirmed receipt
+  friend_responded_at?: number; // When friend's response was detected (for handshake messages only)
   retryCount: number; // Number of retry attempts
   lastRetryAt?: number; // When we last retried
   lastError?: string; // Last error message from relay

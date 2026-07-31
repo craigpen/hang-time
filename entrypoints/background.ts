@@ -2313,20 +2313,21 @@ async function trackPendingInvite(eventId: string, activity: Activity, friendId:
     eventId,
     activity,
     friendId,
-    state: 'pending_publish',
+    state: 'pending',
     sentAt: Date.now(),
     retryCount: 0,
   });
 }
 
 /**
- * Mark invite as published successfully
+ * Mark invite relay acceptance (relay confirmed receipt, awaiting friend response for completion)
  */
 async function markInvitePublished(activityId: string): Promise<void> {
   const invites = await storageManager.getPendingInvites();
   const invite = invites[activityId];
   if (invite) {
-    invite.state = 'published';
+    invite.state = 'relay_accepted';
+    invite.relay_accepted_at = Date.now();
     await storageManager.upsertPendingInvite(activityId, invite);
   }
 }
@@ -2347,9 +2348,21 @@ async function markInvitePublishFailed(activityId: string, error: string): Promi
       invite.state = 'failed';
       console.warn(`[Background] Invite failed permanently after 3 retries: ${activityId}`);
     } else {
-      invite.state = 'pending_publish';
+      invite.state = 'pending';
     }
 
+    await storageManager.upsertPendingInvite(activityId, invite);
+  }
+}
+
+/**
+ * Mark invite as completed (friend responded)
+ */
+async function markInviteCompleted(activityId: string): Promise<void> {
+  const invites = await storageManager.getPendingInvites();
+  const invite = invites[activityId];
+  if (invite) {
+    invite.friend_responded_at = Date.now();
     await storageManager.upsertPendingInvite(activityId, invite);
   }
 }
@@ -2364,7 +2377,7 @@ async function retryPendingInvites(): Promise<void> {
   let retryCount = 0;
 
   for (const [activityId, invite] of Object.entries(invites)) {
-    if (invite.state === 'pending_publish') {
+    if (invite.state === 'pending') {
       try {
         console.debug(`[Background] Retrying invite for activity ${activityId}`);
 
@@ -2407,20 +2420,23 @@ async function trackPendingMessage(eventId: string, messageType: 'join_accepted'
     friendId,
     activityId,
     content,
-    state: 'pending_publish',
+    state: 'pending',
     sentAt: Date.now(),
     retryCount: 0,
   });
 }
 
 /**
- * Mark message as published successfully
+ * Mark message relay acceptance (relay confirmed receipt)
+ * For handshake messages (friend_request, accept/decline), awaiting friend response for completion
+ * For response messages (join_accepted/declined), relay acceptance marks completion
  */
 async function markMessagePublished(messageId: string): Promise<void> {
   const messages = await storageManager.getPendingMessages();
   const message = messages[messageId];
   if (message) {
-    message.state = 'published';
+    message.state = 'relay_accepted';
+    message.relay_accepted_at = Date.now();
     await storageManager.upsertPendingMessage(messageId, message);
   }
 }
@@ -2441,9 +2457,22 @@ async function markMessagePublishFailed(messageId: string, error: string): Promi
       message.state = 'failed';
       console.warn(`[Background] Message failed permanently after 3 retries: ${messageId}`);
     } else {
-      message.state = 'pending_publish';
+      message.state = 'pending';
     }
 
+    await storageManager.upsertPendingMessage(messageId, message);
+  }
+}
+
+/**
+ * Mark handshake message as completed (friend responded)
+ * Only applies to: friend_request, accept/decline friend request
+ */
+async function markMessageCompleted(messageId: string): Promise<void> {
+  const messages = await storageManager.getPendingMessages();
+  const message = messages[messageId];
+  if (message) {
+    message.friend_responded_at = Date.now();
     await storageManager.upsertPendingMessage(messageId, message);
   }
 }
@@ -2458,7 +2487,7 @@ async function retryPendingMessages(): Promise<void> {
   let retryCount = 0;
 
   for (const [messageId, message] of Object.entries(messages)) {
-    if (message.state === 'pending_publish') {
+    if (message.state === 'pending') {
       try {
         console.debug(`[Background] Retrying message ${messageId}`);
 
