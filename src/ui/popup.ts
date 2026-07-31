@@ -268,7 +268,15 @@ export class PopupController {
             this.friendsList!.appendChild(friendElement);
             console.log(`[Popup] ✅ Appended pending friend to DOM: ${friend.local_name}`);
           } else {
-            console.log(`[Popup] ⏳ Updating existing pending friend: ${friend.local_name}`);
+            // Element exists but state may have changed - if it's currently marked as active, remove it to recreate as pending
+            if (!friendElement.classList.contains('pending')) {
+              console.log(`[Popup] ⏳ Friend state changed to pending, recreating: ${friend.local_name}`);
+              friendElement.remove();
+              existingElements.delete(friend.id);
+              friendElement = this._createPendingFriendItem(friend.id, friend.local_name, friend.initiated_by_me !== false);
+              friendElement.setAttribute('data-friend-id', friend.id);
+              this.friendsList!.appendChild(friendElement);
+            }
           }
           friendElement.classList.add('pending');
         } else {
@@ -283,8 +291,18 @@ export class PopupController {
             friendElement.setAttribute('data-friend-id', friend.id);
             this.friendsList!.appendChild(friendElement);
           } else {
-            // Update existing friend element in place
-            this._updateFriendItem(friendElement, friend.id, friend.local_name, activities, isExpanded, friend);
+            // If element was pending and is now active, recreate it
+            if (friendElement.classList.contains('pending')) {
+              console.log(`[Popup] ✅ Friend became active, recreating: ${friend.local_name}`);
+              friendElement.remove();
+              existingElements.delete(friend.id);
+              friendElement = this._createFriendItem(friend.id, friend.local_name, activities, isExpanded, friend);
+              friendElement.setAttribute('data-friend-id', friend.id);
+              this.friendsList!.appendChild(friendElement);
+            } else {
+              // Update existing friend element in place
+              this._updateFriendItem(friendElement, friend.id, friend.local_name, activities, isExpanded, friend);
+            }
           }
 
           const isIdle = Object.keys(friend.current_activities || {}).length === 0;
