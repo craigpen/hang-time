@@ -85,6 +85,12 @@ export class SteamService implements IServiceModule {
     const storedSteam = stored['steam-api'];
     const profile = await this.storage.getUserProfile();
 
+    console.debug('[Steam] Profile steam_config:', profile?.steam_config ? 'present' : 'missing');
+    if (profile?.steam_config) {
+      console.debug('[Steam] steam_id present:', !!profile.steam_config.steam_id);
+      console.debug('[Steam] api_key present:', !!profile.steam_config.api_key);
+    }
+
     try {
       const url = `${SteamService.API_BASE}/ISteamUser/GetPlayerSummaries/v0002/`;
       const params = new URLSearchParams({
@@ -94,9 +100,9 @@ export class SteamService implements IServiceModule {
       // Add API key if configured
       if (profile?.steam_config?.api_key) {
         params.append('key', profile.steam_config.api_key);
-        console.debug('[Steam] API key configured');
+        console.debug('[Steam] API key added to request');
       } else {
-        console.warn('[Steam] No API key configured');
+        console.warn('[Steam] No API key configured - steam_config:', profile?.steam_config);
       }
 
       const fullUrl = `${url}?${params}`;

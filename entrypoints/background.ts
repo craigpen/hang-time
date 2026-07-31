@@ -1858,8 +1858,10 @@ async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): 
     const friendManager = getFriendManager();
 
     if (message.type === 'join_accepted') {
-      // Friend accepted the request - transition from pending to active
-      await friendManager.acceptFriendRequest(friend.id);
+      // Friend accepted the request - transition from pending to active (if not already)
+      if (friend.state === 'pending') {
+        await friendManager.acceptFriendRequest(friend.id);
+      }
       console.log(`[FriendRequest] ✅ ${friend.local_name} accepted your friend request`);
 
       // Notify the user (with deduplication to avoid multiple notifications from multiple relays)
