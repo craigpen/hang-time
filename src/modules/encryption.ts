@@ -137,13 +137,19 @@ export class EncryptionManager {
         encryptedContent
       );
 
+      if (!plaintext) {
+        throw new Error('Decryption returned empty result');
+      }
+
       const decoder = new TextDecoder();
       const result = decoder.decode(plaintext);
 
-      console.debug(`[Encryption] ✅ Decryption successful`);
+      console.debug(`[Encryption] ✅ Decryption successful, decoded ${result.length} chars`);
       return result;
     } catch (error) {
-      throw new Error(`Decryption failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[Encryption] ❌ Decryption error details: ${errorMsg}`);
+      throw new Error(`Decryption failed: ${errorMsg}`);
     }
   }
 
