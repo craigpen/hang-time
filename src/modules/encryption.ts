@@ -36,6 +36,8 @@ export class EncryptionManager {
       // Use sender's secret key for ECDH with recipient's public key
       const senderSecretBytes = this._hexToBytes(senderSecretKey);
 
+      console.debug(`[Encryption] Encrypting with recipient=${recipientPublicKey.substring(0, 16)}..., sender_secret=${senderSecretKey.substring(0, 16)}...`);
+
       // Create plaintext bytes
       const plaintextBytes = decodeUTF8(plaintext);
 
@@ -44,6 +46,8 @@ export class EncryptionManager {
 
       // Encrypt: sender_sk + recipient_pk (creates shared secret via ECDH)
       const ciphertext = nacl.box(plaintextBytes, nonce, recipientBytes, senderSecretBytes);
+
+      console.debug(`[Encryption] ✅ Encryption successful, ciphertext length: ${ciphertext.length}`);
 
       // Return: base64(nonce + ciphertext)
       const payload = new Uint8Array(nonce.length + ciphertext.length);
@@ -92,12 +96,17 @@ export class EncryptionManager {
 
       const recipientSecretBytes = this._hexToBytes(recipientSecretKey);
 
+      console.debug(`[Encryption] Attempting decryption with sender=${senderPublicKey.substring(0, 16)}..., secret_key=${recipientSecretKey.substring(0, 16)}...`);
+
       // Decrypt
       const plaintext = nacl.box.open(encryptedContent, nonce, senderBytes, recipientSecretBytes);
 
       if (!plaintext) {
+        console.error(`[Encryption] ❌ Decryption failed: nacl.box.open returned null`);
         throw new Error('Decryption failed - message may be corrupted or keys invalid');
       }
+
+      console.debug(`[Encryption] ✅ Decryption successful`);
 
       // Convert back to UTF-8
       return new TextDecoder().decode(plaintext);
