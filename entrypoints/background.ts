@@ -1093,8 +1093,14 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
     if (data.notification_preferences !== undefined) {
       profile.notification_preferences = data.notification_preferences;
     }
-    if (data.steam_id !== undefined) {
-      profile.steam_id = data.steam_id;
+    if (data.steam_id !== undefined || data.steam_api_key !== undefined) {
+      profile.steam_config = profile.steam_config || {};
+      if (data.steam_id !== undefined) {
+        profile.steam_config.steam_id = data.steam_id;
+      }
+      if (data.steam_api_key !== undefined) {
+        profile.steam_config.api_key = data.steam_api_key;
+      }
     }
     if (data.publisher_config !== undefined) {
       profile.publisher_config = data.publisher_config;
@@ -1103,7 +1109,7 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
       profile.game_discovery_enabled = data.game_discovery_enabled;
     }
 
-    console.debug('[Background] Saving settings - profile.steam_id after update:', profile.steam_id);
+    console.debug('[Background] Saving settings - steam_config:', profile.steam_config);
 
     // Save updated profile
     await storageManager.setUserProfile(profile);
