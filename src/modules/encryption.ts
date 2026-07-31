@@ -32,7 +32,8 @@ export class EncryptionManager {
       console.debug(`[Encryption] Encrypting with recipient=${recipientPublicKey.substring(0, 16)}..., sender_secret=${senderSecretKey.substring(0, 16)}...`);
 
       // Convert keys from hex to bytes
-      const recipientPubkeyBytes = this._hexToBytes(recipientPublicKey);
+      const recipientPubkeyHex = this._schnorrToSecp256k1(recipientPublicKey);
+      const recipientPubkeyBytes = this._hexToBytes(recipientPubkeyHex);
       const senderSecretBytes = this._hexToBytes(senderSecretKey);
 
       // Compute ECDH shared secret: secp256k1_ecdh(sender_secret, recipient_pubkey)
@@ -110,7 +111,8 @@ export class EncryptionManager {
       const encryptedContent = payload.slice(16);
 
       // Convert keys from hex to bytes
-      const senderPubkeyBytes = this._hexToBytes(senderPublicKey);
+      const senderPubkeyHex = this._schnorrToSecp256k1(senderPublicKey);
+      const senderPubkeyBytes = this._hexToBytes(senderPubkeyHex);
       const recipientSecretBytes = this._hexToBytes(recipientSecretKey);
 
       // Compute ECDH shared secret: secp256k1_ecdh(recipient_secret, sender_pubkey)
@@ -293,6 +295,19 @@ export class EncryptionManager {
       bytes[i] = binary.charCodeAt(i);
     }
     return bytes;
+  }
+
+  /**
+   * Convert Schnorr pubkey (32 bytes) to compressed secp256k1 pubkey (33 bytes)
+   * Schnorr keys in Nostr are just the x-coordinate. For ECDH, we need full pubkey.
+   * Add 0x02 prefix to indicate compressed even point (assuming even y-coordinate).
+   */
+  private _schnorrToSecp256k1(schnorrHex: string): string {
+    if (schnorrHex.length !== 64) {
+      throw new Error('Invalid schnorr key length (expected 64 hex chars)');
+    }
+    // Prefix with 0x02 for compressed secp256k1 pubkey (even y-coordinate)
+    return '02' + schnorrHex;
   }
 }
 
