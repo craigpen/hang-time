@@ -206,7 +206,6 @@ export class ActivityPublisher {
       }
 
       // Check if we should publish game library (every 6 hours)
-      const now = Date.now();
       if (now - this.lastGameLibraryPublishTime > ActivityPublisher.GAME_LIBRARY_PUBLISH_INTERVAL_MS) {
         try {
           const gameDiscoveryEnabled = profile?.game_discovery_enabled ?? false;
