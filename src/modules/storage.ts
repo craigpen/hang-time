@@ -95,7 +95,7 @@ export class StorageManager {
   }
 
   async setUserProfile(profile: UserProfile): Promise<void> {
-    console.debug('[Storage] Saving profile with steam_id:', profile.steam_id);
+    console.debug('[Storage] Saving profile with steam_config:', profile.steam_config?.steam_id ? 'configured' : 'not set');
     await this.set(STORAGE_KEYS.USER_PROFILE, profile);
   }
 
