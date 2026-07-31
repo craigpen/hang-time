@@ -41,8 +41,9 @@ export class FriendManager {
 
   /**
    * Add new friend
+   * @param initiatedByMe - true if we initiated the friendship, false if they did. Defaults to true.
    */
-  async addFriend(identifier: string, localName: string): Promise<Friend> {
+  async addFriend(identifier: string, localName: string, initiatedByMe: boolean = true): Promise<Friend> {
     // Validate friend name
     const validation = validateFriendName(localName);
     if (!validation.valid) {
@@ -68,6 +69,7 @@ export class FriendManager {
       hidden_services: [],
       current_activities: {},
       state: 'pending', // Pending friend request acceptance
+      initiated_by_me: initiatedByMe, // Track who initiated the friendship
     };
 
     await this.storage.addFriend(friend);

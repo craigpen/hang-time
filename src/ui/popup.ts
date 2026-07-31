@@ -254,12 +254,12 @@ export class PopupController {
 
         // Check if this is a pending friend
         if (friend.state === 'pending') {
-          console.log(`[Popup] ⏳ RENDERING PENDING FRIEND: ${friend.local_name} (id=${friend.id}, state=${friend.state})`);
-          // Create pending friend element with accept/decline buttons
+          console.log(`[Popup] ⏳ RENDERING PENDING FRIEND: ${friend.local_name} (id=${friend.id}, state=${friend.state}, initiated_by_me=${friend.initiated_by_me})`);
+          // Create pending friend element with accept/decline buttons if they initiated
           let friendElement = existingElements.get(friend.id);
           if (!friendElement) {
             console.log(`[Popup] ⏳ Creating new pending friend element for ${friend.local_name}`);
-            friendElement = this._createPendingFriendItem(friend.id, friend.local_name);
+            friendElement = this._createPendingFriendItem(friend.id, friend.local_name, friend.initiated_by_me !== false);
             friendElement.setAttribute('data-friend-id', friend.id);
             this.friendsList!.appendChild(friendElement);
             console.log(`[Popup] ✅ Appended pending friend to DOM: ${friend.local_name}`);
@@ -567,7 +567,7 @@ export class PopupController {
     return item;
   }
 
-  private _createPendingFriendItem(id: string, name: string): HTMLElement {
+  private _createPendingFriendItem(id: string, name: string, initiatedByMe: boolean = true): HTMLElement {
     const item = document.createElement('div');
     item.className = 'friend-item pending-friend-item';
     item.dataset.friendId = id;
@@ -588,39 +588,41 @@ export class PopupController {
     header.appendChild(statusSpan);
     item.appendChild(header);
 
-    // Pending message and buttons
-    const messageContainer = document.createElement('div');
-    messageContainer.className = 'pending-message-container';
+    // Only show message and buttons if THEY initiated the request (recipient side)
+    if (!initiatedByMe) {
+      const messageContainer = document.createElement('div');
+      messageContainer.className = 'pending-message-container';
 
-    const message = document.createElement('div');
-    message.className = 'pending-message';
-    message.textContent = `${name} added you as a friend`;
+      const message = document.createElement('div');
+      message.className = 'pending-message';
+      message.textContent = `${name} added you as a friend`;
 
-    const buttonsContainer = document.createElement('div');
-    buttonsContainer.className = 'pending-buttons';
+      const buttonsContainer = document.createElement('div');
+      buttonsContainer.className = 'pending-buttons';
 
-    const acceptBtn = document.createElement('button');
-    acceptBtn.className = 'btn-accept-friend';
-    acceptBtn.textContent = 'Accept';
-    acceptBtn.onclick = (e) => {
-      e.stopPropagation();
-      this._handleAcceptFriendRequest(id, name);
-    };
+      const acceptBtn = document.createElement('button');
+      acceptBtn.className = 'btn-accept-friend';
+      acceptBtn.textContent = 'Accept';
+      acceptBtn.onclick = (e) => {
+        e.stopPropagation();
+        this._handleAcceptFriendRequest(id, name);
+      };
 
-    const declineBtn = document.createElement('button');
-    declineBtn.className = 'btn-decline-friend';
-    declineBtn.textContent = 'Decline';
-    declineBtn.onclick = (e) => {
-      e.stopPropagation();
-      this._handleDeclineFriendRequest(id, name);
-    };
+      const declineBtn = document.createElement('button');
+      declineBtn.className = 'btn-decline-friend';
+      declineBtn.textContent = 'Decline';
+      declineBtn.onclick = (e) => {
+        e.stopPropagation();
+        this._handleDeclineFriendRequest(id, name);
+      };
 
-    buttonsContainer.appendChild(acceptBtn);
-    buttonsContainer.appendChild(declineBtn);
+      buttonsContainer.appendChild(acceptBtn);
+      buttonsContainer.appendChild(declineBtn);
 
-    messageContainer.appendChild(message);
-    messageContainer.appendChild(buttonsContainer);
-    item.appendChild(messageContainer);
+      messageContainer.appendChild(message);
+      messageContainer.appendChild(buttonsContainer);
+      item.appendChild(messageContainer);
+    }
 
     return item;
   }

@@ -1381,8 +1381,8 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
         return;
       }
 
-      // Create as pending friend
-      const newFriend = await friendManager.addFriend(senderIdentifier, senderDisplayName);
+      // Create as pending friend (they initiated the request)
+      const newFriend = await friendManager.addFriend(senderIdentifier, senderDisplayName, false);
       console.log(`[Message] ✅ Created pending friend from request: ${senderDisplayName}`);
 
       // Subscribe to new friend
