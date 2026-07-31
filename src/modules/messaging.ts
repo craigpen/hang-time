@@ -141,8 +141,9 @@ export class MessagingManager {
 
   /**
    * Send a chat message to a friend about an activity
+   * Returns the event ID for tracking/retry purposes
    */
-  async sendChatMessage(activity: Activity, recipientFriend: Friend, content: string): Promise<void> {
+  async sendChatMessage(activity: Activity, recipientFriend: Friend, content: string): Promise<string> {
     const message: ActivityMessage = {
       type: 'chat',
       activity_id: activity.id || generateActivityId(activity.service, activity.url),
@@ -150,43 +151,49 @@ export class MessagingManager {
       timestamp: Date.now(),
     };
 
-    await this._sendActivityMessage(recipientFriend, message);
+    const eventId = await this._sendActivityMessage(recipientFriend, message);
     console.debug('[Messaging] Sent message to:', recipientFriend.local_name);
+    return eventId;
   }
 
   /**
    * Send join acceptance notification
+   * Returns the event ID for tracking/retry purposes
    */
-  async sendJoinAccepted(activity: Activity, recipientFriend: Friend): Promise<void> {
+  async sendJoinAccepted(activity: Activity, recipientFriend: Friend): Promise<string> {
     const message: ActivityMessage = {
       type: 'join_accepted',
       activity_id: activity.id || generateActivityId(activity.service, activity.url),
       timestamp: Date.now(),
     };
 
-    await this._sendActivityMessage(recipientFriend, message);
+    const eventId = await this._sendActivityMessage(recipientFriend, message);
     console.debug('[Messaging] Sent join_accepted for activity:', activity.service);
+    return eventId;
   }
 
   /**
    * Send join decline notification
+   * Returns the event ID for tracking/retry purposes
    */
-  async sendJoinDeclined(activity: Activity, recipientFriend: Friend): Promise<void> {
+  async sendJoinDeclined(activity: Activity, recipientFriend: Friend): Promise<string> {
     const message: ActivityMessage = {
       type: 'join_declined',
       activity_id: activity.id || generateActivityId(activity.service, activity.url),
       timestamp: Date.now(),
     };
 
-    await this._sendActivityMessage(recipientFriend, message);
+    const eventId = await this._sendActivityMessage(recipientFriend, message);
     console.debug('[Messaging] Sent join_declined for activity:', activity.service);
+    return eventId;
   }
 
   /**
    * Send friend request message via kind-4 (encrypted)
    * Used when adding a friend to notify them (works even if they haven't added us yet)
+   * Returns the event ID for tracking/retry purposes
    */
-  async sendFriendRequestMessage(recipientPubkey: string, senderDisplayName: string): Promise<void> {
+  async sendFriendRequestMessage(recipientPubkey: string, senderDisplayName: string): Promise<string> {
     try {
       const userProfile = await this.storageManager.getUserProfile();
       if (!userProfile) {
@@ -243,6 +250,7 @@ export class MessagingManager {
       await this.relayPool.publish(event, publishConfig);
 
       console.debug('[Messaging] Friend request message sent');
+      return event.id; // Return event ID for tracking/retry
     } catch (error) {
       console.error('[Messaging] Failed to send friend request message:', error);
       throw error;
@@ -251,8 +259,9 @@ export class MessagingManager {
 
   /**
    * Internal: send encrypted activity message via kind-4
+   * Returns the event ID for tracking/retry purposes
    */
-  private async _sendActivityMessage(recipientFriend: Friend, message: ActivityMessage): Promise<void> {
+  private async _sendActivityMessage(recipientFriend: Friend, message: ActivityMessage): Promise<string> {
     try {
       const userProfile = await this.storageManager.getUserProfile();
       if (!userProfile) {
@@ -318,6 +327,8 @@ export class MessagingManager {
       };
 
       await this.storageManager.addActivityMessage(recipientFriend.id, message.activity_id, localMessage);
+
+      return event.id; // Return event ID for tracking/retry
     } catch (error) {
       console.error('[Messaging] Failed to send message:', error);
       throw error;

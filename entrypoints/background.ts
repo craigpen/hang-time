@@ -895,10 +895,16 @@ async function _addFriend(identifier?: string, localName?: string): Promise<Exte
       const messagingManager = getMessagingManager();
       const userProfile = await storageManager.getUserProfile();
       const senderDisplayName = userProfile?.nickname || userProfile?.memorable_identifier || 'Friend';
-      await messagingManager.sendFriendRequestMessage(friend.pubkey, senderDisplayName);
+      const eventId = await messagingManager.sendFriendRequestMessage(friend.pubkey, senderDisplayName);
+      const friendRequestActivityId = `friend_request_${Date.now()}`;
+      await trackPendingMessage(eventId, 'friend_request', friend.id, friendRequestActivityId);
+      await markMessagePublished(`friend_request_${friend.id}_${friendRequestActivityId}`);
       console.log(`[Background] 📤 Friend request message sent to ${localName}`);
     } catch (error) {
       console.error('[Background] Failed to send friend request message:', error);
+      // Track failed publish for retry
+      const friendRequestActivityId = `friend_request_${Date.now()}`;
+      await markMessagePublishFailed(`friend_request_${friend.id}_${friendRequestActivityId}`, error instanceof Error ? error.message : 'Failed to send friend request message');
       // Don't fail the add operation if message publish fails
     }
 
@@ -977,7 +983,17 @@ async function _acceptFriendRequest(friendId?: string): Promise<ExtensionRespons
       audio: 'off',
       metadata: {},
     };
-    await messagingManager.sendJoinAccepted(dummyActivity, friend);
+
+    try {
+      const eventId = await messagingManager.sendJoinAccepted(dummyActivity, friend);
+      const messageId = `join_accepted_${friend.id}_${dummyActivity.id}`;
+      await trackPendingMessage(eventId, 'join_accepted', friend.id, dummyActivity.id);
+      await markMessagePublished(messageId);
+    } catch (error) {
+      console.error('[Background] Failed to send acceptance notification:', error);
+      const messageId = `join_accepted_${friend.id}_${dummyActivity.id}`;
+      await markMessagePublishFailed(messageId, error instanceof Error ? error.message : 'Failed to send acceptance');
+    }
 
     console.log(`[Background] ✅ Accepted friend request from: ${friend.local_name}`);
     return { success: true };
@@ -2161,14 +2177,26 @@ async function _sendJoinNotification(activity?: any, friendId?: string, accepted
     }
 
     const messagingManager = getMessagingManager();
-    if (accepted) {
-      await messagingManager.sendJoinAccepted(activity, friend);
-    } else {
-      await messagingManager.sendJoinDeclined(activity, friend);
+    const messageType = accepted ? 'join_accepted' : 'join_declined';
+
+    try {
+      const eventId = accepted
+        ? await messagingManager.sendJoinAccepted(activity, friend)
+        : await messagingManager.sendJoinDeclined(activity, friend);
+
+      const messageId = `${messageType}_${friend.id}_${activity.id}`;
+      await trackPendingMessage(eventId, messageType as 'join_accepted' | 'join_declined', friend.id, activity.id);
+      await markMessagePublished(messageId);
+    } catch (error) {
+      console.error('[Background] Error sending join notification:', error);
+      const messageId = `${messageType}_${friend.id}_${activity.id}`;
+      await markMessagePublishFailed(messageId, error instanceof Error ? error.message : 'Failed to send notification');
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to send notification' };
     }
+
     return { success: true };
   } catch (error) {
-    console.error('[Background] Error sending join notification:', error);
+    console.error('[Background] Error in join notification handler:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Failed to send notification' };
   }
 }
@@ -2369,6 +2397,118 @@ async function retryPendingInvites(): Promise<void> {
 }
 
 /**
+ * Track a pending kind-4 message (chat, accept, decline, friend_request)
+ */
+async function trackPendingMessage(eventId: string, messageType: 'join_accepted' | 'join_declined' | 'friend_request' | 'chat', friendId: string, activityId: string, content?: string): Promise<void> {
+  const messageId = `${messageType}_${friendId}_${activityId}`;
+  await storageManager.upsertPendingMessage(messageId, {
+    eventId,
+    messageType,
+    friendId,
+    activityId,
+    content,
+    state: 'pending_publish',
+    sentAt: Date.now(),
+    retryCount: 0,
+  });
+}
+
+/**
+ * Mark message as published successfully
+ */
+async function markMessagePublished(messageId: string): Promise<void> {
+  const messages = await storageManager.getPendingMessages();
+  const message = messages[messageId];
+  if (message) {
+    message.state = 'published';
+    await storageManager.upsertPendingMessage(messageId, message);
+  }
+}
+
+/**
+ * Mark message publish as failed and schedule retry
+ */
+async function markMessagePublishFailed(messageId: string, error: string): Promise<void> {
+  const messages = await storageManager.getPendingMessages();
+  const message = messages[messageId];
+  if (message) {
+    message.retryCount++;
+    message.lastRetryAt = Date.now();
+    message.lastError = error;
+
+    // After 3 retries, mark as failed permanently
+    if (message.retryCount >= 3) {
+      message.state = 'failed';
+      console.warn(`[Background] Message failed permanently after 3 retries: ${messageId}`);
+    } else {
+      message.state = 'pending_publish';
+    }
+
+    await storageManager.upsertPendingMessage(messageId, message);
+  }
+}
+
+/**
+ * Retry publishing pending messages on startup
+ */
+async function retryPendingMessages(): Promise<void> {
+  if (!relayPool || !messagingManager) return;
+
+  const messages = await storageManager.getPendingMessages();
+  let retryCount = 0;
+
+  for (const [messageId, message] of Object.entries(messages)) {
+    if (message.state === 'pending_publish') {
+      try {
+        console.debug(`[Background] Retrying message ${messageId}`);
+
+        // Get the friend and retry sending
+        const friend = await getFriendManager().getFriend(message.friendId);
+        if (!friend) {
+          console.warn(`[Background] Friend not found for retry: ${message.friendId}`);
+          await markMessagePublishFailed(messageId, 'Friend not found');
+          continue;
+        }
+
+        // Get the activity (for accept/decline)
+        const activities = await storageManager.getMyActivities();
+        const activity = Object.values(activities).find(a => a.id === message.activityId);
+
+        try {
+          let newEventId: string;
+
+          // Retry based on message type
+          if (message.messageType === 'join_accepted' && activity) {
+            newEventId = await messagingManager.sendJoinAccepted(activity, friend);
+          } else if (message.messageType === 'join_declined' && activity) {
+            newEventId = await messagingManager.sendJoinDeclined(activity, friend);
+          } else if (message.messageType === 'chat' && activity) {
+            newEventId = await messagingManager.sendChatMessage(activity, friend, message.content || '');
+          } else if (message.messageType === 'friend_request') {
+            newEventId = await messagingManager.sendFriendRequestMessage(friend.pubkey, '');
+          } else {
+            throw new Error(`Unknown message type: ${message.messageType}`);
+          }
+
+          console.log(`[Background] Successfully retried message, new eventId: ${newEventId.substring(0, 16)}...`);
+          await markMessagePublished(messageId);
+          retryCount++;
+        } catch (error) {
+          // Publish failed again, increment retry count
+          throw error;
+        }
+      } catch (error) {
+        await markMessagePublishFailed(messageId, error instanceof Error ? error.message : 'Unknown error');
+      }
+    }
+  }
+
+  if (retryCount > 0) {
+    console.log(`[Background] Retried ${retryCount} pending messages`);
+  }
+}
+
+/**
  * Clean up invites for activities the friend is no longer doing
  * If a friend stops watching something, any pending invite for that activity expires
  */
@@ -2471,6 +2611,7 @@ console.log('[Background] Service worker loaded');
     await initializeNotificationDedup();
     await initializeExtension();
     await retryPendingInvites();
+    await retryPendingMessages();
   } catch (error) {
     console.error('[Background] Failed to initialize:', error);
   }

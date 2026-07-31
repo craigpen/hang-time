@@ -17,6 +17,7 @@ import {
   StorageError,
   ActivityHistory,
   PendingInvite,
+  PendingMessage,
 } from '../types';
 
 
@@ -457,6 +458,38 @@ export class StorageManager {
     }
 
     return removedCount;
+  }
+
+  /**
+   * Get pending messages (kind-4: chat, accept, decline, friend_request)
+   */
+  async getPendingMessages(): Promise<Record<string, PendingMessage>> {
+    return this.get<Record<string, PendingMessage>>(STORAGE_KEYS.PENDING_MESSAGES, {});
+  }
+
+  /**
+   * Set pending messages
+   */
+  async setPendingMessages(messages: Record<string, PendingMessage>): Promise<void> {
+    await this.set(STORAGE_KEYS.PENDING_MESSAGES, messages);
+  }
+
+  /**
+   * Add or update a pending message
+   */
+  async upsertPendingMessage(messageId: string, message: PendingMessage): Promise<void> {
+    const messages = await this.getPendingMessages();
+    messages[messageId] = message;
+    await this.setPendingMessages(messages);
+  }
+
+  /**
+   * Remove a pending message
+   */
+  async removePendingMessage(messageId: string): Promise<void> {
+    const messages = await this.getPendingMessages();
+    delete messages[messageId];
+    await this.setPendingMessages(messages);
   }
 
   /**

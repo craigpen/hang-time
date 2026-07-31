@@ -207,6 +207,19 @@ export interface PendingInvite {
   lastError?: string; // Last error message from relay
 }
 
+export interface PendingMessage {
+  eventId: string; // Nostr event ID for deduplication
+  messageType: 'join_accepted' | 'join_declined' | 'friend_request' | 'chat'; // Type of message
+  friendId: string; // Recipient friend ID
+  activityId: string; // Associated activity ID
+  content?: string; // Message content (for chat and friend_request)
+  state: 'pending_publish' | 'published' | 'failed'; // Publish state
+  sentAt: number; // When we first tried to send
+  retryCount: number; // Number of retry attempts
+  lastRetryAt?: number; // When we last retried
+  lastError?: string; // Last error message from relay
+}
+
 // ============================================================================
 // NOSTR PROTOCOL
 // ============================================================================
@@ -320,6 +333,7 @@ export const STORAGE_KEYS = {
   SETTINGS: 'hang_time_settings',
   VIDEO_DATA_METRICS: 'hang_time_video_data_metrics',
   PENDING_INVITES: 'hang_time_pending_invites',
+  PENDING_MESSAGES: 'hang_time_pending_messages',
   NOTIFIED_INVITE_IDS: 'hang_time_notified_invite_ids',
   OAUTH_CONFIG: 'hang_time_oauth_config',
   NETFLIX_TITLE: 'hang_time_netflix_title',
