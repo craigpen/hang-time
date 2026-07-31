@@ -1,11 +1,9 @@
 /**
  * Hang Time - NIP-04 Message Encryption
  * Implements Nostr Improvement Proposal 4 for encrypted direct messages
- * Uses TweetNaCl.js for encryption/decryption
+ * Uses secp256k1 ECDH + AES-256-CBC per NIP-04 spec
  */
 
-import nacl from 'tweetnacl';
-import { decodeUTF8, encodeBase64, decodeBase64 } from 'tweetnacl-util';
 import * as secp from '@noble/secp256k1';
 import { sha256 } from '@noble/hashes/sha2.js';
 
@@ -15,9 +13,10 @@ secp.hashes.sha256 = sha256;
 export class EncryptionManager {
   /**
    * Encrypt message using NIP-04 (Nostr encrypted DMs)
-   * Returns base64 encoded ciphertext
+   * Uses secp256k1 ECDH + AES-256-CBC per NIP-04 spec
+   * Returns base64 encoded payload
    */
-  encrypt(plaintext: string, recipientPublicKey: string, senderSecretKey: string): string {
+  async encrypt(plaintext: string, recipientPublicKey: string, senderSecretKey: string): Promise<string> {
     try {
       // Validate inputs
       if (!plaintext || typeof plaintext !== 'string') {
@@ -30,31 +29,51 @@ export class EncryptionManager {
         throw new Error('Invalid sender secret key');
       }
 
-      // For NIP-04, we need the recipient's actual public key (hex format)
-      const recipientBytes = this._hexToBytes(recipientPublicKey);
-
-      // Use sender's secret key for ECDH with recipient's public key
-      const senderSecretBytes = this._hexToBytes(senderSecretKey);
-
       console.debug(`[Encryption] Encrypting with recipient=${recipientPublicKey.substring(0, 16)}..., sender_secret=${senderSecretKey.substring(0, 16)}...`);
 
-      // Create plaintext bytes
-      const plaintextBytes = decodeUTF8(plaintext);
+      // Convert keys from hex to bytes
+      const recipientPubkeyBytes = this._hexToBytes(recipientPublicKey);
+      const senderSecretBytes = this._hexToBytes(senderSecretKey);
 
-      // Create nonce (24 random bytes)
-      const nonce = nacl.randomBytes(24);
+      // Compute ECDH shared secret: secp256k1_ecdh(sender_secret, recipient_pubkey)
+      const sharedSecretBytes = secp.getSharedSecret(senderSecretBytes, recipientPubkeyBytes);
 
-      // Encrypt: sender_sk + recipient_pk (creates shared secret via ECDH)
-      const ciphertext = nacl.box(plaintextBytes, nonce, recipientBytes, senderSecretBytes);
+      // Hash the shared secret to get AES key
+      const sharedSecretHashed = sha256(sharedSecretBytes);
+      const aesKey = sharedSecretHashed.slice(0, 32); // 32 bytes for AES-256
 
-      console.debug(`[Encryption] ✅ Encryption successful, ciphertext length: ${ciphertext.length}`);
+      // Generate random IV (16 bytes for AES-CBC)
+      const iv = new Uint8Array(16);
+      crypto.getRandomValues(iv);
 
-      // Return: base64(nonce + ciphertext)
-      const payload = new Uint8Array(nonce.length + ciphertext.length);
-      payload.set(nonce, 0);
-      payload.set(ciphertext, nonce.length);
+      // Encode plaintext as UTF-8
+      const encoder = new TextEncoder();
+      const plaintextBytes = encoder.encode(plaintext);
 
-      return encodeBase64(payload);
+      // Encrypt using AES-256-CBC with crypto.subtle
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        aesKey,
+        { name: 'AES-CBC' },
+        false,
+        ['encrypt']
+      );
+
+      const ciphertext = await crypto.subtle.encrypt(
+        { name: 'AES-CBC', iv },
+        cryptoKey,
+        plaintextBytes
+      );
+
+      // Combine IV + ciphertext and encode as base64
+      const payload = new Uint8Array(iv.length + ciphertext.byteLength);
+      payload.set(iv, 0);
+      payload.set(new Uint8Array(ciphertext), iv.length);
+
+      const base64Payload = this._bytesToBase64(payload);
+      console.debug(`[Encryption] ✅ Encryption successful, payload length: ${base64Payload.length}`);
+
+      return base64Payload;
     } catch (error) {
       throw new Error(`Encryption failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -62,9 +81,9 @@ export class EncryptionManager {
 
   /**
    * Decrypt message using NIP-04
-   * Input should be base64 encoded (nonce + ciphertext)
+   * Input should be base64 encoded (IV + ciphertext)
    */
-  decrypt(ciphertext: string, senderPublicKey: string, recipientSecretKey?: string): string {
+  async decrypt(ciphertext: string, senderPublicKey: string, recipientSecretKey?: string): Promise<string> {
     try {
       // Validate inputs
       if (!ciphertext || typeof ciphertext !== 'string') {
@@ -73,43 +92,54 @@ export class EncryptionManager {
       if (!senderPublicKey || typeof senderPublicKey !== 'string') {
         throw new Error('Invalid sender public key');
       }
-
-      // Decode base64 payload
-      const payload = decodeBase64(ciphertext);
-
-      // Extract nonce (first 24 bytes) and actual ciphertext
-      if (payload.length < 24) {
-        throw new Error('Invalid encrypted payload (too short)');
-      }
-
-      const nonce = payload.slice(0, 24);
-      const encryptedContent = payload.slice(24);
-
-      // Sender's public key
-      const senderBytes = this._hexToBytes(senderPublicKey);
-
-      // For now, we'd need recipient's secret key to decrypt
-      // In production, this would be retrieved from secure storage
       if (!recipientSecretKey) {
         throw new Error('Recipient secret key required for decryption');
       }
 
-      const recipientSecretBytes = this._hexToBytes(recipientSecretKey);
-
       console.debug(`[Encryption] Attempting decryption with sender=${senderPublicKey.substring(0, 16)}..., secret_key=${recipientSecretKey.substring(0, 16)}...`);
 
-      // Decrypt
-      const plaintext = nacl.box.open(encryptedContent, nonce, senderBytes, recipientSecretBytes);
+      // Decode base64 payload
+      const payload = this._base64ToBytes(ciphertext);
 
-      if (!plaintext) {
-        console.error(`[Encryption] ❌ Decryption failed: nacl.box.open returned null`);
-        throw new Error('Decryption failed - message may be corrupted or keys invalid');
+      // Extract IV (first 16 bytes) and actual ciphertext
+      if (payload.length < 16) {
+        throw new Error('Invalid encrypted payload (too short)');
       }
 
-      console.debug(`[Encryption] ✅ Decryption successful`);
+      const iv = payload.slice(0, 16);
+      const encryptedContent = payload.slice(16);
 
-      // Convert back to UTF-8
-      return new TextDecoder().decode(plaintext);
+      // Convert keys from hex to bytes
+      const senderPubkeyBytes = this._hexToBytes(senderPublicKey);
+      const recipientSecretBytes = this._hexToBytes(recipientSecretKey);
+
+      // Compute ECDH shared secret: secp256k1_ecdh(recipient_secret, sender_pubkey)
+      const sharedSecretBytes = secp.getSharedSecret(recipientSecretBytes, senderPubkeyBytes);
+
+      // Hash the shared secret to get AES key
+      const sharedSecretHashed = sha256(sharedSecretBytes);
+      const aesKey = sharedSecretHashed.slice(0, 32); // 32 bytes for AES-256
+
+      // Decrypt using AES-256-CBC with crypto.subtle
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        aesKey,
+        { name: 'AES-CBC' },
+        false,
+        ['decrypt']
+      );
+
+      const plaintext = await crypto.subtle.decrypt(
+        { name: 'AES-CBC', iv },
+        cryptoKey,
+        encryptedContent
+      );
+
+      const decoder = new TextDecoder();
+      const result = decoder.decode(plaintext);
+
+      console.debug(`[Encryption] ✅ Decryption successful`);
+      return result;
     } catch (error) {
       throw new Error(`Decryption failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -246,6 +276,23 @@ export class EncryptionManager {
       hex += byte.length === 1 ? '0' + byte : byte;
     }
     return hex;
+  }
+
+  private _bytesToBase64(bytes: Uint8Array): string {
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  private _base64ToBytes(base64: string): Uint8Array {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
   }
 }
 

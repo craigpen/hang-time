@@ -208,7 +208,7 @@ export class MessagingManager {
 
       // Serialize and encrypt
       const plaintext = JSON.stringify(message);
-      const encryptedContent = encryptionManager.encrypt(plaintext, recipientPubkey, secretKey);
+      const encryptedContent = await encryptionManager.encrypt(plaintext, recipientPubkey, secretKey);
 
       const created_at = Math.floor(Date.now() / 1000);
       const kind = 4;
@@ -262,7 +262,7 @@ export class MessagingManager {
 
       // Serialize message to JSON and encrypt with recipient's pubkey
       const plaintext = JSON.stringify(message);
-      const encryptedContent = encryptionManager.encrypt(plaintext, recipientFriend.pubkey, secretKey);
+      const encryptedContent = await encryptionManager.encrypt(plaintext, recipientFriend.pubkey, secretKey);
 
       const created_at = Math.floor(Date.now() / 1000);
       const kind = 4; // Kind 4 = encrypted direct message
@@ -337,7 +337,7 @@ export class MessagingManager {
       const secretKey = await this.identityManager.getSecretKey();
 
       // Decrypt the message with friend's pubkey (they sent it to us)
-      const plaintext = encryptionManager.decrypt(encryptedContent, friend.pubkey, secretKey);
+      const plaintext = await encryptionManager.decrypt(encryptedContent, friend.pubkey, secretKey);
 
       // Parse the ActivityMessage structure
       const message: ActivityMessage = JSON.parse(plaintext);

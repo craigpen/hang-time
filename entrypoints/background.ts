@@ -1355,7 +1355,7 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
 
       const secretKey = await identityManager.getSecretKey();
       // Decrypt with sender's pubkey (event.pubkey), not our own
-      const plaintext = encryptionManager.decrypt(event.content, event.pubkey, secretKey);
+      const plaintext = await encryptionManager.decrypt(event.content, event.pubkey, secretKey);
       const message = JSON.parse(plaintext);
 
       if (message.type !== 'friend_request') {
