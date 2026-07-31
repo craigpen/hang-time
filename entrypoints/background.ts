@@ -1304,6 +1304,12 @@ async function _subscribeToIncomingMessages(): Promise<void> {
     relayPool.subscribeToDirectMessages(userPubkey, async (event: NostrEvent) => {
       console.log(`[Message] 📨 Received kind-4 event, processing...`);
 
+      // Skip messages we published ourselves (relay echo)
+      if (event.pubkey === userPubkey) {
+        console.debug(`[Message] ℹ️  Ignoring echo of our own message`);
+        return;
+      }
+
       // Validate event is kind-4 (already filtered by relay, but verify)
       if (event.kind !== 4) {
         console.debug(`[Message] Ignoring non-kind-4 event (kind ${event.kind})`);
