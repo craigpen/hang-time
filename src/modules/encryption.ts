@@ -17,7 +17,7 @@ export class EncryptionManager {
    * Encrypt message using NIP-04 (Nostr encrypted DMs)
    * Returns base64 encoded ciphertext
    */
-  encrypt(plaintext: string, recipientPublicKey: string): string {
+  encrypt(plaintext: string, recipientPublicKey: string, senderSecretKey: string): string {
     try {
       // Validate inputs
       if (!plaintext || typeof plaintext !== 'string') {
@@ -26,13 +26,15 @@ export class EncryptionManager {
       if (!recipientPublicKey || typeof recipientPublicKey !== 'string') {
         throw new Error('Invalid recipient public key');
       }
+      if (!senderSecretKey || typeof senderSecretKey !== 'string') {
+        throw new Error('Invalid sender secret key');
+      }
 
       // For NIP-04, we need the recipient's actual public key (hex format)
-      // Convert recipient identifier to a consistent key format
       const recipientBytes = this._hexToBytes(recipientPublicKey);
 
-      // Generate ephemeral key pair for this message
-      const ephemeralKeyPair = nacl.box.keyPair();
+      // Use sender's secret key for ECDH with recipient's public key
+      const senderSecretBytes = this._hexToBytes(senderSecretKey);
 
       // Create plaintext bytes
       const plaintextBytes = decodeUTF8(plaintext);
@@ -40,8 +42,8 @@ export class EncryptionManager {
       // Create nonce (24 random bytes)
       const nonce = nacl.randomBytes(24);
 
-      // Encrypt: ephemeral_sk + recipient_pk
-      const ciphertext = nacl.box(plaintextBytes, nonce, recipientBytes, ephemeralKeyPair.secretKey);
+      // Encrypt: sender_sk + recipient_pk (creates shared secret via ECDH)
+      const ciphertext = nacl.box(plaintextBytes, nonce, recipientBytes, senderSecretBytes);
 
       // Return: base64(nonce + ciphertext)
       const payload = new Uint8Array(nonce.length + ciphertext.length);
