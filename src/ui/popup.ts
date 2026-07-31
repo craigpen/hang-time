@@ -171,8 +171,12 @@ export class PopupController {
 
   private async _renderFriends(friends: Friend[]): Promise<void> {
     console.log(`[Popup] _renderFriends called with ${friends.length} friends`);
+    friends.forEach(f => {
+      console.log(`[Popup] Friend: ${f.local_name} (state=${f.state}, initiated_by_me=${f.initiated_by_me})`);
+    });
     const pendingCount = friends.filter(f => f.state === 'pending').length;
     const activeCount = friends.filter(f => f.state === 'active').length;
+    console.log(`[Popup] Summary: ${pendingCount} pending, ${activeCount} active`);
     if (pendingCount > 0) {
       console.log(`[Popup] ⏳ Found ${pendingCount} pending friends, ${activeCount} active friends`);
     }
