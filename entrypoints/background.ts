@@ -1393,9 +1393,10 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
       await _subscribeToFriend(senderIdentifier);
 
       // Show notification (with deduplication to avoid duplicate notifications from multiple relays)
-      if (shouldNotifyForEvent(event.id, 20)) {
+      if (shouldNotifyForInvite(event.id)) {
         const notificationManager = getNotificationManager();
         await notificationManager.notifyFriendRequest(newFriend.id, senderDisplayName);
+        await markInviteNotified(event.id);
       }
 
       // Notify popup
@@ -1855,12 +1856,13 @@ async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): 
       console.log(`[FriendRequest] ✅ ${friend.local_name} accepted your friend request`);
 
       // Notify the user (with deduplication to avoid multiple notifications from multiple relays)
-      if (shouldNotifyForEvent(event.id, 20)) {
+      if (shouldNotifyForInvite(event.id)) {
         const notificationManager = getNotificationManager();
         await notificationManager.notify(
           `${friend.local_name} accepted your friend request`,
           'You are now friends!'
         );
+        await markInviteNotified(event.id);
       }
     } else {
       console.warn('[FriendRequest] Unexpected message type in friend request:', message.type);
