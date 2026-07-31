@@ -2176,6 +2176,12 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       });
     }
 
+    // Steam Connect button
+    const steamConnectBtn = document.getElementById('steam-connect-btn') as HTMLButtonElement;
+    if (steamConnectBtn) {
+      steamConnectBtn.addEventListener('click', () => this._handleSteamConnect());
+    }
+
     // Theme selector
     document.querySelectorAll('input[name="theme-popup"]').forEach((radio) => {
       radio.addEventListener('change', (e: Event) => {
@@ -2226,6 +2232,54 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
     document.querySelectorAll('input[data-relay]').forEach((checkbox) => {
       checkbox.addEventListener('change', () => this._saveSettingsPanel());
     });
+  }
+
+  private async _handleSteamConnect(): Promise<void> {
+    const steamIdInput = document.getElementById('steam-id-popup') as HTMLInputElement;
+    const steamApiKeyInput = document.getElementById('steam-api-key-popup') as HTMLInputElement;
+    const steamConnectBtn = document.getElementById('steam-connect-btn') as HTMLButtonElement;
+
+    const steamId = steamIdInput?.value.trim() || '';
+    const apiKey = steamApiKeyInput?.value.trim() || '';
+
+    // Validate both fields are populated
+    if (!steamId || !apiKey) {
+      this._showError('Please enter both Steam ID and Web API Key');
+      return;
+    }
+
+    // Disable button and show loading state
+    if (steamConnectBtn) {
+      steamConnectBtn.disabled = true;
+      steamConnectBtn.textContent = 'Connecting...';
+    }
+
+    try {
+      // Send message to background to save and test the connection
+      const response = await chrome.runtime.sendMessage({
+        type: 'SAVE_SETTINGS',
+        data: {
+          steam_id: steamId,
+          steam_api_key: apiKey,
+        },
+      });
+
+      if (response.success) {
+        this._showSuccess('Steam connected! Fetching your library...');
+        // Update status
+        await this._updateServiceStatus('steam-api');
+      } else {
+        this._showError(response.error || 'Failed to connect to Steam');
+      }
+    } catch (error) {
+      this._showError('Error connecting to Steam: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      // Re-enable button
+      if (steamConnectBtn) {
+        steamConnectBtn.disabled = false;
+        steamConnectBtn.textContent = 'Connect to Steam';
+      }
+    }
   }
 
   private async _authenticateServicePopup(service: string): Promise<void> {
