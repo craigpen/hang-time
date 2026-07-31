@@ -19,12 +19,37 @@ export class ActivityPublisher {
   private lastPublishedFields: Map<string, Record<string, any>> = new Map(); // For delta publishing: service -> {field: value}
   private publishInterval: NodeJS.Timeout | null = null;
   private publishCount = 0; // Increments every 12s, 5th publish (index 4) is full refresh
-  private publishRateMs = 12000; // Default: publish every 12 seconds
+  private publishRateMs = 1000; // Default: 1.0 msg/s (1 event per second max)
   private lastGameLibraryPublishTime = 0; // Track last game library publish
+  private lastPublishTime = 0; // Track last publish for rate limiting
+  private publishQueue: Array<{ publish: () => Promise<void>; timestamp: number }> = []; // Queue for rate-limited publishes
 
-  static readonly PUBLISH_INTERVAL_MS = 12000; // Default: publish every 12 seconds (5 per 60s)
-  static readonly FULL_REFRESH_CYCLE = 5; // Every 5th publish is a full refresh
+  static readonly MAX_PUBLISH_RATE_MS = 1000; // Hard cap: 1.0 msg/s (damus.io limit)
+  static readonly PUBLISH_INTERVAL_MS = 1000; // Check interval for rate limiting
+  static readonly FULL_REFRESH_CYCLE = 60; // Every 60 publishes is a full refresh (roughly every 60 seconds at 1/sec)
   static readonly GAME_LIBRARY_PUBLISH_INTERVAL_MS = 6 * 60 * 60 * 1000; // Every 6 hours
+
+  // Shipping Configuration Presets
+  static readonly CONFIG_PRESETS = {
+    default: {
+      enabled: true,
+      size: 'atomic' as const,
+      scope: 'all' as const,
+      rate_ms: 1000, // 1.0 msg/s (validated)
+      compression: false,
+      delta_publishing: false,
+      low_bandwidth_mode: false,
+    },
+    low_bandwidth: {
+      enabled: true,
+      size: 'atomic' as const,
+      scope: 'all' as const,
+      rate_ms: 2000, // 0.5 msg/s (validated)
+      compression: true,
+      delta_publishing: false,
+      low_bandwidth_mode: true,
+    },
+  } as const;
 
   constructor(
     private relayPool: RelayPool,
@@ -50,16 +75,28 @@ export class ActivityPublisher {
       return;
     }
 
-    console.debug(`[Publisher] Starting activity publisher (rate: ${this.publishRateMs}ms, size: ${config?.size || 'full'}, scope: ${config?.scope || 'updates'})`);
+    // Use DEFAULT shipping config if no config exists
+    const effectiveRate = config?.rate_ms ?? ActivityPublisher.CONFIG_PRESETS.default.rate_ms;
+    const effectiveSize = config?.size ?? ActivityPublisher.CONFIG_PRESETS.default.size;
+    const effectiveScope = config?.scope ?? ActivityPublisher.CONFIG_PRESETS.default.scope;
+    const lowBandwidthMode = config?.low_bandwidth_mode ?? false;
+
+    console.log(`[Publisher] 🚀 Starting activity publisher`);
+    console.log(`[Publisher]   Size: ${effectiveSize} (${effectiveSize === 'atomic' ? 'changed activities only' : 'all activities'})`);
+    console.log(`[Publisher]   Scope: ${effectiveScope === 'all' ? 'full fields' : 'updated fields only'}`);
+    console.log(`[Publisher]   Rate: ${(1000 / effectiveRate).toFixed(1)} msg/sec (every ${effectiveRate}ms)`);
+    if (lowBandwidthMode) {
+      console.log(`[Publisher]   Mode: LOW BANDWIDTH (compression enabled)`);
+    }
 
     try {
       this.publishInterval = setInterval(() => {
         this.publishCycle().catch((error) => {
           console.error('[Publisher] Publish cycle error:', error);
         });
-      }, this.publishRateMs);
+      }, ActivityPublisher.PUBLISH_INTERVAL_MS);
 
-      console.debug(`[Publisher] Publish interval started (every ${this.publishRateMs}ms)`);
+      console.debug(`[Publisher] Publish cycle checker started (every ${ActivityPublisher.PUBLISH_INTERVAL_MS}ms with rate limiting)`);
     } catch (error) {
       console.error('[Publisher] Failed to start:', error);
       throw error;
@@ -127,23 +164,46 @@ export class ActivityPublisher {
   async publishCycle(): Promise<void> {
     try {
       const profile = await this.storageManager.getUserProfile();
-      const config = profile?.publisher_config || {
-        enabled: true,
-        size: 'full',
-        scope: 'updates',
-        rate_ms: 12000,
-        relays: {
-          'nos.lol': true,
-          'relay.damus.io': true,
-          'relay.snort.social': true,
-          'nostr.mom': true,
-          'relay.mostr.pub': true,
-        },
-        retry_backoff_ms: 1000,
-        compression: false,
-        verbose_logging: false,
-        delta_publishing: false,
-      };
+
+      // Get config with shipping presets as base
+      let config = profile?.publisher_config;
+      if (!config) {
+        // Initialize with DEFAULT shipping config
+        config = {
+          enabled: true,
+          ...ActivityPublisher.CONFIG_PRESETS.default,
+          relays: {
+            'nos.lol': true,
+            'relay.damus.io': true,
+            'relay.snort.social': false, // Use 2 relays by default
+            'nostr.mom': false,
+            'relay.mostr.pub': false,
+          },
+          retry_backoff_ms: 1000,
+          verbose_logging: false,
+        };
+      } else if (config.low_bandwidth_mode) {
+        // Apply LOW_BANDWIDTH mode overrides
+        config = {
+          ...config,
+          ...ActivityPublisher.CONFIG_PRESETS.low_bandwidth,
+        };
+      }
+
+      // HARD CAP: Never exceed 1.0 msg/s (damus.io limit)
+      const effectiveRateMs = Math.max(ActivityPublisher.MAX_PUBLISH_RATE_MS, config.rate_ms);
+      if (effectiveRateMs !== config.rate_ms && config.rate_ms < ActivityPublisher.MAX_PUBLISH_RATE_MS) {
+        console.warn(`[Publisher] ⚠️  Rate capped from ${config.rate_ms}ms to ${effectiveRateMs}ms (max 1.0 msg/s)`);
+        config.rate_ms = effectiveRateMs;
+      }
+
+      // Rate limiting: check if enough time has passed since last publish
+      const now = Date.now();
+      const timeSinceLastPublish = now - this.lastPublishTime;
+      if (timeSinceLastPublish < config.rate_ms) {
+        // Not enough time has passed, skip this cycle
+        return;
+      }
 
       // Check if we should publish game library (every 6 hours)
       const now = Date.now();
@@ -269,9 +329,35 @@ export class ActivityPublisher {
       }
 
       this.publishCount++;
+
+      // Record successful publish time for rate limiting
+      this.lastPublishTime = now;
     } catch (error) {
       console.error('[Publisher] Failed to publish cycle:', error);
     }
+  }
+
+  /**
+   * Get the current effective publish rate
+   * Takes into account both configured rate and hard cap
+   */
+  async getEffectivePublishRate(): Promise<{ rate_ms: number; msg_per_sec: number; mode: string }> {
+    const profile = await this.storageManager.getUserProfile();
+    const config = profile?.publisher_config || ActivityPublisher.CONFIG_PRESETS.default;
+
+    const rateMs = Math.max(ActivityPublisher.MAX_PUBLISH_RATE_MS, config.rate_ms || 1000);
+    const msgPerSec = 1000 / rateMs;
+
+    let mode = 'DEFAULT';
+    if (config.low_bandwidth_mode) {
+      mode = 'LOW BANDWIDTH';
+    }
+
+    return {
+      rate_ms: rateMs,
+      msg_per_sec: msgPerSec,
+      mode,
+    };
   }
 
   private async _getActivityDeltas(currentActivities: Partial<Record<string, Activity>>): Promise<Activity[]> {
