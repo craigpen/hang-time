@@ -74,7 +74,7 @@ export class MessagingManager {
   /**
    * Send an invite notification to a friend about an activity (kind-1, unencrypted)
    */
-  async sendInvite(activity: Activity, recipientFriend: Friend): Promise<void> {
+  async sendInvite(activity: Activity, recipientFriend: Friend): Promise<string> {
     const userProfile = await this.storageManager.getUserProfile();
     if (!userProfile) {
       throw new Error('User profile not found');
@@ -135,6 +135,8 @@ export class MessagingManager {
     // Publish to relays
     console.log(`[Messaging] 📤 Publishing kind-1 invite to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);
     await this.relayPool.publish(event, userProfile.publisher_config);
+
+    return event.id; // Return event ID for tracking/retry
   }
 
   /**

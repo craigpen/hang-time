@@ -2057,10 +2057,26 @@ async function _sendInvite(activity?: any, friendId?: string): Promise<Extension
     }
 
     const messagingManager = getMessagingManager();
-    await messagingManager.sendInvite(activity, friend);
+
+    // Send invite and get event ID for tracking
+    const eventId = await messagingManager.sendInvite(activity, friend);
+
+    // Track pending invite for retry on failure
+    await trackPendingInvite(eventId, activity, friendId);
+
+    // Mark as published successfully
+    await markInvitePublished(activity.id);
+
     return { success: true };
   } catch (error) {
     console.error('[Background] Error sending invite:', error);
+
+    // Track failed publish for retry
+    const activityId = activity?.id;
+    if (activityId) {
+      await markInvitePublishFailed(activityId, error instanceof Error ? error.message : 'Failed to send invite');
+    }
+
     return { success: false, error: error instanceof Error ? error.message : 'Failed to send invite' };
   }
 }
@@ -2324,12 +2340,22 @@ async function retryPendingInvites(): Promise<void> {
       try {
         console.debug(`[Background] Retrying invite for activity ${activityId}`);
 
-        // Try to republish the event
-        if (invite.eventId) {
-          // In a real implementation, we'd store and retry the full event
-          // For now, just mark as published if it has an eventId
-          await markInvitePublished(activityId);
-          retryCount++;
+        // Get the friend and retry sending
+        const friend = await getFriendManager().getFriend(invite.friendId);
+        if (friend) {
+          try {
+            // Retry sending the invite (this will attempt to publish again)
+            const newEventId = await messagingManager.sendInvite(invite.activity, friend);
+            console.log(`[Background] Successfully retried invite, new eventId: ${newEventId.substring(0, 16)}...`);
+            await markInvitePublished(activityId);
+            retryCount++;
+          } catch (error) {
+            // Publish failed again, increment retry count
+            throw error;
+          }
+        } else {
+          console.warn(`[Background] Friend not found for retry: ${invite.friendId}`);
+          await markInvitePublishFailed(activityId, 'Friend not found');
         }
       } catch (error) {
         await markInvitePublishFailed(activityId, error instanceof Error ? error.message : 'Unknown error');
@@ -2444,6 +2470,7 @@ console.log('[Background] Service worker loaded');
   try {
     await initializeNotificationDedup();
     await initializeExtension();
+    await retryPendingInvites();
   } catch (error) {
     console.error('[Background] Failed to initialize:', error);
   }
