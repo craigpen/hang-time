@@ -339,6 +339,16 @@
         </label>
       </div>
 
+      <!-- BANDWIDTH SECTION -->
+      <div class="settings-section">
+        <h3>Bandwidth & Performance</h3>
+        <label class="checkbox-label">
+          <input type="checkbox" id="low-bandwidth-mode-popup">
+          <span>Low Bandwidth Mode</span>
+        </label>
+        <p class="help-text">Enable if you have a capped data plan or metered connection. Reduces bandwidth usage by ~75% by enabling compression and reducing publish frequency. Slightly increases latency.</p>
+      </div>
+
       <!-- APPEARANCE SECTION -->
       <div class="settings-section">
         <h3>Appearance</h3>
@@ -369,84 +379,6 @@
             <h4 style="margin: 0 0 12px 0;">Test Local Notifications</h4>
             <p class="help-text" style="margin-bottom: 12px;">Click to verify local notifications are working</p>
             <button id="test-notification-btn" class="btn-backup">Send Test Notification</button>
-          </div>
-
-          <!-- Publishing Config -->
-          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-            <h4 style="margin: 0 0 12px 0;">Publishing Config</h4>
-
-            <!-- Basic Settings -->
-            <label class="checkbox-label">
-              <input type="checkbox" id="pub-enabled-popup" checked>
-              <span>Enable Publishing</span>
-            </label>
-            <label class="label-with-input">
-              <span>Size</span>
-              <select id="pub-size-popup">
-                <option value="full">Full (Bundled)</option>
-                <option value="atomic">Atomic (Individual)</option>
-              </select>
-            </label>
-            <label class="label-with-input">
-              <span>Scope</span>
-              <select id="pub-scope-popup">
-                <option value="updates">Updates Only</option>
-                <option value="all">All Services</option>
-              </select>
-            </label>
-            <label class="label-with-input">
-              <span>Rate (ms)</span>
-              <input type="number" id="pub-rate-popup" min="1000" step="1000" value="12000">
-            </label>
-
-            <!-- Advanced Settings -->
-            <div class="settings-subsection">
-              <h5 style="margin: 12px 0 8px 0; font-size: 0.85em; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">Advanced</h5>
-
-              <label class="checkbox-label">
-                <input type="checkbox" id="pub-compression-popup">
-                <span>Compression (batch services)</span>
-              </label>
-
-              <label class="checkbox-label">
-                <input type="checkbox" id="pub-delta-popup">
-                <span>Delta Publishing (changed fields only)</span>
-              </label>
-
-              <label class="checkbox-label">
-                <input type="checkbox" id="pub-verbose-popup">
-                <span>Verbose Logging (show event JSON)</span>
-              </label>
-
-              <label class="label-with-input">
-                <span>Retry Backoff (ms)</span>
-                <input type="number" id="pub-retry-popup" min="100" step="100" value="1000">
-              </label>
-
-              <div class="relay-selection">
-                <span>Relays to Use</span>
-                <label class="checkbox-label checkbox-inline">
-                  <input type="checkbox" id="relay-nos-lol-popup" data-relay="nos.lol" checked>
-                  <span>nos.lol</span>
-                </label>
-                <label class="checkbox-label checkbox-inline">
-                  <input type="checkbox" id="relay-damus-popup" data-relay="relay.damus.io" checked>
-                  <span>relay.damus.io</span>
-                </label>
-                <label class="checkbox-label checkbox-inline">
-                  <input type="checkbox" id="relay-snort-popup" data-relay="relay.snort.social" checked>
-                  <span>relay.snort.social</span>
-                </label>
-                <label class="checkbox-label checkbox-inline">
-                  <input type="checkbox" id="relay-mom-popup" data-relay="nostr.mom" checked>
-                  <span>nostr.mom</span>
-                </label>
-                <label class="checkbox-label checkbox-inline">
-                  <input type="checkbox" id="relay-mostr-popup" data-relay="relay.mostr.pub" checked>
-                  <span>relay.mostr.pub</span>
-                </label>
-              </div>
-            </div>
           </div>
 
           <!-- Backup & Restore -->
