@@ -1291,14 +1291,20 @@ async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
 async function _subscribeToIncomingMessages(): Promise<void> {
   try {
     const userPubkey = await identityManager.getPubkey();
+    console.log(`[Message] 📧 Subscribing to incoming messages for ${userPubkey.substring(0, 8)}...`);
 
     // Subscribe to events where user is the recipient (Nostr filter authors = [userPubkey])
     // The relay will send us events and we filter for kind 4 where we're the recipient
     relayPool.subscribe(userPubkey, async (event: NostrEvent) => {
+      console.log(`[Message] 📨 Received event (kind ${event.kind}) for own pubkey`);
+
       // Filter for kind 4 (encrypted DMs) only
       if (event.kind !== 4) {
+        console.debug(`[Message] Ignoring non-kind-4 event (kind ${event.kind})`);
         return;
       }
+
+      console.log(`[Message] 📨 Received kind-4 event, processing...`);
 
       // Check if user is tagged as recipient (p tag)
       const recipientTag = event.tags.find((t) => t[0] === 'p');
