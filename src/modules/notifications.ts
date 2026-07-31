@@ -100,17 +100,22 @@ export class NotificationManager {
   async notifyFriendRequest(friendId: string, senderDisplayName: string): Promise<void> {
     try {
       const profile = await this.storage.getUserProfile();
+      console.debug('[Notifications] Checking friend request notification preference:', profile?.notification_preferences?.join_suggestion);
       if (!profile?.notification_preferences?.join_suggestion) {
+        console.debug('[Notifications] Friend request notifications disabled');
         return;
       }
 
       const notificationId = `friend_request_${friendId}_${Date.now()}`;
+      console.debug('[Notifications] Creating friend request notification:', notificationId);
       chrome.notifications.create(notificationId, {
         type: 'basic',
         iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
         title: `${senderDisplayName} sent you a friend request`,
         message: 'Open the extension to accept or decline',
         requireInteraction: true,
+      }, (id) => {
+        console.debug('[Notifications] Friend request notification created with id:', id);
       });
 
       console.debug('[Notifications] Friend request notification sent for', senderDisplayName);
