@@ -16,6 +16,7 @@ import {
   DEFAULT_SETTINGS,
   StorageError,
   ActivityHistory,
+  PendingInvite,
 } from '../types';
 
 
@@ -405,29 +406,47 @@ export class StorageManager {
   /**
    * Pending invite data with timestamp
    */
-  async getPendingInvites(): Promise<Record<string, { friendId: string; sentAt: number }>> {
-    return this.get<Record<string, { friendId: string; sentAt: number }>>('pending_invites', {});
+  async getPendingInvites(): Promise<Record<string, PendingInvite>> {
+    return this.get<Record<string, PendingInvite>>(STORAGE_KEYS.PENDING_INVITES, {});
   }
 
   /**
-   * Set pending invites with timestamps
+   * Set pending invites
    */
-  async setPendingInvites(invites: Record<string, { friendId: string; sentAt: number }>): Promise<void> {
-    await this.set('pending_invites', invites);
+  async setPendingInvites(invites: Record<string, PendingInvite>): Promise<void> {
+    await this.set(STORAGE_KEYS.PENDING_INVITES, invites);
   }
 
   /**
-   * Remove expired invites (older than 2 hours)
+   * Add or update a pending invite
+   */
+  async upsertPendingInvite(activityId: string, invite: PendingInvite): Promise<void> {
+    const invites = await this.getPendingInvites();
+    invites[activityId] = invite;
+    await this.setPendingInvites(invites);
+  }
+
+  /**
+   * Remove a pending invite
+   */
+  async removePendingInvite(activityId: string): Promise<void> {
+    const invites = await this.getPendingInvites();
+    delete invites[activityId];
+    await this.setPendingInvites(invites);
+  }
+
+  /**
+   * Remove expired invites (older than 24 hours)
    * Returns count of removed invites
    */
   async removeExpiredInvites(): Promise<number> {
     const invites = await this.getPendingInvites();
     const now = Date.now();
-    const twoHoursMs = 2 * 60 * 60 * 1000;
+    const oneDayMs = 24 * 60 * 60 * 1000;
     let removedCount = 0;
 
     for (const [activityId, inviteData] of Object.entries(invites)) {
-      if (now - inviteData.sentAt > twoHoursMs) {
+      if (now - inviteData.sentAt > oneDayMs) {
         delete invites[activityId];
         removedCount++;
       }

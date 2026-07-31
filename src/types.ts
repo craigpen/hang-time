@@ -196,6 +196,17 @@ export interface MessageThread {
   messages: Message[];
 }
 
+export interface PendingInvite {
+  eventId: string; // Nostr event ID for deduplication
+  activity: Activity; // The activity being invited to
+  friendId: string; // Who we're inviting
+  state: 'pending_publish' | 'published' | 'failed'; // Publish state
+  sentAt: number; // When we first tried to send
+  retryCount: number; // Number of retry attempts
+  lastRetryAt?: number; // When we last retried
+  lastError?: string; // Last error message from relay
+}
+
 // ============================================================================
 // NOSTR PROTOCOL
 // ============================================================================

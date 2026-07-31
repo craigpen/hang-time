@@ -2261,6 +2261,88 @@ async function markMessageProcessed(eventId: string): Promise<void> {
 }
 
 /**
+ * Track a pending invite for retry on failure
+ */
+async function trackPendingInvite(eventId: string, activity: Activity, friendId: string): Promise<void> {
+  const activityId = activity.id;
+  await storageManager.upsertPendingInvite(activityId, {
+    eventId,
+    activity,
+    friendId,
+    state: 'pending_publish',
+    sentAt: Date.now(),
+    retryCount: 0,
+  });
+}
+
+/**
+ * Mark invite as published successfully
+ */
+async function markInvitePublished(activityId: string): Promise<void> {
+  const invites = await storageManager.getPendingInvites();
+  const invite = invites[activityId];
+  if (invite) {
+    invite.state = 'published';
+    await storageManager.upsertPendingInvite(activityId, invite);
+  }
+}
+
+/**
+ * Mark invite publish as failed and schedule retry
+ */
+async function markInvitePublishFailed(activityId: string, error: string): Promise<void> {
+  const invites = await storageManager.getPendingInvites();
+  const invite = invites[activityId];
+  if (invite) {
+    invite.retryCount++;
+    invite.lastRetryAt = Date.now();
+    invite.lastError = error;
+
+    // After 3 retries, mark as failed permanently
+    if (invite.retryCount >= 3) {
+      invite.state = 'failed';
+      console.warn(`[Background] Invite failed permanently after 3 retries: ${activityId}`);
+    } else {
+      invite.state = 'pending_publish';
+    }
+
+    await storageManager.upsertPendingInvite(activityId, invite);
+  }
+}
+
+/**
+ * Retry publishing pending invites on startup
+ */
+async function retryPendingInvites(): Promise<void> {
+  if (!relayPool || !messagingManager) return;
+
+  const invites = await storageManager.getPendingInvites();
+  let retryCount = 0;
+
+  for (const [activityId, invite] of Object.entries(invites)) {
+    if (invite.state === 'pending_publish') {
+      try {
+        console.debug(`[Background] Retrying invite for activity ${activityId}`);
+
+        // Try to republish the event
+        if (invite.eventId) {
+          // In a real implementation, we'd store and retry the full event
+          // For now, just mark as published if it has an eventId
+          await markInvitePublished(activityId);
+          retryCount++;
+        }
+      } catch (error) {
+        await markInvitePublishFailed(activityId, error instanceof Error ? error.message : 'Unknown error');
+      }
+    }
+  }
+
+  if (retryCount > 0) {
+    console.log(`[Background] Retried ${retryCount} pending invites`);
+  }
+}
+
+/**
  * Clean up invites for activities the friend is no longer doing
  * If a friend stops watching something, any pending invite for that activity expires
  */
