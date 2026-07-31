@@ -94,11 +94,18 @@ export class SteamService implements IServiceModule {
       // Add API key if configured
       if (profile?.steam_config?.api_key) {
         params.append('key', profile.steam_config.api_key);
+        console.debug('[Steam] API key configured');
+      } else {
+        console.warn('[Steam] No API key configured');
       }
 
-      const response = await fetch(`${url}?${params}`);
+      const fullUrl = `${url}?${params}`;
+      console.debug('[Steam] Calling API with steamid:', steamId.substring(0, 8) + '...');
+
+      const response = await fetch(fullUrl);
       if (!response.ok) {
-        console.error('[Steam] API error:', response.status);
+        const errorText = await response.text();
+        console.error('[Steam] API error:', response.status, errorText);
         // Fall back to stored activity on API error
         if (storedSteam) {
           return {
