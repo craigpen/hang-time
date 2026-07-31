@@ -170,16 +170,8 @@ export class PopupController {
   }
 
   private async _renderFriends(friends: Friend[]): Promise<void> {
-    console.log(`[Popup] _renderFriends called with ${friends.length} friends`);
-    friends.forEach(f => {
-      console.log(`[Popup] Friend: ${f.local_name} (state=${f.state}, initiated_by_me=${f.initiated_by_me})`);
-    });
     const pendingCount = friends.filter(f => f.state === 'pending').length;
     const activeCount = friends.filter(f => f.state === 'active').length;
-    console.log(`[Popup] Summary: ${pendingCount} pending, ${activeCount} active`);
-    if (pendingCount > 0) {
-      console.log(`[Popup] ⏳ Found ${pendingCount} pending friends, ${activeCount} active friends`);
-    }
 
     // Don't resize if settings panel is open
     const shouldResize = !this.settingsPanel || this.settingsPanel.style.display === 'none';
@@ -258,19 +250,15 @@ export class PopupController {
 
         // Check if this is a pending friend
         if (friend.state === 'pending') {
-          console.log(`[Popup] ⏳ RENDERING PENDING FRIEND: ${friend.local_name} (id=${friend.id}, state=${friend.state}, initiated_by_me=${friend.initiated_by_me})`);
           // Create pending friend element with accept/decline buttons if they initiated
           let friendElement = existingElements.get(friend.id);
           if (!friendElement) {
-            console.log(`[Popup] ⏳ Creating new pending friend element for ${friend.local_name}`);
             friendElement = this._createPendingFriendItem(friend.id, friend.local_name, friend.initiated_by_me !== false);
             friendElement.setAttribute('data-friend-id', friend.id);
             this.friendsList!.appendChild(friendElement);
-            console.log(`[Popup] ✅ Appended pending friend to DOM: ${friend.local_name}`);
           } else {
             // Element exists but state may have changed - if it's currently marked as active, remove it to recreate as pending
             if (!friendElement.classList.contains('pending')) {
-              console.log(`[Popup] ⏳ Friend state changed to pending, recreating: ${friend.local_name}`);
               friendElement.remove();
               existingElements.delete(friend.id);
               friendElement = this._createPendingFriendItem(friend.id, friend.local_name, friend.initiated_by_me !== false);
@@ -293,7 +281,6 @@ export class PopupController {
           } else {
             // If element was pending and is now active, recreate it
             if (friendElement.classList.contains('pending')) {
-              console.log(`[Popup] ✅ Friend became active, recreating: ${friend.local_name}`);
               friendElement.remove();
               existingElements.delete(friend.id);
               friendElement = this._createFriendItem(friend.id, friend.local_name, activities, isExpanded, friend);
