@@ -999,20 +999,7 @@ async function _declineFriendRequest(friendId?: string): Promise<ExtensionRespon
       return { success: false, error: 'Friend not found' };
     }
 
-    // Send decline notification to the friend
-    const messagingManager = getMessagingManager();
-    const dummyActivity: Activity = {
-      id: `decline_${friendId}`,
-      service: 'friend-request',
-      content: 'Friend request decline',
-      timestamp: Date.now(),
-      freshness_timestamp: Date.now(),
-      audio: 'off',
-      metadata: {},
-    };
-    await messagingManager.sendJoinDeclined(dummyActivity, friend);
-
-    // Remove the friend from the list
+    // Remove the friend from the list (decline is silent, no message sent)
     await friendManager.removeFriend(friendId);
     activeSubscriptions.delete(friend.pubkey);
 
@@ -1808,7 +1795,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
       return;
     }
 
-    if (message?.type === 'join_accepted' || message?.type === 'join_declined') {
+    if (message?.type === 'join_accepted') {
       // Handle friend request response
       await _handleFriendRequestResponse(friend, event);
       return;
@@ -1875,10 +1862,6 @@ async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): 
           'You are now friends!'
         );
       }
-    } else if (message.type === 'join_declined') {
-      // Friend declined - remove them from the friend list
-      await friendManager.removeFriend(friend.id);
-      console.log(`[FriendRequest] ❌ ${friend.local_name} declined your friend request (removed from list)`);
     } else {
       console.warn('[FriendRequest] Unexpected message type in friend request:', message.type);
     }
