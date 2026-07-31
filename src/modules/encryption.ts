@@ -131,13 +131,19 @@ export class EncryptionManager {
         ['decrypt']
       );
 
-      const plaintext = await crypto.subtle.decrypt(
-        { name: 'AES-CBC', iv },
-        cryptoKey,
-        encryptedContent
-      );
+      let plaintext: ArrayBuffer;
+      try {
+        plaintext = await crypto.subtle.decrypt(
+          { name: 'AES-CBC', iv },
+          cryptoKey,
+          encryptedContent
+        );
+      } catch (decryptError) {
+        console.error(`[Encryption] crypto.subtle.decrypt threw:`, decryptError instanceof Error ? decryptError.message : String(decryptError));
+        throw decryptError;
+      }
 
-      if (!plaintext) {
+      if (!plaintext || plaintext.byteLength === 0) {
         throw new Error('Decryption returned empty result');
       }
 
