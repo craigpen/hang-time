@@ -109,19 +109,8 @@ export class NotificationManager {
         type: 'basic',
         iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
         title: `${senderDisplayName} sent you a friend request`,
-        message: 'Open Hang Time to accept or decline',
-        contextMessage: 'Click to open',
+        message: 'Open the extension to accept or decline',
         requireInteraction: true,
-      });
-
-      // Setup click handler to open popup
-      chrome.notifications.onClicked.addListener((clickedNotificationId) => {
-        if (clickedNotificationId === notificationId) {
-          // Open the extension popup
-          chrome.action.openPopup();
-          // Clear the notification
-          chrome.notifications.clear(notificationId);
-        }
       });
 
       console.debug('[Notifications] Friend request notification sent for', senderDisplayName);
