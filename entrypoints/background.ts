@@ -734,12 +734,15 @@ async function _getAllActivities(): Promise<ExtensionResponse> {
     const friendManager = getFriendManager();
     const friends = await friendManager.getAllFriends();
 
-    // Build unified response: { myActivities: {...}, friends: [{id, identifier, local_name, current_activities}, ...] }
+    // Build unified response: { myActivities: {...}, friends: [{id, identifier, local_name, current_activities, state, initiated_by_me}, ...] }
     const friendsData = friends.map((friend) => ({
       id: friend.id,
       identifier: friend.identifier,
       local_name: friend.local_name,
       current_activities: friend.current_activities || {},
+      state: friend.state,
+      initiated_by_me: friend.initiated_by_me,
+      pubkey: friend.pubkey,
     }));
 
     return {
