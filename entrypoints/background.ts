@@ -1867,12 +1867,14 @@ async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): 
       await friendManager.acceptFriendRequest(friend.id);
       console.log(`[FriendRequest] ✅ ${friend.local_name} accepted your friend request`);
 
-      // Notify the user
-      const notificationManager = getNotificationManager();
-      await notificationManager.notify(
-        `${friend.local_name} accepted your friend request`,
-        'You are now friends!'
-      );
+      // Notify the user (with deduplication to avoid multiple notifications from multiple relays)
+      if (shouldNotifyForEvent(event.id, 20)) {
+        const notificationManager = getNotificationManager();
+        await notificationManager.notify(
+          `${friend.local_name} accepted your friend request`,
+          'You are now friends!'
+        );
+      }
     } else if (message.type === 'join_declined') {
       // Friend declined - remove them from the friend list
       await friendManager.removeFriend(friend.id);
