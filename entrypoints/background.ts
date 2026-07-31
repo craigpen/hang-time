@@ -1317,6 +1317,12 @@ async function _subscribeToIncomingMessages(): Promise<void> {
       console.debug(`[Message] Received kind-4 message from ${event.pubkey.substring(0, 8)}...`);
 
       try {
+        // Check if already processed this message
+        if (isMessageAlreadyProcessed(event.id)) {
+          console.debug(`[Message] Already processed event ${event.id.substring(0, 8)}..., ignoring duplicate`);
+          return;
+        }
+
         // Check message type tag
         const messageType = event.tags.find((t) => t[0] === 'message_type')?.[1];
 
@@ -1327,10 +1333,14 @@ async function _subscribeToIncomingMessages(): Promise<void> {
         if (sender) {
           // Known friend - handle normally
           await _handleMessageEvent(sender.identifier, event);
+          await markMessageProcessed(event.id);
+          await publishDeletionRequest(event.id);
         } else if (messageType === 'friend_request') {
           // Friend request from unknown sender - create as pending friend
           console.log(`[Message] 🔔 Friend Request: Received from ${event.pubkey.substring(0, 8)}...`);
           await _handleFriendRequestFromUnknownSender(event);
+          await markMessageProcessed(event.id);
+          await publishDeletionRequest(event.id);
         } else {
           // Unknown message type from unknown sender - ignore
           console.debug(`[Message] Ignoring message from unknown sender (type=${messageType}): ${event.pubkey.substring(0, 8)}...`);
@@ -2198,6 +2208,55 @@ async function markInviteNotified(eventId: string): Promise<void> {
   notifiedInviteIds.set(eventId, now);
 
   // Persist to storage
+  await storageManager.setNotifiedInviteIds(notifiedInviteIds);
+}
+
+/**
+ * Publish a deletion request (NIP-09 kind 5) for a processed message
+ */
+async function publishDeletionRequest(eventId: string): Promise<void> {
+  try {
+    if (!relayPool) return;
+
+    const userProfile = await storageManager.getUserProfile();
+    if (!userProfile) return;
+
+    // Create kind 5 deletion event
+    const deletionEvent: NostrEvent = {
+      id: '',
+      pubkey: userProfile.pubkey,
+      created_at: Math.floor(Date.now() / 1000),
+      kind: 5,
+      tags: [['e', eventId]],
+      content: 'Processed message',
+    };
+
+    // Sign and publish deletion request
+    const eventId_ = await _getEventId(deletionEvent);
+    deletionEvent.id = eventId_;
+    deletionEvent.sig = encryptionManager.signEvent(eventId_, userProfile.secret_key);
+
+    await relayPool.publish(deletionEvent);
+    console.debug(`[Message] Published deletion request for event: ${eventId.substring(0, 8)}...`);
+  } catch (error) {
+    console.debug(`[Message] Failed to publish deletion request:`, error);
+    // Non-fatal - continue anyway
+  }
+}
+
+/**
+ * Check if a message has already been processed
+ */
+function isMessageAlreadyProcessed(eventId: string): boolean {
+  return notifiedInviteIds.has(eventId);
+}
+
+/**
+ * Mark a message as processed
+ */
+async function markMessageProcessed(eventId: string): Promise<void> {
+  const now = Date.now();
+  notifiedInviteIds.set(eventId, now);
   await storageManager.setNotifiedInviteIds(notifiedInviteIds);
 }
 
