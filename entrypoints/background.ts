@@ -327,7 +327,13 @@ async function initializeExtension(): Promise<void> {
     }
 
     // Subscribe to incoming kind 4 (encrypted DM) messages
-    await _subscribeToIncomingMessages();
+    console.log('[Background] 🔔 Setting up incoming message subscription...');
+    try {
+      await _subscribeToIncomingMessages();
+      console.log('[Background] ✅ Incoming message subscription active');
+    } catch (error) {
+      console.error('[Background] ❌ Failed to set up incoming message subscription:', error);
+    }
 
     // Run initial integrity check
     try {
