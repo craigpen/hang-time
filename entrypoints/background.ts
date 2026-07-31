@@ -1801,10 +1801,8 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
 
     // Route based on the actual message type, not just the event tag
     if (message?.type === 'friend_request') {
-      // Incoming friend request - update friend state
-      const friendManager = getFriendManager();
-      await friendManager.acceptFriendRequest(friend.id);
-      console.log(`[Message] ✅ ${friend.local_name} sent friend request, now active`);
+      // Incoming friend request - friend is already pending, user will accept/decline in UI
+      console.log(`[Message] ℹ️  Friend request from ${friend.local_name} already created and awaiting user response`);
       return;
     }
 
