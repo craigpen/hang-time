@@ -108,9 +108,9 @@ export class NotificationManager {
       chrome.notifications.create(notificationId, {
         type: 'basic',
         iconUrl: chrome.runtime.getURL('public/icons/icon48.png'),
-        title: `${senderDisplayName} added you as a friend`,
-        message: 'Click to accept or decline',
-        contextMessage: 'Click to open Hang Time',
+        title: `${senderDisplayName} sent you a friend request`,
+        message: 'Open Hang Time to accept or decline',
+        contextMessage: 'Click to open',
         requireInteraction: true,
       });
 
