@@ -37,11 +37,16 @@ export class EncryptionManager {
       const senderSecretBytes = this._hexToBytes(senderSecretKey);
 
       // Compute ECDH shared secret: secp256k1_ecdh(sender_secret, recipient_pubkey)
-      const sharedSecretBytes = secp.getSharedSecret(senderSecretBytes, recipientPubkeyBytes);
+      console.debug(`[Encryption] ECDH sender: secret=${senderSecretKey.substring(0, 16)}..., pubkey=${recipientPubkeyHex}`);
+      const sharedSecretPoint = secp.getSharedSecret(senderSecretBytes, recipientPubkeyBytes);
+      // Extract just the x-coordinate (skip the compression prefix byte)
+      const sharedSecretBytes = sharedSecretPoint.slice(1);
+      console.debug(`[Encryption] ECDH shared secret (x-only): ${sharedSecretBytes.length}b`);
 
       // Hash the shared secret to get AES key
       const sharedSecretHashed = sha256(sharedSecretBytes);
       const aesKey = sharedSecretHashed.slice(0, 32); // 32 bytes for AES-256
+      console.debug(`[Encryption] AES key (sender): ${this._bytesToHex(aesKey).substring(0, 16)}...`);
 
       // Generate random IV (16 bytes for AES-CBC)
       const iv = new Uint8Array(16);
@@ -116,11 +121,16 @@ export class EncryptionManager {
       const recipientSecretBytes = this._hexToBytes(recipientSecretKey);
 
       // Compute ECDH shared secret: secp256k1_ecdh(recipient_secret, sender_pubkey)
-      const sharedSecretBytes = secp.getSharedSecret(recipientSecretBytes, senderPubkeyBytes);
+      console.debug(`[Encryption] ECDH recipient: secret=${recipientSecretKey.substring(0, 16)}..., pubkey=${senderPubkeyHex}`);
+      const sharedSecretPoint = secp.getSharedSecret(recipientSecretBytes, senderPubkeyBytes);
+      // Extract just the x-coordinate (skip the compression prefix byte)
+      const sharedSecretBytes = sharedSecretPoint.slice(1);
+      console.debug(`[Encryption] ECDH shared secret (x-only): ${sharedSecretBytes.length}b`);
 
       // Hash the shared secret to get AES key
       const sharedSecretHashed = sha256(sharedSecretBytes);
       const aesKey = sharedSecretHashed.slice(0, 32); // 32 bytes for AES-256
+      console.debug(`[Encryption] AES key (recipient): ${this._bytesToHex(aesKey).substring(0, 16)}...`);
 
       // Decrypt using AES-256-CBC with crypto.subtle
       const cryptoKey = await crypto.subtle.importKey(
@@ -133,14 +143,16 @@ export class EncryptionManager {
 
       let plaintext: ArrayBuffer;
       try {
+        console.debug(`[Encryption] About to decrypt: iv.length=${iv.length}, encryptedContent.length=${encryptedContent.length}`);
         plaintext = await crypto.subtle.decrypt(
           { name: 'AES-CBC', iv },
           cryptoKey,
           encryptedContent
         );
       } catch (decryptError) {
-        console.error(`[Encryption] crypto.subtle.decrypt threw:`, decryptError instanceof Error ? decryptError.message : String(decryptError));
-        throw decryptError;
+        const err = decryptError as any;
+        console.error(`[Encryption] crypto.subtle.decrypt failed - name: ${err?.name}, message: ${err?.message}, type: ${typeof err}`);
+        throw new Error(`crypto.subtle.decrypt failed: ${err?.message || err?.name || String(err)}`);
       }
 
       if (!plaintext || plaintext.byteLength === 0) {
