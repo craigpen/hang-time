@@ -103,11 +103,21 @@ export class DiscoveryTabController {
       // Fetch metadata for all owned games
       await this._fetchAllGameMetadata(myGames);
 
+      // Check if metadata sync is incomplete
+      const metadataCount = this.allGameMetadata.size;
+      const totalCount = myGames.length;
+      const isIncomplete = metadataCount < totalCount;
+
       // Build enriched games with friend counts
       const enrichedGames = await this._buildEnrichedGames(myGames);
 
       // Apply filters and sorting
       const filteredAndSorted = this._applyFiltersAndSort(enrichedGames);
+
+      // Show sync status banner if incomplete
+      if (isIncomplete && filteredAndSorted.length > 0) {
+        this._showSyncStatus(metadataCount, totalCount);
+      }
 
       // Render result cards
       if (filteredAndSorted.length === 0) {
@@ -582,6 +592,28 @@ export class DiscoveryTabController {
         <p>${this._escapeHtml(message)}</p>
       </div>
     `;
+  }
+
+  /**
+   * Private: Show sync status banner
+   */
+  private _showSyncStatus(loaded: number, total: number): void {
+    const resultsContainer = document.getElementById('game-results');
+    if (!resultsContainer) return;
+
+    const percent = Math.round((loaded / total) * 100);
+    const banner = document.createElement('div');
+    banner.style.cssText = `
+      background: var(--bg-secondary);
+      border-left: 3px solid var(--accent-primary);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    `;
+    banner.innerHTML = `ℹ️ Syncing game data... ${loaded} of ${total} games loaded (${percent}%)`;
+    resultsContainer.insertBefore(banner, resultsContainer.firstChild);
   }
 
   /**
