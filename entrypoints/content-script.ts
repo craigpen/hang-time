@@ -201,6 +201,16 @@ class GenericVideoTracker {
     this.lastReportTimestamp = now;
     this.lastReportedTime = currentTime;
 
+    // Skip non-playback pages on video platforms
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      const pathname = new URL(url).pathname;
+      // Only report if on actual video watch page (has ?v= parameter)
+      if (!url.includes('watch?v=')) {
+        console.debug('[ContentScript] Skipping YouTube non-watch page:', url);
+        return;
+      }
+    }
+
     // Skip Twitch homepage and non-stream pages (only report actual streams)
     if (url.includes('twitch.tv')) {
       const pathname = new URL(url).pathname;
