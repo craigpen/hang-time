@@ -1405,9 +1405,11 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
       // Subscribe to new friend
       await _subscribeToFriend(senderIdentifier);
 
-      // Show notification
-      const notificationManager = getNotificationManager();
-      await notificationManager.notifyFriendRequest(newFriend.id, senderDisplayName);
+      // Show notification (with deduplication to avoid duplicate notifications from multiple relays)
+      if (shouldNotifyForEvent(event.id, 20)) {
+        const notificationManager = getNotificationManager();
+        await notificationManager.notifyFriendRequest(newFriend.id, senderDisplayName);
+      }
 
       // Notify popup
       try {
