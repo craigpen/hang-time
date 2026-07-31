@@ -1293,22 +1293,14 @@ async function _subscribeToIncomingMessages(): Promise<void> {
     const userPubkey = await identityManager.getPubkey();
     console.log(`[Message] 📧 Subscribing to incoming messages for ${userPubkey.substring(0, 8)}...`);
 
-    // Subscribe to events where user is the recipient (Nostr filter authors = [userPubkey])
-    // The relay will send us events and we filter for kind 4 where we're the recipient
-    relayPool.subscribe(userPubkey, async (event: NostrEvent) => {
-      console.log(`[Message] 📨 Received event (kind ${event.kind}) for own pubkey`);
-
-      // Filter for kind 4 (encrypted DMs) only
-      if (event.kind !== 4) {
-        console.debug(`[Message] Ignoring non-kind-4 event (kind ${event.kind})`);
-        return;
-      }
-
+    // Subscribe to kind-4 events where user's pubkey is in the 'p' tag
+    // RelayPool handles filtering server-side via #p filter
+    relayPool.subscribeToDirectMessages(userPubkey, async (event: NostrEvent) => {
       console.log(`[Message] 📨 Received kind-4 event, processing...`);
 
-      // Check if user is tagged as recipient (p tag)
-      const recipientTag = event.tags.find((t) => t[0] === 'p');
-      if (!recipientTag || recipientTag[1] !== userPubkey) {
+      // Validate event is kind-4 (already filtered by relay, but verify)
+      if (event.kind !== 4) {
+        console.debug(`[Message] Ignoring non-kind-4 event (kind ${event.kind})`);
         return;
       }
 

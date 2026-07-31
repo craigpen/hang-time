@@ -10,6 +10,7 @@ export interface IRelayConnection {
   url: string;
   isConnected: boolean;
   subscribe(identifier: string, callback: (event: NostrEvent) => Promise<void>): void;
+  subscribeToDirectMessages(recipientPubkey: string, callback: (event: NostrEvent) => Promise<void>): void;
   publish(event: NostrEvent): Promise<void>;
   disconnect(): Promise<void>;
 }
@@ -64,7 +65,13 @@ export class RelayConnection implements IRelayConnection {
             console.debug(`[Nostr] Connection opened to ${this.url}, re-sending ${this.subscriptions.size} subscriptions`);
             for (const [identifier, callback] of this.subscriptions.entries()) {
               console.debug(`[Nostr] Re-sending subscription for ${identifier.substring(0, 16)}...`);
-              this._sendSubscription(identifier, callback);
+              if (identifier.startsWith('dm_')) {
+                // DM subscription: extract pubkey from dm_<pubkey> key
+                const pubkey = identifier.substring(3);
+                this._sendDMSubscription(pubkey, callback);
+              } else {
+                this._sendSubscription(identifier, callback);
+              }
             }
 
             resolve();
@@ -141,6 +148,19 @@ export class RelayConnection implements IRelayConnection {
     this._sendSubscription(identifier, callback);
   }
 
+  subscribeToDirectMessages(recipientPubkey: string, callback: (event: NostrEvent) => Promise<void>): void {
+    const key = `dm_${recipientPubkey}`;
+    this.subscriptions.set(key, callback);
+    console.debug(`[Nostr] Subscribe to DMs for ${recipientPubkey.substring(0, 16)}... on ${this.url}, connected: ${this.isConnected}`);
+
+    if (!this.isConnected || !this.ws) {
+      console.debug(`[Nostr] Relay not connected, queueing DM subscription for ${recipientPubkey.substring(0, 16)}... on ${this.url}`);
+      return;
+    }
+
+    this._sendDMSubscription(recipientPubkey, callback);
+  }
+
   async disconnect(): Promise<void> {
     this._cleanup();
     console.debug(`[Nostr] Disconnected from relay: ${this.url}`);
@@ -165,6 +185,29 @@ export class RelayConnection implements IRelayConnection {
       console.debug(`[Nostr] Subscribed to author ${identifier.substring(0, 16)}... (filter: ${JSON.stringify(filter)}) on ${this.url}`);
     } catch (error) {
       console.error(`[Nostr] Failed to subscribe on ${this.url}:`, error);
+    }
+  }
+
+  private _sendDMSubscription(recipientPubkey: string, _callback?: (event: NostrEvent) => Promise<void>): void {
+    if (!this.isConnected || !this.ws) return;
+
+    try {
+      const subscriptionId = `dm_sub_${this.subscriptionId++}`;
+      // Request recent DMs (last 24 hours)
+      const since = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
+      // Subscribe to kind-4 events where our pubkey is in the 'p' tag
+      const filter = {
+        kinds: [4],
+        '#p': [recipientPubkey],
+        since,
+        limit: 1000,
+      };
+
+      const message = JSON.stringify(['REQ', subscriptionId, filter]);
+      this.ws.send(message);
+      console.debug(`[Nostr] Subscribed to DMs for ${recipientPubkey.substring(0, 16)}... (filter: ${JSON.stringify(filter)}) on ${this.url}`);
+    } catch (error) {
+      console.error(`[Nostr] Failed to subscribe to DMs on ${this.url}:`, error);
     }
   }
 
@@ -232,7 +275,21 @@ export class RelayConnection implements IRelayConnection {
 
     let found = false;
     for (const [identifier, callback] of this.subscriptions.entries()) {
-      if (event.pubkey === identifier) {
+      let matches = false;
+
+      if (identifier.startsWith('dm_')) {
+        // DM subscription: route if event is kind-4 (we already filtered on server side)
+        if (event.kind === 4) {
+          matches = true;
+        }
+      } else {
+        // Regular subscription: route if event pubkey matches
+        if (event.pubkey === identifier) {
+          matches = true;
+        }
+      }
+
+      if (matches) {
         found = true;
         console.debug(`[Nostr] Event matches subscription for ${identifier.substring(0, 16)}..., invoking callback`);
         callback(event).catch((error) => {
@@ -438,6 +495,19 @@ export class RelayPool {
 
     for (const relay of this.relays.values()) {
       relay.subscribe(identifier, callback);
+    }
+  }
+
+  subscribeToDirectMessages(recipientPubkey: string, callback: (event: NostrEvent) => Promise<void>): void {
+    const key = `dm_${recipientPubkey}`;
+    if (!this.subscriptions.has(key)) {
+      this.subscriptions.set(key, new Set());
+    }
+
+    this.subscriptions.get(key)!.add(callback);
+
+    for (const relay of this.relays.values()) {
+      relay.subscribeToDirectMessages(recipientPubkey, callback);
     }
   }
 
