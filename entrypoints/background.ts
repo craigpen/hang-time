@@ -304,9 +304,10 @@ async function initializeExtension(): Promise<void> {
     }
 
     // Subscribe to all friends' activities
+    console.log('[Background] 📧 About to subscribe to friends...');
     const friendManager = getFriendManager();
     const friends = await friendManager.getAllFriends();
-    console.debug(`[Background] Subscribing to ${friends.length} friends`);
+    console.log(`[Background] 📧 Subscribing to ${friends.length} friends`);
     for (const friend of friends) {
       try {
         await _subscribeToFriend(friend.identifier);
@@ -314,6 +315,7 @@ async function initializeExtension(): Promise<void> {
         console.warn(`[Background] Failed to subscribe to friend ${friend.identifier}:`, error);
       }
     }
+    console.log('[Background] 📧 Done subscribing to friends');
 
     // Subscribe to friends' game libraries for discovery
     try {
