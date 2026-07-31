@@ -336,8 +336,8 @@ export class MessagingManager {
 
       const secretKey = await this.identityManager.getSecretKey();
 
-      // Decrypt the message with user's secret key
-      const plaintext = encryptionManager.decrypt(encryptedContent, userProfile.pubkey, secretKey);
+      // Decrypt the message with friend's pubkey (they sent it to us)
+      const plaintext = encryptionManager.decrypt(encryptedContent, friend.pubkey, secretKey);
 
       // Parse the ActivityMessage structure
       const message: ActivityMessage = JSON.parse(plaintext);
