@@ -1,6 +1,29 @@
 # Hang Time Performance Testing Framework
 
-Systematic performance and efficiency testing to discover optimal settings for activity detection, publishing, and UI refresh.
+Systematic performance and efficiency testing to discover optimal settings for activity detection, publishing, and UI refresh, plus relay pool validation to standardize relay configuration.
+
+## Implementation Status
+
+### Currently Implemented ✅
+- **Step 1: Parameter Matrix** (`src/__tests__/performance-harness.test.ts`) — Mock-based testing with configurable parameters
+- **Step 2: Results Analyzer** (`scripts/analyze-performance.ts`) — Analyzes results and recommendations
+- **Step 3: Integration Tests** (`src/__tests__/performance-integration.test.ts`) — Real code paths with mocked relays
+- **Step 4: Ramp-Up Stress Test** (`src/__tests__/performance-rampup.test.ts`) — Simulated relay testing with RelayHealthMonitor
+
+### Planned (Not Yet Implemented) 🔄
+- **Step 5: Relay Pool Validation** (`src/__tests__/relay-validation.test.ts`) — Real relay testing
+  - Relay health checks (connectivity, response times)
+  - Rate limit discovery per relay
+  - Size constraint testing (max event size, batch sizes)
+  - Failure mode comparison (which relays fail under which conditions)
+  - Reliability scoring and recommendations
+  - Generates `relay-scorecard.json` with per-relay metrics and recommendations
+
+### Not Yet Tested 🚫
+- Actual testing against real Nostr relays (requires Step 5 implementation)
+- Size/batch limit constraints per relay
+- Relay-specific failure patterns and recovery
+- Standardized relay pool configuration
 
 ## Overview
 
@@ -124,13 +147,131 @@ npx ts-node scripts/analyze-performance.ts
 **Outputs**:
 - `performance-analysis-report.txt` — Full analysis and recommendations
 
+### 5. **Relay Pool Validation** (`src/__tests__/relay-validation.test.ts`)
+
+Tests each relay in the pool to determine reliability, rate limits, and constraints. Goal: standardize on a proven relay set (no user configuration).
+
+**Use case**: Answer critical questions about relay behavior and recommend stable pool
+
+**Relay Questions Answered**:
+1. Are all relays valid and responsive?
+2. Which relays fail under certain conditions?
+3. Do relays have different rate or size limits?
+4. Which relays are most reliable?
+5. What's the safest publish rate across all relays?
+
+**Run**:
+```bash
+npm test -- src/__tests__/relay-validation.test.ts
+```
+
+**Sub-Tests**:
+
+#### 5a. Relay Health Check
+- Connect to each relay
+- Send simple test events
+- Measure response time (p50, p95, p99)
+- Record success rate
+- Identify dead/unresponsive relays
+
+#### 5b. Rate Limit Discovery
+- For each relay, gradually increase publish rate
+- Start: 1 msg/30s, increase 10% every minute
+- Record when relay starts rejecting
+- Measure: max sustainable rate per relay
+- Compare rates across relays
+
+#### 5c. Size Constraint Testing
+- For each relay, test event sizes:
+  - Small: 100 bytes
+  - Medium: 1KB
+  - Large: 10KB
+  - XLarge: 100KB+
+- Record max accepted size per relay
+- Test batch sizes: 1, 5, 10, 50 events
+- Identify relays with strict size limits
+
+#### 5d. Failure Mode Comparison
+- Send identical event sequences to all relays simultaneously
+- Record which relays accept/reject each event
+- Compare failure patterns:
+  - All fail same way? (network issue)
+  - Some fail, others succeed? (relay-specific)
+  - Consistent failures? (policy) vs random? (flakiness)
+- Measure time-to-first-error per relay
+- Measure recovery time (if applicable)
+
+#### 5e. Reliability Under Load
+- Sustained load test over 5-10 minutes
+- Send events at max sustainable rate per relay
+- Record error rate, timeouts, disconnects
+- Measure connection stability
+- Calculate uptime percentage
+
+**Output**: `relay-scorecard.json`
+```json
+{
+  "relays": [
+    {
+      "url": "wss://nos.lol",
+      "status": "ACTIVE",
+      "response_time_p50_ms": 45,
+      "response_time_p95_ms": 120,
+      "response_time_p99_ms": 250,
+      "max_sustainable_rate_msgs_per_sec": 2.5,
+      "max_event_size_bytes": 65536,
+      "max_batch_size": 50,
+      "reliability_score_percent": 98.5,
+      "error_patterns": ["occasional_timeout"],
+      "recommendation": "KEEP"
+    },
+    {
+      "url": "wss://relay.damus.io",
+      "status": "ACTIVE",
+      "response_time_p50_ms": 80,
+      "response_time_p95_ms": 200,
+      "response_time_p99_ms": 500,
+      "max_sustainable_rate_msgs_per_sec": 1.0,
+      "max_event_size_bytes": 32768,
+      "max_batch_size": 20,
+      "reliability_score_percent": 94.2,
+      "error_patterns": ["rate_limit_aggressive", "slow_response"],
+      "recommendation": "KEEP_BUT_MONITOR"
+    }
+  ],
+  "summary": {
+    "active_relays": 2,
+    "dead_relays": 0,
+    "recommended_publish_rate_msgs_per_sec": 1.0,
+    "recommended_max_event_size_bytes": 32768,
+    "recommended_batch_size": 20,
+    "pooled_reliability_score_percent": 96.4
+  }
+}
+```
+
+**Recommendations Generated**:
+- `KEEP` — Relay is reliable, use as-is
+- `KEEP_BUT_MONITOR` — Functional but watch for issues
+- `INVESTIGATE` — Intermittent failures, needs diagnosis
+- `REMOVE` — Dead, unreliable, or too restrictive
+- `UPGRADE_NEEDED` — Can upgrade if relay updates infrastructure
+
+**Integration with Publishing**:
+- Final publish rate = min(optimal_rate_from_perf_test, relay_pool_max_rate)
+- Final event size = relay_pool_max_size
+- All users get standardized settings (derived from pooled limits)
+
 ## Workflow (Safe-First Approach)
 
 **Why this order?**
-- Mock tests identify inefficiency before touching any relays ✅
-- Integration tests validate real code paths without relay load ✅
-- Ramp-up tests carefully probe relay limits with error monitoring ✅
-- No risk of blocking or permanent bans ✅
+- Mock tests identify inefficiency before touching any relays ✅ (implemented)
+- Integration tests validate real code paths without relay load ✅ (implemented)
+- Ramp-up tests carefully probe relay limits with error monitoring (simulated) ✅ (implemented with simulated relays)
+- Relay validation tests discover pool characteristics (planned) 🔄 (not yet implemented)
+- No risk of blocking or permanent bans (simulated steps) or carefully monitored (real steps) ✅
+
+**Current Status**: Steps 1-4 are implemented with simulated/mocked data. Step 5 (real relay validation) is planned.
 
 ### Step 1: Parameter Matrix Testing (Fastest, No Relay Risk)
 ```bash
@@ -200,23 +341,65 @@ npm test -- src/__tests__/performance-rampup.test.ts
 ### Full Workflow Example
 
 ```bash
-# Step 1: Find theoretical optimums (5-10 min)
+# ✅ IMPLEMENTED: Step 1 - Find theoretical optimums (5-10 min)
 npm test -- src/__tests__/performance-harness.test.ts
+# Uses mock services, no relay involvement
 
-# Step 2: Analyze to find best candidates (fast)
+# ✅ IMPLEMENTED: Step 2 - Analyze to find best candidates (fast)
 npx ts-node scripts/analyze-performance.ts
 # Output shows: most efficient config, parameter sensitivity
 
-# Step 3: Validate with real code paths (3 min)
+# ✅ IMPLEMENTED: Step 3 - Validate with real code paths (3 min)
 npm test -- src/__tests__/performance-integration.test.ts
-# Confirms latencies match mock predictions
+# Confirms latencies match mock predictions (uses mocked relays)
 
-# Step 4: Only then test with real relays (10 min)
+# ✅ IMPLEMENTED: Step 4 - Simulated ramp-up relay testing (10 min)
 npm test -- src/__tests__/performance-rampup.test.ts
-# Finds relay-specific limits, confirms safe publish rate
+# Tests against simulated relays, finds theoretical rate limits
+# Generates: relay-health-report.json (with simulated data)
+
+# 🔄 PLANNED: Step 5 - Real relay pool validation (15 min)
+# npm test -- src/__tests__/relay-validation.test.ts
+# TODO: Implement real relay connectivity testing
+# Will test: health checks, rate limits, size constraints, reliability
+# Will generate: relay-scorecard.json with recommendations
+
+# 🔄 PLANNED: Step 6 - Real relay stress testing (10 min)
+# npm test -- src/__tests__/performance-rampup-real.test.ts
+# TODO: Test against actual Nostr relays with real limits
+# Uses results from Step 5 to set safe thresholds
 ```
 
-**Total time**: ~30 minutes, zero relay risk until you're confident
+**Current Time**: ~25 minutes (steps 1-4, all with simulated data)
+**Total Time (when complete)**: ~50 minutes (including real relay testing)
+
+**Note**: Current implementation is safe for iteration (all simulated). Real relay testing (Steps 5-6) requires implementation and careful execution to avoid blocking.
+
+### Integration: Publishing Rate Formula
+
+**Current (Simulated)**: After completing steps 1-4 (all with simulated data):
+```
+Final Publish Rate = optimal_rate_from_step_2 with safety margin
+(Relay limits from step 4 are simulated; use for initial guidance only)
+```
+
+**Future (Real Relays)**: After implementing and completing steps 5-6 (real relay testing):
+```
+Final Publish Rate = min(
+  optimal_rate_from_step_2,
+  relay_pool_max_rate_from_step_5
+)
+
+Final Max Event Size = relay_pool_max_size_from_step_5
+Final Batch Size = relay_pool_max_batch_from_step_5
+```
+
+This ensures all users have safe, standardized settings based on:
+1. Performance requirements (what the system needs)
+2. Relay constraints (what relays allow)
+3. Reliability thresholds (what keeps us below rate-limit/rejection rates)
+
+**Relay Pool Decision**: Once step 5 generates recommendations, we hardcode the relay list in the extension (no user configuration).
 
 ## Understanding the Results
 

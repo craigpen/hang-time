@@ -189,6 +189,30 @@ This document outlines the phased approach to building the Hang Time extension M
 - ✅ Performance acceptable (no hangs, relays stable)
 - ✅ Ready for initial release
 
+### Post-Phase-5 Addition: Nostr Message State Tracking (2026-07-31)
+
+**Problem Discovered**: During testing, relay rate-limiting caused silent failures of critical messages (friend requests, activity invites) with no recovery mechanism.
+
+**Investigation**: Reviewed NIP-01 and NIP-09 specs — relays have ephemeral retention policies and deletion requests are best-effort only. All state tracking must be client-side.
+
+**Implementation**:
+- Added unified state model: `pending → relay_accepted → [handshakes: friend_responded] → complete`
+- Three message categories:
+  1. **Periodic** (profile, activity, game library): Complete on relay acceptance
+  2. **Handshake Initiations** (friend requests, invites, accept/decline): Complete on friend response
+  3. **Handshake Responses** (activity join responses): Complete on relay acceptance
+- Tracking types: `PendingInvite` and `PendingMessage` with milestone timestamps
+- Retry logic: Max 3 retries with exponential backoff
+- Functions: `trackPendingMessage()`, `markMessagePublished()`, `markMessagePublishFailed()`, `retryPendingMessages()`
+
+**Deliverables**:
+- ✅ Unified state tracking for all Nostr messages
+- ✅ Retry infrastructure on app startup
+- ✅ Milestone timestamps for operational tracking
+- ✅ No silent failures for handshake messages
+
+**Future**: Unified scheduler/rate limiter for all Nostr publishes (depends on rate-limit testing phase)
+
 ---
 
 ## Phase Progression Gates
