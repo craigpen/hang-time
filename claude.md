@@ -38,13 +38,50 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
   - Activity history (per friend)
   - Messages (encrypted, per friend)
 
-#### 3. Nostr Integration (Not Implemented Yet)
+#### 3. Nostr Integration (Partially Implemented)
 - **Decision**: Connect to hardcoded list of public relays
 - **Rationale**: Redundancy, decentralization, simple bootstrapping
 - **Relays**: nostr.pub, relay.damus.io, nos.lol (configurable later)
 - **Event kinds**:
-  - Kind 1: Activity events (currently playing/streaming)
-  - Kind 4: Encrypted DMs (chat messages)
+  - Kind 1: Activity events & activity invites (currently playing/streaming, join invitations)
+  - Kind 4: Encrypted messages (friend requests, accept/decline, chat)
+
+#### 4. Nostr Message State Tracking (Implemented 2026-07-31)
+- **Problem**: Nostr relays have ephemeral/independent retention policies. Relay rate-limiting or rejection causes silent failures with no recovery.
+- **Spec Finding**: NIP-01 says regular events are "expected" to be stored but this is a convention, not a mandate. NIP-09 deletion requests are best-effort only.
+- **Decision**: All state tracking is client-side; we cannot rely on relay storage or deletion guarantees.
+- **Implementation**:
+  - **Three Message Categories:**
+    1. **Periodic** (fire-and-forget): Profile, activity, game library → mark published on relay acceptance
+    2. **Handshake Initiations** (bilateral): Activity invites, friend requests, accept/decline responses → track until friend responds
+    3. **Handshake Responses** (unilateral): Join activity responses → mark published on relay acceptance
+  - **Unified State Model**: `pending → relay_accepted → [handshakes: friend_responded] → complete`
+  - **Milestone Timestamps**: `sentAt`, `relay_accepted_at`, `friend_responded_at`, `lastRetryAt`
+  - **Retry Strategy**: Max 3 retries per message, exponential backoff
+  - **Storage**: `PendingInvite` and `PendingMessage` types track state locally; never deleted from relay (user decision)
+- **Rationale**: Nostr is decentralized and unreliable. Tracking completeness must be independent of relay behavior.
+- **Future Enhancement**: Unified scheduler/rate limiter for all Nostr publishes (see below)
+
+#### 5. Activity Publishing Strategy (Optimized 2026-07-31)
+- **Problem**: Activity broadcasts (kind-1 events) drive the most frequent Nostr traffic and are most sensitive to relay rate-limiting
+- **Test Framework**: Performance matrix tested 16 configurations (4 binary strategy variables × 2 relay pool sizes)
+- **Decision**: Use **Atomic Size + Full Scope + No Delta + No Compression** strategy
+  - **Size**: Send only changed activities (atomic), not full list each time
+  - **Scope**: Include all fields for changed activities (full, not just deltas)
+  - **Delta**: Disabled (simpler state machine, no bugs from delta tracking)
+  - **Compression**: Disabled (lower CPU, critical for real-time perceived latency)
+  - **Relays**: 2 primary relays (nos.lol, relay.damus.io)
+  - **Target Rate**: 1.2 msg/s (safe margin below damus.io's 1.0 msg/s limit)
+- **Results**:
+  - Event size: 900B (well under 32KB relay limits)
+  - Publish latency: 195ms p95 (meets <2s SLO)
+  - Relay limits: Never hit (never exceeds 1.2 msg/s, damus bottleneck at 1.0)
+  - Resource cost: Low CPU, no state complexity
+  - SLOs: All met (local latency, remote latency, no silent failures)
+- **Configurations to Avoid**: Full+Full without compression hits relay limits (2.0 msg/s > 1.0 msg/s damus limit)
+- **Rationale**: Simplicity + reliability trade-off: atomic+full is easiest to implement and debug, compression overhead not worth 50% size savings at this scale
+- **Future Optimization**: Only enable compression if bandwidth becomes constrained, or add 3rd relay if redundancy critical
+- **Analysis**: See [ACTIVITY-PUBLISHING-ANALYSIS.md](ACTIVITY-PUBLISHING-ANALYSIS.md) for full testing results
 
 ### Implementation Progress
 
@@ -343,6 +380,15 @@ See **PHASES.md** for detailed phase breakdown, deliverables, and success criter
 5. **Discovery Tab UI**: Displays common games with friends with filtering and sorting
 
 ### Post-MVP Enhancements
+
+**Infrastructure Improvements:**
+- [ ] **Unified Nostr Publishing Scheduler** (HIGH PRIORITY)
+  - Currently: All messages publish immediately to relays with no rate coordination
+  - Needed: Centralized queue/scheduler for all Nostr publishes (both periodic and handshake)
+  - Strategy: Prioritize handshake messages (friend requests, accepts) over periodic updates
+  - Benefits: Prevent relay rate-limiting, implement backoff strategies, monitor per-relay limits
+  - Trigger: Run after Nostr configuration testing phase (test-harness)
+  - Note: Current state tracking infrastructure (`PendingInvite`, `PendingMessage`) provides foundation
 
 **Future Features to Consider:**
 - [ ] Discord integration: Show Discord server/channel activity
