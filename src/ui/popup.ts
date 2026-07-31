@@ -2866,6 +2866,10 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
     }
   }
 
+  private _showSuccess(message: string): void {
+    toastManager.show(message, { duration: 3000 });
+  }
+
   destroy(): void {
     if (this.myActivityInterval) {
       clearInterval(this.myActivityInterval);
