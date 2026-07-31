@@ -1790,20 +1790,26 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
       return;
     }
 
-    // Check message_type tag to route to appropriate handler
-    const messageType = event.tags.find((t) => t[0] === 'message_type')?.[1];
-
-    if (messageType === 'friend_request') {
-      // Handle friend request acceptance/decline
-      await _handleFriendRequestResponse(friend, event);
-      return;
-    }
-
-    // Handle other message types (chat, activity invites, etc.)
+    // Decrypt and check the actual message type
     const messagingManager = getMessagingManager();
     const timestamp = event.created_at * 1000;
 
     const message = await messagingManager.receiveMessage(friend, event.content, timestamp);
+
+    // Route based on the actual message type, not just the event tag
+    if (message?.type === 'friend_request') {
+      // Incoming friend request - update friend state
+      const friendManager = getFriendManager();
+      await friendManager.acceptFriendRequest(friend.id);
+      console.log(`[Message] ✅ ${friend.local_name} sent friend request, now active`);
+      return;
+    }
+
+    if (message?.type === 'join_accepted' || message?.type === 'join_declined') {
+      // Handle friend request response
+      await _handleFriendRequestResponse(friend, event);
+      return;
+    }
 
     if (message) {
       // Send notification based on message type
