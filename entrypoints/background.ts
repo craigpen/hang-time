@@ -1117,6 +1117,10 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
       if (data.steam_api_key !== undefined) {
         profile.steam_config.api_key = data.steam_api_key;
       }
+      // Mark Steam as enabled if both ID and key are now present
+      if (profile.steam_config.steam_id && profile.steam_config.api_key) {
+        profile.steam_config.enabled = true;
+      }
     }
     if (data.publisher_config !== undefined) {
       profile.publisher_config = data.publisher_config;
