@@ -1,19 +1,18 @@
 /**
  * Hang Time - File Logger
- * Writes all console logs to file for debugging
+ * Writes all console logs to storage for debugging
+ * Logs are stored in chrome.storage.local and can be queried directly
  */
 
 export class FileLogger {
   private logsBuffer: string[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
   private profileId: string = 'unknown';
-  private filePath: string = '';
+  private storageKey: string = '';
 
   constructor(profileId: string) {
     this.profileId = profileId;
-    // Use temp directory and include profile ID in filename
-    const tempDir = 'hang-time-logs';
-    this.filePath = `${tempDir}-${profileId}.txt`;
+    this.storageKey = `hang_time_file_logs_${profileId}`;
   }
 
   /**

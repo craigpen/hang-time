@@ -2747,6 +2747,53 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 console.log('[Background] Service worker loaded');
 
 // Initialize on startup
+/**
+ * DEBUG: Export all logs from both profiles to temp files
+ * Call this from the console: chrome.runtime.getBackgroundPage().then(bg => bg.dumpHangTimeLogs())
+ * Writes to: C:\Users\craig\AppData\Local\Temp\hang-time-logs-{profileId}.txt
+ */
+(globalThis as any).dumpHangTimeLogs = async function() {
+  try {
+    const data = await chrome.storage.local.get(null);
+    const logs: Record<string, string> = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      if (key.startsWith('hang_time_file_logs_')) {
+        const profileId = key.replace('hang_time_file_logs_', '');
+        logs[profileId] = value as string;
+      }
+    }
+
+    console.log('='.repeat(80));
+    console.log('EXPORTING HANG TIME LOGS');
+    console.log('='.repeat(80));
+
+    for (const [profileId, logText] of Object.entries(logs)) {
+      // Create a blob with the log text
+      const blob = new Blob([logText], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+
+      // Trigger download with specific filename
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `hang-time-logs-${profileId}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      console.log(`✅ Downloaded logs for profile: ${profileId}`);
+    }
+
+    console.log('='.repeat(80));
+    console.log('Logs exported to Downloads folder');
+    console.log('Check: C:\\Users\\craig\\Downloads\\hang-time-logs-*.txt');
+    console.log('='.repeat(80));
+  } catch (error) {
+    console.error('Failed to dump logs:', error);
+  }
+};
+
 (async () => {
   try {
     await initializeNotificationDedup();
