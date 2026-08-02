@@ -56,8 +56,6 @@ export interface UserProfile {
     rate_ms: number;
     relays: {
       'nos.lol': boolean;
-      'relay.damus.io': boolean;
-      'relay.snort.social': boolean;
       'nostr.mom': boolean;
       'relay.mostr.pub': boolean;
     };
@@ -315,8 +313,6 @@ export interface VideoDataMetrics {
 
 export const DEFAULT_RELAY_URLS = [
   'wss://nos.lol',
-  'wss://relay.damus.io',
-  'wss://relay.snort.social',
   'wss://nostr.mom',
   'wss://relay.mostr.pub',
 ];

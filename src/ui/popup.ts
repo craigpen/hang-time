@@ -1951,7 +1951,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         size: 'full',
         scope: 'updates',
         rate_ms: 12000,
-        relays: { 'nos.lol': true, 'relay.damus.io': true, 'relay.snort.social': true, 'nostr.mom': true, 'relay.mostr.pub': true },
+        relays: { 'nos.lol': true, 'nostr.mom': true, 'relay.mostr.pub': true },
         retry_backoff_ms: 1000,
         compression: false,
         verbose_logging: false,

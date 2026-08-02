@@ -117,8 +117,6 @@ export class IdentityManager {
         rate_ms: 24000,
         relays: {
           'nos.lol': true,
-          'relay.damus.io': true,
-          'relay.snort.social': true,
           'nostr.mom': true,
           'relay.mostr.pub': true,
         },
