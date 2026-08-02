@@ -15,6 +15,22 @@ export interface IRelayConnection {
   disconnect(): Promise<void>;
 }
 
+export interface RelayPublishResult {
+  relay_url: string;
+  success: boolean;
+  latency_ms?: number;
+  error?: string;
+  error_type?: string;
+  connection_status: 'connected' | 'disconnected' | 'timeout';
+}
+
+export interface PublishResults {
+  overall_success: boolean;
+  total_relays: number;
+  successful_relays: number;
+  relay_results: RelayPublishResult[];
+}
+
 export class RelayConnection implements IRelayConnection {
   url: string;
   isConnected: boolean = false;
@@ -412,9 +428,10 @@ export class RelayPool {
     console.debug(`[Nostr] Successfully connected to ${connectedCount} relay(s)`);
   }
 
-  async publish(event: NostrEvent, config?: any): Promise<void> {
+  async publish(event: NostrEvent, config?: any): Promise<PublishResults> {
     const maxRetries = 3;
     let lastError: Error | null = null;
+    let lastResults: PublishResults | null = null;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -445,22 +462,46 @@ export class RelayPool {
         }
 
         // Publish to all relays, wait for at least one success
-        const publishPromises = relays.map((relay) => relay.publish(event));
-        const results = await Promise.allSettled(publishPromises);
+        const publishStart = Date.now();
+        const publishPromises = relays.map((relay) =>
+          relay.publish(event).then(
+            () => ({ relay: relay.url, success: true, latency_ms: Date.now() - publishStart }),
+            (error) => ({ relay: relay.url, success: false, error: error.message, latency_ms: Date.now() - publishStart })
+          )
+        );
+        const relayAttempts = await Promise.all(publishPromises);
 
-        const successful = results.filter((r) => r.status === 'fulfilled').length;
+        // Build results with per-relay info
+        const relayResults: RelayPublishResult[] = relays.map((relay, idx) => {
+          const attempt = relayAttempts[idx];
+          return {
+            relay_url: relay.url,
+            success: attempt.success,
+            latency_ms: attempt.latency_ms,
+            error: attempt.error,
+            error_type: attempt.error ? this._parseErrorType(attempt.error) : undefined,
+            connection_status: relay.isConnected ? 'connected' : 'disconnected',
+          };
+        });
+
+        const successful = relayResults.filter((r) => r.success).length;
+        lastResults = {
+          overall_success: successful > 0,
+          total_relays: relays.length,
+          successful_relays: successful,
+          relay_results: relayResults,
+        };
+
         if (successful === 0) {
           // All relays rejected - extract and log detailed errors
-          const errors = results
-            .filter((r) => r.status === 'rejected')
-            .map((r) => (r as PromiseRejectedResult).reason?.message || String((r as PromiseRejectedResult).reason));
+          const errors = relayResults.map(r => r.error || 'unknown error');
 
           console.error(`[Nostr] ❌ Publish failed: All ${relays.length} relays rejected`);
           errors.forEach((error, idx) => {
             console.error(`[Nostr]   Relay ${idx + 1}: ${error}`);
           });
 
-          const powError = errors.some((e) => e.includes('pow:'));
+          const powError = errors.some((e) => e?.includes('pow:'));
           if (powError && attempt < maxRetries - 1) {
             const backoff = (config?.retry_backoff_ms || 1000) * Math.pow(2, attempt);
             console.log(`[Nostr] 🔄 Config: Retry backoff - PoW detected, retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries})`);
@@ -472,7 +513,7 @@ export class RelayPool {
         }
 
         console.debug(`[Nostr] kind-${event.kind} published to ${successful}/${relays.length} relays`);
-        return; // Success
+        return lastResults; // Success
       } catch (error) {
         lastError = error as Error;
         if (attempt < maxRetries - 1) {
@@ -483,7 +524,20 @@ export class RelayPool {
       }
     }
 
+    // Return last results even on error
+    if (lastResults) {
+      return lastResults;
+    }
+
     throw lastError || new NostrError('Failed to publish after retries');
+  }
+
+  private _parseErrorType(error: string): string {
+    if (error.includes('pow:')) return 'rate_limit';
+    if (error.includes('auth')) return 'auth_required';
+    if (error.includes('timeout')) return 'timeout';
+    if (error.includes('rejection')) return 'rejection';
+    return 'unknown';
   }
 
   subscribe(identifier: string, callback: (event: NostrEvent) => Promise<void>): void {
