@@ -11,6 +11,7 @@ import { IdentityManager } from './identity';
 import { encryptionManager } from './encryption';
 import { validateActivity, detectCorruption } from './activity-validation';
 import { GameLibraryManager } from './game-library';
+import { ActivityDiagnostics } from './activity-diagnostics';
 
 const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
 
@@ -21,6 +22,7 @@ export class ActivityPublisher {
   private publishCount = 0; // Increments every 12s, 5th publish (index 4) is full refresh
   private publishRateMs = 12000; // Default: publish every 12 seconds
   private lastGameLibraryPublishTime = 0; // Track last game library publish
+  private diagnostics: ActivityDiagnostics;
 
   static readonly PUBLISH_INTERVAL_MS = 12000; // Default: publish every 12 seconds (5 per 60s)
   static readonly FULL_REFRESH_CYCLE = 5; // Every 5th publish is a full refresh
@@ -30,7 +32,9 @@ export class ActivityPublisher {
     private relayPool: RelayPool,
     private storageManager: StorageManager,
     private identityManager: IdentityManager
-  ) {}
+  ) {
+    this.diagnostics = ActivityDiagnostics.getInstance(storageManager);
+  }
 
   private async _loadConfig(): Promise<void> {
     const profile = await this.storageManager.getUserProfile();
@@ -118,6 +122,7 @@ export class ActivityPublisher {
       console.log(`[Publisher] 📤 Publishing kind-0 profile (nickname: ${profile.nickname || 'none'}, discord: ${profile.discord_info ? 'yes' : 'no'})`);
       const config = profile?.publisher_config;
       await this.relayPool.publish(event, config);
+      // Note: Profile publishes not tracked in diagnostics (kind-0, not activity)
       console.debug('[Publisher] Profile published successfully');
     } catch (error) {
       console.error('[Publisher] Failed to publish profile:', error);
@@ -439,7 +444,27 @@ export class ActivityPublisher {
         console.log(`[Publisher] 📋 Verbose: Event JSON=${eventJson}`);
       }
 
-      await this.relayPool.publish(event, config);
+      const publishResults = await this.relayPool.publish(event, config);
+
+      // Record relay attempts for each activity's diagnostics
+      for (const activity of activities) {
+        for (const relayResult of publishResults.relay_results) {
+          await this.diagnostics.recordRelayAttempt(
+            activity.id,
+            relayResult.relay_url,
+            relayResult.connection_status,
+            relayResult.success ? 'OK' : 'FAILED',
+            relayResult.latency_ms,
+            relayResult.error_type,
+            relayResult.error,
+            0, // retry count (single attempt here)
+            relayResult.success ? 'succeeded' : 'failed',
+            id,
+            eventSize
+          );
+        }
+      }
+
       console.debug(`[Publisher] ✅ Published bundled event with ${activities.length} services`);
     } catch (error) {
       console.error('[Publisher] Failed to publish bundled activities:', error);
@@ -512,7 +537,25 @@ export class ActivityPublisher {
       // Load config for relay selection and retry settings
       const profile = await this.storageManager.getUserProfile();
       const config = profile?.publisher_config;
-      await this.relayPool.publish(event, config);
+
+      const publishResults = await this.relayPool.publish(event, config);
+
+      // Record relay attempts for this activity's diagnostics
+      for (const relayResult of publishResults.relay_results) {
+        await this.diagnostics.recordRelayAttempt(
+          activity.id,
+          relayResult.relay_url,
+          relayResult.connection_status,
+          relayResult.success ? 'OK' : 'FAILED',
+          relayResult.latency_ms,
+          relayResult.error_type,
+          relayResult.error,
+          0, // retry count
+          relayResult.success ? 'succeeded' : 'failed',
+          id,
+          eventSize
+        );
+      }
     } catch (error) {
       console.error('[Publisher] Failed to publish activity:', error);
     }
