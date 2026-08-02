@@ -1579,6 +1579,22 @@ export class PopupController {
       });
     }
 
+    // Debug logs export button
+    const debugLogsBtn = document.getElementById('debug-logs-btn');
+    if (debugLogsBtn) {
+      debugLogsBtn.addEventListener('click', async () => {
+        try {
+          const response = await chrome.runtime.sendMessage({ type: 'DUMP_LOGS' });
+          if (response?.success) {
+            toastManager.show('✅ Logs exported to Downloads!', { duration: 3000 });
+          }
+        } catch (error) {
+          console.error('[Popup] Failed to export logs:', error);
+          toastManager.show('❌ Failed to export logs', { duration: 3000 });
+        }
+      });
+    }
+
     const settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
