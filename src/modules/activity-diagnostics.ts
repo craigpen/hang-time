@@ -154,14 +154,23 @@ export class ActivityDiagnostics {
       enabled_relays: string[];
     }
   ): Promise<void> {
-    const record = await this._findRecord(activityId);
-    if (record) {
-      record.publish_cycle_triggered_at = Date.now();
-      record.reason_published = reasonPublished;
-      record.config_at_publish = config;
-      record.relay_attempts = {};
-      await this._updateRecord(record);
+    let record = await this._findRecord(activityId);
+    if (!record) {
+      // Create minimal record if it doesn't exist yet
+      record = {
+        activity_id: activityId,
+        service: 'unknown',
+        detected_at: Date.now(),
+        source: 'API' as const,
+        content: '',
+        metadata: {},
+      };
     }
+    record.publish_cycle_triggered_at = Date.now();
+    record.reason_published = reasonPublished;
+    record.config_at_publish = config;
+    record.relay_attempts = {};
+    await this._updateRecord(record);
   }
 
   /**
@@ -429,12 +438,21 @@ export class ActivityDiagnostics {
     const idx = records.findIndex((r) => r.activity_id === record.activity_id);
 
     if (idx >= 0) {
+      // Update existing record
       records[idx] = record;
-      try {
-        await chrome.storage.local.set({ [STORAGE_KEY]: records });
-      } catch (error) {
-        console.error('[ActivityDiagnostics] Failed to update record:', error);
+    } else {
+      // Create new record if doesn't exist
+      records.push(record);
+      // Keep only recent records
+      if (records.length > MAX_RECORDS) {
+        records.splice(0, records.length - MAX_RECORDS);
       }
+    }
+
+    try {
+      await chrome.storage.local.set({ [STORAGE_KEY]: records });
+    } catch (error) {
+      console.error('[ActivityDiagnostics] Failed to update record:', error);
     }
   }
 }
