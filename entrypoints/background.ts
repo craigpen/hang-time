@@ -1715,6 +1715,12 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       const diagnostics = ActivityDiagnostics.getInstance(storageManager);
       const userProfile = await storageManager.getUserProfile();
 
+      getFileLogger().log('Background', 'INFO', `Parsed ${activities.length} activities from event`, {
+        friendIdentifier,
+        services: activities.map(a => a.service).join(','),
+        eventId: event.id.substring(0, 16)
+      });
+
       console.log('[Background] Received activities from Nostr:', activities.map(a => ({
         service: a.service,
         content: a.content,
@@ -1811,6 +1817,12 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       await storageManager.updateFriend(friend.id, {
         current_activities: newCurrentActivities,
         last_seen: Date.now(),
+      });
+
+      getFileLogger().log('Background', 'INFO', `Stored ${activities.length} activities for friend`, {
+        friendIdentifier,
+        storedServices: Object.keys(newCurrentActivities).join(','),
+        changed: Array.from(changedServices).join(',')
       });
 
       // Record processing success for each activity
