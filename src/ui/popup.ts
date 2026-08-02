@@ -1601,18 +1601,21 @@ export class PopupController {
             return;
           }
 
-          // Create downloads for each profile
-          for (const [profileId, logText] of Object.entries(logs)) {
-            const blob = new Blob([logText], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `hang-time-logs-${profileId}.txt`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-          }
+          // Create a SINGLE combined log file with all profiles
+          const combinedLog = Object.entries(logs)
+            .map(([profileId, logText]) => logText)
+            .join('\n\n' + '='.repeat(80) + '\n\n');
+
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const blob = new Blob([combinedLog], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `hang-time-logs-${timestamp}.txt`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
 
           toastManager.show('✅ Logs exported!', { duration: 3000 });
         } catch (error) {
