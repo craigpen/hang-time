@@ -116,8 +116,11 @@ export class IdentityManager {
         scope: 'updates',
         rate_ms: 24000,
         relays: {
+          'nos.lol': true,
           'relay.damus.io': true,
           'relay.snort.social': true,
+          'nostr.mom': true,
+          'relay.mostr.pub': true,
         },
         retry_backoff_ms: 1000,
         compression: false,

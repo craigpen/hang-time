@@ -183,7 +183,7 @@ export class ActivityPublisher {
       if (config.retry_backoff_ms !== 1000) activeSettings.push(`retry_backoff=${config.retry_backoff_ms}ms`);
       const selectedRelays = Object.entries(config.relays)
         .filter(([, enabled]) => enabled)
-        .map(([url]) => url.split('/')[2]);
+        .map(([domain]) => domain);
       if (selectedRelays.length > 0 && selectedRelays.length < 5) {
         activeSettings.push(`relays=[${selectedRelays.join(',')}]`);
       }

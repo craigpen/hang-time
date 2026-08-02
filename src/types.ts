@@ -313,7 +313,13 @@ export interface VideoDataMetrics {
 // NOSTR RELAYS (Single source of truth)
 // ============================================================================
 
-export const DEFAULT_RELAY_URLS = ['wss://nos.lol'];
+export const DEFAULT_RELAY_URLS = [
+  'wss://nos.lol',
+  'wss://relay.damus.io',
+  'wss://relay.snort.social',
+  'wss://nostr.mom',
+  'wss://relay.mostr.pub',
+];
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'auto',
