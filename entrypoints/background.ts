@@ -31,6 +31,7 @@ import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } 
 let initialized = false;
 let activityDetector: ActivityDetector | null = null;
 let activityPublisher: ActivityPublisher | null = null;
+let messagingManager: MessagingManager | null = null;
 const activeSubscriptions = new Map<string, void>();
 
 // ============================================================================
@@ -229,6 +230,7 @@ async function initializeExtension(): Promise<void> {
 
     // Initialize messaging manager
     initializeMessagingManager(storageManager, identityManager, relayPool);
+    messagingManager = getMessagingManager();
     console.debug('[Background] Messaging manager initialized');
 
     // Initialize notification manager
