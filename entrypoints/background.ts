@@ -1693,26 +1693,47 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       }
 
       // Store all activities atomically, merging with existing to preserve fields from delta publishing
+      // When multiple activities have same service (e.g. multiple youtube tabs), keep the most recent
       const newCurrentActivities: Partial<Record<ServiceName, Activity>> = {};
+
+      // First, keep existing activities that aren't being updated
+      if (friend.current_activities) {
+        for (const [service, activity] of Object.entries(friend.current_activities)) {
+          if (!activities.find(a => a.service === service)) {
+            newCurrentActivities[service as ServiceName] = activity;
+          }
+        }
+      }
+
+      // Then add/update with new activities, keeping only the most recent per service
+      const activitiesByService: Partial<Record<ServiceName, Activity>> = {};
       for (const activity of activities) {
-        const existingActivity = friend.current_activities?.[activity.service];
+        const existing = activitiesByService[activity.service];
+        // Keep this activity if: no existing, or this one is newer (has audio on, or later timestamp)
+        const shouldKeep = !existing ||
+          (activity.audio === 'on' && existing.audio !== 'on') ||
+          ((activity.timestamp || 0) > (existing.timestamp || 0));
 
-        // Check if new activity is incomplete (missing content) and we have a complete version
+        if (shouldKeep) {
+          activitiesByService[activity.service] = activity;
+        }
+      }
+
+      // Merge new activities with any that were preserved
+      for (const [service, activity] of Object.entries(activitiesByService)) {
+        const existingActivity = friend.current_activities?.[service as ServiceName];
+
         const isIncomplete = !activity.content && existingActivity?.content;
-
         if (isIncomplete) {
-          // Don't overwrite complete activity with incomplete delta - just update specific fields
-          newCurrentActivities[activity.service] = {
+          newCurrentActivities[service as ServiceName] = {
             ...existingActivity,
             ...activity,
-            // Preserve content from existing activity if new one is missing it
             content: existingActivity.content,
             id: activity.id || existingActivity?.id,
             service: activity.service,
           };
         } else {
-          // Normal merge for complete activities
-          newCurrentActivities[activity.service] = {
+          newCurrentActivities[service as ServiceName] = {
             ...existingActivity,
             ...activity,
             id: activity.id || existingActivity?.id,
