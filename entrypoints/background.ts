@@ -617,6 +617,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'SAVE_SETTINGS':
       return _saveSettings(message.data);
 
+    case 'GET_DIAGNOSTICS':
+      return _getDiagnostics();
+
     case 'RESTORE_SETTINGS':
       return _restoreSettings(message.data);
 
@@ -832,6 +835,16 @@ async function _getUserIdentifier(): Promise<ExtensionResponse> {
     return { success: false, error: 'user profile not found' };
   }
   return { success: true, data: profile };
+}
+
+async function _getDiagnostics(): Promise<ExtensionResponse> {
+  try {
+    const diagnostics = ActivityDiagnostics.getInstance(storageManager);
+    const exported = await diagnostics.exportDiagnostics();
+    return { success: true, data: JSON.parse(exported) };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to export diagnostics' };
+  }
 }
 
 async function _getMessages(friendId?: string): Promise<ExtensionResponse> {
