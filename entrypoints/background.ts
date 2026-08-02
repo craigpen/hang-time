@@ -1551,10 +1551,13 @@ async function _handleProfileEvent(event: NostrEvent): Promise<void> {
 }
 
 async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {
+  console.log(`[Background] 📨 Received event from friend ${friendIdentifier.substring(0, 8)}... kind=${event.kind} tags=${event.tags.map(t => t[0]).join(',')}`);
+
   const friends = await storageManager.getFriends();
   const friend = friends.find((f) => f.identifier === friendIdentifier);
 
   if (!friend) {
+    console.debug(`[Background] Friend ${friendIdentifier} not found in local list, ignoring event`);
     return;
   }
 
