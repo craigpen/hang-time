@@ -302,6 +302,11 @@ export class RelayConnection implements IRelayConnection {
         // Regular subscription: route if event pubkey matches
         if (event.pubkey === identifier) {
           matches = true;
+        } else {
+          // DEBUG: Show mismatch for non-DM events
+          if (event.kind === 1) {
+            console.debug(`[Nostr] KIND-1 EVENT MISMATCH: event.pubkey=${event.pubkey.substring(0, 16)}... vs subscription identifier=${identifier.substring(0, 16)}...`);
+          }
         }
       }
 
