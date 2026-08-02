@@ -1584,10 +1584,37 @@ export class PopupController {
     if (debugLogsBtn) {
       debugLogsBtn.addEventListener('click', async () => {
         try {
-          const response = await chrome.runtime.sendMessage({ type: 'DUMP_LOGS' });
-          if (response?.success) {
-            toastManager.show('✅ Logs exported to Downloads!', { duration: 3000 });
+          toastManager.show('📋 Preparing logs...', { duration: 2000 });
+
+          // Signal background to prepare logs
+          await chrome.runtime.sendMessage({ type: 'DUMP_LOGS' });
+
+          // Give it a moment to prepare
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          // Retrieve logs from storage
+          const data = await chrome.storage.local.get('hang_time_logs_export');
+          const logs = data['hang_time_logs_export'] as Record<string, string>;
+
+          if (!logs || Object.keys(logs).length === 0) {
+            toastManager.show('❌ No logs found', { duration: 3000 });
+            return;
           }
+
+          // Create downloads for each profile
+          for (const [profileId, logText] of Object.entries(logs)) {
+            const blob = new Blob([logText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `hang-time-logs-${profileId}.txt`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          }
+
+          toastManager.show('✅ Logs exported!', { duration: 3000 });
         } catch (error) {
           console.error('[Popup] Failed to export logs:', error);
           toastManager.show('❌ Failed to export logs', { duration: 3000 });

@@ -2751,8 +2751,8 @@ console.log('[Background] Service worker loaded');
 
 // Initialize on startup
 /**
- * Export all logs from both profiles to download files
- * Usage from console: chrome.runtime.sendMessage({type: 'DUMP_LOGS'})
+ * Export all logs from both profiles to storage for download
+ * Uses chrome.storage to make logs accessible to popup for download
  */
 async function dumpHangTimeLogs() {
   try {
@@ -2766,33 +2766,18 @@ async function dumpHangTimeLogs() {
       }
     }
 
-    console.log('='.repeat(80));
-    console.log('EXPORTING HANG TIME LOGS');
-    console.log('='.repeat(80));
+    console.log('[Background] Preparing logs for export...');
 
-    for (const [profileId, logText] of Object.entries(logs)) {
-      // Create a blob with the log text
-      const blob = new Blob([logText], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
+    // Store logs in a special key that the popup can access and download
+    await chrome.storage.local.set({ 'hang_time_logs_export': logs });
 
-      // Trigger download with specific filename
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `hang-time-logs-${profileId}.txt`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+    console.log('[Background] Logs prepared in storage for export');
+    console.log('[Background] Profiles found:', Object.keys(logs).join(', '));
 
-      console.log(`✅ Downloaded logs for profile: ${profileId}`);
-    }
-
-    console.log('='.repeat(80));
-    console.log('Logs exported to Downloads folder');
-    console.log('Check: C:\\Users\\craig\\Downloads\\hang-time-logs-*.txt');
-    console.log('='.repeat(80));
+    return { success: true, profiles: Object.keys(logs) };
   } catch (error) {
-    console.error('Failed to dump logs:', error);
+    console.error('[Background] Failed to prepare logs:', error);
+    throw error;
   }
 }
 
