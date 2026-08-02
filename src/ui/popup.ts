@@ -2928,11 +2928,12 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
     return div.innerHTML;
   }
 
+  private _showSuccess(message: string): void {
+    toastManager.show(message, { duration: 3000 });
+  }
+
   private _showError(message: string): void {
-    if (this.friendsList) {
-      this.friendsList.innerHTML = `<div class="error">${this._escapeHtml(message)}</div>`;
-      this.friendsList.style.display = 'block';
-    }
+    toastManager.show(message, { duration: 5000 });
   }
 
   destroy(): void {
