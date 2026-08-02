@@ -239,8 +239,8 @@ export function detectCorruption(activity: Activity): string[] {
     issues.push(`Invalid state: ${activity.state}`);
   }
 
-  // Check progress bounds
-  if (activity.metadata?.progress !== undefined && activity.metadata?.duration !== undefined) {
+  // Check progress bounds (skip for live streams where duration=0)
+  if (activity.metadata?.progress !== undefined && activity.metadata?.duration !== undefined && activity.metadata.duration > 0) {
     if (activity.metadata.progress < 0 || activity.metadata.progress > activity.metadata.duration) {
       issues.push(`Progress out of bounds: ${activity.metadata.progress}/${activity.metadata.duration}`);
     }
