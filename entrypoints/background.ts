@@ -2748,11 +2748,10 @@ console.log('[Background] Service worker loaded');
 
 // Initialize on startup
 /**
- * DEBUG: Export all logs from both profiles to temp files
- * Call this from the console: chrome.runtime.getBackgroundPage().then(bg => bg.dumpHangTimeLogs())
- * Writes to: C:\Users\craig\AppData\Local\Temp\hang-time-logs-{profileId}.txt
+ * Export all logs from both profiles to download files
+ * Usage from console: chrome.runtime.sendMessage({type: 'DUMP_LOGS'})
  */
-(globalThis as any).dumpHangTimeLogs = async function() {
+async function dumpHangTimeLogs() {
   try {
     const data = await chrome.storage.local.get(null);
     const logs: Record<string, string> = {};
@@ -2792,7 +2791,15 @@ console.log('[Background] Service worker loaded');
   } catch (error) {
     console.error('Failed to dump logs:', error);
   }
-};
+}
+
+// Message handler for DUMP_LOGS
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'DUMP_LOGS') {
+    dumpHangTimeLogs().then(() => sendResponse({ success: true }));
+    return true; // Keep channel open for async response
+  }
+});
 
 (async () => {
   try {
