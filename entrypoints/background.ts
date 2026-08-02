@@ -23,6 +23,7 @@ import { initializeMetadataFetcher, metadataFetcher } from '../src/modules/metad
 import { getActivityVerb, generateActivityId } from '../src/modules/activity-utils';
 import { encryptionManager } from '../src/modules/encryption';
 import { ActivityDiagnostics } from '../src/modules/activity-diagnostics';
+import { initializeFileLogger, getFileLogger } from '../src/modules/file-logger';
 import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } from '../src/types';
 
 // ============================================================================
@@ -158,6 +159,18 @@ async function initializeExtension(): Promise<void> {
     } catch (error) {
       console.error('[Background] Storage initialization failed:', error);
       throw error;
+    }
+
+    // Initialize file logger for debugging (captures console logs to storage)
+    try {
+      const userProfile = await storageManager.getUserProfile();
+      const profileId = userProfile?.memorable_identifier || 'unknown';
+      initializeFileLogger(profileId);
+      const logger = getFileLogger();
+      logger.log('Background', 'INFO', 'File logger initialized', { profileId });
+    } catch (error) {
+      console.error('[Background] File logger initialization failed:', error);
+      // Don't fail extension startup if logger fails
     }
 
     // Re-inject content scripts if we detect orphaned scripts from before restart
@@ -1480,6 +1493,9 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
   const friend = await friendManager.getFriendByIdentifier(friendIdentifier);
   if (!friend) {
     console.error(`[Background] Friend not found: ${friendIdentifier}`);
+    try {
+      getFileLogger().log('Background', 'ERROR', 'Friend not found for subscription', { friendIdentifier });
+    } catch {}
     return;
   }
 
@@ -1487,14 +1503,22 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
   const pubkey = friendManager.derivePubkeyFromIdentifier(friendIdentifier);
 
   if (activeSubscriptions.has(pubkey)) {
+    try {
+      getFileLogger().log('Background', 'DEBUG', 'Already subscribed to friend', { friendIdentifier, pubkey: pubkey.substring(0, 16) });
+    } catch {}
     return;
   }
+
+  try {
+    getFileLogger().log('Background', 'INFO', 'Setting up subscription to friend', { friendIdentifier, pubkey: pubkey.substring(0, 16) });
+  } catch {}
 
   relayPool.subscribe(pubkey, async (event: NostrEvent) => {
     console.debug(`[Friend] Event from ${friendIdentifier} (kind ${event.kind})`);
     console.debug(`[Friend] Details - pubkey: ${event.pubkey.substring(0, 8)}..., tags: ${JSON.stringify(event.tags.slice(0, 3))}`);
 
     try {
+      getFileLogger().log('Background', 'INFO', `Event received from ${friendIdentifier}`, { kind: event.kind, pubkey: event.pubkey.substring(0, 16), tags_count: event.tags.length });
       // Fetch current friend state to check if active or pending
       const currentFriend = await friendManager.getFriendByIdentifier(friendIdentifier);
       const isPending = currentFriend?.state === 'pending';
@@ -1518,21 +1542,26 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
           }
         } else {
           console.debug(`[Friend] Skipping kind-1 from pending friend ${friendIdentifier}`);
+          getFileLogger().log('Background', 'DEBUG', `Skipped kind-1 from pending friend`, { friendIdentifier });
         }
       } else if (event.kind === 4) {
         // Kind-4 messages (always accept for both pending and active)
         console.debug(`[Message] Handling incoming kind-4`);
+        getFileLogger().log('Background', 'INFO', `Handling kind-4 message from ${friendIdentifier}`, {});
         await _handleMessageEvent(friendIdentifier, event);
       } else {
         console.debug(`[Friend] Ignoring event with kind ${event.kind}`);
+        getFileLogger().log('Background', 'DEBUG', `Ignored event kind`, { kind: event.kind, friendIdentifier });
       }
     } catch (error) {
       console.error(`[Friend] Error handling event for ${friendIdentifier}:`, error);
+      getFileLogger().log('Background', 'ERROR', `Error handling event from ${friendIdentifier}`, { error: String(error) });
     }
   });
 
   activeSubscriptions.set(pubkey, undefined);
   console.debug(`[Friend] Subscribed to: ${friendIdentifier} (pubkey: ${pubkey})`);
+  getFileLogger().log('Background', 'INFO', `Subscribed to friend`, { friendIdentifier, pubkey: pubkey.substring(0, 16) });
 }
 
 async function _handleProfileEvent(event: NostrEvent): Promise<void> {
@@ -1552,12 +1581,14 @@ async function _handleProfileEvent(event: NostrEvent): Promise<void> {
 
 async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {
   console.log(`[Background] 📨 Received event from friend ${friendIdentifier.substring(0, 8)}... kind=${event.kind} tags=${event.tags.map(t => t[0]).join(',')}`);
+  getFileLogger().log('Background', 'INFO', `Activity event received from ${friendIdentifier}`, { eventId: event.id.substring(0, 16), tags: event.tags.map(t => t[0]).join(',') });
 
   const friends = await storageManager.getFriends();
   const friend = friends.find((f) => f.identifier === friendIdentifier);
 
   if (!friend) {
     console.debug(`[Background] Friend ${friendIdentifier} not found in local list, ignoring event`);
+    getFileLogger().log('Background', 'WARN', `Friend not found for activity event`, { friendIdentifier });
     return;
   }
 
