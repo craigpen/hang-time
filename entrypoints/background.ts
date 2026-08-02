@@ -22,6 +22,7 @@ import { TwitchService } from '../src/modules/services/twitch';
 import { initializeMetadataFetcher, metadataFetcher } from '../src/modules/metadata-fetcher';
 import { getActivityVerb, generateActivityId } from '../src/modules/activity-utils';
 import { encryptionManager } from '../src/modules/encryption';
+import { ActivityDiagnostics } from '../src/modules/activity-diagnostics';
 import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } from '../src/types';
 
 // ============================================================================
@@ -1661,6 +1662,9 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
     // Parse JSON array of activities
     try {
       const activities = JSON.parse(event.content) as Activity[];
+      const diagnostics = ActivityDiagnostics.getInstance(storageManager);
+      const userProfile = await storageManager.getUserProfile();
+
       console.log('[Background] Received activities from Nostr:', activities.map(a => ({
         service: a.service,
         content: a.content,
@@ -1668,6 +1672,17 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         id: a.id,
         url: a.url,
       })));
+
+      // Record reception for each activity
+      for (const activity of activities) {
+        await diagnostics.recordReception(
+          activity.id,
+          event.tags.find(t => t[0] === 'relay')?.[1] || 'unknown',
+          event.id,
+          event.tags,
+          friend.identifier
+        );
+      }
       const wasActive = Object.keys(friend.current_activities || {}).length > 0;
 
       // Detect which activities changed
@@ -1748,6 +1763,17 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         last_seen: Date.now(),
       });
 
+      // Record processing success for each activity
+      for (const activity of activities) {
+        await diagnostics.recordProcessing(
+          activity.id,
+          ['parse', 'validate', 'merge', 'store'],
+          undefined, // no validation errors
+          undefined, // no filtering applied
+          undefined  // not rejected
+        );
+      }
+
       // Clean up orphaned invites: if friend no longer has an activity, remove the invite for it
       await cleanupOrphanedInvites(friend.id, newCurrentActivities);
 
@@ -1782,6 +1808,18 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       return;
     } catch (error) {
       console.error('[Background] Failed to parse complete activity state:', error);
+      // Record rejection if we have an activity ID from tags
+      const activityId = event.tags.find(t => t[0] === 'activity_id')?.[1];
+      if (activityId) {
+        const diagnostics = ActivityDiagnostics.getInstance(storageManager);
+        await diagnostics.recordProcessing(
+          activityId,
+          ['parse'],
+          [error instanceof Error ? error.message : String(error)],
+          undefined,
+          `Parse error: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
       return;
     }
   }
