@@ -136,6 +136,8 @@ export class ActivityPublisher {
           'nos.lol': true,
           'nostr.mom': true,
           'relay.mostr.pub': true,
+          'relay.primal.net': true,
+          'relay.nostr.band': true,
         },
         retry_backoff_ms: 1000,
         compression: false,

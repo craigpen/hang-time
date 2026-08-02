@@ -58,6 +58,8 @@ export interface UserProfile {
       'nos.lol': boolean;
       'nostr.mom': boolean;
       'relay.mostr.pub': boolean;
+      'relay.primal.net': boolean;
+      'relay.nostr.band': boolean;
     };
     retry_backoff_ms: number;
     compression: boolean;
@@ -315,6 +317,8 @@ export const DEFAULT_RELAY_URLS = [
   'wss://nos.lol',
   'wss://nostr.mom',
   'wss://relay.mostr.pub',
+  'wss://relay.primal.net',
+  'wss://relay.nostr.band',
 ];
 
 export const DEFAULT_SETTINGS: Settings = {
