@@ -235,7 +235,7 @@ export function detectCorruption(activity: Activity): string[] {
   }
 
   // Check state validity
-  if (!['playing', 'paused', 'stopped'].includes(activity.state || '')) {
+  if (!['playing', 'paused', 'stopped', 'disconnected'].includes(activity.state || '')) {
     issues.push(`Invalid state: ${activity.state}`);
   }
 
