@@ -224,6 +224,25 @@ export class ActivityPublisher {
 
       console.log(`[Publisher] Publishing cycle: ${Object.keys(currentActivitiesForPublishing).length} activities total (${Object.values(currentActivitiesForPublishing).map(a => a?.service).join(', ')})`);
 
+      // Record each activity's publish cycle start
+      const enabledRelays = Object.entries(config.relays)
+        .filter(([, enabled]) => enabled)
+        .map(([domain]) => domain);
+
+      for (const activity of Object.values(currentActivitiesForPublishing)) {
+        if (!activity) continue;
+        await this.diagnostics.recordPublishCycle(
+          activity.id,
+          'changed', // Will be updated if full refresh
+          {
+            rate_ms: config.rate_ms,
+            size: config.size,
+            scope: config.scope,
+            enabled_relays: enabledRelays,
+          }
+        );
+      }
+
       // If delta publishing, only publish changed fields (no full refresh)
       if (config.delta_publishing) {
         const changedActivities = await this._getActivityDeltas(currentActivitiesForPublishing);
