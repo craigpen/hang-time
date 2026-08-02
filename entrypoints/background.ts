@@ -365,6 +365,9 @@ async function initializeExtension(): Promise<void> {
     console.log('[Background] Initialization complete');
     initialized = true;
 
+    // Register message handlers for debugging
+    _registerMessageHandlers();
+
     // Start periodic integrity checks and cleanup
     _startPeriodicCleanup();
 
@@ -2793,13 +2796,27 @@ async function dumpHangTimeLogs() {
   }
 }
 
-// Message handler for DUMP_LOGS
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'DUMP_LOGS') {
-    dumpHangTimeLogs().then(() => sendResponse({ success: true }));
-    return true; // Keep channel open for async response
-  }
-});
+/**
+ * Register all message handlers for debugging and extension communication
+ */
+function _registerMessageHandlers(): void {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'DUMP_LOGS') {
+      console.log('[Background] DUMP_LOGS request received');
+      dumpHangTimeLogs()
+        .then(() => {
+          console.log('[Background] Logs dumped successfully');
+          sendResponse({ success: true });
+        })
+        .catch((error) => {
+          console.error('[Background] Failed to dump logs:', error);
+          sendResponse({ success: false, error: String(error) });
+        });
+      return true; // Keep channel open for async response
+    }
+  });
+  console.debug('[Background] Message handlers registered');
+}
 
 (async () => {
   try {
