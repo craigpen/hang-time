@@ -469,6 +469,8 @@ export class ActivityPublisher {
       }
 
       const tags: Array<[string, string]> = [
+        ['is_activity', 'true'],
+        ['type', 'activity-state'],
         ['service', activity.service],
         ['content', activityContent],
         ['activity_id', activity.id],
