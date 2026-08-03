@@ -587,7 +587,14 @@ chrome.runtime.onConnect.addListener((port) => {
 
     port.onMessage.addListener(async (message) => {
       try {
-        if (message.type === 'CONTENT_SCRIPT_ACTIVITY') {
+        if (message.type === 'PING') {
+          // Keep-alive ping from content script, reply with PONG
+          try {
+            port.postMessage({ type: 'PONG' });
+          } catch (e) {
+            console.debug(`[Background] Failed to send PONG:`, e);
+          }
+        } else if (message.type === 'CONTENT_SCRIPT_ACTIVITY') {
           await _handleContentScriptActivity(message.data?.key, message.data?.value, tabId);
         } else if (message.type === 'CONTENT_SCRIPT_ORPHANED') {
           console.log(`[Background] Content script orphaned for tab ${tabId}`);

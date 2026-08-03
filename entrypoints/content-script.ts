@@ -513,6 +513,28 @@ function establishConnection(): void {
 
     reconnectAttempts = 0; // Reset on successful connection
     console.log('[ContentScript] ✅ Connected to background service worker');
+
+    // Send initial ping to keep service worker awake
+    try {
+      port.postMessage({ type: 'PING' });
+      console.log('[ContentScript] Sent initial PING to background');
+    } catch (e) {
+      console.debug('[ContentScript] PING failed:', e);
+    }
+
+    // Send periodic pings to keep service worker from suspending
+    const pingInterval = setInterval(() => {
+      if (port && (window as any).hangTimeScriptActive) {
+        try {
+          port.postMessage({ type: 'PING' });
+        } catch (e) {
+          console.debug('[ContentScript] PING failed:', e);
+          clearInterval(pingInterval);
+        }
+      } else {
+        clearInterval(pingInterval);
+      }
+    }, 10000); // Every 10 seconds
   } catch (err) {
     console.error('[ContentScript] Failed to establish connection:', err);
     // Schedule retry
