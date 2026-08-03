@@ -157,21 +157,28 @@ async function _registerContentScripts(): Promise<void> {
  * Programmatically executes the content script, triggering orphan detection in old instances
  */
 async function _reinjectionContentScripts(): Promise<void> {
+  console.log('[Background] 🔄 REINJECTION: Starting content script re-injection...');
   try {
     if (!chrome.scripting) {
-      console.warn('[Background] chrome.scripting not available for re-injection');
+      console.error('[Background] ❌ REINJECTION: chrome.scripting API not available');
       return;
     }
 
+    console.log('[Background] REINJECTION: Querying tabs...');
     // Query all tabs with http/https protocols (filter out chrome://, moz-extension://, etc.)
     const allTabs = await chrome.tabs.query({
       url: ['http://*/*', 'https://*/*'],
     });
 
-    console.log(`[Background] Found ${allTabs.length} eligible tabs for re-injection`);
+    console.log(`[Background] REINJECTION: Found ${allTabs.length} eligible tabs`);
+    if (allTabs.length > 0) {
+      allTabs.forEach((tab, idx) => {
+        console.log(`  [${idx}] Tab ${tab.id}: ${tab.url?.substring(0, 60)}`);
+      });
+    }
 
     if (allTabs.length === 0) {
-      console.log('[Background] No tabs to re-inject into');
+      console.log('[Background] REINJECTION: No tabs to re-inject into');
       return;
     }
 
@@ -180,26 +187,29 @@ async function _reinjectionContentScripts(): Promise<void> {
     let failureCount = 0;
 
     for (const tab of allTabs) {
-      if (!tab.id) continue;
+      if (!tab.id) {
+        console.log('[Background] REINJECTION: Skipping tab with no ID');
+        continue;
+      }
 
       try {
+        console.log(`[Background] REINJECTION: Injecting into tab ${tab.id}...`);
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           files: ['content-script.js'],
         });
 
         successCount++;
-        console.log(`[Background] ✓ Re-injected content script into tab ${tab.id} (${tab.url?.substring(0, 50)}...)`);
+        console.log(`[Background] ✅ REINJECTION: Successfully injected into tab ${tab.id}`);
       } catch (err) {
         failureCount++;
-        // Ignore failures - some tabs might be restricted (chrome://, etc.) despite our filter
-        console.debug(`[Background] Could not re-inject into tab ${tab.id}:`, err instanceof Error ? err.message : String(err));
+        console.error(`[Background] ❌ REINJECTION: Failed to inject into tab ${tab.id}:`, err instanceof Error ? err.message : String(err));
       }
     }
 
-    console.log(`[Background] Re-injection complete: ${successCount} successful, ${failureCount} failed`);
+    console.log(`[Background] 🏁 REINJECTION COMPLETE: ${successCount} successful, ${failureCount} failed`);
   } catch (err) {
-    console.error('[Background] ❌ Re-injection routine failed:', err instanceof Error ? err.message : String(err));
+    console.error('[Background] ❌ REINJECTION: Routine failed:', err instanceof Error ? err.message : String(err));
   }
 }
 
