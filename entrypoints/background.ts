@@ -238,6 +238,9 @@ async function initializeExtension(): Promise<void> {
     return;
   }
 
+  // Set flag immediately to prevent concurrent initialization attempts
+  initialized = true;
+
   try {
     console.log('[Background] Initializing extension...');
 
@@ -488,7 +491,6 @@ async function initializeExtension(): Promise<void> {
     }
 
     console.log('[Background] Initialization complete');
-    initialized = true;
 
     // Register message handlers for debugging
     _registerMessageHandlers();
