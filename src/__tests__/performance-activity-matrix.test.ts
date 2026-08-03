@@ -1,8 +1,15 @@
 /**
- * Hang Time - Activity Publishing Performance Matrix
+ * DEPRECATED (2026-08-03): Activity Publishing Performance Matrix
+ *
+ * ⚠️ This test suite was based on simulated relay characteristics and flawed assumptions.
+ * The simulated rate limits do not reflect actual Nostr relay behavior.
+ * Real relay limits are not publicly documented and vary by operator.
+ *
  * Tests different publishing strategies to find optimal settings for activity broadcasts
  * Focuses on: Size (atomic/full), Scope (updates/full), Delta (enabled/disabled), Compression (enabled/disabled)
  * Measures: Event size, publish rate, latency, relay rate-limit behavior, resource cost
+ *
+ * DO NOT use the simulated limits from this test for real-world decisions.
  */
 
 import { describe, it, expect } from 'vitest';

@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 /**
- * Real Relay Validation - WebSocket Connections
+ * DEPRECATED (2026-08-03): Real Relay Validation - WebSocket Connections
+ *
+ * ⚠️ This script tested configurations based on flawed simulated relay performance analysis.
+ * The rate limits (1.0 msg/s, 0.5 msg/s) are NOT valid for real-world deployment.
+ *
  * Tests two shipping configurations against actual Nostr relays
+ *
+ * DO NOT use results from this test for production decisions.
  */
 
 const fs = require('fs');

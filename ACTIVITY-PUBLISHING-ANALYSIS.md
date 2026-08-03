@@ -1,7 +1,9 @@
 # Activity Publishing Performance Analysis
 
+⚠️ **DEPRECATED (2026-08-03)**: This analysis was based on simulated relay characteristics and flawed assumptions. Actual relay rate limits are not publicly documented and vary significantly by operator. Do not use the 1.0 msg/s or other rate limits from this document for real-world decisions. See CLAUDE.md for current approach.
+
 **Date:** 2026-07-31  
-**Test Framework:** Performance matrix tester (simulate relay characteristics)  
+**Test Framework:** Performance matrix tester (simulate relay characteristics) — **SIMULATED, NOT REAL**  
 **Scope:** Activity publishing only (focus on bulk messaging, primary rate-limit driver)  
 **Configurations Tested:** 16 publishing strategy combinations × 2 relay pool sizes = 32 total
 

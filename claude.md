@@ -62,50 +62,15 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
 - **Rationale**: Nostr is decentralized and unreliable. Tracking completeness must be independent of relay behavior.
 - **Future Enhancement**: Unified scheduler/rate limiter for all Nostr publishes (see below)
 
-#### 5. Activity Publishing Strategy (Finalized 2026-07-31)
-- **Problem**: Activity broadcasts (kind-1 events) drive the most frequent Nostr traffic and are most sensitive to relay rate-limiting
-- **Discovery Process**: Performance matrix tested 16 configurations (4 binary strategy variables × 2 relay pool sizes = 32 tests)
-- **Key Findings**:
-  - Delta tracking & compression add complexity without sufficient benefit for MVP
-  - Full+Full payload strategy hits relay limits (2.0 msg/s > damus.io's 1.0 msg/s)
-  - Atomic+Full+No-Delta+No-Compression is optimal: simple, reliable, meets all SLOs
-  - Relay pool must be fixed and identical across all clients (no per-user configuration)
-
-- **Final Decision: Two Shipping Configurations**
-  1. **Default** (Ship as primary):
-     - Atomic size (only changed activities) + Full scope (all fields)
-     - No delta tracking (simpler state machine)
-     - No compression (lower latency, better UX)
-     - 1.0 msg/s hard cap (canonical damus.io rate limit)
-     - Event size: 900B, Latency: 195ms, Bandwidth: 3.09 MB/hour (2.2 GB/month sustained)
-  
-  2. **Low Bandwidth Mode** (Optional user toggle):
-     - Same strategy as default, but with:
-     - Compression enabled (50% event size reduction → 450B)
-     - Rate reduced to 0.5 msg/s (50% frequency reduction)
-     - Event size: 450B, Latency: 193ms, Bandwidth: 0.77 MB/hour (0.55 GB/month sustained)
-     - 75% bandwidth savings for capped-data users
-
-- **Fixed Configuration (Never User-Configurable)**:
-  - Relay pool: [nos.lol, relay.damus.io] (hardcoded, identical on all clients)
-  - Size strategy: ATOMIC
-  - Scope: FULL
-  - Delta tracking: DISABLED
-  - Max publish rate: 1.0 msg/s
-
-- **SLO Validation**:
-  - Local latency: ✅ 193-195ms (target <2s)
-  - Remote latency: ✅ ~350-450ms estimated (target <7s)
-  - Relay rate limits: ✅ Neither config exceeds limits (safe margin)
-  - Resource efficiency: ✅ Low-Medium CPU across both modes
-
-- **Rationale**: 
-  1. Simplicity first: No delta tracking or compression complexity in MVP
-  2. User toggle only for real constraint (bandwidth caps), bundled as single mode
-  3. Relay pool must be canonical to prevent message delivery gaps
-  4. Conservative rate (1.0 not 1.2) ensures stable operation
-
-- **Analysis**: See [ACTIVITY-PUBLISHING-ANALYSIS.md](ACTIVITY-PUBLISHING-ANALYSIS.md) and [shipping-config-validation.txt](shipping-config-validation.txt)
+#### 5. Activity Publishing Strategy (Needs Re-evaluation 2026-08-03)
+- **Problem**: Activity broadcasts (kind-1 events) drive the most frequent Nostr traffic and are sensitive to relay rate-limiting
+- **Note**: Previous performance testing (ACTIVITY-PUBLISHING-ANALYSIS.md) was based on simulated relay characteristics and flawed assumptions. Rate limits vary widely by relay operator and are not publicly documented.
+- **Current Approach**: Publishing activities every 12 seconds (~0.083 msg/s), well below any observed relay limits
+- **TODO**: 
+  - Implement unified rate limiting/scheduling to coordinate all event types (activities, time-sync, user actions, game library)
+  - Implement game library chunking (64KB max event size limit, not 10MB)
+  - Add monitoring to detect actual rate limiting errors from relays
+  - Establish safe publish rates based on real-world relay behavior, not simulated tests
 
 #### 4. Content Script Lifecycle Management (2026-08-03) ✅ WORKING
 - **Decision**: Instance ownership pattern with INSTANCE_ID verification

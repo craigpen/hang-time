@@ -1,5 +1,7 @@
 # Hang Time Performance Testing Framework
 
+⚠️ **DEPRECATED (2026-08-03)**: The performance testing in this framework was based on simulated relay characteristics and flawed assumptions about relay limits. The simulated rate limits (1.0 msg/s, 0.5 msg/s) do not reflect actual Nostr relay behavior. Real relay limits are not publicly documented and vary by operator.
+
 Systematic performance and efficiency testing to discover optimal settings for activity detection, publishing, and UI refresh, plus relay pool validation to standardize relay configuration.
 
 ## Implementation Status

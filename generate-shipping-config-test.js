@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 /**
- * Shipping Configuration Validator
- * Tests the two configurations that will ship with Hang Time:
- * 1. Default: Atomic + Full Scope + No Delta + No Compression (1.0 msg/s)
- * 2. Low Bandwidth Mode: Same but with Compression + 0.5 msg/s
+ * DEPRECATED (2026-08-03): Shipping Configuration Validator
+ *
+ * ⚠️ This validator tested configurations based on flawed simulated relay performance analysis.
+ * The rate limits (1.0 msg/s, 0.5 msg/s) are NOT valid for real-world deployment.
+ *
+ * DO NOT use results from this test for production decisions.
+ * See CLAUDE.md for current publishing strategy.
  */
 
 const fs = require('fs');

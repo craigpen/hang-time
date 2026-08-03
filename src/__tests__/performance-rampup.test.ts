@@ -1,7 +1,13 @@
 /**
- * Hang Time - Safe Ramp-Up Stress Tester
- * Gradually increases publishing load to find relay limits without triggering blocks
+ * DEPRECATED (2026-08-03): Safe Ramp-Up Stress Tester
+ *
+ * ⚠️ This test was based on simulated relay characteristics and flawed assumptions.
+ * Real relay limits are not publicly documented and cannot be reliably tested this way.
+ *
+ * Originally: Gradually increases publishing load to find relay limits without triggering blocks
  * Identifies non-functional relays and sustainable rate limits
+ *
+ * DO NOT use results from this test for production decisions.
  */
 
 import { describe, it, beforeEach, afterEach, expect } from 'vitest';

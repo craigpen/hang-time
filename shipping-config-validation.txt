@@ -1,37 +1,11 @@
+⚠️ DEPRECATED (2026-08-03)
+This file was based on simulated relay performance testing that was flawed.
+The rate limits (1.0 msg/s, 0.5 msg/s) are NOT valid for real-world deployment.
+See CLAUDE.md for current publishing strategy.
 
-
-📊 SHIPPING CONFIGURATION COMPARISON
+📊 ORIGINAL SHIPPING CONFIGURATION COMPARISON (ARCHIVED)
 
 Configuration | Event Size | Rate | Latency | Relay Limit | CPU | Bandwidth (hour) | Status
 --------------|------------|------|---------|-------------|-----|------------------|-------
-DEFAULT        | 900        | 1.0  | 195     | NO          | Low | 3.09 MB          | ✅
-LOW-BW         | 450        | 0.5  | 193     | NO          | Medium | 0.77 MB          | ✅
-
-✅ VALIDATION SUMMARY
-
-✓ Both configurations meet SLOs
-✓ Neither configuration hits relay rate limits
-✓ Both achieve < 250ms latency (well under 2s SLO)
-✓ Resource efficiency is acceptable for all users
-
-📋 SHIPPING PLAN
-
-1. Ship DEFAULT configuration by default
-2. Add optional LOW BANDWIDTH MODE toggle in settings
-3. Automatically enable compression + reduce rate to 0.5 msg/s
-4. Document bandwidth constraints as use case
-
-🎯 SETTINGS UI
-
-  ☐ Low Bandwidth Mode
-    └─ Reduces event size via compression
-    └─ Reduces publish rate to 0.5 msg/sec
-    └─ For users with capped data plans
-
-🔒 LOCKED CONFIGURATION (Never User-Configurable)
-
-  ├─ Size Strategy: ATOMIC (only send changed activities)
-  ├─ Scope: FULL (all fields, even unchanged)
-  ├─ Delta Tracking: DISABLED (simpler, more reliable)
-  ├─ Relay Pool: [nos.lol, relay.damus.io] (canonical)
-  └─ Max Rate: 1.0 msg/sec (damus.io hard limit)
+DEFAULT        | 900        | 1.0  | 195     | NO          | Low | 3.09 MB          | ⚠️ SIMULATED
+LOW-BW         | 450        | 0.5  | 193     | NO          | Medium | 0.77 MB          | ⚠️ SIMULATED
