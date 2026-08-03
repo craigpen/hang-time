@@ -7,21 +7,20 @@
 import { generateActivityId } from '../src/modules/activity-utils';
 
 // ============================================================================
-// LIFECYCLE MANAGEMENT - Simple, top-level flag and cleanup
+// LIFECYCLE MANAGEMENT - Simple, top-level flag and cleanup event
 // ============================================================================
 
 const CLEANUP_EVENT = 'hang-time-content-script-cleanup';
 
-// If this script is already running, signal the old instance to cleanup
+// If an older instance is running, signal it to destroy itself
 if ((window as any).hangTimeScriptActive) {
-  console.log('[ContentScript] 🔄 Detected old instance, triggering cleanup...');
+  console.log('[ContentScript] 🔄 Orphaned instance detected, triggering cleanup...');
   window.dispatchEvent(new CustomEvent(CLEANUP_EVENT));
-} else {
-  console.log('[ContentScript] ✨ No previous instance, fresh start');
 }
 
-// Mark this instance as active
+// Mark THIS instance as the active one (new owner)
 (window as any).hangTimeScriptActive = true;
+console.log('[ContentScript] ✨ This instance is now active');
 
 // Track event listeners for cleanup
 const trackedEventListeners: Array<{
@@ -627,19 +626,12 @@ setTimeout(() => {
     return;
   }
 
-  console.log('[ContentScript] 🚀 Context valid, initializing generic video tracker');
+  console.log('[ContentScript] 🚀 Initializing generic video tracker');
   establishConnection();
 
   const tracker = new GenericVideoTracker();
   tracker.init();
-
-  // Monitor context validity periodically
-  setInterval(() => {
-    if (!isContextValid()) {
-      console.error('[ContentScript] Extension context lost—orphaned script detected');
-      performCleanup();
-    }
-  }, 5000);
+  // Context validity is checked implicitly via port reconnection on disconnect
 }, 100);
 
 console.log('[ContentScript] 📋 Script loaded, waiting for initialization...');

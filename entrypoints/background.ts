@@ -164,38 +164,25 @@ async function _reinjectionContentScripts(): Promise<void> {
       return;
     }
 
-    console.log('[Background] REINJECTION: Querying tabs...');
-    // Query all tabs with http/https protocols (filter out chrome://, moz-extension://, etc.)
     const allTabs = await chrome.tabs.query({
       url: ['http://*/*', 'https://*/*'],
     });
 
     console.log(`[Background] REINJECTION: Found ${allTabs.length} eligible tabs`);
-    if (allTabs.length > 0) {
-      allTabs.forEach((tab, idx) => {
-        console.log(`  [${idx}] Tab ${tab.id}: ${tab.url?.substring(0, 60)}`);
-      });
-    }
-
     if (allTabs.length === 0) {
       console.log('[Background] REINJECTION: No tabs to re-inject into');
       return;
     }
 
-    // Execute content script in each tab
     let successCount = 0;
     let failureCount = 0;
 
     for (const tab of allTabs) {
-      if (!tab.id) {
-        console.log('[Background] REINJECTION: Skipping tab with no ID');
-        continue;
-      }
+      if (!tab.id) continue;
 
       try {
         console.log(`[Background] REINJECTION: Injecting into tab ${tab.id}...`);
 
-        // Use Promise.race with timeout to prevent hanging
         const injectionPromise = chrome.scripting.executeScript({
           target: { tabId: tab.id },
           files: ['content-script.js'],
@@ -211,7 +198,10 @@ async function _reinjectionContentScripts(): Promise<void> {
         console.log(`[Background] ✅ REINJECTION: Successfully injected into tab ${tab.id}`);
       } catch (err) {
         failureCount++;
-        console.error(`[Background] ❌ REINJECTION: Failed to inject into tab ${tab.id}:`, err instanceof Error ? err.message : String(err));
+        console.error(
+          `[Background] ❌ REINJECTION: Failed to inject into tab ${tab.id}:`,
+          err instanceof Error ? err.message : String(err)
+        );
       }
     }
 
