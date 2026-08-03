@@ -9,6 +9,7 @@ import { IdentityManager } from './identity';
 import { StorageManager } from './storage';
 import { encryptionManager } from './encryption';
 import { generateActivityId } from './activity-utils';
+import type { PublishQueue } from './publish-queue';
 
 // Singleton instance with lazy initialization
 let instance: MessagingManager | null = null;
@@ -21,11 +22,20 @@ export interface ActivityMessage {
 }
 
 export class MessagingManager {
+  private publishQueue: PublishQueue | null = null;
+
   constructor(
     private relayPool: RelayPool,
     private identityManager: IdentityManager,
     private storageManager: StorageManager
   ) {}
+
+  /**
+   * Set the publish queue (called after queue is initialized)
+   */
+  setPublishQueue(queue: PublishQueue): void {
+    this.publishQueue = queue;
+  }
 
   /**
    * Send a friend request notification (kind-1, unencrypted)
@@ -66,9 +76,14 @@ export class MessagingManager {
     event.id = eventId.substring(0, 64);
     event.sig = encryptionManager.signEvent(event.id, await this.identityManager.getSecretKey());
 
-    // Publish to relays
-    console.log(`[Messaging] 📤 Publishing friend request to ${recipientDisplayName} (${recipientPubkey.substring(0, 8)}...)`);
-    await this.relayPool.publish(event, userProfile.publisher_config);
+    // Queue or publish the event
+    console.log(`[Messaging] 📤 Queuing friend request to ${recipientDisplayName} (${recipientPubkey.substring(0, 8)}...)`);
+    if (this.publishQueue) {
+      await this.publishQueue.enqueueUserAction(event, 'friend_request');
+    } else {
+      // Fallback if queue not initialized (shouldn't happen in normal flow)
+      await this.relayPool.publish(event, userProfile.publisher_config);
+    }
   }
 
   /**
@@ -132,9 +147,14 @@ export class MessagingManager {
     event.id = eventId.substring(0, 64);
     event.sig = encryptionManager.signEvent(event.id, await this.identityManager.getSecretKey());
 
-    // Publish to relays
-    console.log(`[Messaging] 📤 Publishing kind-1 invite to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);
-    await this.relayPool.publish(event, userProfile.publisher_config);
+    // Queue or publish the event
+    console.log(`[Messaging] 📤 Queuing invite to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);
+    if (this.publishQueue) {
+      await this.publishQueue.enqueueUserAction(event, 'invite');
+    } else {
+      // Fallback if queue not initialized
+      await this.relayPool.publish(event, userProfile.publisher_config);
+    }
 
     return event.id; // Return event ID for tracking/retry
   }

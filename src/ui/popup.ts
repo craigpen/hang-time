@@ -1259,22 +1259,14 @@ export class PopupController {
   }
 
   private _renderMyActivity(activities: Activity[]): void {
-    // Sort activities: audio_on first, then by most recent accessed
+    // Sort activities by most recent accessed time
     const sorted = [...activities].sort((a, b) => {
-      // Prioritize activities with audio
-      const aAudio = a.audio === 'on' ? 1 : 0;
-      const bAudio = b.audio === 'on' ? 1 : 0;
-      if (aAudio !== bAudio) {
-        return bAudio - aAudio; // audio_on (1) comes before audio_off (0)
-      }
-
-      // Then sort by most recent (last accessed time)
       const aTime = (a.metadata?.lastAccessed as number) || a.timestamp || 0;
       const bTime = (b.metadata?.lastAccessed as number) || b.timestamp || 0;
       return bTime - aTime;
     });
 
-    console.debug('[Popup] My Activity sorted order:', sorted.map(a => `${a.service}(audio:${a.audio})`).join(' → '));
+    console.debug('[Popup] My Activity sorted order:', sorted.map(a => a.service).join(' → '));
     this.userActivities = sorted;
 
     // Re-render the friends list (including "My Activity" section) with updated activities
@@ -1291,11 +1283,11 @@ export class PopupController {
 
     // State indicator (on the left) - FIRST
     if (activity.state) {
-      const audioIcon = document.createElement('span');
-      audioIcon.className = `activity-audio-icon activity-audio-${activity.audio}`;
-      audioIcon.textContent = activity.audio === 'on' ? '🔊' : '🔇';
-      audioIcon.title = activity.audio === 'on' ? 'Audio On' : 'Audio Off';
-      item.appendChild(audioIcon);
+      const stateIcon = document.createElement('span');
+      stateIcon.className = `activity-state-icon`;
+      stateIcon.textContent = activity.state === 'playing' ? '▶️' : '⏸️';
+      stateIcon.title = activity.state === 'playing' ? 'Playing' : 'Paused';
+      item.appendChild(stateIcon);
 
       // Pipe separator
       const separator = document.createElement('span');

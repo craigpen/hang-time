@@ -4,6 +4,7 @@
  * 5 publishes per 60 seconds: changed services at 12s, 24s, 36s, 48s + full refresh at 60s
  */
 
+import * as pako from 'pako';
 import { Activity, NostrEvent, ServiceName } from '../types';
 import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
@@ -15,8 +16,6 @@ import { GameLibraryManager } from './game-library';
 const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
 
 export class ActivityPublisher {
-  private lastPublishedState: Partial<Record<string, Activity>> = {};
-  private lastPublishedFields: Map<string, Record<string, any>> = new Map(); // For delta publishing: service -> {field: value}
   private publishInterval: NodeJS.Timeout | null = null;
   private publishCount = 0; // Increments every 12s, 5th publish (index 4) is full refresh
   private publishRateMs = 12000; // Default: publish every 12 seconds
@@ -219,123 +218,17 @@ export class ActivityPublisher {
 
       console.log(`[Publisher] Publishing cycle: ${Object.keys(currentActivitiesForPublishing).length} activities total (${Object.values(currentActivitiesForPublishing).map(a => a?.service).join(', ')})`);
 
-      // If delta publishing, only publish changed fields (no full refresh)
-      if (config.delta_publishing) {
-        const changedActivities = await this._getActivityDeltas(currentActivitiesForPublishing);
-
-        if (changedActivities.length > 0) {
-          console.debug(`[Publisher] Delta mode: ${changedActivities.length} services with changes`);
-          await this._publishServices(changedActivities, 'changed', config);
-        } else {
-          console.debug('[Publisher] Delta mode: no field changes to publish');
-        }
+      // Publish all activities with minimized payload
+      if (Object.keys(currentActivitiesForPublishing).length > 0) {
+        await this._publishServices(currentActivitiesForPublishing, 'all', config);
       } else {
-        // Standard mode: full publish cycles
-        const isFullRefreshCycle = this.publishCount % ActivityPublisher.FULL_REFRESH_CYCLE === (ActivityPublisher.FULL_REFRESH_CYCLE - 1);
-
-        // Determine if we should do a full refresh based on scope config
-        const doFullRefresh = config.scope === 'all' || isFullRefreshCycle;
-
-        if (doFullRefresh) {
-          // Full refresh: publish all active services
-          console.debug('[Publisher] Full refresh cycle');
-          await this._publishServices(currentActivitiesForPublishing, config.size === 'atomic' ? 'atomic' : 'all', config);
-          this.lastPublishedState = { ...currentActivitiesForPublishing };
-        } else {
-          // Changed services only: publish only what changed since last publish
-          const changedActivities: Partial<Record<string, Activity>> = {};
-
-          // Iterate over activities and filter by service
-          for (const activity of Object.values(currentActivitiesForPublishing)) {
-            if (!activity) continue;
-
-            // Get the last published activity for this service
-            const lastActivity = Object.values(this.lastPublishedState).find(a => a?.service === activity.service);
-
-            if (!this._activityUnchanged(activity, lastActivity)) {
-              changedActivities[activity.id] = activity;  // Key by ID for consistency
-            }
-          }
-
-          if (Object.keys(changedActivities).length > 0) {
-            console.debug(`[Publisher] Changed services: ${Object.values(changedActivities).map(a => a?.service).join(', ')}`);
-            await this._publishServices(changedActivities, 'changed', config);
-            // Update last published state with what we just published
-            this.lastPublishedState = { ...this.lastPublishedState, ...changedActivities };
-          } else {
-            console.debug('[Publisher] No changes to publish');
-          }
-        }
+        console.debug('[Publisher] No activities to publish');
       }
 
       this.publishCount++;
     } catch (error) {
       console.error('[Publisher] Failed to publish cycle:', error);
     }
-  }
-
-  private async _getActivityDeltas(currentActivities: Partial<Record<string, Activity>>): Promise<Activity[]> {
-    const deltas: Activity[] = [];
-
-    // Iterate over activities and filter by service (currentActivities now keyed by ID, not service)
-    for (const activity of Object.values(currentActivities)) {
-      if (!activity || !SERVICES_TO_PUBLISH.includes(activity.service)) continue;
-
-      const current = activity;
-
-      const lastFields = this.lastPublishedFields.get(current.service) || {};
-      // Always include required fields for complete Activity object
-      // Defensive: ensure content is never undefined (fallback to service name if missing)
-      const changedFields: Record<string, any> = {
-        service: current.service,
-        id: current.id,
-        content: current.content || `Activity on ${current.service}`,
-        audio: current.audio || 'off',
-      };
-      let hasChanges = false;
-
-      // Check each field for changes
-      const fieldsToCheck = ['content', 'url', 'audio', 'timestamp', 'metadata'];
-      for (const field of fieldsToCheck) {
-        const currentValue = (current as any)[field];
-        const lastValue = lastFields[field];
-
-        if (JSON.stringify(currentValue) !== JSON.stringify(lastValue)) {
-          // For required fields (content, audio), never set to undefined - use existing value or fallback
-          if (field === 'content' && !currentValue) {
-            changedFields[field] = changedFields[field]; // Keep defensive fallback from line 181
-          } else if (field === 'audio' && !currentValue) {
-            changedFields[field] = changedFields[field]; // Keep defensive fallback from line 182
-          } else {
-            changedFields[field] = currentValue;
-          }
-          hasChanges = true;
-        }
-      }
-
-      if (hasChanges) {
-        // Ensure url and timestamp are also included
-        if (current.url) changedFields.url = current.url;
-        if (current.timestamp) changedFields.timestamp = current.timestamp;
-        console.log(`[Publisher] Delta for ${current.service}:`, {
-          service: changedFields.service,
-          id: changedFields.id,
-          content: changedFields.content,
-          audio: changedFields.audio,
-          url: changedFields.url,
-          state: changedFields.state,
-        });
-        deltas.push(changedFields as Activity);
-        // Update tracked state
-        const newTrackedFields: Record<string, any> = { ...lastFields };
-        for (const field of fieldsToCheck) {
-          newTrackedFields[field] = (current as any)[field];
-        }
-        this.lastPublishedFields.set(current.service, newTrackedFields);
-      }
-    }
-
-    return deltas;
   }
 
   private async _publishServices(
@@ -354,7 +247,7 @@ export class ActivityPublisher {
       return;
     }
 
-    console.debug('[Publisher] Activities to publish:', activitiesToPublish.map(a => ({ service: a.service, audio: a.audio })));
+    console.debug('[Publisher] Activities to publish:', activitiesToPublish.map(a => ({ service: a.service })));
 
     // Publish as individual events (atomic) or bundled (full)
     if (mode === 'atomic') {
@@ -395,8 +288,20 @@ export class ActivityPublisher {
         tags.push(['service', activity.service]);
       }
 
-      // Serialize activities as JSON array in content
-      const content = JSON.stringify(activities);
+      // Serialize activities as JSON array with minimized payload (only published fields)
+      const publishableActivities = activities.map(a => this._toPublishableActivity(a));
+      let content = JSON.stringify(publishableActivities);
+
+      // Apply gzip compression if low_bandwidth_mode is enabled
+      let isCompressed = false;
+      if (config?.low_bandwidth_mode) {
+        const originalSize = content.length;
+        content = await this._compressContent(content);
+        const compressedSize = content.length;
+        isCompressed = true;
+        console.debug(`[Publisher] Gzip compression: ${originalSize}b → ${compressedSize}b (${((1 - compressedSize / originalSize) * 100).toFixed(1)}% reduction)`);
+        tags.push(['compression', 'gzip']);
+      }
 
       // Compute event ID
       const id = await this._computeEventId(pubkey, created_at, kind, tags, content);
@@ -419,7 +324,7 @@ export class ActivityPublisher {
       const eventJson = JSON.stringify(event);
       const eventSize = eventJson.length;
       console.debug(`[Publisher] Bundled event (${mode}): ${activities.length} services, size=${eventSize}b`);
-      console.debug(`[Publisher] Services: ${activities.map(a => `${a.service}(audio:${a.audio})`).join(', ')}`);
+      console.debug(`[Publisher] Services: ${activities.map(a => a.service).join(', ')}`);
 
       // Show which settings are being used for this publish
       const settingsUsed = [];
@@ -528,20 +433,6 @@ export class ActivityPublisher {
     return parts.filter((p) => p).join(' - ');
   }
 
-  private _activityUnchanged(current: Activity | undefined, last: Activity | undefined): boolean {
-    // If either is undefined, they're different
-    if (!current && !last) return true; // Both empty = unchanged
-    if (!current || !last) return false; // One empty, one not = changed
-
-    // Compare key fields
-    return (
-      current.content === last.content &&
-      current.audio === last.audio &&
-      current.url === last.url &&
-      current.metadata?.progress === last.metadata?.progress
-    );
-  }
-
   private async _computeEventId(
     pubkey: string,
     created_at: number,
@@ -554,5 +445,44 @@ export class ActivityPublisher {
     const canonicalJson = JSON.stringify(eventData);
     const hash256 = await encryptionManager.sha256(canonicalJson);
     return hash256.substring(0, 64);
+  }
+
+  private async _compressContent(content: string): Promise<string> {
+    try {
+      const compressed = pako.gzip(content);
+      return Buffer.from(compressed).toString('base64');
+    } catch (error) {
+      console.error('[Publisher] Gzip compression failed, sending uncompressed:', error);
+      return content;
+    }
+  }
+
+  private async _decompressContent(content: string): Promise<string> {
+    try {
+      const binary = Buffer.from(content, 'base64');
+      const decompressed = pako.ungzip(binary, { to: 'string' });
+      return decompressed;
+    } catch (error) {
+      console.error('[Publisher] Gzip decompression failed, treating as uncompressed:', error);
+      return content;
+    }
+  }
+
+  private _toPublishableActivity(activity: Activity): any {
+    // Only publish fields needed by receivers
+    return {
+      id: activity.id,
+      service: activity.service,
+      content: activity.content,
+      url: activity.url,
+      state: activity.state,
+      timestamp: activity.timestamp,
+      metadata: activity.metadata ? {
+        progress: activity.metadata.progress,
+        duration: activity.metadata.duration,
+        // Optionally add artist for Spotify when API is implemented
+        // artist: activity.metadata.artist,
+      } : undefined,
+    };
   }
 }

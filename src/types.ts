@@ -50,21 +50,9 @@ export interface UserProfile {
     join_suggestion: boolean;
   };
   publisher_config?: {
-    enabled: boolean;
-    size: 'atomic' | 'full';
-    scope: 'updates' | 'all';
-    rate_ms: number;
-    relays: {
-      'nos.lol': boolean;
-      'nostr.mom': boolean;
-      'relay.mostr.pub': boolean;
-      'relay.primal.net': boolean;
-    };
-    retry_backoff_ms: number;
-    compression: boolean;
-    verbose_logging: boolean;
-    delta_publishing: boolean;
-    low_bandwidth_mode?: boolean; // Enable compression + 0.5 msg/s
+    enabled: boolean; // Global publishing on/off
+    rate_ms: number; // Publishing interval in milliseconds (default 12000)
+    low_bandwidth_mode?: boolean; // Enable gzip compression (for capped data)
   };
   steam_config?: {
     enabled: boolean;
@@ -149,7 +137,6 @@ export interface Activity {
   content: string; // The title/name of what's playing (single source of truth)
   url?: string; // Direct link to the content
   state?: 'playing' | 'paused' | 'stopped' | 'disconnected'; // Activity state: playing, paused, stopped, or disconnected (content script lost connection)
-  audio: 'on' | 'off'; // Audio state detected from tab.audible (deprecated, kept for compatibility)
   timestamp: number; // When activity was detected
   freshness_timestamp: number; // When data was last refreshed (for calculating age and freshness)
   is_fresh?: boolean; // Whether data came from responsive content script (true) or stored/stale data (false)

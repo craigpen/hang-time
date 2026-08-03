@@ -269,7 +269,6 @@ class GenericVideoTracker {
       service: service,
       content: title,
       state: isPaused ? 'paused' : 'playing',
-      audio: 'on',
       timestamp: Date.now(),
       url: url,
       metadata: {

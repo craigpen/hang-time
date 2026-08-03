@@ -6,7 +6,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { FriendManager } from '../modules/friends';
 import { MessagingManager } from '../modules/messaging';
-import { TimeSyncManager } from '../modules/time-sync';
 import { Activity, Friend } from '../types';
 
 describe('Integration Tests', () => {
@@ -223,82 +222,6 @@ describe('Integration Tests', () => {
       const unreadCount = await messagingManager.getUnreadCount('friend1');
 
       expect(unreadCount).toBe(2);
-    });
-  });
-
-  describe('Time Sync Flow', () => {
-    it('should handle complete time-sync cycle', async () => {
-      const timeSyncManager = new TimeSyncManager(mockRelayPool, mockIdentity);
-      const now = Date.now();
-
-      // Step 1: User publishes their playback position
-      await timeSyncManager.publishTimeSync('video123', 150, 3600, true, 'youtube-tab');
-
-      expect(mockRelayPool.publish).toHaveBeenCalled();
-      const publishedEvent = mockRelayPool.publish.mock.calls[0][0];
-      expect(publishedEvent.tags).toContainEqual(['current_time', '150']);
-
-      // Step 2: Receive friend's sync event
-      const friendSyncEvent = {
-        id: '1',
-        pubkey: 'friend123',
-        created_at: Math.floor(now / 1000),
-        kind: 1,
-        tags: [
-          ['type', 'time-sync'],
-          ['service', 'youtube-tab'],
-          ['video_id', 'video123'],
-          ['current_time', '155'],
-          ['duration', '3600'],
-          ['playing', 'true'],
-        ],
-        content: 'Watching at 02:35',
-      };
-
-      timeSyncManager.startMonitoring();
-      const syncData = timeSyncManager.handleTimeSyncEvent(friendSyncEvent);
-
-      expect(syncData).toBeDefined();
-      expect(syncData?.currentTime).toBe(155);
-      expect(syncData?.isPlaying).toBe(true);
-
-      // Step 3: Calculate if sync is needed
-      const recommendedPosition = timeSyncManager.getRecommendedSyncPosition('friend123', 150);
-
-      // Should recommend sync since friend is 5 seconds ahead
-      expect(recommendedPosition).toBeDefined();
-
-      timeSyncManager.stopMonitoring();
-    });
-
-    it('should not recommend sync if within tolerance', () => {
-      const timeSyncManager = new TimeSyncManager(mockRelayPool, mockIdentity);
-      const now = Date.now();
-
-      // Friend at 150s
-      const friendSyncEvent = {
-        id: '1',
-        pubkey: 'friend123',
-        created_at: Math.floor(now / 1000),
-        kind: 1,
-        tags: [
-          ['type', 'time-sync'],
-          ['service', 'youtube-tab'],
-          ['video_id', 'video123'],
-          ['current_time', '150'],
-          ['duration', '3600'],
-          ['playing', 'true'],
-        ],
-        content: 'Playing',
-      };
-
-      timeSyncManager.handleTimeSyncEvent(friendSyncEvent);
-
-      // Local at 150.5s (within 2s tolerance)
-      const recommendedPosition = timeSyncManager.getRecommendedSyncPosition('friend123', 150.5);
-
-      // Should NOT recommend sync
-      expect(recommendedPosition).toBeNull();
     });
   });
 

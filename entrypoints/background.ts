@@ -4,6 +4,7 @@
  * Handles: lifecycle, message routing, activity detection, Nostr subscriptions
  */
 
+import * as pako from 'pako';
 import { RelayPool, relayPool } from '../src/modules/nostr';
 import { StorageManager, storageManager } from '../src/modules/storage';
 import { IdentityManager, initializeIdentityManager, identityManager } from '../src/modules/identity';
@@ -24,6 +25,7 @@ import { getActivityVerb, generateActivityId } from '../src/modules/activity-uti
 import { encryptionManager } from '../src/modules/encryption';
 import { ActivityDiagnostics } from '../src/modules/activity-diagnostics';
 import { initializeFileLogger, getFileLogger } from '../src/modules/file-logger';
+import { PublishQueue } from '../src/modules/publish-queue';
 import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } from '../src/types';
 
 // ============================================================================
@@ -34,6 +36,7 @@ let initialized = false;
 let activityDetector: ActivityDetector | null = null;
 let activityPublisher: ActivityPublisher | null = null;
 let messagingManager: MessagingManager | null = null;
+let publishQueue: PublishQueue | null = null;
 const activeSubscriptions = new Map<string, void>();
 
 // ============================================================================
@@ -388,6 +391,22 @@ async function initializeExtension(): Promise<void> {
       await activityPublisher.publishProfile();
     } catch (error) {
       console.error('[Background] Failed to initialize activity publisher:', error);
+    }
+
+    // Initialize and start unified publish queue (rate-limits all event types)
+    try {
+      const profile = await storageManager.getUserProfile();
+      const publishIntervalMs = profile?.publisher_config?.rate_ms || 12000;
+      publishQueue = new PublishQueue(relayPool, storageManager, publishIntervalMs);
+      publishQueue.start();
+      console.log('[Background] PublishQueue initialized and started');
+
+      // Wire up messaging manager to use the queue
+      const msgMgr = getMessagingManager();
+      msgMgr.setPublishQueue(publishQueue);
+      console.debug('[Background] MessagingManager wired to PublishQueue');
+    } catch (error) {
+      console.error('[Background] Failed to initialize publish queue:', error);
     }
 
     // Subscribe to all friends' activities
@@ -1252,7 +1271,10 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
       }
     }
     if (data.publisher_config !== undefined) {
-      profile.publisher_config = data.publisher_config;
+      profile.publisher_config = {
+        ...(profile.publisher_config || {}),
+        ...data.publisher_config,
+      };
     }
     if (data.game_discovery_enabled !== undefined) {
       profile.game_discovery_enabled = data.game_discovery_enabled;
@@ -1808,7 +1830,21 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
   if (isActivityTag === 'true' && typeTag === 'activity-state') {
     // Parse JSON array of activities
     try {
-      const activities = JSON.parse(event.content) as Activity[];
+      // Check if event content is compressed
+      let content = event.content;
+      const isCompressed = event.tags.find(t => t[0] === 'compression')?.[1] === 'gzip';
+
+      if (isCompressed) {
+        try {
+          const binary = Buffer.from(content, 'base64');
+          content = pako.ungzip(binary, { to: 'string' });
+          console.debug(`[Background] Decompressed activity event (${event.content.length}b → ${content.length}b)`);
+        } catch (error) {
+          console.error('[Background] Gzip decompression failed, treating as uncompressed:', error);
+        }
+      }
+
+      const activities = JSON.parse(content) as Activity[];
       const diagnostics = ActivityDiagnostics.getInstance(storageManager);
       const userProfile = await storageManager.getUserProfile();
 
@@ -1842,11 +1878,12 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       const changedServices = new Set<ServiceName>();
       for (const activity of activities) {
         const oldActivity = friend.current_activities?.[activity.service];
-        // Check if activity changed (content, audio, or URL)
+        // Check if activity changed (content, URL, state, or progress)
         if (!oldActivity ||
             oldActivity.content !== activity.content ||
-            oldActivity.audio !== activity.audio ||
-            oldActivity.url !== activity.url) {
+            oldActivity.url !== activity.url ||
+            oldActivity.state !== activity.state ||
+            oldActivity.metadata?.progress !== activity.metadata?.progress) {
           changedServices.add(activity.service);
         }
       }
@@ -1877,10 +1914,8 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       const activitiesByService: Partial<Record<ServiceName, Activity>> = {};
       for (const activity of activities) {
         const existing = activitiesByService[activity.service];
-        // Keep this activity if: no existing, or this one is newer (has audio on, or later timestamp)
-        const shouldKeep = !existing ||
-          (activity.audio === 'on' && existing.audio !== 'on') ||
-          ((activity.timestamp || 0) > (existing.timestamp || 0));
+        // Keep this activity if: no existing, or this one is newer (later timestamp)
+        const shouldKeep = !existing || ((activity.timestamp || 0) > (existing.timestamp || 0));
 
         if (shouldKeep) {
           activitiesByService[activity.service] = activity;
@@ -1888,27 +1923,18 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       }
 
       // Merge new activities with any that were preserved
+      // Always update published fields, preserve local-only fields
       for (const [service, activity] of Object.entries(activitiesByService)) {
         const existingActivity = friend.current_activities?.[service as ServiceName];
 
-        const isIncomplete = !activity.content && existingActivity?.content;
-        if (isIncomplete) {
-          newCurrentActivities[service as ServiceName] = {
-            ...existingActivity,
-            ...activity,
-            content: existingActivity.content,
-            id: activity.id || existingActivity?.id,
-            service: activity.service,
-          };
-        } else {
-          newCurrentActivities[service as ServiceName] = {
-            ...existingActivity,
-            ...activity,
-            id: activity.id || existingActivity?.id,
-            service: activity.service,
-            content: activity.content || existingActivity?.content,
-          };
-        }
+        newCurrentActivities[service as ServiceName] = {
+          ...existingActivity,  // Start with existing (preserves local fields)
+          ...activity,          // Override with published fields
+          metadata: {
+            ...existingActivity?.metadata,  // Preserve local metadata
+            ...activity.metadata,           // Override with published metadata
+          }
+        };
       }
 
       await storageManager.updateFriend(friend.id, {
