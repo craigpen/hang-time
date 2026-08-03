@@ -89,8 +89,24 @@ const GLOBAL_FLAG_KEY = 'HANG_TIME_SCRIPT_ACTIVE_V1';
       }
 
       const visibleVideos = videoElements.filter((v) => v.offsetWidth > 0 && v.offsetHeight > 0);
-      const mainContentVideos = visibleVideos.filter((v) => v.duration > 0 && v.duration >= 60);
-      const currentVideo = mainContentVideos[0] || visibleVideos[0] || videoElements[0];
+
+      // Filter for main content: not known ads AND not in ad containers
+      const mainContentVideos = visibleVideos.filter((v) => {
+        // Skip if duration is known to be short (ad indicator)
+        if (v.duration > 0 && v.duration < 60) return false;
+
+        // Skip if in ad container (class or parent class indicates ad)
+        if (v.className.toLowerCase().includes('ad')) return false;
+        let parent = v.parentElement;
+        for (let i = 0; i < 5 && parent; i++) {
+          if (parent.className.toLowerCase().includes('ad')) return false;
+          parent = parent.parentElement;
+        }
+        return true;
+      });
+
+      // Use main content if available, otherwise give up (don't fallback to ad videos)
+      const currentVideo = mainContentVideos[0] || null;
 
       if (!currentVideo || currentVideo === this.activeVideoElement) {
         return;
@@ -198,10 +214,7 @@ const GLOBAL_FLAG_KEY = 'HANG_TIME_SCRIPT_ACTIVE_V1';
       const isPaused = this.activeVideoElement.paused;
 
       if (duration > 0 && duration < 60) {
-        console.debug('[ContentScript] Detected ad video (duration < 60s), unhooking:', {
-          title,
-          duration,
-        });
+        // Ad detected, unhook silently (already filtered in _findAndHookVideo)
         this._removeVideoListeners();
         this.activeVideoElement = null;
         setTimeout(() => this._findAndHookVideo(), 100);
