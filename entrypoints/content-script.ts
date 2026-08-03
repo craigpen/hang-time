@@ -16,9 +16,11 @@ const GLOBAL_FLAG_KEY = 'HANG_TIME_SCRIPT_ACTIVE_V1';
 
   // Check if a previous instance is already active
   if ((window as any)[GLOBAL_FLAG_KEY]) {
-    console.log('[ContentScript] Previous instance detected, signaling old instance to self-destruct');
+    console.log('[ContentScript] Previous instance detected, clearing flag and signaling old instance to self-destruct');
+    // Clear the flag IMMEDIATELY so new instance can proceed even if old cleanup is slow
+    (window as any)[GLOBAL_FLAG_KEY] = false;
     window.dispatchEvent(new CustomEvent(LIFECYCLE_EVENT_TOKEN));
-    return; // Exit this initialization, let the old instance handle cleanup
+    // Continue with new initialization instead of returning
   }
 
   // Mark this instance as active
