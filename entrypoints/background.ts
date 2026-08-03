@@ -59,7 +59,18 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   } else if (details.reason === 'update') {
     console.log('[Background] Extension updated, registering content scripts...');
     await _registerContentScripts();
+    // Re-inject into all open tabs
+    await _reinjectionContentScripts();
   }
+});
+
+/**
+ * Extension startup: service worker wakes up after browser restart
+ * Re-inject content scripts into all open tabs to reconnect
+ */
+chrome.runtime.onStartup?.addListener(async () => {
+  console.log('[Background] Extension startup detected, re-injecting content scripts into open tabs');
+  await _reinjectionContentScripts();
 });
 
 /**
@@ -137,6 +148,58 @@ async function _registerContentScripts(): Promise<void> {
     console.log('[Background] ✅ Content scripts registered persistently');
   } catch (err) {
     console.error('[Background] ❌ Failed to register content scripts:', err instanceof Error ? err.message : String(err));
+  }
+}
+
+/**
+ * Re-inject content scripts into all open HTTP(S) tabs
+ * Called on extension update and startup to ensure seamless reconnection
+ * Programmatically executes the content script, triggering orphan detection in old instances
+ */
+async function _reinjectionContentScripts(): Promise<void> {
+  try {
+    if (!chrome.scripting) {
+      console.warn('[Background] chrome.scripting not available for re-injection');
+      return;
+    }
+
+    // Query all tabs with http/https protocols (filter out chrome://, moz-extension://, etc.)
+    const allTabs = await chrome.tabs.query({
+      url: ['http://*/*', 'https://*/*'],
+    });
+
+    console.log(`[Background] Found ${allTabs.length} eligible tabs for re-injection`);
+
+    if (allTabs.length === 0) {
+      console.log('[Background] No tabs to re-inject into');
+      return;
+    }
+
+    // Execute content script in each tab
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (const tab of allTabs) {
+      if (!tab.id) continue;
+
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content-script.js'],
+        });
+
+        successCount++;
+        console.log(`[Background] ✓ Re-injected content script into tab ${tab.id} (${tab.url?.substring(0, 50)}...)`);
+      } catch (err) {
+        failureCount++;
+        // Ignore failures - some tabs might be restricted (chrome://, etc.) despite our filter
+        console.debug(`[Background] Could not re-inject into tab ${tab.id}:`, err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    console.log(`[Background] Re-injection complete: ${successCount} successful, ${failureCount} failed`);
+  } catch (err) {
+    console.error('[Background] ❌ Re-injection routine failed:', err instanceof Error ? err.message : String(err));
   }
 }
 
