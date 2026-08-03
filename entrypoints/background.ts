@@ -380,20 +380,18 @@ async function initializeExtension(): Promise<void> {
     await activityDetector.start();
     console.debug('[Background] Activity detector started');
 
-    // Initialize and start activity publisher (publishes to Nostr)
+    // Initialize activity publisher (publishes to Nostr)
     try {
       activityPublisher = new ActivityPublisher(relayPool, storageManager, identityManager);
       console.debug('[Background] ActivityPublisher created');
       await activityPublisher.start();
       console.debug('[Background] Activity publisher started');
-
-      // Publish user profile on startup
-      await activityPublisher.publishProfile();
     } catch (error) {
       console.error('[Background] Failed to initialize activity publisher:', error);
     }
 
-    // Initialize and start unified publish queue (rate-limits all event types)
+    // Initialize and start unified publish queue BEFORE publishing profile
+    // This ensures all publishes go through the queue from startup
     try {
       const profile = await storageManager.getUserProfile();
       const publishIntervalMs = profile?.publisher_config?.rate_ms || 12000;
@@ -415,8 +413,13 @@ async function initializeExtension(): Promise<void> {
       const gameLibMgr = GameLibraryManager.getInstance(storageManager);
       gameLibMgr.setPublishQueue(publishQueue);
       console.debug('[Background] GameLibraryManager wired to PublishQueue');
+
+      // Publish user profile on startup (now that queue is ready)
+      if (activityPublisher) {
+        await activityPublisher.publishProfile();
+      }
     } catch (error) {
-      console.error('[Background] Failed to initialize publish queue:', error);
+      console.error('[Background] Failed to initialize publish queue or publish profile:', error);
     }
 
     // Subscribe to all friends' activities

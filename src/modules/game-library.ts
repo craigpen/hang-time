@@ -345,9 +345,7 @@ export class GameLibraryManager {
         this.publishQueue.markGameLibraryDue(event);
         console.log(`[GameLibrary] ✓ Game library marked as due for publishing`);
       } else {
-        // Fallback if queue not initialized
-        await this.relayPool.publish(event);
-        console.log(`[GameLibrary] ✓ Published game library directly (${appIds.length} games)`);
+        console.warn('[GameLibrary] PublishQueue not initialized, game library publish skipped');
       }
     } catch (error) {
       console.error('[GameLibrary] Failed to publish game library:', error);

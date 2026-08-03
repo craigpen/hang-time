@@ -103,17 +103,14 @@ export class ActivityPublisher {
       event.id = eventId.substring(0, 64);
       event.sig = encryptionManager.signEvent(event.id, await this.identityManager.getSecretKey());
 
-      // Mark profile as pending in queue, or publish directly if no queue
+      // Mark profile as pending in queue
       console.log(`[Publisher] 📤 Profile update (nickname: ${profile.nickname || 'none'}, discord: ${profile.discord_info ? 'yes' : 'no'})`);
-      const config = profile?.publisher_config;
 
       if (this.publishQueue) {
         this.publishQueue.markProfileUpdatePending(event);
         console.debug('[Publisher] Profile update marked as pending in queue');
       } else {
-        // Fallback if queue not initialized
-        await this.relayPool.publish(event, config);
-        console.debug('[Publisher] Profile published directly');
+        console.warn('[Publisher] PublishQueue not initialized, profile update skipped');
       }
     } catch (error) {
       console.error('[Publisher] Failed to publish profile:', error);
