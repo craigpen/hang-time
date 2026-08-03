@@ -37,7 +37,7 @@ let port: chrome.runtime.Port | null = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_BACKOFF_MS = 500;
-let reconnectTimeoutId: NodeJS.Timeout | null = null;
+let reconnectTimeoutId: number | null = null;
 let tracker: GenericVideoTracker | null = null;
 
 // ============================================================================
@@ -46,12 +46,12 @@ let tracker: GenericVideoTracker | null = null;
 
 class GenericVideoTracker {
   private activeVideoElement: HTMLVideoElement | null = null;
-  private pollingInterval: NodeJS.Timeout | null = null;
+  private pollingInterval: number | null = null;
   private domObserver: MutationObserver | null = null;
   private eventListeners: Map<string, (evt: Event) => void> = new Map();
   private lastReportedTime: number = 0;
   private lastReportTimestamp: number = 0;
-  private videoSearchTimeout: NodeJS.Timeout | null = null;
+  private videoSearchTimeout: number | null = null;
   private cachedNetflixTitle: string | null = null;
 
   constructor() {}
