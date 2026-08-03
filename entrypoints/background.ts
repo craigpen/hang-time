@@ -194,10 +194,18 @@ async function _reinjectionContentScripts(): Promise<void> {
 
       try {
         console.log(`[Background] REINJECTION: Injecting into tab ${tab.id}...`);
-        await chrome.scripting.executeScript({
+
+        // Use Promise.race with timeout to prevent hanging
+        const injectionPromise = chrome.scripting.executeScript({
           target: { tabId: tab.id },
           files: ['content-script.js'],
         });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Injection timeout after 5 seconds')), 5000)
+        );
+
+        await Promise.race([injectionPromise, timeoutPromise]);
 
         successCount++;
         console.log(`[Background] ✅ REINJECTION: Successfully injected into tab ${tab.id}`);
