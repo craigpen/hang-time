@@ -570,24 +570,37 @@ const GLOBAL_FLAG_KEY = 'HANG_TIME_SCRIPT_ACTIVE_V1';
   // Register self-destruct listener
   window.addEventListener(LIFECYCLE_EVENT_TOKEN, performCleanup);
 
-  // Initialize
-  if (isContextValid()) {
-    console.log('[ContentScript] 🚀 Initializing generic video tracker');
+  // Initialize with a brief delay to allow old instance cleanup
+  const initDelay = setTimeout(() => {
+    if (isContextValid()) {
+      console.log('[ContentScript] 🚀 Initializing generic video tracker');
 
-    establishConnection();
+      establishConnection();
 
-    const tracker = new GenericVideoTracker();
-    tracker.init();
+      const tracker = new GenericVideoTracker();
+      tracker.init();
 
-    // Monitor context validity
-    const contextCheckInterval = setInterval(() => {
-      if (!isContextValid()) {
-        console.error('[ContentScript] Extension context lost—orphaned script detected');
-        performCleanup();
-        clearInterval(contextCheckInterval);
-      }
-    }, 5000);
-  } else {
-    console.warn('[ContentScript] Extension context invalid, skipping initialization');
-  }
+      // Monitor context validity
+      const contextCheckInterval = setInterval(() => {
+        if (!isContextValid()) {
+          console.error('[ContentScript] Extension context lost—orphaned script detected');
+          performCleanup();
+          clearInterval(contextCheckInterval);
+        }
+      }, 5000);
+    } else {
+      console.warn('[ContentScript] Extension context invalid at init time, will retry');
+      // Retry once more after a longer delay if context not ready
+      setTimeout(() => {
+        if (isContextValid()) {
+          console.log('[ContentScript] 🚀 Retrying initialization after context ready');
+          establishConnection();
+          const tracker = new GenericVideoTracker();
+          tracker.init();
+        } else {
+          console.error('[ContentScript] Context still invalid after retry, giving up');
+        }
+      }, 2000);
+    }
+  }, 100);
 })();
