@@ -584,12 +584,9 @@ const activeContentScriptPorts = new Map<number, chrome.runtime.Port>();
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name.startsWith('content-script-')) {
     const service = port.name.replace('content-script-', '');
-    const tabId = port.sender?.tabId;
+    // MV3: tab info is nested under port.sender.tab, not port.sender.tabId
+    const tabId = port.sender?.tab?.id;
     const url = port.sender?.url;
-
-    console.log('[Background] DEBUG: port.sender =', port.sender);
-    console.log('[Background] DEBUG: tabId =', tabId);
-    console.log('[Background] DEBUG: url =', url);
 
     try {
       const logger = getFileLogger();
@@ -603,16 +600,9 @@ chrome.runtime.onConnect.addListener((port) => {
     if (tabId !== undefined) {
       activeContentScriptPorts.set(tabId, port);
       freshConnectionTimestamps.set(tabId, Date.now()); // Track this tab's fresh connection
-      console.log(`[Background] ✅ Tracked content script for tab ${tabId}`);
+      console.log(`[Background] ✅ Content script connected for tab ${tabId} (${service})`);
     } else {
-      console.warn(`[Background] ⚠️ Content script connected but no tab ID: ${service} (sender: ${JSON.stringify(port.sender)})`);
-      // Still add the port so we can receive messages even if we can't identify the tab
-      // Use a pseudo-ID based on the URL hash
-      if (url) {
-        const pseudoTabId = Math.abs(url.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0));
-        activeContentScriptPorts.set(pseudoTabId, port);
-        console.log(`[Background] Using pseudo-tab ID ${pseudoTabId} for URL: ${url.substring(0, 60)}`);
-      }
+      console.error(`[Background] ❌ Content script connected but no tab ID: ${service} (url: ${url?.substring(0, 60)})`);
     }
 
     port.onMessage.addListener(async (message) => {
