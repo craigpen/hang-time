@@ -12,6 +12,7 @@ import { IdentityManager } from './identity';
 import { encryptionManager } from './encryption';
 import { validateActivity, detectCorruption } from './activity-validation';
 import { GameLibraryManager } from './game-library';
+import type { PublishQueue } from './publish-queue';
 
 const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
 
@@ -20,6 +21,7 @@ export class ActivityPublisher {
   private publishCount = 0; // Increments every 12s, 5th publish (index 4) is full refresh
   private publishRateMs = 12000; // Default: publish every 12 seconds
   private lastGameLibraryPublishTime = 0; // Track last game library publish
+  private publishQueue: PublishQueue | null = null;
 
   static readonly PUBLISH_INTERVAL_MS = 12000; // Default: publish every 12 seconds (5 per 60s)
   static readonly FULL_REFRESH_CYCLE = 5; // Every 5th publish is a full refresh
@@ -30,6 +32,13 @@ export class ActivityPublisher {
     private storageManager: StorageManager,
     private identityManager: IdentityManager
   ) {}
+
+  /**
+   * Set the publish queue (called after queue is initialized)
+   */
+  setPublishQueue(queue: PublishQueue): void {
+    this.publishQueue = queue;
+  }
 
   private async _loadConfig(): Promise<void> {
     const profile = await this.storageManager.getUserProfile();
@@ -113,11 +122,18 @@ export class ActivityPublisher {
       event.id = eventId.substring(0, 64);
       event.sig = encryptionManager.signEvent(event.id, await this.identityManager.getSecretKey());
 
-      // Publish to relays
-      console.log(`[Publisher] 📤 Publishing kind-0 profile (nickname: ${profile.nickname || 'none'}, discord: ${profile.discord_info ? 'yes' : 'no'})`);
+      // Mark profile as pending in queue, or publish directly if no queue
+      console.log(`[Publisher] 📤 Profile update (nickname: ${profile.nickname || 'none'}, discord: ${profile.discord_info ? 'yes' : 'no'})`);
       const config = profile?.publisher_config;
-      await this.relayPool.publish(event, config);
-      console.debug('[Publisher] Profile published successfully');
+
+      if (this.publishQueue) {
+        this.publishQueue.markProfileUpdatePending(event);
+        console.debug('[Publisher] Profile update marked as pending in queue');
+      } else {
+        // Fallback if queue not initialized
+        await this.relayPool.publish(event, config);
+        console.debug('[Publisher] Profile published directly');
+      }
     } catch (error) {
       console.error('[Publisher] Failed to publish profile:', error);
     }
@@ -218,9 +234,14 @@ export class ActivityPublisher {
 
       console.log(`[Publisher] Publishing cycle: ${Object.keys(currentActivitiesForPublishing).length} activities total (${Object.values(currentActivitiesForPublishing).map(a => a?.service).join(', ')})`);
 
-      // Publish all activities with minimized payload
-      if (Object.keys(currentActivitiesForPublishing).length > 0) {
+      // Check if publish queue allows activity publish this cycle
+      const shouldPublishActivity = this.publishQueue ? this.publishQueue.shouldPublishActivity() : true;
+
+      // Publish all activities with minimized payload (unless queue is publishing something else)
+      if (shouldPublishActivity && Object.keys(currentActivitiesForPublishing).length > 0) {
         await this._publishServices(currentActivitiesForPublishing, 'all', config);
+      } else if (!shouldPublishActivity) {
+        console.debug('[Publisher] Skipping activity publish (queue published high-priority event)');
       } else {
         console.debug('[Publisher] No activities to publish');
       }

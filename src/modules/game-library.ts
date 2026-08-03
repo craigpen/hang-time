@@ -8,6 +8,7 @@ import { StorageManager } from './storage';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
 import { encryptionManager } from './encryption';
+import type { PublishQueue } from './publish-queue';
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -27,6 +28,7 @@ export class GameLibraryManager {
   private static instance: GameLibraryManager;
   private relayPool: RelayPool | null = null;
   private identityManager: IdentityManager | null = null;
+  private publishQueue: PublishQueue | null = null;
   private activeGameLibrarySubscriptions: Map<string, void> = new Map();
 
   private constructor(private storage: StorageManager) {}
@@ -48,6 +50,13 @@ export class GameLibraryManager {
     this.relayPool = relayPool;
     this.identityManager = identityManager;
     console.debug('[GameLibrary] Nostr dependencies initialized');
+  }
+
+  /**
+   * Set the publish queue (called after queue is initialized)
+   */
+  setPublishQueue(queue: PublishQueue): void {
+    this.publishQueue = queue;
   }
 
   /**
@@ -330,10 +339,16 @@ export class GameLibraryManager {
       // Sign the event
       event.sig = encryptionManager.signEvent(event.id, secretKey);
 
-      console.debug(`[GameLibrary] Publishing ${appIds.length} games to Nostr`);
+      console.debug(`[GameLibrary] Marking game library as due (${appIds.length} games)`);
 
-      await this.relayPool.publish(event);
-      console.log(`[GameLibrary] ✓ Published game library (${appIds.length} games)`);
+      if (this.publishQueue) {
+        this.publishQueue.markGameLibraryDue(event);
+        console.log(`[GameLibrary] ✓ Game library marked as due for publishing`);
+      } else {
+        // Fallback if queue not initialized
+        await this.relayPool.publish(event);
+        console.log(`[GameLibrary] ✓ Published game library directly (${appIds.length} games)`);
+      }
     } catch (error) {
       console.error('[GameLibrary] Failed to publish game library:', error);
       throw error;

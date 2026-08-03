@@ -401,10 +401,19 @@ async function initializeExtension(): Promise<void> {
       publishQueue.start();
       console.log('[Background] PublishQueue initialized and started');
 
-      // Wire up messaging manager to use the queue
+      // Wire up managers to use the queue
       const msgMgr = getMessagingManager();
       msgMgr.setPublishQueue(publishQueue);
       console.debug('[Background] MessagingManager wired to PublishQueue');
+
+      if (activityPublisher) {
+        activityPublisher.setPublishQueue(publishQueue);
+        console.debug('[Background] ActivityPublisher wired to PublishQueue');
+      }
+
+      const gameLibMgr = GameLibraryManager.getInstance(storageManager);
+      gameLibMgr.setPublishQueue(publishQueue);
+      console.debug('[Background] GameLibraryManager wired to PublishQueue');
     } catch (error) {
       console.error('[Background] Failed to initialize publish queue:', error);
     }
@@ -1285,6 +1294,12 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
     // Save updated profile
     await storageManager.setUserProfile(profile);
     console.debug('[Background] Settings saved');
+
+    // If publisher config rate changed, update the queue
+    if (data.publisher_config?.rate_ms !== undefined && publishQueue) {
+      publishQueue.setPublishInterval(data.publisher_config.rate_ms);
+      console.log(`[Background] Updated publish queue rate to ${data.publisher_config.rate_ms}ms`);
+    }
 
     // If nickname or discord info changed, republish profile to Nostr
     if (data.nickname !== undefined || data.discord_info !== undefined) {

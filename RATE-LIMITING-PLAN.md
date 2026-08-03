@@ -642,15 +642,16 @@ if (isCompressed) {
 
 ## Summary: Work Breakdown
 
-| Phase | Task | Files | Risk | Benefit |
-|-------|------|-------|------|---------|
-| 1 | Fix progress change detection | background.ts | Low | Enables UI progress bar updates from friends |
-| 2 | Remove TimeSyncManager | time-sync.ts + imports | Low | Code cleanup, reduce complexity |
-| 2.5 | Remove audio field | types.ts, content-script.ts, popup.ts, publisher.ts, background.ts | Low | Reduces event size by 10-20B, simplifies UI |
-| 2.7 | Add Low Bandwidth Mode (gzip) | types.ts, publisher.ts, background.ts, popup.ts | Low | Optional toggle, 50% compression for capped users |
-| 3 | Consolidate activity + time-sync | publisher.ts | Medium | Reduces rate from 0.28→0.125 msg/s |
-| 3b | Minimize published payload | publisher.ts | Low | 65-70% size reduction (900B → 280B) |
-| 4 | Unified rate limiting | New PublishQueue module | High | Handles all event types safely (future) |
+| Phase | Task | Files | Risk | Status |
+|-------|------|-------|------|--------|
+| 1 | Fix progress change detection | background.ts | Low | ✅ Complete |
+| 2 | Remove TimeSyncManager | time-sync.ts + imports | Low | ✅ Complete |
+| 2.5 | Remove audio field | types.ts, content-script.ts, popup.ts, publisher.ts, background.ts | Low | ✅ Complete |
+| 2.7 | Add Low Bandwidth Mode (gzip) | types.ts, publisher.ts, background.ts, popup.ts | Low | ✅ Complete |
+| 3 | Consolidate activity + time-sync | publisher.ts | Medium | ✅ Complete |
+| 3b | Minimize published payload | publisher.ts | Low | ✅ Complete |
+| 3.5 | Simplify receiving logic | background.ts | Low | ✅ Complete |
+| 4 | Unified rate limiting | PublishQueue, background.ts, publisher.ts, messaging.ts, game-library.ts | Medium | ✅ Complete |
 
 ---
 
@@ -785,13 +786,21 @@ publisher_config: {
 
 | # | Phase | Task | Risk | Status |
 |---|-------|------|------|--------|
-| 1 | Phase 1 | Fix progress change detection | Low | Ready |
-| 2 | Phase 2 | Remove TimeSyncManager | Low | Ready |
-| 3 | Phase 2.5 | Remove audio field | Low | Ready |
-| 4 | Phase 2.7 | Add Low Bandwidth Mode (gzip) | Low | Ready |
-| 5 | Phase 3 | Consolidate activity + time-sync | Medium | Ready |
-| 6 | Phase 3b | Minimize published payload | Low | Ready |
-| 7 | Phase 4 | Unified rate limiting queue | High | Future |
+| 1 | Phase 1 | Fix progress change detection | Low | ✅ Complete |
+| 2 | Phase 2 | Remove TimeSyncManager | Low | ✅ Complete |
+| 3 | Phase 2.5 | Remove audio field | Low | ✅ Complete |
+| 4 | Phase 2.7 | Add Low Bandwidth Mode (gzip) | Low | ✅ Complete |
+| 5 | Phase 3 | Consolidate activity + time-sync | Medium | ✅ Complete |
+| 6 | Phase 3b | Minimize published payload | Low | ✅ Complete |
+| 7 | Phase 3.5 | Simplify receiving logic | Low | ✅ Complete |
+| 8 | Phase 4 | Unified rate limiting queue | Medium | ✅ Complete |
 
-**Total scope:** 6 phases for MVP (phases 1-3b), ~2-3 days of work
-**Future:** Phase 4 (unified scheduling) for robust rate limiting across all event types
+**Total scope:** All 8 phases complete! 
+**Implementation:** 
+- Phases 1-3b: Payload optimization & dead code removal
+- Phase 3.5: Simplified merge logic
+- Phase 4: Unified rate limiting with three-tier priority queue
+- Publishing: 1 event/12s (configurable), ~5/min, gzip compression option
+- User actions: Guaranteed within 12s with exponential backoff retry (10x, 60s cap)
+- Activities: At least every other cycle (activity gap prevention)
+- Persistence: Pending items restored from storage on restart
