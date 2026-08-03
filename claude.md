@@ -46,6 +46,18 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
   - Kind 1: Activity events (currently playing/streaming)
   - Kind 4: Encrypted DMs (chat messages)
 
+#### 4. Content Script Lifecycle Management (2026-08-03) ✅ WORKING
+- **Decision**: Instance ownership pattern with INSTANCE_ID verification
+- **Problem Solved**: Content scripts getting orphaned on extension reload, stuck in reconnection loops
+- **Pattern**: 
+  - Each script gets unique INSTANCE_ID on load
+  - All checks verify `hangTimeScriptActive === INSTANCE_ID` (not just existence)
+  - New script dispatches cleanup event, old script self-destructs
+  - Guards at every API call point (connect, send, retry)
+- **Clean Baseline Commit**: `3740933` - "Clean up content script: remove dead code and simplify lifecycle management"
+- **Reference**: See `docs/MV3_CONTENT_SCRIPT_LIFECYCLE.md` for detailed pattern documentation
+- **Status**: Production-ready, tested with extension reloads and re-injections
+
 ### Implementation Progress
 
 #### Session 1: Project Setup & Phase 1 (2026-07-21)
