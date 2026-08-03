@@ -264,10 +264,15 @@ export class MessagingManager {
       event.id = eventId.substring(0, 64);
       event.sig = encryptionManager.signEvent(event.id, secretKey);
 
-      // Publish to relays
-      const publishConfig = userProfile?.publisher_config;
-      console.log(`[Messaging] 📤 Publishing kind-4 friend request to ${recipientPubkey.substring(0, 8)}...`);
-      await this.relayPool.publish(event, publishConfig);
+      // Queue or publish the event
+      console.log(`[Messaging] 📤 Queuing kind-4 friend request to ${recipientPubkey.substring(0, 8)}...`);
+      if (this.publishQueue) {
+        await this.publishQueue.enqueueUserAction(event, 'message');
+      } else {
+        // Fallback if queue not initialized
+        const publishConfig = userProfile?.publisher_config;
+        await this.relayPool.publish(event, publishConfig);
+      }
 
       console.debug('[Messaging] Friend request message sent');
       return event.id; // Return event ID for tracking/retry
@@ -326,10 +331,15 @@ export class MessagingManager {
       // Sign event
       event.sig = encryptionManager.signEvent(event.id, secretKey);
 
-      // Publish to relays with config
-      const publishConfig = userProfile.publisher_config;
-      console.log(`[Messaging] 📤 Publishing kind-4 ${message.type} to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);
-      await this.relayPool.publish(event, publishConfig);
+      // Queue or publish the event
+      console.log(`[Messaging] 📤 Queuing kind-4 ${message.type} to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);
+      if (this.publishQueue) {
+        await this.publishQueue.enqueueUserAction(event, 'message');
+      } else {
+        // Fallback if queue not initialized
+        const publishConfig = userProfile.publisher_config;
+        await this.relayPool.publish(event, publishConfig);
+      }
 
       // Store in local message history as outbound
       const localMessage = {

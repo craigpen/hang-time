@@ -2554,8 +2554,13 @@ async function publishDeletionRequest(eventId: string): Promise<void> {
     deletionEvent.id = eventId_;
     deletionEvent.sig = encryptionManager.signEvent(eventId_, userProfile.secret_key);
 
-    await relayPool.publish(deletionEvent);
-    console.debug(`[Message] Published deletion request for event: ${eventId.substring(0, 8)}...`);
+    console.log(`[Message] 📤 Queuing deletion request for event: ${eventId.substring(0, 8)}...`);
+    if (publishQueue) {
+      await publishQueue.enqueueUserAction(deletionEvent, 'message');
+    } else {
+      // Fallback if queue not initialized
+      await relayPool.publish(deletionEvent);
+    }
   } catch (error) {
     console.debug(`[Message] Failed to publish deletion request:`, error);
     // Non-fatal - continue anyway
