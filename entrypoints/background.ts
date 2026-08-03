@@ -77,6 +77,11 @@ chrome.runtime.onStartup?.addListener(async () => {
 });
 
 /**
+ * Lock to prevent concurrent content script registration attempts
+ */
+let isRegisteringContentScripts = false;
+
+/**
  * Track fresh content script connections per tab
  * Tab ID -> timestamp of last connection
  */
@@ -121,6 +126,14 @@ async function _checkForOrphanedActivity(): Promise<void> {
  * Uses registerContentScripts() which survives extension restart/reload
  */
 async function _registerContentScripts(): Promise<void> {
+  // Prevent concurrent registration attempts
+  if (isRegisteringContentScripts) {
+    console.debug('[Background] Content script registration already in progress, skipping');
+    return;
+  }
+
+  isRegisteringContentScripts = true;
+
   try {
     if (!chrome.scripting) {
       console.warn('[Background] chrome.scripting not available');
@@ -151,6 +164,8 @@ async function _registerContentScripts(): Promise<void> {
     console.log('[Background] ✅ Content scripts registered persistently');
   } catch (err) {
     console.error('[Background] ❌ Failed to register content scripts:', err instanceof Error ? err.message : String(err));
+  } finally {
+    isRegisteringContentScripts = false;
   }
 }
 
