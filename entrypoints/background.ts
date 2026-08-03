@@ -82,6 +82,11 @@ chrome.runtime.onStartup?.addListener(async () => {
 let isRegisteringContentScripts = false;
 
 /**
+ * Lock to prevent concurrent initialization attempts
+ */
+let isInitializing = false;
+
+/**
  * Track fresh content script connections per tab
  * Tab ID -> timestamp of last connection
  */
@@ -238,8 +243,12 @@ async function initializeExtension(): Promise<void> {
     return;
   }
 
-  // Set flag immediately to prevent concurrent initialization attempts
-  initialized = true;
+  if (isInitializing) {
+    console.debug('[Background] Initialization already in progress');
+    return;
+  }
+
+  isInitializing = true;
 
   try {
     console.log('[Background] Initializing extension...');
@@ -500,9 +509,14 @@ async function initializeExtension(): Promise<void> {
 
     // Start integration health monitoring
     _startIntegrationHealthCheck();
+
+    // Mark initialization as complete only after everything succeeds
+    initialized = true;
   } catch (error) {
     console.error('[Background] Initialization failed:', error);
     throw error;
+  } finally {
+    isInitializing = false;
   }
 }
 
