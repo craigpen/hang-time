@@ -12,19 +12,30 @@ const GLOBAL_FLAG_KEY = 'HANG_TIME_SCRIPT_ACTIVE_V1';
 
 // IIFE wrapper for complete isolation and lifecycle management
 (() => {
-  console.log('[ContentScript] Script loaded at:', window.location.href);
+  // Very first log to catch any startup issues
+  try {
+    console.log('[ContentScript] 📜 IIFE starting at:', window.location.href);
+    console.log('[ContentScript] Global flag status:', (window as any)[GLOBAL_FLAG_KEY]);
+  } catch (e) {
+    console.error('[ContentScript] ❌ Error in startup logging:', e);
+  }
 
   // Check if a previous instance is already active
   if ((window as any)[GLOBAL_FLAG_KEY]) {
-    console.log('[ContentScript] Previous instance detected, clearing flag and signaling old instance to self-destruct');
+    console.log('[ContentScript] 🔄 Previous instance detected at entry, clearing flag and signaling old instance to self-destruct');
     // Clear the flag IMMEDIATELY so new instance can proceed even if old cleanup is slow
     (window as any)[GLOBAL_FLAG_KEY] = false;
+    console.log('[ContentScript] Flag cleared, dispatching cleanup event...');
     window.dispatchEvent(new CustomEvent(LIFECYCLE_EVENT_TOKEN));
+    console.log('[ContentScript] Cleanup event dispatched, continuing with new initialization');
     // Continue with new initialization instead of returning
+  } else {
+    console.log('[ContentScript] ✨ No previous instance detected, fresh start');
   }
 
   // Mark this instance as active
   (window as any)[GLOBAL_FLAG_KEY] = true;
+  console.log('[ContentScript] Flag set to true, marking this instance as active');
 
   // Tracker array: stores {element, eventName, handler} tuples for cleanup
   const trackedEventListeners: Array<{
@@ -570,12 +581,16 @@ const GLOBAL_FLAG_KEY = 'HANG_TIME_SCRIPT_ACTIVE_V1';
   }
 
   // Register self-destruct listener
+  console.log('[ContentScript] Registering cleanup listener for:', LIFECYCLE_EVENT_TOKEN);
   window.addEventListener(LIFECYCLE_EVENT_TOKEN, performCleanup);
+  console.log('[ContentScript] Cleanup listener registered ✓');
 
   // Initialize with a brief delay to allow old instance cleanup
+  console.log('[ContentScript] Scheduling initialization in 100ms...');
   const initDelay = setTimeout(() => {
+    console.log('[ContentScript] ⏱️ Init timeout fired, checking context validity...');
     if (isContextValid()) {
-      console.log('[ContentScript] 🚀 Initializing generic video tracker');
+      console.log('[ContentScript] 🚀 Context valid, initializing generic video tracker');
 
       establishConnection();
 
@@ -591,18 +606,20 @@ const GLOBAL_FLAG_KEY = 'HANG_TIME_SCRIPT_ACTIVE_V1';
         }
       }, 5000);
     } else {
-      console.warn('[ContentScript] Extension context invalid at init time, will retry');
+      console.warn('[ContentScript] ⚠️ Extension context invalid at init time, will retry in 2s');
       // Retry once more after a longer delay if context not ready
       setTimeout(() => {
+        console.log('[ContentScript] ⏱️ Retry timeout fired, checking context again...');
         if (isContextValid()) {
           console.log('[ContentScript] 🚀 Retrying initialization after context ready');
           establishConnection();
           const tracker = new GenericVideoTracker();
           tracker.init();
         } else {
-          console.error('[ContentScript] Context still invalid after retry, giving up');
+          console.error('[ContentScript] ❌ Context still invalid after retry, giving up');
         }
       }, 2000);
     }
   }, 100);
+  console.log('[ContentScript] 📋 IIFE execution complete, waiting for init timer...');
 })();
