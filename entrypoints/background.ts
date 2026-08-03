@@ -26,7 +26,7 @@ import { encryptionManager } from '../src/modules/encryption';
 import { ActivityDiagnostics } from '../src/modules/activity-diagnostics';
 import { initializeFileLogger, getFileLogger } from '../src/modules/file-logger';
 import { PublishQueue } from '../src/modules/publish-queue';
-import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName } from '../src/types';
+import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName, DEFAULT_RELAY_URLS } from '../src/types';
 
 // ============================================================================
 // GLOBAL STATE (recreated on each service worker restart)
@@ -316,6 +316,23 @@ async function initializeExtension(): Promise<void> {
       // Load relay configuration from user profile
       const profile = await storageManager.getUserProfile();
       let relayUrls: string[] = RelayPool.DEFAULT_RELAYS;
+
+      // Ensure stored relays match DEFAULT_RELAYS (source of truth)
+      if (profile && profile.publisher_config) {
+        const expectedRelays = Object.fromEntries(
+          DEFAULT_RELAY_URLS.map(url => [url.replace('wss://', '').replace('ws://', '').replace(/\/$/, ''), true])
+        );
+
+        // Check if stored relays differ from defaults
+        const storedRelays = profile.publisher_config.relays || {};
+        const needsSync = JSON.stringify(storedRelays) !== JSON.stringify(expectedRelays);
+
+        if (needsSync) {
+          console.debug(`[Background] Syncing relay config to defaults`);
+          profile.publisher_config.relays = expectedRelays;
+          await storageManager.setUserProfile(profile);
+        }
+      }
 
       if (profile && profile.publisher_config && profile.publisher_config.relays) {
         // Filter to only enabled relays
@@ -2422,6 +2439,9 @@ async function _refreshGameLibrary(): Promise<ExtensionResponse> {
     const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
     const userGames = await gameLibraryManager.fetchMyGameLibrary();
     console.debug(`[Background] Fetched ${userGames.length} games from Steam`);
+
+    // Publish game library to Nostr
+    await gameLibraryManager.publishMyGameLibrary();
 
     // Check which games are missing metadata and queue only those
     const gamesNeedingMetadata = await _findGamesMissingMetadata(userGames);
