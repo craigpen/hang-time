@@ -361,4 +361,5 @@ See **PHASES.md** for detailed phase breakdown, deliverables, and success criter
 - **Development Phases**: PHASES.md
 - **Agent Pipeline**: AGENTS.md, AGENT_ORCHESTRATION.md
 - **Architecture**: docs/ARCHITECTURE.md
+- **MV3 Content Script Lifecycle**: docs/MV3_CONTENT_SCRIPT_LIFECYCLE.md (extension reload recovery pattern)
 - **Reference Project**: ../tab-lifecycle-manager

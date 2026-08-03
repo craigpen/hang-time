@@ -57,19 +57,19 @@ chrome.runtime.onInstalled.addListener(async (details) => {
       console.log('[Background] Generated user identifier');
     }
   } else if (details.reason === 'update') {
-    console.log('[Background] Extension updated, registering content scripts...');
+    console.log('[Background] Extension updated, re-injecting content scripts...');
     await _registerContentScripts();
-    // Re-inject into all open tabs
+    // Re-inject into all open tabs so new instances can take over
     await _reinjectionContentScripts();
   }
 });
 
 /**
  * Extension startup: service worker wakes up after browser restart
- * Re-inject content scripts into all open tabs to reconnect
+ * Re-inject content scripts to reconnect existing tabs
  */
 chrome.runtime.onStartup?.addListener(async () => {
-  console.log('[Background] Extension startup detected, re-injecting content scripts into open tabs');
+  console.log('[Background] Extension startup detected, re-injecting content scripts');
   await _reinjectionContentScripts();
 });
 

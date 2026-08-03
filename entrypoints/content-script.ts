@@ -11,16 +11,19 @@ import { generateActivityId } from '../src/modules/activity-utils';
 // ============================================================================
 
 const CLEANUP_EVENT = 'hang-time-content-script-cleanup';
+const INSTANCE_ID = Math.random().toString(36).slice(2, 9);
+
+console.log(`[ContentScript] 🆕 New instance spawned: ${INSTANCE_ID}`);
 
 // If an older instance is running, signal it to destroy itself
 if ((window as any).hangTimeScriptActive) {
-  console.log('[ContentScript] 🔄 Orphaned instance detected, triggering cleanup...');
+  console.log(`[ContentScript] 🔄 Orphaned instance detected (${(window as any).hangTimeScriptActive}), triggering cleanup...`);
   window.dispatchEvent(new CustomEvent(CLEANUP_EVENT));
 }
 
 // Mark THIS instance as the active one (new owner)
-(window as any).hangTimeScriptActive = true;
-console.log('[ContentScript] ✨ This instance is now active');
+(window as any).hangTimeScriptActive = INSTANCE_ID;
+console.log(`[ContentScript] ✨ Instance ${INSTANCE_ID} is now active`);
 
 // Track event listeners for cleanup
 const trackedEventListeners: Array<{
@@ -35,6 +38,7 @@ let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_BACKOFF_MS = 500;
 let reconnectTimeoutId: NodeJS.Timeout | null = null;
+let tracker: GenericVideoTracker | null = null;
 
 // ============================================================================
 // GENERIC VIDEO TRACKER CLASS
@@ -50,19 +54,22 @@ class GenericVideoTracker {
   private videoSearchTimeout: NodeJS.Timeout | null = null;
   private cachedNetflixTitle: string | null = null;
 
-  constructor() {
-    console.log('[ContentScript] ✅ Generic video tracker initialized');
-  }
+  constructor() {}
 
   init(): void {
     this._setupDOMObserver();
     this._findAndHookVideo();
   }
 
+  // Public method for external cleanup (called by forceGlobalTeardown)
+  destroy(): void {
+    this._cleanup();
+  }
+
   private _setupDOMObserver(): void {
     this.domObserver = new MutationObserver(() => {
       if (!this._isContextValid()) {
-        this._cleanup();
+        forceGlobalTeardown();
         return;
       }
 
@@ -79,8 +86,6 @@ class GenericVideoTracker {
       childList: true,
       subtree: true,
     });
-
-    console.log('[ContentScript] 📹 DOM observer started, watching for video elements');
   }
 
   private _findAndHookVideo(): void {
@@ -107,8 +112,11 @@ class GenericVideoTracker {
       return true;
     });
 
-    // Use main content if available, otherwise give up (don't fallback to ad videos)
-    const currentVideo = mainContentVideos[0] || null;
+    // Priority order:
+    // 1. Main content video (visible, passed ad filters)
+    // 2. Fallback to any visible video (duration might not be loaded yet)
+    // 3. Fallback to first video (worst case)
+    const currentVideo = mainContentVideos[0] || visibleVideos[0] || videoElements[0];
 
     if (!currentVideo || currentVideo === this.activeVideoElement) {
       return;
@@ -189,17 +197,15 @@ class GenericVideoTracker {
   }
 
   private _onVideoEmptied(): void {
-    console.log('[ContentScript] Video emptied - ready to hook new video');
     this._removeVideoListeners();
     this.activeVideoElement = null;
     this.cachedNetflixTitle = null;
-
     setTimeout(() => this._findAndHookVideo(), 100);
   }
 
   private _sendPlaybackUpdate(): void {
     if (!this._isContextValid()) {
-      this._cleanup();
+      forceGlobalTeardown();
       return;
     }
 
@@ -236,7 +242,6 @@ class GenericVideoTracker {
 
     if (url.includes('youtube.com') || url.includes('youtu.be')) {
       if (!url.includes('watch?v=')) {
-        console.debug('[ContentScript] Skipping YouTube non-watch page:', url);
         return;
       }
     }
@@ -244,7 +249,6 @@ class GenericVideoTracker {
     if (url.includes('twitch.tv')) {
       const pathname = new URL(url).pathname;
       if (pathname === '/' || pathname === '' || pathname.startsWith('/search') || pathname.startsWith('/directory')) {
-        console.debug('[ContentScript] Skipping Twitch non-stream page:', url);
         return;
       }
     }
@@ -276,7 +280,8 @@ class GenericVideoTracker {
       },
     };
 
-    if (port) {
+    // Only send if we still own this tab
+    if (port && (window as any).hangTimeScriptActive === INSTANCE_ID) {
       try {
         port.postMessage({
           type: 'CONTENT_SCRIPT_ACTIVITY',
@@ -286,10 +291,8 @@ class GenericVideoTracker {
           },
         });
       } catch (err) {
-        console.debug('[ContentScript] Port send failed:', err);
+        // Silently fail if port is dead
       }
-    } else {
-      console.warn('[ContentScript] ⚠️ Port not available for sending activity');
     }
   }
 
@@ -330,50 +333,76 @@ class GenericVideoTracker {
   }
 
   private _tryExtractNetflixTitle(): string | null {
-    const h2Elements = document.querySelectorAll('h2');
-    for (const h2 of h2Elements) {
-      const text = h2.textContent?.trim();
+    // Priority 1: data-uia='video-title' (most reliable, used by player UI)
+    const titleElements = document.querySelectorAll("[data-uia='video-title']");
+    for (const titleElement of titleElements) {
+      const title = this._parseNetflixTitleText(titleElement.textContent?.trim() || '');
+      if (title && this._isValidNetflixTitle(title)) {
+        return title;
+      }
+    }
+
+    // Priority 2: Player title area (look for heading in player controls)
+    const playerTitles = document.querySelectorAll("[data-uia='player-title'], [class*='player-title'], h2[role='heading']");
+    for (const elem of playerTitles) {
+      const text = elem.textContent?.trim();
       if (text && this._isValidNetflixTitle(text)) {
         return text;
       }
     }
 
-    const titleElements = document.querySelectorAll("[data-uia='video-title']");
-    for (const titleElement of titleElements) {
-      const fullText = titleElement.textContent?.trim() || '';
-      if (!fullText) continue;
+    // Priority 3: h2 tags (but skip obvious UI sections by checking parent context)
+    const h2Elements = document.querySelectorAll('h2');
+    for (const h2 of h2Elements) {
+      const text = h2.textContent?.trim();
+      if (!text) continue;
 
-      const parts = fullText.split(/\s+(?=Rated|Audio|Subtitles|CC|Closed|Available|IMDb|\d+%)/i);
-      let title = parts[0].trim();
+      // Skip if in browse/menu context
+      const parent = h2.closest('[class*="browse"], [class*="menu"], [data-uia*="menu"]');
+      if (parent) continue;
 
-      if (/^Rated|^PG|^R$|^NC-17|^G$|^TV-|^\d+%|^IMDb|^Audio|^Subtitles|^CC|^Closed|^Available/i.test(title)) {
-        continue;
+      if (this._isValidNetflixTitle(text)) {
+        return text;
       }
+    }
 
-      const episodeMatch = title.match(/\s*([SE]\d+(?:E\d+)?)\s*/i);
-      const episode = episodeMatch ? episodeMatch[1] : null;
+    return null;
+  }
 
-      if (episode) {
-        title = title.substring(0, episodeMatch.index).trim();
+  private _parseNetflixTitleText(fullText: string): string | null {
+    if (!fullText) return null;
+
+    // Split on common metadata separators
+    const parts = fullText.split(/\s+(?=Rated|Audio|Subtitles|CC|Closed|Available|IMDb|\d+%)/i);
+    let title = parts[0].trim();
+
+    // Skip if starts with metadata
+    if (/^Rated|^PG|^R$|^NC-17|^G$|^TV-|^\d+%|^IMDb|^Audio|^Subtitles|^CC|^Closed|^Available/i.test(title)) {
+      return null;
+    }
+
+    // Extract episode if present (e.g., "S1:E1" or "Season 1 Episode 1")
+    const episodeMatch = title.match(/\s*([SE]\d+(?:E\d+)?)\s*/i);
+    const episode = episodeMatch ? episodeMatch[1] : null;
+
+    if (episode && episodeMatch?.index !== undefined) {
+      title = title.substring(0, episodeMatch.index).trim();
+    }
+
+    // Remove duplicate words at end (Netflix sometimes repeats first word)
+    const titleWords = title.split(/\s+/);
+    if (titleWords.length > 1) {
+      const firstWord = titleWords[0].toLowerCase();
+      while (titleWords.length > 1 && titleWords[titleWords.length - 1].toLowerCase() === firstWord) {
+        titleWords.pop();
       }
+      title = titleWords.join(' ');
+    }
 
-      const titleWords = title.split(/\s+/);
-      if (titleWords.length > 1) {
-        const firstWord = titleWords[0].toLowerCase();
-        while (titleWords.length > 1 && titleWords[titleWords.length - 1].toLowerCase() === firstWord) {
-          titleWords.pop();
-        }
-        title = titleWords.join(' ');
-      }
+    title = title.trim();
 
-      title = title.trim();
-
-      if (title && title.length > 2) {
-        const result = episode ? `${title} ${episode}` : title;
-        if (this._isValidNetflixTitle(result)) {
-          return result;
-        }
-      }
+    if (title && title.length > 2) {
+      return episode ? `${title} ${episode}` : title;
     }
 
     return null;
@@ -398,7 +427,11 @@ class GenericVideoTracker {
       lower === 'play' ||
       lower === 'pause' ||
       lower === 'skip' ||
-      lower === 'replay'
+      lower === 'replay' ||
+      lower === 'your next watch' ||
+      lower === 'top 10' ||
+      lower === 'new & hot' ||
+      lower === 'trending now'
     ) {
       return false;
     }
@@ -451,7 +484,11 @@ class GenericVideoTracker {
 
   private _isContextValid(): boolean {
     try {
-      return !!chrome.runtime?.id;
+      // Check both: extension context AND instance ownership
+      if (!(globalThis as any).chrome?.runtime?.id) return false;
+      // If a newer script took over, this instance is dead
+      if ((window as any).hangTimeScriptActive !== INSTANCE_ID) return false;
+      return true;
     } catch {
       return false;
     }
@@ -459,6 +496,17 @@ class GenericVideoTracker {
 
   private _cleanup(): void {
     console.log('[ContentScript] 🧹 Cleaning up video tracker');
+
+    // Stop all timers
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
+    }
+
+    if (this.videoSearchTimeout) {
+      clearTimeout(this.videoSearchTimeout);
+      this.videoSearchTimeout = null;
+    }
 
     if (this.domObserver) {
       this.domObserver.disconnect();
@@ -476,6 +524,12 @@ class GenericVideoTracker {
 // CONNECTION AND INITIALIZATION FUNCTIONS
 // ============================================================================
 
+// Called when tracker detects it's no longer the active instance
+function forceGlobalTeardown(): void {
+  console.log(`[ContentScript] 🛑 Instance ${INSTANCE_ID} detected ownership loss, triggering self-destruct...`);
+  performCleanup();
+}
+
 function isContextValid(): boolean {
   try {
     return !!chrome.runtime?.id;
@@ -485,6 +539,11 @@ function isContextValid(): boolean {
 }
 
 function establishConnection(): void {
+  // Skip if we're no longer the active instance (new script took over)
+  if ((window as any).hangTimeScriptActive !== INSTANCE_ID) {
+    return;
+  }
+
   if (port) {
     return; // Already connected
   }
@@ -498,11 +557,10 @@ function establishConnection(): void {
       console.warn('[ContentScript] Port disconnected from background');
       port = null;
 
-      // Attempt reconnection with exponential backoff
-      if ((window as any).hangTimeScriptActive && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      // Only reconnect if we're still the active instance
+      if ((window as any).hangTimeScriptActive === INSTANCE_ID && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         const backoff = INITIAL_BACKOFF_MS * Math.pow(2, reconnectAttempts);
         reconnectAttempts++;
-        console.log(`[ContentScript] Attempting reconnection in ${backoff}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
 
         reconnectTimeoutId = setTimeout(() => {
           establishConnection();
@@ -513,23 +571,21 @@ function establishConnection(): void {
     reconnectAttempts = 0; // Reset on successful connection
     console.log('[ContentScript] ✅ Connected to background service worker');
 
-    // Send initial ping immediately to keep service worker awake
+    // Send initial ping to keep service worker awake
     try {
       port.postMessage({ type: 'PING' });
-      console.log('[ContentScript] Sent initial PING to background');
     } catch (e) {
-      console.debug('[ContentScript] PING failed:', e);
+      // Ignore ping failures
     }
 
     // Send frequent pings to keep service worker from suspending
     // MV3 service workers can suspend after ~30 seconds of inactivity,
     // so we ping every 5 seconds to keep it alive
     const pingInterval = setInterval(() => {
-      if (port && (window as any).hangTimeScriptActive) {
+      if (port && (window as any).hangTimeScriptActive === INSTANCE_ID) {
         try {
           port.postMessage({ type: 'PING' });
         } catch (e) {
-          console.debug('[ContentScript] PING failed:', e);
           clearInterval(pingInterval);
         }
       } else {
@@ -538,8 +594,17 @@ function establishConnection(): void {
     }, 5000); // Every 5 seconds (matches context check frequency)
   } catch (err) {
     console.error('[ContentScript] Failed to establish connection:', err);
-    // Schedule retry
-    if ((window as any).hangTimeScriptActive && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+
+    // If context is invalid, stop trying. The old script's context is dead.
+    // Background will re-inject a new instance when ready.
+    if ((err as Error).message?.includes('Extension context invalidated')) {
+      console.warn('[ContentScript] Extension context invalidated—stopping retry loop. Awaiting re-injection.');
+      performCleanup();
+      return;
+    }
+
+    // For other transient errors, retry with exponential backoff (only if still active instance)
+    if ((window as any).hangTimeScriptActive === INSTANCE_ID && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
       const backoff = INITIAL_BACKOFF_MS * Math.pow(2, reconnectAttempts);
       reconnectAttempts++;
       reconnectTimeoutId = setTimeout(() => {
@@ -552,8 +617,13 @@ function establishConnection(): void {
 function performCleanup(): void {
   console.log('[ContentScript] 🧹 SELF-DESTRUCT: Starting complete cleanup');
 
-  // Clear active flag
+  // Clear active flag FIRST so no new work starts
   (window as any).hangTimeScriptActive = false;
+
+  // Stop the video tracker (kills polling interval and observers)
+  if (tracker) {
+    tracker.destroy();
+  }
 
   // Disconnect port
   if (port) {
@@ -576,20 +646,10 @@ function performCleanup(): void {
     try {
       element.removeEventListener(eventName, handler);
     } catch (err) {
-      console.debug('[ContentScript] Error removing listener:', err);
+      // Ignore errors if element already removed
     }
   }
-  trackedEventListeners.length = 0; // Clear array
-
-  // Remove any extension-created UI nodes
-  const extensionElements = document.querySelectorAll('[data-hang-time-ui]');
-  for (const el of extensionElements) {
-    try {
-      el.remove();
-    } catch (err) {
-      console.debug('[ContentScript] Error removing UI element:', err);
-    }
-  }
+  trackedEventListeners.length = 0;
 
   // Unregister self-destruct listener
   window.removeEventListener(CLEANUP_EVENT, performCleanup);
@@ -602,36 +662,22 @@ function performCleanup(): void {
 // ============================================================================
 
 // Register cleanup listener FIRST so old instances can clean up when signaled
-console.log('[ContentScript] Registering cleanup listener...');
 window.addEventListener(CLEANUP_EVENT, performCleanup);
-console.log('[ContentScript] ✓ Cleanup listener registered');
 
 // Initialize with a brief delay to give old instance time to cleanup
-console.log('[ContentScript] Scheduling initialization in 100ms...');
 setTimeout(() => {
-  console.log('[ContentScript] ⏱️ Init timeout fired, checking context...');
-
   if (!isContextValid()) {
-    console.warn('[ContentScript] ⚠️ Extension context invalid, retrying in 2s...');
     setTimeout(() => {
       if (isContextValid()) {
-        console.log('[ContentScript] 🚀 Context now valid, initializing...');
         establishConnection();
-        const tracker = new GenericVideoTracker();
+        tracker = new GenericVideoTracker();
         tracker.init();
-      } else {
-        console.error('[ContentScript] ❌ Context still invalid after retry, giving up');
       }
     }, 2000);
     return;
   }
 
-  console.log('[ContentScript] 🚀 Initializing generic video tracker');
   establishConnection();
-
-  const tracker = new GenericVideoTracker();
+  tracker = new GenericVideoTracker();
   tracker.init();
-  // Context validity is checked implicitly via port reconnection on disconnect
 }, 100);
-
-console.log('[ContentScript] 📋 Script loaded, waiting for initialization...');
