@@ -6,7 +6,7 @@
 import * as secp from '@noble/secp256k1';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { StorageManager } from './storage';
-import { UserProfile, AuthError } from '../types';
+import { UserProfile, AuthError, DEFAULT_PUBLISHER_RATE_MS } from '../types';
 import { deriveKeypairFromIdentifier } from './security-utils';
 
 // Configure secp256k1 to use sha256 for signing
@@ -114,7 +114,7 @@ export class IdentityManager {
         enabled: true,
         size: 'atomic',
         scope: 'updates',
-        rate_ms: 24000,
+        rate_ms: DEFAULT_PUBLISHER_RATE_MS,
         relays: {
           'nos.lol': true,
           'nostr.mom': true,

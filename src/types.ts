@@ -307,6 +307,8 @@ export const DEFAULT_RELAY_URLS = [
   'wss://relay.primal.net',
 ];
 
+export const DEFAULT_PUBLISHER_RATE_MS = 12000;
+
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'auto',
   relay_urls: DEFAULT_RELAY_URLS,

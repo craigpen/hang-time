@@ -17,7 +17,6 @@ import type { PublishQueue } from './publish-queue';
 const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
 
 export class ActivityPublisher {
-  private publishInterval: NodeJS.Timeout | null = null;
   private publishCount = 0; // Increments every 12s, 5th publish (index 4) is full refresh
   private publishRateMs = 12000; // Default: publish every 12 seconds
   private lastGameLibraryPublishTime = 0; // Track last game library publish
@@ -58,28 +57,10 @@ export class ActivityPublisher {
       return;
     }
 
-    console.debug(`[Publisher] Starting activity publisher (rate: ${this.publishRateMs}ms, size: ${config?.size || 'full'}, scope: ${config?.scope || 'updates'})`);
-
-    try {
-      this.publishInterval = setInterval(() => {
-        this.publishCycle().catch((error) => {
-          console.error('[Publisher] Publish cycle error:', error);
-        });
-      }, this.publishRateMs);
-
-      console.debug(`[Publisher] Publish interval started (every ${this.publishRateMs}ms)`);
-    } catch (error) {
-      console.error('[Publisher] Failed to start:', error);
-      throw error;
-    }
+    console.debug(`[Publisher] Activity publisher started (ready to publish activities on demand via PublishQueue)`);
+    console.debug(`[Publisher] Config: size=${config?.size || 'full'}, scope=${config?.scope || 'updates'}`);
   }
 
-  async stop(): Promise<void> {
-    if (this.publishInterval) {
-      clearInterval(this.publishInterval);
-      this.publishInterval = null;
-    }
-  }
 
   /**
    * Publish user profile information (kind 0)
@@ -139,14 +120,17 @@ export class ActivityPublisher {
     }
   }
 
-  async publishCycle(): Promise<void> {
+  /**
+   * Called by PublishQueue when it's ready for an activity publish
+   * Handles activity detection and publishing
+   */
+  async publishActivityIfAllowed(): Promise<void> {
     try {
       const profile = await this.storageManager.getUserProfile();
       const config = profile?.publisher_config || {
         enabled: true,
         size: 'full',
         scope: 'updates',
-        rate_ms: 12000,
         relays: {
           'nos.lol': true,
           'relay.damus.io': true,
@@ -154,101 +138,43 @@ export class ActivityPublisher {
           'nostr.mom': true,
           'relay.mostr.pub': true,
         },
-        retry_backoff_ms: 1000,
-        compression: false,
-        verbose_logging: false,
-        delta_publishing: false,
       };
 
-      // Check if we should publish game library (every 6 hours)
-      const now = Date.now();
-      if (now - this.lastGameLibraryPublishTime > ActivityPublisher.GAME_LIBRARY_PUBLISH_INTERVAL_MS) {
-        try {
-          const gameDiscoveryEnabled = profile?.game_discovery_enabled ?? false;
-          if (gameDiscoveryEnabled) {
-            const gameLibraryManager = GameLibraryManager.getInstance(this.storageManager);
-            await gameLibraryManager.publishMyGameLibrary();
-            this.lastGameLibraryPublishTime = now;
-            console.log('[Publisher] Game library published as part of periodic cycle');
-          }
-        } catch (error) {
-          console.warn('[Publisher] Failed to publish game library:', error);
-        }
-      }
-
-      // Check if publish rate has changed and restart interval if needed
-      if (config.rate_ms !== this.publishRateMs) {
-        console.debug(`[Publisher] Publish rate changed from ${this.publishRateMs}ms to ${config.rate_ms}ms, restarting interval`);
-        this.publishRateMs = config.rate_ms;
-        // Clear old interval and start new one with updated rate
-        if (this.publishInterval) {
-          clearInterval(this.publishInterval);
-        }
-        this.publishInterval = setInterval(() => {
-          this.publishCycle().catch((error) => {
-            console.error('[Publisher] Publish cycle error:', error);
-          });
-        }, this.publishRateMs);
-      }
-
-      // Log active config
-      const activeSettings = [];
-      if (config.compression) activeSettings.push('compression');
-      if (config.verbose_logging) activeSettings.push('verbose_logging');
-      if (config.retry_backoff_ms !== 1000) activeSettings.push(`retry_backoff=${config.retry_backoff_ms}ms`);
-      const selectedRelays = Object.entries(config.relays)
-        .filter(([, enabled]) => enabled)
-        .map(([url]) => url.split('/')[2]);
-      if (selectedRelays.length > 0 && selectedRelays.length < 5) {
-        activeSettings.push(`relays=[${selectedRelays.join(',')}]`);
-      }
-
-      if (activeSettings.length > 0) {
-        console.log(`[Publisher] ⚙️ Config: size=${config.size}, scope=${config.scope}, rate=${config.rate_ms}ms | Active: ${activeSettings.join(', ')}`);
+      // Check if publish queue allows activity publish this cycle
+      const shouldPublishActivity = this.publishQueue ? this.publishQueue.shouldPublishActivity() : true;
+      if (!shouldPublishActivity) {
+        console.debug('[Publisher] Queue blocked activity publish');
+        return;
       }
 
       const currentActivities = await this.storageManager.getMyActivities();
 
-      // Debug: log what we're about to publish (currentActivities keyed by activity ID, not service)
-      // Also validate and skip corrupted activities
+      // Validate and skip corrupted activities
       const validActivities: Partial<Record<string, Activity>> = {};
       Object.entries(currentActivities).forEach(([activityId, activity]) => {
         if (!activity) return;
 
         const issues = detectCorruption(activity);
         if (issues.length > 0) {
-          console.warn(`[Publisher] ⚠️ Activity ${activity.service} (ID: ${activityId}) is corrupted:`, issues);
-          return;  // Skip corrupted activities
+          console.warn(`[Publisher] Activity ${activity.service} (ID: ${activityId}) is corrupted:`, issues);
+          return;
         }
 
         if (!activity.content) {
-          console.warn(`[Publisher] ⚠️ Activity ${activity.service} (ID: ${activityId}) has NO content!`, activity);
-          return;  // Skip invalid activities
+          console.warn(`[Publisher] Activity ${activity.service} (ID: ${activityId}) has NO content!`);
+          return;
         }
 
         validActivities[activityId] = activity;
       });
 
-      // Use only valid activities for publishing
-      const currentActivitiesForPublishing = validActivities;
-
-      console.log(`[Publisher] Publishing cycle: ${Object.keys(currentActivitiesForPublishing).length} activities total (${Object.values(currentActivitiesForPublishing).map(a => a?.service).join(', ')})`);
-
-      // Check if publish queue allows activity publish this cycle
-      const shouldPublishActivity = this.publishQueue ? this.publishQueue.shouldPublishActivity() : true;
-
-      // Publish all activities with minimized payload (unless queue is publishing something else)
-      if (shouldPublishActivity && Object.keys(currentActivitiesForPublishing).length > 0) {
-        await this._publishServices(currentActivitiesForPublishing, 'all', config);
-      } else if (!shouldPublishActivity) {
-        console.debug('[Publisher] Skipping activity publish (queue published high-priority event)');
-      } else {
-        console.debug('[Publisher] No activities to publish');
+      // Publish activities if any are available
+      if (Object.keys(validActivities).length > 0) {
+        await this._publishServices(validActivities, 'all', config);
+        this.publishCount++;
       }
-
-      this.publishCount++;
     } catch (error) {
-      console.error('[Publisher] Failed to publish cycle:', error);
+      console.error('[Publisher] Failed to publish activities:', error);
     }
   }
 

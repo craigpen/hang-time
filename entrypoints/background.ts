@@ -408,7 +408,8 @@ async function initializeExtension(): Promise<void> {
 
       if (activityPublisher) {
         activityPublisher.setPublishQueue(publishQueue);
-        console.debug('[Background] ActivityPublisher wired to PublishQueue');
+        publishQueue.setActivityPublisher(activityPublisher);
+        console.debug('[Background] ActivityPublisher ↔ PublishQueue wired bidirectionally');
       }
 
       const gameLibMgr = GameLibraryManager.getInstance(storageManager);
@@ -2858,10 +2859,6 @@ async function cleanupOnUnload(): Promise<void> {
       console.debug('[Background] Activity detector stopped');
     }
 
-    if (activityPublisher) {
-      activityPublisher.stop();
-      console.debug('[Background] Activity publisher stopped');
-    }
 
     // Stop metadata fetcher background processing
     await metadataFetcher.stopBackgroundFetcher();

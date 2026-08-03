@@ -9,6 +9,7 @@
 import { NostrEvent } from '../types';
 import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
+import type { ActivityPublisher } from './publisher';
 
 export interface PendingPublish {
   type: 'invite' | 'friend_request' | 'message';
@@ -29,6 +30,7 @@ export class PublishQueue {
   private publishInterval: NodeJS.Timeout | null = null;
   private relayPool: RelayPool;
   private storageManager: StorageManager;
+  private activityPublisher: ActivityPublisher | null = null;
 
   // Retry configuration
   private readonly MAX_RETRIES = 10;
@@ -76,6 +78,14 @@ export class PublishQueue {
     this.gameLibraryDue = true;
     this.gameLibraryEvent = event;
     console.log('[PublishQueue] Game library marked as due');
+  }
+
+  /**
+   * Set the ActivityPublisher instance (called from background.ts after initialization)
+   */
+  setActivityPublisher(publisher: ActivityPublisher): void {
+    this.activityPublisher = publisher;
+    console.debug('[PublishQueue] ActivityPublisher wired');
   }
 
   /**
@@ -178,9 +188,13 @@ export class PublishQueue {
           await this._persistQueue();
         }
       } else {
-        // No high-priority event, caller should publish activity
-        console.debug('[PublishQueue] Ready for activity publish');
+        // No high-priority event, publish activity
         this.lastEventReplacedActivity = false;
+        if (this.activityPublisher) {
+          await this.activityPublisher.publishActivityIfAllowed();
+        } else {
+          console.debug('[PublishQueue] ActivityPublisher not initialized, skipping activity publish');
+        }
       }
     } catch (error) {
       console.error('[PublishQueue] Publish cycle failed:', error);
