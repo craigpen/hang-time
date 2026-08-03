@@ -514,7 +514,7 @@ function establishConnection(): void {
     reconnectAttempts = 0; // Reset on successful connection
     console.log('[ContentScript] ✅ Connected to background service worker');
 
-    // Send initial ping to keep service worker awake
+    // Send initial ping immediately to keep service worker awake
     try {
       port.postMessage({ type: 'PING' });
       console.log('[ContentScript] Sent initial PING to background');
@@ -522,7 +522,9 @@ function establishConnection(): void {
       console.debug('[ContentScript] PING failed:', e);
     }
 
-    // Send periodic pings to keep service worker from suspending
+    // Send frequent pings to keep service worker from suspending
+    // MV3 service workers can suspend after ~30 seconds of inactivity,
+    // so we ping every 5 seconds to keep it alive
     const pingInterval = setInterval(() => {
       if (port && (window as any).hangTimeScriptActive) {
         try {
@@ -534,7 +536,7 @@ function establishConnection(): void {
       } else {
         clearInterval(pingInterval);
       }
-    }, 10000); // Every 10 seconds
+    }, 5000); // Every 5 seconds (matches context check frequency)
   } catch (err) {
     console.error('[ContentScript] Failed to establish connection:', err);
     // Schedule retry
