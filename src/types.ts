@@ -65,6 +65,7 @@ export interface UserProfile {
     compression: boolean;
     verbose_logging: boolean;
     delta_publishing: boolean;
+    low_bandwidth_mode?: boolean; // Enable compression + 0.5 msg/s
   };
   steam_config?: {
     enabled: boolean;

@@ -11,8 +11,6 @@ import { IdentityManager } from './identity';
 import { encryptionManager } from './encryption';
 import { validateActivity, detectCorruption } from './activity-validation';
 import { GameLibraryManager } from './game-library';
-import { ActivityDiagnostics } from './activity-diagnostics';
-import { getFileLogger } from './file-logger';
 
 const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
 
@@ -21,21 +19,43 @@ export class ActivityPublisher {
   private lastPublishedFields: Map<string, Record<string, any>> = new Map(); // For delta publishing: service -> {field: value}
   private publishInterval: NodeJS.Timeout | null = null;
   private publishCount = 0; // Increments every 12s, 5th publish (index 4) is full refresh
-  private publishRateMs = 12000; // Default: publish every 12 seconds
+  private publishRateMs = 1000; // Default: 1.0 msg/s (1 event per second max)
   private lastGameLibraryPublishTime = 0; // Track last game library publish
-  private diagnostics: ActivityDiagnostics;
+  private lastPublishTime = 0; // Track last publish for rate limiting
+  private publishQueue: Array<{ publish: () => Promise<void>; timestamp: number }> = []; // Queue for rate-limited publishes
 
-  static readonly PUBLISH_INTERVAL_MS = 12000; // Default: publish every 12 seconds (5 per 60s)
-  static readonly FULL_REFRESH_CYCLE = 5; // Every 5th publish is a full refresh
+  static readonly MAX_PUBLISH_RATE_MS = 1000; // Hard cap: 1.0 msg/s (damus.io limit)
+  static readonly PUBLISH_INTERVAL_MS = 1000; // Check interval for rate limiting
+  static readonly FULL_REFRESH_CYCLE = 60; // Every 60 publishes is a full refresh (roughly every 60 seconds at 1/sec)
   static readonly GAME_LIBRARY_PUBLISH_INTERVAL_MS = 6 * 60 * 60 * 1000; // Every 6 hours
+
+  // Shipping Configuration Presets
+  static readonly CONFIG_PRESETS = {
+    default: {
+      enabled: true,
+      size: 'atomic' as const,
+      scope: 'all' as const,
+      rate_ms: 1000, // 1.0 msg/s (validated)
+      compression: false,
+      delta_publishing: false,
+      low_bandwidth_mode: false,
+    },
+    low_bandwidth: {
+      enabled: true,
+      size: 'atomic' as const,
+      scope: 'all' as const,
+      rate_ms: 2000, // 0.5 msg/s (validated)
+      compression: true,
+      delta_publishing: false,
+      low_bandwidth_mode: true,
+    },
+  } as const;
 
   constructor(
     private relayPool: RelayPool,
     private storageManager: StorageManager,
     private identityManager: IdentityManager
-  ) {
-    this.diagnostics = ActivityDiagnostics.getInstance(storageManager);
-  }
+  ) {}
 
   private async _loadConfig(): Promise<void> {
     const profile = await this.storageManager.getUserProfile();
@@ -51,43 +71,33 @@ export class ActivityPublisher {
     const config = profile?.publisher_config;
 
     if (config && !config.enabled) {
-      try {
-        const logger = getFileLogger();
-        logger.log('Publisher', 'INFO', 'Publishing is disabled in config');
-      } catch {}
       console.debug('[Publisher] Publishing is disabled in config');
       return;
     }
 
-    try {
-      const logger = getFileLogger();
-      logger.log('Publisher', 'INFO', 'Starting activity publisher', {
-        rate_ms: this.publishRateMs,
-        size: config?.size || 'full',
-        scope: config?.scope || 'updates'
-      });
-    } catch {}
+    // Use DEFAULT shipping config if no config exists
+    const effectiveRate = config?.rate_ms ?? ActivityPublisher.CONFIG_PRESETS.default.rate_ms;
+    const effectiveSize = config?.size ?? ActivityPublisher.CONFIG_PRESETS.default.size;
+    const effectiveScope = config?.scope ?? ActivityPublisher.CONFIG_PRESETS.default.scope;
+    const lowBandwidthMode = config?.low_bandwidth_mode ?? false;
+
+    console.log(`[Publisher] 🚀 Starting activity publisher`);
+    console.log(`[Publisher]   Size: ${effectiveSize} (${effectiveSize === 'atomic' ? 'changed activities only' : 'all activities'})`);
+    console.log(`[Publisher]   Scope: ${effectiveScope === 'all' ? 'full fields' : 'updated fields only'}`);
+    console.log(`[Publisher]   Rate: ${(1000 / effectiveRate).toFixed(1)} msg/sec (every ${effectiveRate}ms)`);
+    if (lowBandwidthMode) {
+      console.log(`[Publisher]   Mode: LOW BANDWIDTH (compression enabled)`);
+    }
 
     try {
       this.publishInterval = setInterval(() => {
         this.publishCycle().catch((error) => {
-          try {
-            const logger = getFileLogger();
-            logger.log('Publisher', 'ERROR', 'Publish cycle error', { error: String(error) });
-          } catch {}
           console.error('[Publisher] Publish cycle error:', error);
         });
-      }, this.publishRateMs);
+      }, ActivityPublisher.PUBLISH_INTERVAL_MS);
 
-      try {
-        const logger = getFileLogger();
-        logger.log('Publisher', 'INFO', 'Publish interval started', { interval_ms: this.publishRateMs });
-      } catch {}
+      console.debug(`[Publisher] Publish cycle checker started (every ${ActivityPublisher.PUBLISH_INTERVAL_MS}ms with rate limiting)`);
     } catch (error) {
-      try {
-        const logger = getFileLogger();
-        logger.log('Publisher', 'ERROR', 'Failed to start publisher', { error: String(error) });
-      } catch {}
       console.error('[Publisher] Failed to start:', error);
       throw error;
     }
@@ -145,7 +155,6 @@ export class ActivityPublisher {
       console.log(`[Publisher] 📤 Publishing kind-0 profile (nickname: ${profile.nickname || 'none'}, discord: ${profile.discord_info ? 'yes' : 'no'})`);
       const config = profile?.publisher_config;
       await this.relayPool.publish(event, config);
-      // Note: Profile publishes not tracked in diagnostics (kind-0, not activity)
       console.debug('[Publisher] Profile published successfully');
     } catch (error) {
       console.error('[Publisher] Failed to publish profile:', error);
@@ -155,34 +164,48 @@ export class ActivityPublisher {
   async publishCycle(): Promise<void> {
     try {
       const profile = await this.storageManager.getUserProfile();
-      const config = profile?.publisher_config || {
-        enabled: true,
-        size: 'full',
-        scope: 'updates',
-        rate_ms: 12000,
-        relays: {
-          'nos.lol': true,
-          'nostr.mom': true,
-          'relay.mostr.pub': true,
-          'relay.primal.net': true,
-          'relay.nostr.band': true,
-        },
-        retry_backoff_ms: 1000,
-        compression: false,
-        verbose_logging: false,
-        delta_publishing: false,
-      };
 
-      try {
-        const logger = getFileLogger();
-        logger.log('Publisher', 'DEBUG', 'Publish cycle started', {
-          size: config.size,
-          scope: config.scope
-        });
-      } catch {}
+      // Get config with shipping presets as base
+      let config = profile?.publisher_config;
+      if (!config) {
+        // Initialize with DEFAULT shipping config
+        config = {
+          enabled: true,
+          ...ActivityPublisher.CONFIG_PRESETS.default,
+          relays: {
+            'nos.lol': true,
+            'relay.damus.io': true,
+            'relay.snort.social': false, // Use 2 relays by default
+            'nostr.mom': false,
+            'relay.mostr.pub': false,
+          },
+          retry_backoff_ms: 1000,
+          verbose_logging: false,
+        };
+      } else if (config.low_bandwidth_mode) {
+        // Apply LOW_BANDWIDTH mode overrides
+        config = {
+          ...config,
+          ...ActivityPublisher.CONFIG_PRESETS.low_bandwidth,
+        };
+      }
+
+      // HARD CAP: Never exceed 1.0 msg/s (damus.io limit)
+      const effectiveRateMs = Math.max(ActivityPublisher.MAX_PUBLISH_RATE_MS, config.rate_ms);
+      if (effectiveRateMs !== config.rate_ms && config.rate_ms < ActivityPublisher.MAX_PUBLISH_RATE_MS) {
+        console.warn(`[Publisher] ⚠️  Rate capped from ${config.rate_ms}ms to ${effectiveRateMs}ms (max 1.0 msg/s)`);
+        config.rate_ms = effectiveRateMs;
+      }
+
+      // Rate limiting: check if enough time has passed since last publish
+      const now = Date.now();
+      const timeSinceLastPublish = now - this.lastPublishTime;
+      if (timeSinceLastPublish < config.rate_ms) {
+        // Not enough time has passed, skip this cycle
+        return;
+      }
 
       // Check if we should publish game library (every 6 hours)
-      const now = Date.now();
       if (now - this.lastGameLibraryPublishTime > ActivityPublisher.GAME_LIBRARY_PUBLISH_INTERVAL_MS) {
         try {
           const gameDiscoveryEnabled = profile?.game_discovery_enabled ?? false;
@@ -219,7 +242,7 @@ export class ActivityPublisher {
       if (config.retry_backoff_ms !== 1000) activeSettings.push(`retry_backoff=${config.retry_backoff_ms}ms`);
       const selectedRelays = Object.entries(config.relays)
         .filter(([, enabled]) => enabled)
-        .map(([domain]) => domain);
+        .map(([url]) => url.split('/')[2]);
       if (selectedRelays.length > 0 && selectedRelays.length < 5) {
         activeSettings.push(`relays=[${selectedRelays.join(',')}]`);
       }
@@ -253,34 +276,7 @@ export class ActivityPublisher {
       // Use only valid activities for publishing
       const currentActivitiesForPublishing = validActivities;
 
-      try {
-        const logger = getFileLogger();
-        logger.log('Publisher', 'INFO', 'Publishing cycle', {
-          activity_count: Object.keys(currentActivitiesForPublishing).length,
-          services: Object.values(currentActivitiesForPublishing).map(a => a?.service).join(', ')
-        });
-      } catch {}
-
       console.log(`[Publisher] Publishing cycle: ${Object.keys(currentActivitiesForPublishing).length} activities total (${Object.values(currentActivitiesForPublishing).map(a => a?.service).join(', ')})`);
-
-      // Record each activity's publish cycle start
-      const enabledRelays = Object.entries(config.relays)
-        .filter(([, enabled]) => enabled)
-        .map(([domain]) => domain);
-
-      for (const activity of Object.values(currentActivitiesForPublishing)) {
-        if (!activity) continue;
-        await this.diagnostics.recordPublishCycle(
-          activity.id,
-          'changed', // Will be updated if full refresh
-          {
-            rate_ms: config.rate_ms,
-            size: config.size,
-            scope: config.scope,
-            enabled_relays: enabledRelays,
-          }
-        );
-      }
 
       // If delta publishing, only publish changed fields (no full refresh)
       if (config.delta_publishing) {
@@ -299,27 +295,9 @@ export class ActivityPublisher {
         // Determine if we should do a full refresh based on scope config
         const doFullRefresh = config.scope === 'all' || isFullRefreshCycle;
 
-        try {
-          const logger = getFileLogger();
-          logger.log('Publisher', 'DEBUG', 'Standard mode decision', {
-            publishCount: this.publishCount,
-            isFullRefreshCycle,
-            scope: config.scope,
-            doFullRefresh,
-            activitiesCount: Object.keys(currentActivitiesForPublishing).length
-          });
-        } catch {}
-
         if (doFullRefresh) {
           // Full refresh: publish all active services
           console.debug('[Publisher] Full refresh cycle');
-          try {
-            const logger = getFileLogger();
-            logger.log('Publisher', 'INFO', 'Full refresh cycle - calling publishServices', {
-              mode: config.size === 'atomic' ? 'atomic' : 'all',
-              count: Object.keys(currentActivitiesForPublishing).length
-            });
-          } catch {}
           await this._publishServices(currentActivitiesForPublishing, config.size === 'atomic' ? 'atomic' : 'all', config);
           this.lastPublishedState = { ...currentActivitiesForPublishing };
         } else {
@@ -338,42 +316,47 @@ export class ActivityPublisher {
             }
           }
 
-          try {
-            const logger = getFileLogger();
-            logger.log('Publisher', 'DEBUG', 'Changed services detection', {
-              currentCount: Object.keys(currentActivitiesForPublishing).length,
-              changedCount: Object.keys(changedActivities).length,
-              lastStateCount: Object.keys(this.lastPublishedState).length
-            });
-          } catch {}
-
           if (Object.keys(changedActivities).length > 0) {
             console.debug(`[Publisher] Changed services: ${Object.values(changedActivities).map(a => a?.service).join(', ')}`);
-            try {
-              const logger = getFileLogger();
-              logger.log('Publisher', 'INFO', 'Publishing changed services', {
-                mode: 'changed',
-                count: Object.keys(changedActivities).length,
-                services: Object.values(changedActivities).map(a => a?.service).join(', ')
-              });
-            } catch {}
             await this._publishServices(changedActivities, 'changed', config);
             // Update last published state with what we just published
             this.lastPublishedState = { ...this.lastPublishedState, ...changedActivities };
           } else {
             console.debug('[Publisher] No changes to publish');
-            try {
-              const logger = getFileLogger();
-              logger.log('Publisher', 'DEBUG', 'No changes detected', { lastStateCount: Object.keys(this.lastPublishedState).length });
-            } catch {}
           }
         }
       }
 
       this.publishCount++;
+
+      // Record successful publish time for rate limiting
+      this.lastPublishTime = now;
     } catch (error) {
       console.error('[Publisher] Failed to publish cycle:', error);
     }
+  }
+
+  /**
+   * Get the current effective publish rate
+   * Takes into account both configured rate and hard cap
+   */
+  async getEffectivePublishRate(): Promise<{ rate_ms: number; msg_per_sec: number; mode: string }> {
+    const profile = await this.storageManager.getUserProfile();
+    const config = profile?.publisher_config || ActivityPublisher.CONFIG_PRESETS.default;
+
+    const rateMs = Math.max(ActivityPublisher.MAX_PUBLISH_RATE_MS, config.rate_ms || 1000);
+    const msgPerSec = 1000 / rateMs;
+
+    let mode = 'DEFAULT';
+    if (config.low_bandwidth_mode) {
+      mode = 'LOW BANDWIDTH';
+    }
+
+    return {
+      rate_ms: rateMs,
+      msg_per_sec: msgPerSec,
+      mode,
+    };
   }
 
   private async _getActivityDeltas(currentActivities: Partial<Record<string, Activity>>): Promise<Activity[]> {
@@ -445,37 +428,14 @@ export class ActivityPublisher {
     mode: 'changed' | 'all' | 'atomic',
     config?: any
   ): Promise<void> {
-    try {
-      const logger = getFileLogger();
-      logger.log('Publisher', 'INFO', '_publishServices called', {
-        mode,
-        inputCount: Object.keys(activities).length,
-        services: Object.values(activities).filter(a => !!a).map(a => a?.service).join(', ')
-      });
-    } catch {}
-
     // Activities are keyed by activity ID, not service name
     // For 'all'/'atomic': filter to only SERVICES_TO_PUBLISH; for 'changed': use all activities
     const activitiesToPublish: Activity[] = mode === 'all' || mode === 'atomic'
       ? Object.values(activities).filter((a): a is Activity => !!a && SERVICES_TO_PUBLISH.includes(a.service))
       : Object.values(activities).filter((a): a is Activity => !!a);
 
-    try {
-      const logger = getFileLogger();
-      logger.log('Publisher', 'DEBUG', 'Activities filtered for publish', {
-        mode,
-        beforeFilter: Object.keys(activities).length,
-        afterFilter: activitiesToPublish.length,
-        filtered: Object.values(activities).filter((a): a is Activity => !!a && !SERVICES_TO_PUBLISH.includes(a?.service || '')).map(a => a?.service)
-      });
-    } catch {}
-
     if (activitiesToPublish.length === 0) {
       console.debug('[Publisher] No activities to publish');
-      try {
-        const logger = getFileLogger();
-        logger.log('Publisher', 'WARN', 'No activities after filtering', { mode });
-      } catch {}
       return;
     }
 
@@ -492,25 +452,11 @@ export class ActivityPublisher {
           await this._publishBundledActivities(batch, 'compressed', config);
         }
       } else {
-        try {
-          const logger = getFileLogger();
-          logger.log('Publisher', 'DEBUG', 'Publishing activities individually (atomic mode)', {
-            count: activitiesToPublish.length,
-            services: activitiesToPublish.map(a => a.service).join(', ')
-          });
-        } catch {}
         for (const activity of activitiesToPublish) {
           await this._publishActivity(activity);
         }
       }
     } else {
-      try {
-        const logger = getFileLogger();
-        logger.log('Publisher', 'DEBUG', 'Publishing bundled activities', {
-          mode,
-          count: activitiesToPublish.length
-        });
-      } catch {}
       await this._publishBundledActivities(activitiesToPublish, mode, config);
     }
   }
@@ -578,27 +524,7 @@ export class ActivityPublisher {
         console.log(`[Publisher] 📋 Verbose: Event JSON=${eventJson}`);
       }
 
-      const publishResults = await this.relayPool.publish(event, config);
-
-      // Record relay attempts for each activity's diagnostics
-      for (const activity of activities) {
-        for (const relayResult of publishResults.relay_results) {
-          await this.diagnostics.recordRelayAttempt(
-            activity.id,
-            relayResult.relay_url,
-            relayResult.connection_status,
-            relayResult.success ? 'OK' : 'FAILED',
-            relayResult.latency_ms,
-            relayResult.error_type,
-            relayResult.error,
-            0, // retry count (single attempt here)
-            relayResult.success ? 'succeeded' : 'failed',
-            id,
-            eventSize
-          );
-        }
-      }
-
+      await this.relayPool.publish(event, config);
       console.debug(`[Publisher] ✅ Published bundled event with ${activities.length} services`);
     } catch (error) {
       console.error('[Publisher] Failed to publish bundled activities:', error);
@@ -628,8 +554,6 @@ export class ActivityPublisher {
       }
 
       const tags: Array<[string, string]> = [
-        ['is_activity', 'true'],
-        ['type', 'activity-state'],
         ['service', activity.service],
         ['content', activityContent],
         ['activity_id', activity.id],
@@ -671,25 +595,7 @@ export class ActivityPublisher {
       // Load config for relay selection and retry settings
       const profile = await this.storageManager.getUserProfile();
       const config = profile?.publisher_config;
-
-      const publishResults = await this.relayPool.publish(event, config);
-
-      // Record relay attempts for this activity's diagnostics
-      for (const relayResult of publishResults.relay_results) {
-        await this.diagnostics.recordRelayAttempt(
-          activity.id,
-          relayResult.relay_url,
-          relayResult.connection_status,
-          relayResult.success ? 'OK' : 'FAILED',
-          relayResult.latency_ms,
-          relayResult.error_type,
-          relayResult.error,
-          0, // retry count
-          relayResult.success ? 'succeeded' : 'failed',
-          id,
-          eventSize
-        );
-      }
+      await this.relayPool.publish(event, config);
     } catch (error) {
       console.error('[Publisher] Failed to publish activity:', error);
     }

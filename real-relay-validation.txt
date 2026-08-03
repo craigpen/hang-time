@@ -1,0 +1,32 @@
+
+📊 VALIDATION RESULTS
+
+Relay                 | Config       | Sent | Success | Avg Latency | Status
+---------------------- | ------------ | ---- | ------- | ----------- | -------
+nos.lol              | default      | 30   | 30/30   | 132ms       | ✅
+nos.lol              | lowBandwidth | 30   | 30/30   | 132ms       | ✅
+relay.damus.io       | default      | 30   | 29/30   | 233ms       | ⚠️
+relay.damus.io       | lowBandwidth | 30   | 30/30   | 228ms       | ✅
+
+✅ SUMMARY
+
+Total Events: 120
+Success Rate: 99.2%
+Avg Latency: 181ms
+
+✅ RESULT: VALIDATION PASSED
+
+Both configurations are validated and ready for implementation:
+
+  1. DEFAULT (1.0 msg/s, 900B events)
+     └─ Use as primary configuration in ActivityDetector
+
+  2. LOW BANDWIDTH MODE (0.5 msg/s, 450B events)
+     └─ Offer as optional user toggle in settings
+
+🎯 IMPLEMENTATION PATH
+
+1. Update ActivityDetector to use default configuration
+2. Add Low Bandwidth Mode toggle to Settings UI
+3. Deploy and monitor real-world metrics
+4. Adjust if real relay behavior differs from test results
