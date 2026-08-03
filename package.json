@@ -23,6 +23,7 @@
   "author": "Craig",
   "license": "MIT",
   "devDependencies": {
+    "@types/chrome": "^0.2.5",
     "adm-zip": "^0.5.17",
     "cheerio": "^1.2.0",
     "esbuild": "^0.28.1",

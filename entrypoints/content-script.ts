@@ -373,6 +373,7 @@ class GenericVideoTracker {
 
     // Split on common metadata separators
     const parts = fullText.split(/\s+(?=Rated|Audio|Subtitles|CC|Closed|Available|IMDb|\d+%)/i);
+    if (!parts[0]) return null;
     let title = parts[0].trim();
 
     // Skip if starts with metadata
@@ -390,7 +391,7 @@ class GenericVideoTracker {
 
     // Remove duplicate words at end (Netflix sometimes repeats first word)
     const titleWords = title.split(/\s+/);
-    if (titleWords.length > 1) {
+    if (titleWords.length > 1 && titleWords[0]) {
       const firstWord = titleWords[0].toLowerCase();
       while (titleWords.length > 1 && titleWords[titleWords.length - 1].toLowerCase() === firstWord) {
         titleWords.pop();
