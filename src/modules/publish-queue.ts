@@ -217,7 +217,7 @@ export class PublishQueue {
       // Only persist user actions (others are periodic and can be missed)
       const pending: PendingPublish[] = this.userActionQueue.filter(p => p.retryCount > 0 || Date.now() - p.createdAt < 5000);
 
-      await this.storageManager.setData('pending_publishes', pending);
+      await this.storageManager.set('pending_publishes', pending);
     } catch (error) {
       console.error('[PublishQueue] Failed to persist queue:', error);
     }
@@ -228,7 +228,7 @@ export class PublishQueue {
    */
   private async _restoreQueue(): Promise<void> {
     try {
-      const pending = await this.storageManager.getData('pending_publishes') as PendingPublish[] || [];
+      const pending = await this.storageManager.get<PendingPublish[]>('pending_publishes') || [];
 
       if (pending.length > 0) {
         this.userActionQueue = pending;
