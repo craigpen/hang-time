@@ -1997,7 +1997,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         size: 'full',
         scope: 'updates',
         rate_ms: 12000,
-        relays: { 'nos.lol': true, 'nostr.mom': true, 'relay.mostr.pub': true, 'relay.primal.net': true, 'relay.nostr.band': true },
+        relays: { 'nos.lol': true, 'nostr.mom': true, 'relay.mostr.pub': true, 'relay.primal.net': true },
         retry_backoff_ms: 1000,
         compression: false,
         verbose_logging: false,

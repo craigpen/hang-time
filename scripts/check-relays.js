@@ -9,7 +9,6 @@ const DEFAULT_RELAYS = [
   'wss://nostr.mom',
   'wss://relay.mostr.pub',
   'wss://relay.primal.net',
-  'wss://relay.nostr.band',
 ];
 
 async function testRelay(url, timeout = 5000) {
