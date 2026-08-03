@@ -393,7 +393,9 @@ class GenericVideoTracker {
     const titleWords = title.split(/\s+/);
     if (titleWords.length > 1 && titleWords[0]) {
       const firstWord = titleWords[0].toLowerCase();
-      while (titleWords.length > 1 && titleWords[titleWords.length - 1].toLowerCase() === firstWord) {
+      while (titleWords.length > 1) {
+        const lastWord = titleWords[titleWords.length - 1];
+        if (!lastWord || lastWord.toLowerCase() !== firstWord) break;
         titleWords.pop();
       }
       title = titleWords.join(' ');
