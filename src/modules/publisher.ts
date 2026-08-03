@@ -12,6 +12,7 @@ import { encryptionManager } from './encryption';
 import { validateActivity, detectCorruption } from './activity-validation';
 import { GameLibraryManager } from './game-library';
 import { ActivityDiagnostics } from './activity-diagnostics';
+import { getFileLogger } from './file-logger';
 
 const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
 
@@ -50,21 +51,43 @@ export class ActivityPublisher {
     const config = profile?.publisher_config;
 
     if (config && !config.enabled) {
+      try {
+        const logger = getFileLogger();
+        logger.log('Publisher', 'INFO', 'Publishing is disabled in config');
+      } catch {}
       console.debug('[Publisher] Publishing is disabled in config');
       return;
     }
 
-    console.debug(`[Publisher] Starting activity publisher (rate: ${this.publishRateMs}ms, size: ${config?.size || 'full'}, scope: ${config?.scope || 'updates'})`);
+    try {
+      const logger = getFileLogger();
+      logger.log('Publisher', 'INFO', 'Starting activity publisher', {
+        rate_ms: this.publishRateMs,
+        size: config?.size || 'full',
+        scope: config?.scope || 'updates'
+      });
+    } catch {}
 
     try {
       this.publishInterval = setInterval(() => {
         this.publishCycle().catch((error) => {
+          try {
+            const logger = getFileLogger();
+            logger.log('Publisher', 'ERROR', 'Publish cycle error', { error: String(error) });
+          } catch {}
           console.error('[Publisher] Publish cycle error:', error);
         });
       }, this.publishRateMs);
 
-      console.debug(`[Publisher] Publish interval started (every ${this.publishRateMs}ms)`);
+      try {
+        const logger = getFileLogger();
+        logger.log('Publisher', 'INFO', 'Publish interval started', { interval_ms: this.publishRateMs });
+      } catch {}
     } catch (error) {
+      try {
+        const logger = getFileLogger();
+        logger.log('Publisher', 'ERROR', 'Failed to start publisher', { error: String(error) });
+      } catch {}
       console.error('[Publisher] Failed to start:', error);
       throw error;
     }
@@ -150,6 +173,14 @@ export class ActivityPublisher {
         delta_publishing: false,
       };
 
+      try {
+        const logger = getFileLogger();
+        logger.log('Publisher', 'DEBUG', 'Publish cycle started', {
+          size: config.size,
+          scope: config.scope
+        });
+      } catch {}
+
       // Check if we should publish game library (every 6 hours)
       const now = Date.now();
       if (now - this.lastGameLibraryPublishTime > ActivityPublisher.GAME_LIBRARY_PUBLISH_INTERVAL_MS) {
@@ -222,6 +253,14 @@ export class ActivityPublisher {
       // Use only valid activities for publishing
       const currentActivitiesForPublishing = validActivities;
 
+      try {
+        const logger = getFileLogger();
+        logger.log('Publisher', 'INFO', 'Publishing cycle', {
+          activity_count: Object.keys(currentActivitiesForPublishing).length,
+          services: Object.values(currentActivitiesForPublishing).map(a => a?.service).join(', ')
+        });
+      } catch {}
+
       console.log(`[Publisher] Publishing cycle: ${Object.keys(currentActivitiesForPublishing).length} activities total (${Object.values(currentActivitiesForPublishing).map(a => a?.service).join(', ')})`);
 
       // Record each activity's publish cycle start
@@ -260,9 +299,27 @@ export class ActivityPublisher {
         // Determine if we should do a full refresh based on scope config
         const doFullRefresh = config.scope === 'all' || isFullRefreshCycle;
 
+        try {
+          const logger = getFileLogger();
+          logger.log('Publisher', 'DEBUG', 'Standard mode decision', {
+            publishCount: this.publishCount,
+            isFullRefreshCycle,
+            scope: config.scope,
+            doFullRefresh,
+            activitiesCount: Object.keys(currentActivitiesForPublishing).length
+          });
+        } catch {}
+
         if (doFullRefresh) {
           // Full refresh: publish all active services
           console.debug('[Publisher] Full refresh cycle');
+          try {
+            const logger = getFileLogger();
+            logger.log('Publisher', 'INFO', 'Full refresh cycle - calling publishServices', {
+              mode: config.size === 'atomic' ? 'atomic' : 'all',
+              count: Object.keys(currentActivitiesForPublishing).length
+            });
+          } catch {}
           await this._publishServices(currentActivitiesForPublishing, config.size === 'atomic' ? 'atomic' : 'all', config);
           this.lastPublishedState = { ...currentActivitiesForPublishing };
         } else {
@@ -281,13 +338,34 @@ export class ActivityPublisher {
             }
           }
 
+          try {
+            const logger = getFileLogger();
+            logger.log('Publisher', 'DEBUG', 'Changed services detection', {
+              currentCount: Object.keys(currentActivitiesForPublishing).length,
+              changedCount: Object.keys(changedActivities).length,
+              lastStateCount: Object.keys(this.lastPublishedState).length
+            });
+          } catch {}
+
           if (Object.keys(changedActivities).length > 0) {
             console.debug(`[Publisher] Changed services: ${Object.values(changedActivities).map(a => a?.service).join(', ')}`);
+            try {
+              const logger = getFileLogger();
+              logger.log('Publisher', 'INFO', 'Publishing changed services', {
+                mode: 'changed',
+                count: Object.keys(changedActivities).length,
+                services: Object.values(changedActivities).map(a => a?.service).join(', ')
+              });
+            } catch {}
             await this._publishServices(changedActivities, 'changed', config);
             // Update last published state with what we just published
             this.lastPublishedState = { ...this.lastPublishedState, ...changedActivities };
           } else {
             console.debug('[Publisher] No changes to publish');
+            try {
+              const logger = getFileLogger();
+              logger.log('Publisher', 'DEBUG', 'No changes detected', { lastStateCount: Object.keys(this.lastPublishedState).length });
+            } catch {}
           }
         }
       }
@@ -367,14 +445,37 @@ export class ActivityPublisher {
     mode: 'changed' | 'all' | 'atomic',
     config?: any
   ): Promise<void> {
+    try {
+      const logger = getFileLogger();
+      logger.log('Publisher', 'INFO', '_publishServices called', {
+        mode,
+        inputCount: Object.keys(activities).length,
+        services: Object.values(activities).filter(a => !!a).map(a => a?.service).join(', ')
+      });
+    } catch {}
+
     // Activities are keyed by activity ID, not service name
     // For 'all'/'atomic': filter to only SERVICES_TO_PUBLISH; for 'changed': use all activities
     const activitiesToPublish: Activity[] = mode === 'all' || mode === 'atomic'
       ? Object.values(activities).filter((a): a is Activity => !!a && SERVICES_TO_PUBLISH.includes(a.service))
       : Object.values(activities).filter((a): a is Activity => !!a);
 
+    try {
+      const logger = getFileLogger();
+      logger.log('Publisher', 'DEBUG', 'Activities filtered for publish', {
+        mode,
+        beforeFilter: Object.keys(activities).length,
+        afterFilter: activitiesToPublish.length,
+        filtered: Object.values(activities).filter((a): a is Activity => !!a && !SERVICES_TO_PUBLISH.includes(a?.service || '')).map(a => a?.service)
+      });
+    } catch {}
+
     if (activitiesToPublish.length === 0) {
       console.debug('[Publisher] No activities to publish');
+      try {
+        const logger = getFileLogger();
+        logger.log('Publisher', 'WARN', 'No activities after filtering', { mode });
+      } catch {}
       return;
     }
 
@@ -391,11 +492,25 @@ export class ActivityPublisher {
           await this._publishBundledActivities(batch, 'compressed', config);
         }
       } else {
+        try {
+          const logger = getFileLogger();
+          logger.log('Publisher', 'DEBUG', 'Publishing activities individually (atomic mode)', {
+            count: activitiesToPublish.length,
+            services: activitiesToPublish.map(a => a.service).join(', ')
+          });
+        } catch {}
         for (const activity of activitiesToPublish) {
           await this._publishActivity(activity);
         }
       }
     } else {
+      try {
+        const logger = getFileLogger();
+        logger.log('Publisher', 'DEBUG', 'Publishing bundled activities', {
+          mode,
+          count: activitiesToPublish.length
+        });
+      } catch {}
       await this._publishBundledActivities(activitiesToPublish, mode, config);
     }
   }

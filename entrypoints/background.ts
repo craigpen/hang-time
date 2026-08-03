@@ -323,6 +323,13 @@ async function initializeExtension(): Promise<void> {
     console.log('[Background] 📧 About to subscribe to friends...');
     const friendManager = getFriendManager();
     const friends = await friendManager.getAllFriends();
+    try {
+      const logger = getFileLogger();
+      logger.log('Background', 'INFO', 'Found friends to subscribe to', {
+        count: friends.length,
+        identifiers: friends.map(f => f.identifier)
+      });
+    } catch {}
     console.log(`[Background] 📧 Subscribing to ${friends.length} friends`);
     for (const friend of friends) {
       try {
@@ -497,6 +504,16 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name.startsWith('content-script-')) {
     const service = port.name.replace('content-script-', '');
     const tabId = port.sender?.tabId;
+    const url = port.sender?.url;
+
+    try {
+      const logger = getFileLogger();
+      logger.log('Background', 'INFO', 'Content script connected', {
+        service,
+        tabId,
+        url: url?.substring(0, 50),
+      });
+    } catch {}
 
     if (tabId !== undefined) {
       activeContentScriptPorts.set(tabId, port);
@@ -2037,11 +2054,19 @@ async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): 
 
 async function _handleContentScriptActivity(key: string, value: any, tabId?: number): Promise<ExtensionResponse> {
   try {
+    const logger = getFileLogger();
+    logger.log('Background', 'INFO', 'Content script activity received', {
+      service: value?.service,
+      content: value?.content?.substring(0, 50),
+      tabId,
+    });
+
     // Verify we have all required fields before writing
     if (key.startsWith('content_script_activity_') && value) {
       const requiredFields = ['id', 'service', 'content', 'state', 'timestamp'];
       const missingFields = requiredFields.filter(field => !(field in value));
       if (missingFields.length > 0) {
+        logger.log('Background', 'WARN', 'Activity missing fields', { missingFields });
         console.warn(`[Background] ⚠️  Activity missing fields: ${missingFields.join(', ')}`, value);
       }
     }

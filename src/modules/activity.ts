@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { StorageManager } from './storage';
 import { getActivityDatastore } from './activity-datastore';
+import { getFileLogger } from './file-logger';
 
 export class ActivityDetector {
   private services: Map<string, IServiceModule> = new Map();
@@ -33,6 +34,16 @@ export class ActivityDetector {
 
   async start(): Promise<void> {
     // Initial detection
+    try {
+      try {
+        const logger = getFileLogger();
+        logger.log('Activity', 'INFO', 'Activity detector starting...');
+      } catch {}
+    } catch (e) {
+      console.error('[Activity] Start failed:', e);
+      throw e;
+    }
+
     await this.detectAndPublish();
 
     // Poll every N seconds
@@ -55,8 +66,19 @@ export class ActivityDetector {
       const allActivities = await this.detectAllActiveActivities();
 
       if (allActivities.length === 0) {
+        try {
+          const logger = getFileLogger();
+          logger.log('Activity', 'DEBUG', 'No activities detected');
+        } catch {}
         return;
       }
+
+      try {
+        const logger = getFileLogger();
+        logger.log('Activity', 'INFO', `Detected ${allActivities.length} activities`, {
+          services: allActivities.map(a => a.service),
+        });
+      } catch {}
 
       // Validate activities through datastore before storing
       const datastore = getActivityDatastore();
@@ -158,6 +180,10 @@ export class ActivityDetector {
   async detectAllActiveActivities(): Promise<Activity[]> {
     const profile = await this.storageManager.getUserProfile();
     if (!profile) {
+      try {
+        const logger = getFileLogger();
+        logger.log('Activity', 'WARN', 'No user profile found');
+      } catch {}
       return [];
     }
 
@@ -176,22 +202,51 @@ export class ActivityDetector {
       'video-tab': true,
     };
 
+    try {
+      const logger = getFileLogger();
+      logger.log('Activity', 'DEBUG', 'Starting detection', { servicesEnabled });
+    } catch {}
+
     // Check each enabled OAuth service (Spotify, Twitch, Steam, Discord)
     const oauthServices: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api'];
     for (const serviceName of oauthServices) {
-      if (!servicesEnabled[serviceName]) continue;
+      if (!servicesEnabled[serviceName]) {
+        try {
+          const logger = getFileLogger();
+          logger.log('Activity', 'DEBUG', `${serviceName} disabled, skipping`);
+        } catch {}
+        continue;
+      }
 
       const service = this.services.get(serviceName);
-      if (!service) continue;
+      if (!service) {
+        try {
+          const logger = getFileLogger();
+          logger.log('Activity', 'WARN', `${serviceName} not registered`);
+        } catch {}
+        continue;
+      }
 
       try {
         const activity = await service.getCurrentActivity();
         if (activity) {
           activities.push(activity);
           seenServices.add(serviceName);
+          try {
+            const logger = getFileLogger();
+            logger.log('Activity', 'INFO', `Detected activity from ${serviceName}: ${activity.content}`);
+          } catch {}
+        } else {
+          try {
+            const logger = getFileLogger();
+            logger.log('Activity', 'DEBUG', `${serviceName} returned no activity`);
+          } catch {}
         }
       } catch (error) {
-        console.error(`[Activity] ERROR detecting ${serviceName}:`, error);
+        try {
+          const logger = getFileLogger();
+          logger.log('Activity', 'ERROR', `Failed detecting ${serviceName}`, { error: String(error) });
+        } catch {}
       }
     }
 
@@ -199,8 +254,16 @@ export class ActivityDetector {
     const tabService = this.services.get('tabs') as any;
     if (tabService) {
       try {
+        const logger = getFileLogger();
+        logger.log('Activity', 'DEBUG', 'Checking tab service...');
+      } catch {}
+      try {
         const videoActivity = await tabService.getCurrentActivity();
         if (videoActivity) {
+          try {
+            const logger = getFileLogger();
+            logger.log('Activity', 'INFO', `Tab service found activity: ${videoActivity.service} - ${videoActivity.content}`);
+          } catch {}
           // Check if this specific service is enabled (youtube-tab, netflix-tab, twitch-tab, or video-tab)
           const serviceEnabled = servicesEnabled[videoActivity.service as ServiceName];
           if (serviceEnabled !== false) {
@@ -208,10 +271,23 @@ export class ActivityDetector {
             activities.push(videoActivity);
             seenServices.add(videoActivity.service);
           }
+        } else {
+          try {
+            const logger = getFileLogger();
+            logger.log('Activity', 'DEBUG', 'Tab service returned no activity');
+          } catch {}
         }
       } catch (error) {
-        console.error('[Activity] ERROR detecting browser videos:', error);
+        try {
+          const logger = getFileLogger();
+          logger.log('Activity', 'ERROR', 'Failed detecting browser videos', { error: String(error) });
+        } catch {}
       }
+    } else {
+      try {
+        const logger = getFileLogger();
+        logger.log('Activity', 'WARN', 'Tab service not registered');
+      } catch {}
     }
 
     // Sort: audio on first, then by last accessed time (for browser tabs) or timestamp (for APIs)

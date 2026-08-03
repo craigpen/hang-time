@@ -5,6 +5,7 @@
  */
 
 import { NostrEvent, NostrError, DEFAULT_RELAY_URLS } from '../types';
+import { getFileLogger } from './file-logger';
 
 export interface IRelayConnection {
   url: string;
@@ -183,23 +184,44 @@ export class RelayConnection implements IRelayConnection {
   }
 
   private _sendSubscription(identifier: string, _callback?: (event: NostrEvent) => Promise<void>): void {
-    if (!this.isConnected || !this.ws) return;
+    if (!this.isConnected || !this.ws) {
+      try {
+        const logger = getFileLogger();
+        logger.log('RelayConnection', 'WARN', 'Cannot subscribe: not connected', {
+          identifier: identifier.substring(0, 16),
+          url: this.url
+        });
+      } catch {}
+      return;
+    }
 
     try {
       const subscriptionId = `sub_${this.subscriptionId++}`;
-      // Request recent events (last 24 hours) + limit to catch all recent activities
+      // Subscribe to recent and new events from friend (no limit for live subscription)
       const since = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
       const filter = {
         authors: [identifier],
         kinds: [1, 4],
         since,
-        limit: 1000, // Increased from 100 to catch more recent events
       };
 
       const message = JSON.stringify(['REQ', subscriptionId, filter]);
       this.ws.send(message);
+      try {
+        const logger = getFileLogger();
+        logger.log('RelayConnection', 'INFO', 'Subscription sent', {
+          identifier: identifier.substring(0, 16),
+          subscription_id: subscriptionId,
+          url: this.url,
+          filter
+        });
+      } catch {}
       console.debug(`[Nostr] Subscribed to author ${identifier.substring(0, 16)}... (filter: ${JSON.stringify(filter)}) on ${this.url}`);
     } catch (error) {
+      try {
+        const logger = getFileLogger();
+        logger.log('RelayConnection', 'ERROR', 'Failed to send subscription', { error: String(error), url: this.url });
+      } catch {}
       console.error(`[Nostr] Failed to subscribe on ${this.url}:`, error);
     }
   }
@@ -406,6 +428,10 @@ export class RelayPool {
   static readonly DEFAULT_RELAYS = DEFAULT_RELAY_URLS;
 
   async connect(relayUrls: string[]): Promise<void> {
+    try {
+      const logger = getFileLogger();
+      logger.log('RelayPool', 'INFO', 'Connecting to relays', { count: relayUrls.length, urls: relayUrls });
+    } catch {}
     console.debug(`[Nostr] Connecting to ${relayUrls.length} relays...`);
 
     const connectionPromises = relayUrls.map(async (url) => {
@@ -418,7 +444,15 @@ export class RelayPool {
 
       try {
         await relay.connect();
+        try {
+          const logger = getFileLogger();
+          logger.log('RelayPool', 'INFO', 'Relay connected', { url });
+        } catch {}
       } catch (error) {
+        try {
+          const logger = getFileLogger();
+          logger.log('RelayPool', 'WARN', 'Failed to connect to relay', { url, error: String(error) });
+        } catch {}
         console.warn(`[Nostr] Failed to connect to ${url}:`, error);
       }
     });
@@ -427,9 +461,17 @@ export class RelayPool {
 
     const connectedCount = this.getConnectedRelayCount();
     if (connectedCount === 0) {
+      try {
+        const logger = getFileLogger();
+        logger.log('RelayPool', 'ERROR', 'Failed to connect to any relays');
+      } catch {}
       throw new NostrError('Failed to connect to any relays');
     }
 
+    try {
+      const logger = getFileLogger();
+      logger.log('RelayPool', 'INFO', 'Connected to relays', { count: connectedCount });
+    } catch {}
     console.debug(`[Nostr] Successfully connected to ${connectedCount} relay(s)`);
   }
 
@@ -546,6 +588,14 @@ export class RelayPool {
   }
 
   subscribe(identifier: string, callback: (event: NostrEvent) => Promise<void>): void {
+    try {
+      const logger = getFileLogger();
+      logger.log('RelayPool', 'INFO', 'Subscribing to identifier', {
+        identifier: identifier.substring(0, 16),
+        relay_count: this.relays.size
+      });
+    } catch {}
+
     if (!this.subscriptions.has(identifier)) {
       this.subscriptions.set(identifier, new Set());
     }
@@ -553,6 +603,14 @@ export class RelayPool {
     this.subscriptions.get(identifier)!.add(callback);
 
     for (const relay of this.relays.values()) {
+      try {
+        const logger = getFileLogger();
+        logger.log('RelayPool', 'DEBUG', 'Calling relay.subscribe', {
+          identifier: identifier.substring(0, 16),
+          url: relay.url,
+          connected: relay.isConnected
+        });
+      } catch {}
       relay.subscribe(identifier, callback);
     }
   }

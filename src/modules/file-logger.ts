@@ -17,9 +17,17 @@ export class FileLogger {
 
   /**
    * Initialize logger - call once at startup
+   * Clears old logs from previous sessions
    */
   async init(): Promise<void> {
-    // Clear any old logs on init
+    // Clear old logs from storage for fresh session
+    try {
+      await chrome.storage.local.remove(this.storageKey);
+    } catch (error) {
+      console.error('[FileLogger] Failed to clear old logs:', error);
+    }
+
+    // Initialize fresh log buffer
     this.logsBuffer = [];
     this.logsBuffer.push(`\n${'='.repeat(80)}`);
     this.logsBuffer.push(`Hang Time Logs - Profile: ${this.profileId}`);
