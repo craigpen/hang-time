@@ -6,7 +6,7 @@
 import * as secp from '@noble/secp256k1';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { StorageManager } from './storage';
-import { UserProfile, AuthError, DEFAULT_PUBLISHER_RATE_MS } from '../types';
+import { UserProfile, AuthError, DEFAULT_PUBLISHER_RATE_MS, DEFAULT_RELAY_URLS } from '../types';
 import { deriveKeypairFromIdentifier } from './security-utils';
 
 // Configure secp256k1 to use sha256 for signing
@@ -115,12 +115,7 @@ export class IdentityManager {
         size: 'atomic',
         scope: 'updates',
         rate_ms: DEFAULT_PUBLISHER_RATE_MS,
-        relays: {
-          'nos.lol': true,
-          'nostr.mom': true,
-          'relay.mostr.pub': true,
-          'relay.primal.net': true,
-        },
+        relays: Object.fromEntries(DEFAULT_RELAY_URLS.map(url => [url.replace('wss://', '').replace('ws://', '').replace(/\/$/, ''), true])),
         retry_backoff_ms: 1000,
         compression: false,
         verbose_logging: false,

@@ -5,7 +5,7 @@
  */
 
 import * as pako from 'pako';
-import { Activity, NostrEvent, ServiceName } from '../types';
+import { Activity, NostrEvent, ServiceName, DEFAULT_RELAY_URLS } from '../types';
 import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
@@ -128,13 +128,7 @@ export class ActivityPublisher {
         enabled: true,
         size: 'full',
         scope: 'updates',
-        relays: {
-          'nos.lol': true,
-          'relay.damus.io': true,
-          'relay.snort.social': true,
-          'nostr.mom': true,
-          'relay.mostr.pub': true,
-        },
+        relays: Object.fromEntries(DEFAULT_RELAY_URLS.map(url => [url.replace('wss://', '').replace('ws://', '').replace(/\/$/, ''), true])),
       };
 
       // Check if publish queue allows activity publish this cycle
@@ -394,7 +388,9 @@ export class ActivityPublisher {
   private async _compressContent(content: string): Promise<string> {
     try {
       const compressed = pako.gzip(content);
-      return Buffer.from(compressed).toString('base64');
+      // Convert Uint8Array to base64 using browser API
+      const binaryString = String.fromCharCode(...compressed);
+      return btoa(binaryString);
     } catch (error) {
       console.error('[Publisher] Gzip compression failed, sending uncompressed:', error);
       return content;
@@ -403,8 +399,13 @@ export class ActivityPublisher {
 
   private async _decompressContent(content: string): Promise<string> {
     try {
-      const binary = Buffer.from(content, 'base64');
-      const decompressed = pako.ungzip(binary, { to: 'string' });
+      // Convert base64 back to binary using browser API
+      const binaryString = atob(content);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const decompressed = pako.ungzip(bytes, { to: 'string' });
       return decompressed;
     } catch (error) {
       console.error('[Publisher] Gzip decompression failed, treating as uncompressed:', error);

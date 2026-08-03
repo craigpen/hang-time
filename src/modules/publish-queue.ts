@@ -176,7 +176,7 @@ export class PublishQueue {
           if (pending.retryCount >= this.MAX_RETRIES) {
             // Exhausted retries, remove from queue
             this.userActionQueue.shift();
-            console.warn(`[PublishQueue] Removed ${pending.type} after ${this.MAX_RETRIES} failed retries`);
+            console.warn(`[PublishQueue] ❌ Removed ${pending.type} after ${this.MAX_RETRIES} failed retries (event: ${pending.event.id.substring(0, 16)}..., created: ${new Date(pending.createdAt).toISOString()})`);
           } else {
             // Schedule retry
             const backoffMs = this.RETRY_BACKOFF_MS[pending.retryCount - 1] || 60000;

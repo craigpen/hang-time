@@ -299,10 +299,14 @@ export interface VideoDataMetrics {
 // ============================================================================
 // NOSTR RELAYS (Single source of truth)
 // ============================================================================
+// Note: These relays have proven reliable without rate-limiting or restrictions.
+// Future candidates (tested but rejected):
+//   - nos.lol: rate-limits aggressively (~5-10 msg/min)
+//   - nostr.wine: requires authentication to write events
+//   - relay.nostr.info: blocks kind 0 (profile) events
+//   - nostr.mom: requires 28-bit proof-of-work
 
 export const DEFAULT_RELAY_URLS = [
-  'wss://nos.lol',
-  'wss://nostr.mom',
   'wss://relay.mostr.pub',
   'wss://relay.primal.net',
 ];

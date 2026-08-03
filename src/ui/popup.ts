@@ -3,7 +3,7 @@
  * Main extension popup showing active friends
  */
 
-import { Friend, Activity, ExtensionResponse, STORAGE_KEYS } from '../types';
+import { Friend, Activity, ExtensionResponse, STORAGE_KEYS, DEFAULT_RELAY_URLS } from '../types';
 import { StorageManager } from '../modules/storage';
 import { GameLibraryManager } from '../modules/game-library';
 import { MetadataFetcher } from '../modules/metadata-fetcher';
@@ -1989,7 +1989,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         size: 'full',
         scope: 'updates',
         rate_ms: 12000,
-        relays: { 'nos.lol': true, 'nostr.mom': true, 'relay.mostr.pub': true, 'relay.primal.net': true },
+        relays: Object.fromEntries(DEFAULT_RELAY_URLS.map(url => [url.replace('wss://', '').replace('ws://', '').replace(/\/$/, ''), true])),
         retry_backoff_ms: 1000,
         compression: false,
         verbose_logging: false,
