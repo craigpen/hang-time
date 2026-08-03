@@ -63,7 +63,18 @@ export function validateContent(content: unknown): string {
  * Validates that service field is valid
  */
 export function validateService(service: unknown): string {
-  const validServices = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'video-tab'];
+  const validServices = [
+    // OAuth-based services
+    'spotify-api',
+    'twitch-api',
+    'steam-api',
+    'discord-api',
+    // Browser tab-based services (video detection)
+    'video-tab',
+    'youtube-tab',
+    'netflix-tab',
+    'twitch-tab',
+  ];
 
   if (typeof service !== 'string') {
     throw new ValidationError('service', 'Must be a string', service);
