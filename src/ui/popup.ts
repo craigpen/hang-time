@@ -1836,23 +1836,10 @@ export class PopupController {
 
   private _resizePopupToFitSettings(): void {
     const body = document.body;
-    const settingsContent = document.querySelector('.settings-panel-content');
-
-    if (settingsContent) {
-      // Measure the settings content height
-      const contentHeight = settingsContent.scrollHeight;
-      // Add padding from settings-panel-content
-      const computedStyle = window.getComputedStyle(settingsContent);
-      const padding = parseFloat(computedStyle.paddingTop) + parseFloat(computedStyle.paddingBottom);
-
-      // Add header height (settings-panel-header)
-      const header = document.querySelector('.settings-panel-header');
-      const headerHeight = header ? header.clientHeight : 40;
-
-      const totalHeight = headerHeight + contentHeight + padding + 20; // 20px buffer
-      body.style.minHeight = totalHeight + 'px';
-      console.debug(`[Popup] Resized for settings: ${totalHeight}px`);
-    }
+    // Don't resize body when settings panel is open - the fixed panel handles its own scrolling
+    // Setting minHeight causes overflow and scrollbars even with overflow: hidden
+    body.style.minHeight = '100px';
+    console.debug(`[Popup] Settings panel opened (using fixed positioning)`);
   }
 
   private _resizePopupToFitContent(): void {
