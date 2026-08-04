@@ -6,9 +6,11 @@
  * 3. Activities - base case, must publish at least every other cycle
  */
 
+import { finalizeEvent } from 'nostr-tools';
 import { NostrEvent } from '../types';
 import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
+import { IdentityManager } from './identity';
 import type { ActivityPublisher } from './publisher';
 
 export interface PendingPublish {
@@ -31,6 +33,7 @@ export class PublishQueue {
   private relayPool: RelayPool;
   private storageManager: StorageManager;
   private activityPublisher: ActivityPublisher | null = null;
+  private identityManager: IdentityManager | null = null;
 
   // Retry configuration
   private readonly MAX_RETRIES = 10;
@@ -40,6 +43,14 @@ export class PublishQueue {
     this.relayPool = relayPool;
     this.storageManager = storageManager;
     this.publishIntervalMs = publishIntervalMs;
+  }
+
+  /**
+   * Set the IdentityManager (called from background.ts after initialization)
+   */
+  setIdentityManager(identityManager: IdentityManager): void {
+    this.identityManager = identityManager;
+    console.debug('[PublishQueue] IdentityManager wired');
   }
 
   /**
@@ -132,6 +143,42 @@ export class PublishQueue {
   }
 
   /**
+   * Refresh event timestamp to current time and re-finalize
+   * Ensures replaceable/parameterized replaceable events always have strictly increasing created_at
+   */
+  private async _refreshEventTimestamp(event: NostrEvent): Promise<NostrEvent> {
+    if (!this.identityManager) {
+      console.warn('[PublishQueue] IdentityManager not available, publishing with stale timestamp');
+      return event;
+    }
+
+    try {
+      const secretKey = await this.identityManager.getSecretKey();
+      const created_at = Math.floor(Date.now() / 1000);
+
+      // Re-finalize the event with fresh timestamp
+      const refreshedEvent = finalizeEvent({
+        kind: event.kind,
+        tags: event.tags,
+        content: event.content,
+        created_at,
+      }, hexToBytes(secretKey)) as NostrEvent;
+
+      return refreshedEvent;
+    } catch (error) {
+      console.error('[PublishQueue] Failed to refresh event timestamp:', error);
+      return event;
+    }
+  }
+
+  /**
+   * Helper: Convert hex string to Uint8Array (for nostr-tools finalizeEvent)
+   */
+  private hexToBytes(hex: string): Uint8Array {
+    return new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+  }
+
+  /**
    * Main publish cycle - determines what to publish based on priority
    */
   private async _publishCycle(): Promise<void> {
@@ -171,9 +218,11 @@ export class PublishQueue {
       // Priority 4: Activities (always available, fills gaps, resets gap counter)
       // This is handled by caller (ActivityPublisher) who will call back
 
-      // If we have an event to publish, publish it
+      // If we have an event to publish, refresh timestamp and publish it
       if (eventToPublish) {
-        await this.relayPool.publish(eventToPublish);
+        // Refresh created_at to current time for replaceable/parameterized replaceable events
+        const eventToPublishWithFreshTimestamp = await this._refreshEventTimestamp(eventToPublish);
+        await this.relayPool.publish(eventToPublishWithFreshTimestamp);
 
         // If this was a user action, remove from queue and retry on failure
         if (this.userActionQueue.length > 0) {

@@ -81,7 +81,6 @@ export class ActivityPublisher {
       }
 
       const pubkey = await this.identityManager.getPubkey();
-      const created_at = Math.floor(Date.now() / 1000);
 
       // Build profile tags
       const tags: Array<[string, string]> = [];
@@ -93,12 +92,13 @@ export class ActivityPublisher {
       }
 
       // Create and sign kind 0 profile event using nostr-tools
+      // Note: created_at will be refreshed by PublishQueue at actual publish time
       const secretKeyHex = await this.identityManager.getSecretKey();
       const event = finalizeEvent({
         kind: 0,
         tags,
         content: '', // Kind 0 typically has empty content for profile data in tags
-        created_at,
+        created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
       }, hexToBytes(secretKeyHex)) as NostrEvent;
 
       // Mark profile as pending in queue

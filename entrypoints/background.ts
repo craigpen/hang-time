@@ -561,6 +561,7 @@ async function initializeExtension(): Promise<void> {
       const profile = await storageManager.getUserProfile();
       const publishIntervalMs = profile?.publisher_config?.rate_ms || 12000;
       publishQueue = new PublishQueue(relayPool, storageManager, publishIntervalMs);
+      publishQueue.setIdentityManager(identityManager);
       publishQueue.start();
       console.log('[Background] PublishQueue initialized and started');
 

@@ -317,7 +317,6 @@ export class GameLibraryManager {
       const steamId = profile?.steam_config?.steam_id || '';
 
       // Create Nostr event
-      const created_at = Math.floor(Date.now() / 1000);
       const content = JSON.stringify({
         appIds,
         count: library.length,
@@ -325,6 +324,7 @@ export class GameLibraryManager {
       });
 
       // Use nostr-tools to create and sign the event
+      // Note: created_at will be refreshed by PublishQueue at actual publish time
       const event = finalizeEvent({
         kind: 10003, // Replaceable: only latest game library snapshot stored
         tags: [
@@ -332,7 +332,7 @@ export class GameLibraryManager {
           ['steam-id', steamId],
         ],
         content,
-        created_at,
+        created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
       }, hexToBytes(secretKey)) as NostrEvent;
 
       console.debug(`[GameLibrary] Marking game library as due (${appIds.length} games)`);

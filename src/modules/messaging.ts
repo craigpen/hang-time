@@ -55,7 +55,6 @@ export class MessagingManager {
     }
 
     const pubkey = await this.identityManager.getPubkey();
-    const created_at = Math.floor(Date.now() / 1000);
     const secretKeyHex = await this.identityManager.getSecretKey();
 
     // Build tags with friend request metadata
@@ -70,11 +69,12 @@ export class MessagingManager {
     ];
 
     // Create kind-30001 parameterized replaceable friend request event
+    // Note: created_at will be refreshed by PublishQueue at actual publish time
     const event = finalizeEvent({
       kind: 30001,
       tags,
       content: `${userProfile.nickname || userProfile.memorable_identifier} added you as a friend`,
-      created_at,
+      created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
     }, hexToBytes(secretKeyHex)) as NostrEvent;
 
     // Queue or publish the event
@@ -97,7 +97,6 @@ export class MessagingManager {
     }
 
     const pubkey = await this.identityManager.getPubkey();
-    const created_at = Math.floor(Date.now() / 1000);
 
     // Build tags with activity metadata and Discord link if available
     const tags = [
@@ -138,11 +137,12 @@ export class MessagingManager {
     const secretKeyHex = await this.identityManager.getSecretKey();
 
     // Create kind-30001 parameterized replaceable invite event
+    // Note: created_at will be refreshed by PublishQueue at actual publish time
     const event = finalizeEvent({
       kind: 30001,
       tags,
       content: `Inviting ${recipientFriend.local_name} to ${activity.content || activity.service}`,
-      created_at,
+      created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
     }, hexToBytes(secretKeyHex)) as NostrEvent;
 
     // Queue or publish the event
@@ -237,8 +237,6 @@ export class MessagingManager {
       const plaintext = JSON.stringify(message);
       const encryptedContent = await encryptionManager.encrypt(plaintext, recipientPubkey, secretKey);
 
-      const created_at = Math.floor(Date.now() / 1000);
-
       // Create kind-4 event with message_type tag
       const tags: Array<[string, string]> = [
         ['p', recipientPubkey],
@@ -246,11 +244,12 @@ export class MessagingManager {
       ];
 
       // Use finalizeEvent() for consistent event signing
+      // Note: created_at will be refreshed by PublishQueue at actual publish time
       const event = finalizeEvent({
         kind: 4,
         tags,
         content: encryptedContent,
-        created_at,
+        created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
       }, hexToBytes(secretKey)) as NostrEvent;
 
       // Queue or publish the event
@@ -289,8 +288,6 @@ export class MessagingManager {
       const plaintext = JSON.stringify(message);
       const encryptedContent = await encryptionManager.encrypt(plaintext, recipientFriend.pubkey, secretKey);
 
-      const created_at = Math.floor(Date.now() / 1000);
-
       // Create kind-4 event with recipient tag and message type
       const tags: Array<[string, string]> = [['p', recipientFriend.pubkey]];
 
@@ -302,11 +299,12 @@ export class MessagingManager {
       }
 
       // Use finalizeEvent() for consistent event signing
+      // Note: created_at will be refreshed by PublishQueue at actual publish time
       const event = finalizeEvent({
         kind: 4,
         tags,
         content: encryptedContent,
-        created_at,
+        created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
       }, hexToBytes(secretKey)) as NostrEvent;
 
       // Queue or publish the event
