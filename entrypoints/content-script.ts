@@ -486,12 +486,16 @@ class GenericVideoTracker {
 
   private _isContextValid(): boolean {
     try {
-      // Check both: extension context AND instance ownership
-      if (!(globalThis as any).chrome?.runtime?.id) return false;
+      // Check if chrome API is available (dies when extension reloads)
+      const chrome = (globalThis as any).chrome;
+      if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
+        return false;
+      }
       // If a newer script took over, this instance is dead
       if ((window as any).hangTimeScriptActive !== INSTANCE_ID) return false;
       return true;
-    } catch {
+    } catch (e) {
+      // Any error accessing chrome = context is invalid
       return false;
     }
   }
@@ -528,7 +532,12 @@ class GenericVideoTracker {
 
 // Called when tracker detects it's no longer the active instance
 function forceGlobalTeardown(): void {
-  console.log(`[ContentScript] 🛑 Instance ${INSTANCE_ID} detected ownership loss, triggering self-destruct...`);
+  console.log(`[ContentScript] 🛑 Instance ${INSTANCE_ID} detected context loss/ownership loss, forcefully terminating...`);
+
+  // Mark as inactive BEFORE cleanup to block any concurrent operations
+  (window as any).hangTimeScriptActive = false;
+
+  // Then cleanup
   performCleanup();
 }
 
