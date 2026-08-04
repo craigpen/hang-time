@@ -2516,10 +2516,16 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
     console.debug('[Popup] Joining activity:', activity.service, 'from friend:', friendId);
     try {
       // Open the activity (service-specific handler)
-      await chrome.runtime.sendMessage({
+      const response = await chrome.runtime.sendMessage({
         type: 'JOIN_ACTIVITY',
         data: { activity, friendId },
       });
+
+      if (!response.success) {
+        console.error('[Popup] Join failed:', response.error);
+        this._showError(response.error || 'Failed to join activity');
+        return;
+      }
 
       // Send join_accepted notification to friend who invited
       if (friendId && friendId !== 'self') {
@@ -2530,6 +2536,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       }
     } catch (error) {
       console.error('[Popup] Failed to join activity:', error);
+      this._showError('Failed to join activity');
     }
   }
 
