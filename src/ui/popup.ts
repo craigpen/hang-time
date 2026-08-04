@@ -2160,10 +2160,22 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
     const gameDiscoveryToggle = document.getElementById('game-discovery-enabled-popup') as HTMLInputElement;
     if (gameDiscoveryToggle) {
       gameDiscoveryToggle.addEventListener('change', async () => {
+        const wasEnabled = this.storage ? (await this.storage.getUserProfile())?.game_discovery_enabled : false;
+        const nowEnabled = gameDiscoveryToggle.checked;
+
         await this._saveSettingsPanel();
-        if (gameDiscoveryToggle.checked) {
-          console.debug('[Popup] Game discovery enabled - will start in background service worker');
-        } else {
+
+        // If just enabled, kick off game library refresh immediately
+        if (!wasEnabled && nowEnabled) {
+          console.debug('[Popup] Game discovery enabled - triggering immediate refresh');
+          try {
+            await chrome.runtime.sendMessage({
+              type: 'REFRESH_GAME_LIBRARY',
+            });
+          } catch (error) {
+            console.debug('[Popup] Game library refresh initiated');
+          }
+        } else if (!nowEnabled) {
           console.debug('[Popup] Game discovery disabled');
         }
       });

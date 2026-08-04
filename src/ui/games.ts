@@ -107,6 +107,20 @@ export class GamesTabController {
       const metadataCount = this.allGameMetadata.size;
       const totalCount = myGames.length;
       const isIncomplete = metadataCount < totalCount;
+      const metadataPercentage = totalCount > 0 ? metadataCount / totalCount : 0;
+
+      // If we have very little metadata (less than 10%), keep showing loading state
+      // This prevents showing placeholder cards while background fetcher is still queuing metadata
+      if (metadataPercentage < 0.1 && metadataCount > 0) {
+        this._showSyncStatus(metadataCount, totalCount);
+        return;
+      }
+
+      // If we have no metadata at all, show loading state
+      if (metadataCount === 0) {
+        this._showLoading();
+        return;
+      }
 
       // Build enriched games with friend counts
       const enrichedGames = await this._buildEnrichedGames(myGames);
