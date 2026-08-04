@@ -1909,10 +1909,30 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
       } else if (event.kind === 4) {
         // Kind-4 messages (always accept for both pending and active)
         console.debug(`[Message] Handling incoming kind-4`);
-  await _handleMessageEvent(friendIdentifier, event);
+        await _handleMessageEvent(friendIdentifier, event);
+      } else if (event.kind === 10003) {
+        // Kind-10003 replaceable activities - only process if friend is active
+        if (!isPending) {
+          // Check if this is a game-library event (tag t=game-library)
+          const isGameLibraryEvent = event.tags.find((t) => t[0] === 't' && t[1] === 'game-library');
+
+          if (isGameLibraryEvent) {
+            // Route to game library manager
+            const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
+            await gameLibraryManager.handleGameLibraryEvent(event);
+          } else {
+            // Activity event
+            await _handleActivityEvent(friendIdentifier, event);
+          }
+        } else {
+          console.debug(`[Friend] Skipping kind-10003 from pending friend ${friendIdentifier}`);
+        }
+      } else if (event.kind === 30001) {
+        // Kind-30001 parameterized replaceable events (friend requests, invites)
+        await _handleActivityEvent(friendIdentifier, event);
       } else {
         console.debug(`[Friend] Ignoring event with kind ${event.kind}`);
-  }
+      }
     } catch (error) {
       console.error(`[Friend] Error handling event for ${friendIdentifier}:`, error);
     }
