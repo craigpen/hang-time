@@ -1,9 +1,12 @@
 /**
- * Hang Time - Nostr Relay Pool (FIXED)
+ * Hang Time - Nostr Relay Pool (with nostr-tools SimplePool)
  * Manages WebSocket connections to multiple Nostr relays
+ * Uses nostr-tools SimplePool for event broadcasting
+ * Keeps RelayConnection for subscription management and sophisticated features
  * NIP-01 compliant with proper OK, NOTICE, and CLOSED handling
  */
 
+import { SimplePool } from 'nostr-tools';
 import { NostrEvent, NostrError, DEFAULT_RELAY_URLS } from '../types';
 import { getFileLogger } from './file-logger';
 
@@ -424,8 +427,13 @@ export class RelayConnection implements IRelayConnection {
 export class RelayPool {
   private relays: Map<string, RelayConnection> = new Map();
   private subscriptions: Map<string, Set<(event: NostrEvent) => Promise<void>>> = new Map();
+  private simplePool: SimplePool;
 
   static readonly DEFAULT_RELAYS = DEFAULT_RELAY_URLS;
+
+  constructor() {
+    this.simplePool = new SimplePool();
+  }
 
   async connect(relayUrls: string[]): Promise<void> {
     try {
@@ -508,12 +516,15 @@ export class RelayPool {
           throw new NostrError('No connected relays available for publishing');
         }
 
-        // Publish to all relays, wait for at least one success
+        // Publish to all relays using SimplePool for better connection management
         const publishStart = Date.now();
-        const publishPromises = relays.map((relay) =>
-          relay.publish(event).then(
-            () => ({ relay: relay.url, success: true, latency_ms: Date.now() - publishStart }),
-            (error) => ({ relay: relay.url, success: false, error: error.message, latency_ms: Date.now() - publishStart })
+        const relayUrls = relays.map(r => r.url);
+
+        // Use SimplePool to broadcast to all relays
+        const publishPromises = relayUrls.map((url) =>
+          this.simplePool.publish([url], event as any).then(
+            () => ({ relay: url, success: true, latency_ms: Date.now() - publishStart }),
+            (error) => ({ relay: url, success: false, error: (error as Error).message, latency_ms: Date.now() - publishStart })
           )
         );
         const relayAttempts = await Promise.all(publishPromises);
