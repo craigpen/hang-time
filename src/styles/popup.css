@@ -782,11 +782,6 @@ body.settings-open {
   align-items: center;
   gap: 12px;
   padding: 8px 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.service-row:last-child {
-  border-bottom: none;
 }
 
 .service-toggle,
