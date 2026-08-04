@@ -13,6 +13,11 @@ import { encryptionManager } from './encryption';
 import { generateActivityId } from './activity-utils';
 import type { PublishQueue } from './publish-queue';
 
+// Helper: Convert hex string to Uint8Array (for nostr-tools finalizeEvent)
+function hexToBytes(hex: string): Uint8Array {
+  return new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+}
+
 // Singleton instance with lazy initialization
 let instance: MessagingManager | null = null;
 
@@ -51,7 +56,7 @@ export class MessagingManager {
 
     const pubkey = await this.identityManager.getPubkey();
     const created_at = Math.floor(Date.now() / 1000);
-    const secretKey = await this.identityManager.getSecretKey();
+    const secretKeyHex = await this.identityManager.getSecretKey();
 
     // Build tags with friend request metadata
     // The 'd' tag identifies this as a friend request to this specific recipient (parameterized replaceable)
@@ -70,7 +75,7 @@ export class MessagingManager {
       tags,
       content: `${userProfile.nickname || userProfile.memorable_identifier} added you as a friend`,
       created_at,
-    }, secretKey) as NostrEvent;
+    }, hexToBytes(secretKeyHex)) as NostrEvent;
 
     // Queue or publish the event
     console.log(`[Messaging] 📤 Queuing friend request to ${recipientDisplayName} (${recipientPubkey.substring(0, 8)}...)`);
@@ -130,7 +135,7 @@ export class MessagingManager {
     const activityIdForTag = activity.id || generateActivityId(activity.service, activity.url);
     tags.push(['d', `invite_${activityIdForTag}_${recipientFriend.pubkey}`]);
 
-    const secretKey = await this.identityManager.getSecretKey();
+    const secretKeyHex = await this.identityManager.getSecretKey();
 
     // Create kind-30001 parameterized replaceable invite event
     const event = finalizeEvent({
@@ -138,7 +143,7 @@ export class MessagingManager {
       tags,
       content: `Inviting ${recipientFriend.local_name} to ${activity.content || activity.service}`,
       created_at,
-    }, secretKey) as NostrEvent;
+    }, hexToBytes(secretKeyHex)) as NostrEvent;
 
     // Queue or publish the event
     console.log(`[Messaging] 📤 Queuing invite to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);

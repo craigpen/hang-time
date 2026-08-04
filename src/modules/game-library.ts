@@ -3,12 +3,18 @@
  * Manages game library fetching, caching, and common game discovery
  */
 
+import { finalizeEvent } from 'nostr-tools';
 import { OwnedGame, STORAGE_KEYS, NostrEvent, NostrError } from '../types';
 import { StorageManager } from './storage';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
 import { encryptionManager } from './encryption';
 import type { PublishQueue } from './publish-queue';
+
+// Helper: Convert hex string to Uint8Array (for nostr-tools finalizeEvent)
+function hexToBytes(hex: string): Uint8Array {
+  return new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+}
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -319,7 +325,6 @@ export class GameLibraryManager {
       });
 
       // Use nostr-tools to create and sign the event
-      const { finalizeEvent } = await import('nostr-tools');
       const event = finalizeEvent({
         kind: 10003, // Replaceable: only latest game library snapshot stored
         tags: [
@@ -328,7 +333,7 @@ export class GameLibraryManager {
         ],
         content,
         created_at,
-      }, secretKey) as NostrEvent;
+      }, hexToBytes(secretKey)) as NostrEvent;
 
       console.debug(`[GameLibrary] Marking game library as due (${appIds.length} games)`);
 

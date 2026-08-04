@@ -17,6 +17,11 @@ import type { PublishQueue } from './publish-queue';
 
 const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
 
+// Helper: Convert hex string to Uint8Array (for nostr-tools finalizeEvent)
+function hexToBytes(hex: string): Uint8Array {
+  return new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+}
+
 export class ActivityPublisher {
   private publishCount = 0; // Increments every 12s, 5th publish (index 4) is full refresh
   private publishRateMs = 12000; // Default: publish every 12 seconds
@@ -88,13 +93,13 @@ export class ActivityPublisher {
       }
 
       // Create and sign kind 0 profile event using nostr-tools
-      const secretKey = await this.identityManager.getSecretKey();
+      const secretKeyHex = await this.identityManager.getSecretKey();
       const event = finalizeEvent({
         kind: 0,
         tags,
         content: '', // Kind 0 typically has empty content for profile data in tags
         created_at,
-      }, secretKey) as NostrEvent;
+      }, hexToBytes(secretKeyHex)) as NostrEvent;
 
       // Mark profile as pending in queue
       console.log(`[Publisher] 📤 Profile update (nickname: ${profile.nickname || 'none'}, discord: ${profile.discord_info ? 'yes' : 'no'})`);
@@ -235,13 +240,13 @@ export class ActivityPublisher {
       }
 
       // Create and sign event using nostr-tools
-      const secretKey = await this.identityManager.getSecretKey();
+      const secretKeyHex = await this.identityManager.getSecretKey();
       const event = finalizeEvent({
         kind,
         tags,
         content,
         created_at,
-      }, secretKey) as NostrEvent;
+      }, hexToBytes(secretKeyHex)) as NostrEvent;
 
       // Log event details
       const eventJson = JSON.stringify(event);
@@ -315,13 +320,13 @@ export class ActivityPublisher {
       const content = this._buildEventContent(activity);
 
       // Create and sign event using nostr-tools
-      const secretKey = await this.identityManager.getSecretKey();
+      const secretKeyHex = await this.identityManager.getSecretKey();
       const event = finalizeEvent({
         kind,
         tags,
         content,
         created_at,
-      }, secretKey) as NostrEvent;
+      }, hexToBytes(secretKeyHex)) as NostrEvent;
 
       const eventJson = JSON.stringify(event);
       const eventSize = eventJson.length;
