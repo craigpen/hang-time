@@ -34,7 +34,6 @@ const ENTRYPOINTS = {
   popup: 'src/ui/popup.ts',
   'oauth-handler': 'entrypoints/oauth-handler.ts',
   'content-script': 'entrypoints/content-script.ts',
-  'netflix-debug-comprehensive': 'entrypoints/netflix-debug-comprehensive.ts',
 };
 
 const STATIC_FILES = [

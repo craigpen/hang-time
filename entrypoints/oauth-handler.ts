@@ -88,9 +88,17 @@ function detectService(): string | null {
 
 async function getFromStorage(key: string): Promise<string | null> {
   return new Promise((resolve) => {
-    chrome.storage.local.get([key], (result) => {
-      resolve(result[key] || null);
-    });
+    chrome.runtime.sendMessage(
+      { type: 'GET_STORAGE', key },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('[OAuth Handler] Failed to get storage:', chrome.runtime.lastError);
+          resolve(null);
+        } else {
+          resolve(response?.value || null);
+        }
+      }
+    );
   });
 }
 

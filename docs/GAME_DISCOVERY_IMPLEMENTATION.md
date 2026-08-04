@@ -1,8 +1,9 @@
 # Game Discovery Implementation Plan
 
 **Baseline Commit**: 4c8c6a2  
-**Status**: Ready for implementation  
-**Created**: 2026-07-28
+**Status**: Backend complete; UI (games.ts) pending implementation  
+**Created**: 2026-07-28  
+**Note**: The Discovery Tab UI module (src/ui/games.ts) is not yet fully implemented. Backend infrastructure (GameLibraryManager, MetadataFetcher, relay publishing) is production-ready.
 
 ---
 

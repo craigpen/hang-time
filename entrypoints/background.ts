@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Hang Time - Background Service Worker
  * Main orchestration center for the extension
  * Handles: lifecycle, message routing, activity detection, Nostr subscriptions
@@ -59,6 +59,10 @@ chrome.runtime.onInstalled.addListener(async (details) => {
       await identityManager.generateIdentifier();
       console.log('[Background] Generated user identifier');
     }
+
+    // Re-inject into existing tabs (e.g., tabs opened before extension was installed)
+    console.log('[Background] Fresh install: re-injecting into any pre-existing tabs...');
+    await _reinjectionContentScripts();
   } else if (details.reason === 'update') {
     console.log('[Background] Extension updated, re-injecting content scripts...');
     await _registerContentScripts();
@@ -166,9 +170,9 @@ async function _registerContentScripts(): Promise<void> {
       },
     ]);
 
-    console.log('[Background] ✅ Content scripts registered persistently');
+    console.log('[Background] âœ… Content scripts registered persistently');
   } catch (err) {
-    console.error('[Background] ❌ Failed to register content scripts:', err instanceof Error ? err.message : String(err));
+    console.error('[Background] âŒ Failed to register content scripts:', err instanceof Error ? err.message : String(err));
   } finally {
     isRegisteringContentScripts = false;
   }
@@ -178,12 +182,13 @@ async function _registerContentScripts(): Promise<void> {
  * Re-inject content scripts into all open HTTP(S) tabs
  * Called on extension update and startup to ensure seamless reconnection
  * Programmatically executes the content script, triggering orphan detection in old instances
+ * For suspended tabs, the injection API succeeds but execution is deferred until tab wakes up
  */
 async function _reinjectionContentScripts(): Promise<void> {
-  console.log('[Background] 🔄 REINJECTION: Starting content script re-injection...');
+  console.log('[Background] ðŸ”„ REINJECTION: Starting content script re-injection...');
   try {
     if (!chrome.scripting) {
-      console.error('[Background] ❌ REINJECTION: chrome.scripting API not available');
+      console.error('[Background] âŒ REINJECTION: chrome.scripting API not available');
       return;
     }
 
@@ -199,39 +204,131 @@ async function _reinjectionContentScripts(): Promise<void> {
 
     let successCount = 0;
     let failureCount = 0;
+    const suspendedTabs: number[] = [];
 
     for (const tab of allTabs) {
       if (!tab.id) continue;
 
       try {
-        console.log(`[Background] REINJECTION: Injecting into tab ${tab.id}...`);
+        const tabStatus = tab.status || 'unknown';
+        const tabUrl = tab.url || 'unknown';
+
+        // Skip extension pages and special URLs that can't be injected into
+        if (tabUrl.startsWith('chrome-extension://') ||
+            tabUrl.startsWith('chrome://')) {
+          console.debug(`[Background] REINJECTION: Skipping tab ${tab.id} (extension page) - ${tabUrl}`);
+          continue;
+        }
+
+        console.log(`[Background] REINJECTION: Injecting into tab ${tab.id} (${tabStatus}) - ${tabUrl}`);
 
         const injectionPromise = chrome.scripting.executeScript({
           target: { tabId: tab.id },
           files: ['content-script.js'],
         });
 
+        // Longer timeout for suspended tabs (they may take time to respond)
+        const timeoutMs = tabStatus === 'unloaded' ? 10000 : 8000;
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Injection timeout after 5 seconds')), 5000)
+          setTimeout(() => reject(new Error(`Injection timeout after ${timeoutMs}ms`)), timeoutMs)
         );
 
         await Promise.race([injectionPromise, timeoutPromise]);
 
+        // Note: on suspended tabs, executeScript() succeeds at API level but script runs after tab wakes up
+        if (tabStatus === 'unloaded') {
+          suspendedTabs.push(tab.id);
+          console.log(`[Background] â¸ï¸  REINJECTION: Tab ${tab.id} is suspended - injection queued for when tab becomes active`);
+        }
+
         successCount++;
-        console.log(`[Background] ✅ REINJECTION: Successfully injected into tab ${tab.id}`);
+        console.log(`[Background] âœ… REINJECTION: Successfully injected into tab ${tab.id}`);
       } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+
+        // Filter out expected errors that we shouldn't retry
+        if (errMsg.includes('Cannot access contents of the page')) {
+          console.debug(`[Background] REINJECTION: Tab ${tab.id} denied extension access (Netflix, etc.) - skipping`);
+          continue;
+        }
+
         failureCount++;
-        console.error(
-          `[Background] ❌ REINJECTION: Failed to inject into tab ${tab.id}:`,
-          err instanceof Error ? err.message : String(err)
+        console.warn(
+          `[Background] âš ï¸  REINJECTION: Failed to inject into tab ${tab.id} (may retry on activation):`,
+          errMsg
         );
       }
     }
 
-    console.log(`[Background] 🏁 REINJECTION COMPLETE: ${successCount} successful, ${failureCount} failed`);
+    console.log(`[Background] ðŸ REINJECTION COMPLETE: ${successCount} successful, ${failureCount} failed${suspendedTabs.length > 0 ? ` (${suspendedTabs.length} suspended tabs queued)` : ''}`);
+
+    // Set up listener to re-inject into suspended tabs when they become active
+    if (suspendedTabs.length > 0) {
+      const handleTabUpdated = (tabId: number, changeInfo: chrome.tabs.TabChangeInfo) => {
+        if (suspendedTabs.includes(tabId) && changeInfo.status === 'complete') {
+          console.log(`[Background] REINJECTION: Suspended tab ${tabId} is now active, content script already injected`);
+          suspendedTabs.splice(suspendedTabs.indexOf(tabId), 1);
+          if (suspendedTabs.length === 0) {
+            chrome.tabs.onUpdated.removeListener(handleTabUpdated);
+          }
+        }
+      };
+      chrome.tabs.onUpdated.addListener(handleTabUpdated);
+    }
   } catch (err) {
-    console.error('[Background] ❌ REINJECTION: Routine failed:', err instanceof Error ? err.message : String(err));
+    console.error('[Background] âŒ REINJECTION: Routine failed:', err instanceof Error ? err.message : String(err));
   }
+}
+
+/**
+ * Hook console methods to forward to FileLogger
+ * Every console.log/error/warn/debug call now persists to storage
+ */
+function _hookConsoleToFileLogger(logger: any): void {
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const originalDebug = console.debug;
+
+  console.log = (...args: any[]) => {
+    originalLog(...args);
+    try {
+      const message = args.map(arg =>
+        typeof arg === 'string' ? arg : JSON.stringify(arg)
+      ).join(' ');
+      logger.log('Console', 'INFO', message);
+    } catch {}
+  };
+
+  console.error = (...args: any[]) => {
+    originalError(...args);
+    try {
+      const message = args.map(arg =>
+        typeof arg === 'string' ? arg : JSON.stringify(arg)
+      ).join(' ');
+      logger.log('Console', 'ERROR', message);
+    } catch {}
+  };
+
+  console.warn = (...args: any[]) => {
+    originalWarn(...args);
+    try {
+      const message = args.map(arg =>
+        typeof arg === 'string' ? arg : JSON.stringify(arg)
+      ).join(' ');
+      logger.log('Console', 'WARN', message);
+    } catch {}
+  };
+
+  console.debug = (...args: any[]) => {
+    originalDebug(...args);
+    try {
+      const message = args.map(arg =>
+        typeof arg === 'string' ? arg : JSON.stringify(arg)
+      ).join(' ');
+      logger.log('Console', 'DEBUG', message);
+    } catch {}
+  };
 }
 
 /**
@@ -268,7 +365,7 @@ async function initializeExtension(): Promise<void> {
       const profileId = userProfile?.memorable_identifier || 'unknown';
       initializeFileLogger(profileId);
       const logger = getFileLogger();
-      logger.log('Background', 'INFO', 'File logger initialized', { profileId });
+      _hookConsoleToFileLogger(logger);
     } catch (error) {
       console.error('[Background] File logger initialization failed:', error);
       // Don't fail extension startup if logger fails
@@ -451,7 +548,7 @@ async function initializeExtension(): Promise<void> {
       if (activityPublisher) {
         activityPublisher.setPublishQueue(publishQueue);
         publishQueue.setActivityPublisher(activityPublisher);
-        console.debug('[Background] ActivityPublisher ↔ PublishQueue wired bidirectionally');
+        console.debug('[Background] ActivityPublisher â†” PublishQueue wired bidirectionally');
       }
 
       const gameLibMgr = GameLibraryManager.getInstance(storageManager);
@@ -467,17 +564,10 @@ async function initializeExtension(): Promise<void> {
     }
 
     // Subscribe to all friends' activities
-    console.log('[Background] 📧 About to subscribe to friends...');
+    console.log('[Background] ðŸ“§ About to subscribe to friends...');
     const friendManager = getFriendManager();
     const friends = await friendManager.getAllFriends();
-    try {
-      const logger = getFileLogger();
-      logger.log('Background', 'INFO', 'Found friends to subscribe to', {
-        count: friends.length,
-        identifiers: friends.map(f => f.identifier)
-      });
-    } catch {}
-    console.log(`[Background] 📧 Subscribing to ${friends.length} friends`);
+    console.log(`[Background] ðŸ“§ Subscribing to ${friends.length} friends`);
     for (const friend of friends) {
       try {
         await _subscribeToFriend(friend.identifier);
@@ -485,7 +575,7 @@ async function initializeExtension(): Promise<void> {
         console.warn(`[Background] Failed to subscribe to friend ${friend.identifier}:`, error);
       }
     }
-    console.log('[Background] 📧 Done subscribing to friends');
+    console.log('[Background] ðŸ“§ Done subscribing to friends');
 
     // Subscribe to friends' game libraries for discovery
     try {
@@ -499,12 +589,12 @@ async function initializeExtension(): Promise<void> {
     }
 
     // Subscribe to incoming kind 4 (encrypted DM) messages
-    console.log('[Background] 🔔 Setting up incoming message subscription...');
+    console.log('[Background] ðŸ”” Setting up incoming message subscription...');
     try {
       await _subscribeToIncomingMessages();
-      console.log('[Background] ✅ Incoming message subscription active');
+      console.log('[Background] âœ… Incoming message subscription active');
     } catch (error) {
-      console.error('[Background] ❌ Failed to set up incoming message subscription:', error);
+      console.error('[Background] âŒ Failed to set up incoming message subscription:', error);
     }
 
     // Run initial integrity check
@@ -557,7 +647,7 @@ function _startPeriodicCleanup(): void {
       const staleNetflixTitles = await storageManager.removeStaleNetflixTitle();
 
       if (corruptedRemoved > 0 || ghostsRemoved > 0 || expiredInvites > 0 || staleNetflixTitles > 0) {
-        console.log('[Background] 🧹 Cleanup cycle complete:', {
+        console.log('[Background] ðŸ§¹ Cleanup cycle complete:', {
           corruptedRemoved,
           ghostsRemoved,
           expiredInvites,
@@ -623,7 +713,7 @@ function _startIntegrationHealthCheck(): void {
 
           const isHealthy = true;
           await storageManager.updateIntegrationHealth('steam-api', isHealthy, personaname);
-          console.debug(`[Background] Steam API health: ✅ Healthy${personaname ? ` (${personaname})` : ''}`);
+          console.debug(`[Background] Steam API health: âœ… Healthy${personaname ? ` (${personaname})` : ''}`);
         } catch (error) {
           await storageManager.updateIntegrationHealth('steam-api', false);
           console.debug(`[Background] Steam API check failed:`, error instanceof Error ? error.message : error);
@@ -646,9 +736,11 @@ function _startIntegrationHealthCheck(): void {
 // ============================================================================
 
 const activeContentScriptPorts = new Map<number, chrome.runtime.Port>();
+const connectedTabIds = new Set<number>(); // Track tabs that have successfully connected at least once
+const failedInjectionAttempts = new Map<number, number>(); // Track retry attempts per tab
 
 /**
- * Port-based connection handler for content script ↔ background communication
+ * Port-based connection handler for content script â†” background communication
  * Tracks connections and detects when content scripts disconnect (e.g., after extension restart)
  */
 chrome.runtime.onConnect.addListener((port) => {
@@ -658,21 +750,14 @@ chrome.runtime.onConnect.addListener((port) => {
     const tabId = port.sender?.tab?.id;
     const url = port.sender?.url;
 
-    try {
-      const logger = getFileLogger();
-      logger.log('Background', 'INFO', 'Content script connected', {
-        service,
-        tabId,
-        url: url?.substring(0, 50),
-      });
-    } catch {}
-
     if (tabId !== undefined) {
       activeContentScriptPorts.set(tabId, port);
+      connectedTabIds.add(tabId); // Mark this tab as successfully connected
+      failedInjectionAttempts.delete(tabId); // Clear any retry counter
       freshConnectionTimestamps.set(tabId, Date.now()); // Track this tab's fresh connection
-      console.log(`[Background] ✅ Content script connected for tab ${tabId} (${service})`);
+      console.log(`[Background] âœ… Content script connected for tab ${tabId} (${service})`);
     } else {
-      console.error(`[Background] ❌ Content script connected but no tab ID: ${service} (url: ${url?.substring(0, 60)})`);
+      console.error(`[Background] âŒ Content script connected but no tab ID: ${service} (url: ${url?.substring(0, 60)})`);
     }
 
     port.onMessage.addListener(async (message) => {
@@ -698,7 +783,7 @@ chrome.runtime.onConnect.addListener((port) => {
     port.onDisconnect.addListener(() => {
       if (tabId !== undefined) {
         activeContentScriptPorts.delete(tabId);
-        console.log(`[Background] 🔌 Content script disconnected (${service}) for tab ${tabId}`);
+        console.log(`[Background] ðŸ”Œ Content script disconnected (${service}) for tab ${tabId}`);
         // Mark the tab's activity as disconnected since the content script is gone
         _markActivityAsDisconnected(tabId);
       }
@@ -714,7 +799,70 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 /**
- * Message handler for popup ↔ background communication
+ * Retry injection with exponential backoff (handles tabs that are active but not yet responsive)
+ */
+async function _retryInjectionWithBackoff(tabId: number, maxAttempts = 3): Promise<boolean> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`[Background] Injection attempt ${attempt}/${maxAttempts} for tab ${tabId}...`);
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content-script.js'],
+      });
+
+      console.log(`[Background] âœ… Injection succeeded for tab ${tabId} on attempt ${attempt}`);
+      connectedTabIds.add(tabId);
+      failedInjectionAttempts.delete(tabId);
+      return true;
+    } catch (err) {
+      lastError = err as Error;
+      console.warn(`[Background] Injection attempt ${attempt}/${maxAttempts} failed for tab ${tabId}: ${lastError.message}`);
+
+      if (attempt < maxAttempts) {
+        // Exponential backoff: 100ms, 200ms, 400ms
+        const backoffMs = Math.pow(2, attempt - 1) * 100;
+        console.debug(`[Background] Retrying in ${backoffMs}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+    }
+  }
+
+  // All attempts failed
+  console.warn(`[Background] âš ï¸  All ${maxAttempts} injection attempts failed for tab ${tabId}`);
+  return false;
+}
+
+/**
+ * Tab activation listener: retry injection on tabs that haven't connected yet
+ * This ensures tabs with initial injection failures eventually get the content script
+ * Retries with exponential backoff per activation with no hard limitâ€”if the tab wasn't ready before, it might be now
+ */
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  // Only retry on status complete (tab is fully loaded)
+  if (changeInfo.status === 'complete' && tab.url) {
+    if (connectedTabIds.has(tabId)) {
+      console.debug(`[Background] Tab ${tabId} already connected, skipping injection`);
+      return;
+    }
+
+    // Skip special pages
+    if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+      console.debug(`[Background] Skipping special page: ${tab.url.substring(0, 60)}`);
+      return;
+    }
+
+    const activationCount = (failedInjectionAttempts.get(tabId) || 0) + 1;
+    failedInjectionAttempts.set(tabId, activationCount);
+    console.log(`[Background] ðŸ”„ Tab ${tabId} activated (activation #${activationCount}): ${tab.url.substring(0, 60)}...`);
+
+    await _retryInjectionWithBackoff(tabId, 3);
+  }
+});
+
+/**
+ * Message handler for popup â†” background communication
  */
 chrome.runtime.onMessage.addListener(
   (message: ExtensionMessage, sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
@@ -753,6 +901,13 @@ chrome.runtime.onMessage.addListener(
  */
 async function _handleMessage(message: ExtensionMessage): Promise<ExtensionResponse> {
   switch (message.type) {
+    case 'GET_STORAGE':
+      // Handle OAuth handler requests for stored state/tokens
+      return {
+        success: true,
+        value: await storageManager.get(message.data?.key),
+      };
+
     case 'GET_CURRENT_ACTIVITY':
       return _getCurrentActivity(message.data?.service);
 
@@ -918,7 +1073,7 @@ async function _getAllActivities(): Promise<ExtensionResponse> {
     // Debug: log what we're returning for video-tab activities
     Object.entries(myActivities).forEach(([id, activity]: [string, any]) => {
       if (activity && activity.service === 'video-tab') {
-        console.log(`[Background] ✅ Returning video-tab activity: "${activity.content}"`, {
+        console.log(`[Background] âœ… Returning video-tab activity: "${activity.content}"`, {
           state: activity.state,
           disconnected_reason: activity.metadata?.disconnected_reason,
           has_metadata: !!activity.metadata,
@@ -1108,7 +1263,7 @@ async function _addFriend(identifier?: string, localName?: string): Promise<Exte
       const friendRequestActivityId = `friend_request_${Date.now()}`;
       await trackPendingMessage(eventId, 'friend_request', friend.id, friendRequestActivityId);
       await markMessagePublished(`friend_request_${friend.id}_${friendRequestActivityId}`);
-      console.log(`[Background] 📤 Friend request message sent to ${localName}`);
+      console.log(`[Background] ðŸ“¤ Friend request message sent to ${localName}`);
     } catch (error) {
       console.error('[Background] Failed to send friend request message:', error);
       // Track failed publish for retry
@@ -1172,7 +1327,7 @@ async function _acceptFriendRequest(friendId?: string): Promise<ExtensionRespons
     // Handle based on current state
     if (friend.state === 'active') {
       // Already friends, just confirm
-      console.log(`[Background] ℹ️  ${friend.local_name} already in active state`);
+      console.log(`[Background] â„¹ï¸  ${friend.local_name} already in active state`);
       return { success: true, message: 'Already friends' };
     } else if (friend.state !== 'pending') {
       return { success: false, error: `Cannot accept friend in state: ${friend.state}` };
@@ -1207,7 +1362,7 @@ async function _acceptFriendRequest(friendId?: string): Promise<ExtensionRespons
       await markMessagePublishFailed(messageId, error instanceof Error ? error.message : 'Failed to send acceptance');
     }
 
-    console.log(`[Background] ✅ Accepted friend request from: ${friend.local_name}`);
+    console.log(`[Background] âœ… Accepted friend request from: ${friend.local_name}`);
     return { success: true };
   } catch (error) {
     console.error('[Background] Failed to accept friend request:', error);
@@ -1231,7 +1386,7 @@ async function _declineFriendRequest(friendId?: string): Promise<ExtensionRespon
     await friendManager.removeFriend(friendId);
     activeSubscriptions.delete(friend.pubkey);
 
-    console.log(`[Background] ❌ Declined friend request from: ${friend.local_name}`);
+    console.log(`[Background] âŒ Declined friend request from: ${friend.local_name}`);
     return { success: true };
   } catch (error) {
     console.error('[Background] Failed to decline friend request:', error);
@@ -1536,16 +1691,16 @@ async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
 async function _subscribeToIncomingMessages(): Promise<void> {
   try {
     const userPubkey = await identityManager.getPubkey();
-    console.log(`[Message] 📧 Subscribing to incoming messages for ${userPubkey.substring(0, 8)}...`);
+    console.log(`[Message] ðŸ“§ Subscribing to incoming messages for ${userPubkey.substring(0, 8)}...`);
 
     // Subscribe to kind-4 events where user's pubkey is in the 'p' tag
     // RelayPool handles filtering server-side via #p filter
     relayPool.subscribeToDirectMessages(userPubkey, async (event: NostrEvent) => {
-      console.log(`[Message] 📨 Received kind-4 event, processing...`);
+      console.log(`[Message] ðŸ“¨ Received kind-4 event, processing...`);
 
       // Skip messages we published ourselves (relay echo)
       if (event.pubkey === userPubkey) {
-        console.debug(`[Message] ℹ️  Ignoring echo of our own message`);
+        console.debug(`[Message] â„¹ï¸  Ignoring echo of our own message`);
         return;
       }
 
@@ -1578,7 +1733,7 @@ async function _subscribeToIncomingMessages(): Promise<void> {
           await publishDeletionRequest(event.id);
         } else if (messageType === 'friend_request') {
           // Friend request from unknown sender - create as pending friend
-          console.log(`[Message] 🔔 Friend Request: Received from ${event.pubkey.substring(0, 8)}...`);
+          console.log(`[Message] ðŸ”” Friend Request: Received from ${event.pubkey.substring(0, 8)}...`);
           await _handleFriendRequestFromUnknownSender(event);
           await markMessageProcessed(event.id);
           await publishDeletionRequest(event.id);
@@ -1634,17 +1789,17 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
         return;
       }
 
-      console.log(`[Message] 🔔 Friend Request from ${senderDisplayName} (${senderIdentifier})`);
+      console.log(`[Message] ðŸ”” Friend Request from ${senderDisplayName} (${senderIdentifier})`);
 
       const existingFriend = await friendManager.getFriendByIdentifier(senderIdentifier);
       if (existingFriend) {
-        console.log(`[Message] ℹ️  Friend already exists: ${senderIdentifier}`);
+        console.log(`[Message] â„¹ï¸  Friend already exists: ${senderIdentifier}`);
         return;
       }
 
       // Create as pending friend (they initiated the request)
       const newFriend = await friendManager.addFriend(senderIdentifier, senderDisplayName, false);
-      console.log(`[Message] ✅ Created pending friend from request: ${senderDisplayName}`);
+      console.log(`[Message] âœ… Created pending friend from request: ${senderDisplayName}`);
 
       // Subscribe to new friend
       await _subscribeToFriend(senderIdentifier);
@@ -1686,8 +1841,7 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
   if (!friend) {
     console.error(`[Background] Friend not found: ${friendIdentifier}`);
     try {
-      getFileLogger().log('Background', 'ERROR', 'Friend not found for subscription', { friendIdentifier });
-    } catch {}
+} catch {}
     return;
   }
 
@@ -1695,22 +1849,14 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
   const pubkey = friendManager.derivePubkeyFromIdentifier(friendIdentifier);
 
   if (activeSubscriptions.has(pubkey)) {
-    try {
-      getFileLogger().log('Background', 'DEBUG', 'Already subscribed to friend', { friendIdentifier, pubkey: pubkey.substring(0, 16) });
-    } catch {}
     return;
   }
-
-  try {
-    getFileLogger().log('Background', 'INFO', 'Setting up subscription to friend', { friendIdentifier, pubkey: pubkey.substring(0, 16) });
-  } catch {}
 
   relayPool.subscribe(pubkey, async (event: NostrEvent) => {
     console.debug(`[Friend] Event from ${friendIdentifier} (kind ${event.kind})`);
     console.debug(`[Friend] Details - pubkey: ${event.pubkey.substring(0, 8)}..., tags: ${JSON.stringify(event.tags.slice(0, 3))}`);
 
     try {
-      getFileLogger().log('Background', 'INFO', `Event received from ${friendIdentifier}`, { kind: event.kind, pubkey: event.pubkey.substring(0, 16), tags_count: event.tags.length });
       // Fetch current friend state to check if active or pending
       const currentFriend = await friendManager.getFriendByIdentifier(friendIdentifier);
       const isPending = currentFriend?.state === 'pending';
@@ -1734,26 +1880,21 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
           }
         } else {
           console.debug(`[Friend] Skipping kind-1 from pending friend ${friendIdentifier}`);
-          getFileLogger().log('Background', 'DEBUG', `Skipped kind-1 from pending friend`, { friendIdentifier });
-        }
+    }
       } else if (event.kind === 4) {
         // Kind-4 messages (always accept for both pending and active)
         console.debug(`[Message] Handling incoming kind-4`);
-        getFileLogger().log('Background', 'INFO', `Handling kind-4 message from ${friendIdentifier}`, {});
-        await _handleMessageEvent(friendIdentifier, event);
+  await _handleMessageEvent(friendIdentifier, event);
       } else {
         console.debug(`[Friend] Ignoring event with kind ${event.kind}`);
-        getFileLogger().log('Background', 'DEBUG', `Ignored event kind`, { kind: event.kind, friendIdentifier });
-      }
+  }
     } catch (error) {
       console.error(`[Friend] Error handling event for ${friendIdentifier}:`, error);
-      getFileLogger().log('Background', 'ERROR', `Error handling event from ${friendIdentifier}`, { error: String(error) });
     }
   });
 
   activeSubscriptions.set(pubkey, undefined);
   console.debug(`[Friend] Subscribed to: ${friendIdentifier} (pubkey: ${pubkey})`);
-  getFileLogger().log('Background', 'INFO', `Subscribed to friend`, { friendIdentifier, pubkey: pubkey.substring(0, 16) });
 }
 
 async function _handleProfileEvent(event: NostrEvent): Promise<void> {
@@ -1772,15 +1913,14 @@ async function _handleProfileEvent(event: NostrEvent): Promise<void> {
 }
 
 async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {
-  console.log(`[Background] 📨 Received event from friend ${friendIdentifier.substring(0, 8)}... kind=${event.kind} tags=${event.tags.map(t => t[0]).join(',')}`);
-  getFileLogger().log('Background', 'INFO', `Activity event received from ${friendIdentifier}`, { eventId: event.id.substring(0, 16), tags: event.tags.map(t => t[0]).join(',') });
+  console.log(`[Background] ðŸ”¨ Received event from friend ${friendIdentifier.substring(0, 8)}... kind=${event.kind} tags=${event.tags.map(t => t[0]).join(',')}`);
+
 
   const friends = await storageManager.getFriends();
   const friend = friends.find((f) => f.identifier === friendIdentifier);
 
   if (!friend) {
     console.debug(`[Background] Friend ${friendIdentifier} not found in local list, ignoring event`);
-    getFileLogger().log('Background', 'WARN', `Friend not found for activity event`, { friendIdentifier });
     return;
   }
 
@@ -1798,16 +1938,16 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       // Friend request notification - prompt user to accept/decline
       const senderDisplayName = event.tags.find((t) => t[0] === 'sender_display_name')?.[1] || friend.local_name;
 
-      console.log(`[Background] 🔔 Friend Request: Received from ${senderDisplayName} (state=${friend.state})`);
+      console.log(`[Background] ðŸ”” Friend Request: Received from ${senderDisplayName} (state=${friend.state})`);
 
       // Only show notification if friend is pending (not if already active)
       if (friend.state === 'pending') {
         const notificationManager = getNotificationManager();
         await notificationManager.notifyFriendRequest(friend.id, senderDisplayName);
-        console.log(`[Background] ✅ Showing friend request notification for ${senderDisplayName}`);
+        console.log(`[Background] âœ… Showing friend request notification for ${senderDisplayName}`);
       } else if (friend.state === 'active') {
         // Already friends - just log it
-        console.debug(`[Background] ℹ️  Friend request from ${senderDisplayName}, but already friends (active)`);
+        console.debug(`[Background] â„¹ï¸  Friend request from ${senderDisplayName}, but already friends (active)`);
       }
 
       // Try to notify popup if it's open
@@ -1857,7 +1997,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         }
       }
       
-      console.log(`[Background] 🔔 Invite: Firing notification for ${friend.local_name}`);
+      console.log(`[Background] ðŸ”” Invite: Firing notification for ${friend.local_name}`);
       await notificationManager.notifyInvite(
         friend.id,
         friend.local_name,
@@ -1866,11 +2006,11 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         discordInfo
       );
       await markInviteNotified(event.id);
-      console.log(`[Background] ✅ Invite: Notification fired for ${friend.local_name}`);
+      console.log(`[Background] âœ… Invite: Notification fired for ${friend.local_name}`);
 
       // Store pending invite in persistent storage with timestamp
       if (activityId) {
-        console.debug(`[Background] 🔔 Invite: Storing pending invite - activityId: ${activityId}, friendId: ${friend.id}`);
+        console.debug(`[Background] ðŸ”” Invite: Storing pending invite - activityId: ${activityId}, friendId: ${friend.id}`);
         const pendingInvites = await storageManager.getPendingInvites();
         pendingInvites[activityId] = {
           friendId: friend.id,
@@ -1891,7 +2031,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
           console.debug('[Background] Could not notify popup (not open), stored in storage:', error instanceof Error ? error.message : error);
         }
       } else {
-        console.debug('[Background] 🔔 Invite: No activityId found in tags');
+        console.debug('[Background] ðŸ”” Invite: No activityId found in tags');
       }
     }
     return;
@@ -1908,7 +2048,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         try {
           const binary = Buffer.from(content, 'base64');
           content = pako.ungzip(binary, { to: 'string' });
-          console.debug(`[Background] Decompressed activity event (${event.content.length}b → ${content.length}b)`);
+          console.debug(`[Background] Decompressed activity event (${event.content.length}b â†’ ${content.length}b)`);
         } catch (error) {
           console.error('[Background] Gzip decompression failed, treating as uncompressed:', error);
         }
@@ -1917,12 +2057,6 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       const activities = JSON.parse(content) as Activity[];
       const diagnostics = ActivityDiagnostics.getInstance(storageManager);
       const userProfile = await storageManager.getUserProfile();
-
-      getFileLogger().log('Background', 'INFO', `Parsed ${activities.length} activities from event`, {
-        friendIdentifier,
-        services: activities.map(a => a.service).join(','),
-        eventId: event.id.substring(0, 16)
-      });
 
       console.log('[Background] Received activities from Nostr:', activities.map(a => ({
         service: a.service,
@@ -2010,12 +2144,6 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       await storageManager.updateFriend(friend.id, {
         current_activities: newCurrentActivities,
         last_seen: Date.now(),
-      });
-
-      getFileLogger().log('Background', 'INFO', `Stored ${activities.length} activities for friend`, {
-        friendIdentifier,
-        storedServices: Object.keys(newCurrentActivities).join(','),
-        changed: Array.from(changedServices).join(',')
       });
 
       // Record processing success for each activity
@@ -2145,7 +2273,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
     // Route based on the actual message type, not just the event tag
     if (message?.type === 'friend_request') {
       // Incoming friend request - friend is already pending, user will accept/decline in UI
-      console.log(`[Message] ℹ️  Friend request from ${friend.local_name} already created and awaiting user response`);
+      console.log(`[Message] â„¹ï¸  Friend request from ${friend.local_name} already created and awaiting user response`);
       return;
     }
 
@@ -2208,7 +2336,7 @@ async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): 
       if (friend.state === 'pending') {
         await friendManager.acceptFriendRequest(friend.id);
       }
-      console.log(`[FriendRequest] ✅ ${friend.local_name} accepted your friend request`);
+      console.log(`[FriendRequest] âœ… ${friend.local_name} accepted your friend request`);
 
       // Notify the user (with deduplication to avoid multiple notifications from multiple relays)
       if (shouldNotifyForInvite(event.id)) {
@@ -2230,20 +2358,13 @@ async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): 
 
 async function _handleContentScriptActivity(key: string, value: any, tabId?: number): Promise<ExtensionResponse> {
   try {
-    const logger = getFileLogger();
-    logger.log('Background', 'INFO', 'Content script activity received', {
-      service: value?.service,
-      content: value?.content?.substring(0, 50),
-      tabId,
-    });
-
     // Verify we have all required fields before writing
     if (key.startsWith('content_script_activity_') && value) {
       const requiredFields = ['id', 'service', 'content', 'state', 'timestamp'];
       const missingFields = requiredFields.filter(field => !(field in value));
       if (missingFields.length > 0) {
         logger.log('Background', 'WARN', 'Activity missing fields', { missingFields });
-        console.warn(`[Background] ⚠️  Activity missing fields: ${missingFields.join(', ')}`, value);
+        console.warn(`[Background] âš ï¸  Activity missing fields: ${missingFields.join(', ')}`, value);
       }
     }
 
@@ -2260,7 +2381,7 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
           const isOlder = (activity.timestamp || 0) < (value.timestamp || 0);
           if (isOlder || tabId !== undefined) {
             // Remove: either older timestamp, or from different tab (keep current tab's newer activity)
-            console.debug(`[Background] 🗑️  Removing old ${value.service} activity (id: ${activity.id}, timestamp: ${activity.timestamp})`);
+            console.debug(`[Background] ðŸ—‘ï¸  Removing old ${value.service} activity (id: ${activity.id}, timestamp: ${activity.timestamp})`);
             delete allActivities[activityId];
           }
         }
@@ -2279,7 +2400,7 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
     }
 
     await storageManager.updateMyActivity(activityId, value);
-    console.debug(`[Background] ✅ Stored activity in MY_ACTIVITIES:`, {
+    console.debug(`[Background] âœ… Stored activity in MY_ACTIVITIES:`, {
       id: activityId,
       service: value?.service,
       content: value?.content?.substring(0, 50),
@@ -2288,7 +2409,7 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
 
     // If this is an activity update, trigger detection cycle to process it
     if (key.startsWith('content_script_activity_')) {
-      console.debug(`[Background] 🔄 Triggering activity detection from content script update`);
+      console.debug(`[Background] ðŸ”„ Triggering activity detection from content script update`);
       await activityDetector.detectAndPublish().catch((error) => {
         console.error('[Background] Error in detectAndPublish:', error);
       });
@@ -2333,7 +2454,7 @@ async function _markActivityAsDisconnected(tabId: number): Promise<void> {
 
         // Update using StorageManager
         await storageManager.updateMyActivity(activityId, disconnectedActivity);
-        console.log(`[Background] ✅ Marked video-tab activity as disconnected, new state: ${disconnectedActivity.state}`);
+        console.log(`[Background] âœ… Marked video-tab activity as disconnected, new state: ${disconnectedActivity.state}`);
         return;
       }
     }
@@ -2617,7 +2738,7 @@ async function publishDeletionRequest(eventId: string): Promise<void> {
     deletionEvent.id = eventId_;
     deletionEvent.sig = encryptionManager.signEvent(eventId_, userProfile.secret_key);
 
-    console.log(`[Message] 📤 Queuing deletion request for event: ${eventId.substring(0, 8)}...`);
+    console.log(`[Message] ðŸ“¤ Queuing deletion request for event: ${eventId.substring(0, 8)}...`);
     if (publishQueue) {
       await publishQueue.enqueueUserAction(deletionEvent, 'message');
     } else {
@@ -2952,7 +3073,7 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 
     for (const [activityId, activity] of Object.entries(allActivities)) {
       if (activity?.metadata?.tabId === tabId && activity?.service === 'video-tab') {
-        console.debug(`[Background] 🗑️  Removing activity for closed tab ${tabId}: ${activity.id}`);
+        console.debug(`[Background] ðŸ—‘ï¸  Removing activity for closed tab ${tabId}: ${activity.id}`);
         delete allActivities[activityId];
         removed = true;
       }
@@ -3036,3 +3157,4 @@ function _registerMessageHandlers(): void {
     console.error('[Background] Failed to initialize:', error);
   }
 })();
+

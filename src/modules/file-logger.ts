@@ -2,7 +2,10 @@
  * Hang Time - File Logger
  * Writes all console logs to storage for debugging
  * Logs are stored in chrome.storage.local and can be queried directly
+ * Implements hybrid approach: clears on startup, trims at 2MB during session
  */
+
+const MAX_LOG_SIZE_BYTES = 2 * 1024 * 1024; // 2MB limit
 
 export class FileLogger {
   private logsBuffer: string[] = [];
@@ -61,6 +64,7 @@ export class FileLogger {
 
   /**
    * Flush logs to file via chrome storage (which we can read)
+   * Implements size-based trimming: keeps logs under 2MB by removing oldest entries
    */
   async flush(): Promise<void> {
     if (this.flushTimer) {
@@ -73,16 +77,53 @@ export class FileLogger {
     }
 
     try {
-      const logsText = this.logsBuffer.join('\n');
-
-      // Store in chrome.storage.local so it persists and we can query it
+      let logsText = this.logsBuffer.join('\n');
       const storageKey = `hang_time_file_logs_${this.profileId}`;
+
+      // Store in chrome.storage.local
       await chrome.storage.local.set({ [storageKey]: logsText });
 
-      // Also attempt to write via chrome.downloads API (won't work in extension context, but try anyway)
-      // This is a fallback; the storage approach is primary
+      // Check size and trim if necessary (hybrid approach: clears on startup, trims during session)
+      await this._trimLogsIfNeeded(storageKey);
     } catch (error) {
       console.error('[FileLogger] Failed to flush logs:', error);
+    }
+  }
+
+  /**
+   * Trim oldest log entries if storage exceeds 2MB
+   */
+  private async _trimLogsIfNeeded(storageKey: string): Promise<void> {
+    try {
+      const data = await chrome.storage.local.get(storageKey);
+      const logsText = data[storageKey] as string;
+
+      if (!logsText) return;
+
+      // Get size in bytes (UTF-8 encoding)
+      const sizeBytes = new Blob([logsText]).size;
+
+      if (sizeBytes > MAX_LOG_SIZE_BYTES) {
+        // Logs exceed limit, trim oldest entries
+        const lines = logsText.split('\n');
+
+        // Keep header (first 4 lines) and trim from the middle
+        const header = lines.slice(0, 4);
+        const footer = lines.slice(-10); // Keep last 10 lines
+        const middle = lines.slice(4, -10);
+
+        // Remove 25% of middle entries
+        const removeCount = Math.ceil(middle.length * 0.25);
+        const trimmedMiddle = middle.slice(removeCount);
+
+        const trimmedLogs = [...header, ...trimmedMiddle, ...footer].join('\n');
+        await chrome.storage.local.set({ [storageKey]: trimmedLogs });
+
+        const newSize = new Blob([trimmedLogs]).size;
+        console.debug(`[FileLogger] Trimmed logs: ${(sizeBytes / 1024 / 1024).toFixed(2)}MB → ${(newSize / 1024 / 1024).toFixed(2)}MB`);
+      }
+    } catch (error) {
+      console.error('[FileLogger] Failed to trim logs:', error);
     }
   }
 
