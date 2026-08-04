@@ -74,6 +74,12 @@ export class ActivityPublisher {
         return;
       }
 
+      // Check if publishing is enabled
+      if (!profile.publisher_config?.enabled) {
+        console.debug('[Publisher] Publishing is disabled, skipping profile publish');
+        return;
+      }
+
       const pubkey = await this.identityManager.getPubkey();
       const created_at = Math.floor(Date.now() / 1000);
 
@@ -130,6 +136,12 @@ export class ActivityPublisher {
         scope: 'updates',
         relays: Object.fromEntries(DEFAULT_RELAY_URLS.map(url => [url.replace('wss://', '').replace('ws://', '').replace(/\/$/, ''), true])),
       };
+
+      // Check if publishing is enabled
+      if (!config.enabled) {
+        console.debug('[Publisher] Publishing is disabled');
+        return;
+      }
 
       // Check if publish queue allows activity publish this cycle
       const shouldPublishActivity = this.publishQueue ? this.publishQueue.shouldPublishActivity() : true;
