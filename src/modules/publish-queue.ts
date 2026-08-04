@@ -162,7 +162,7 @@ export class PublishQueue {
         tags: event.tags,
         content: event.content,
         created_at,
-      }, hexToBytes(secretKey)) as NostrEvent;
+      }, this.hexToBytes(secretKey)) as NostrEvent;
 
       return refreshedEvent;
     } catch (error) {
