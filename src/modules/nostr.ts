@@ -578,10 +578,13 @@ export class RelayPool {
         // Use SimplePool to broadcast to all relays
         const publishPromises = relayUrls.map(async (url) => {
           try {
+            console.debug(`[Nostr] Publishing event (kind=${event.kind}, id=${event.id.substring(0, 16)}..., created_at=${event.created_at}, now=${Math.floor(Date.now()/1000)}) to ${url}`);
             await this.simplePool.publish([url], event as any);
             return { relay: url, success: true, latency_ms: Date.now() - publishStart };
           } catch (error) {
-            return { relay: url, success: false, error: (error as Error).message, latency_ms: Date.now() - publishStart };
+            const errorMsg = (error as Error).message;
+            console.error(`[Nostr] Publish FAILED (kind=${event.kind}, id=${event.id.substring(0, 16)}..., created_at=${event.created_at}) to ${url}: ${errorMsg}`);
+            return { relay: url, success: false, error: errorMsg, latency_ms: Date.now() - publishStart };
           }
         });
         const relayAttempts = await Promise.all(publishPromises);
