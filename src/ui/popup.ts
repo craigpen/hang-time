@@ -188,7 +188,8 @@ export class PopupController {
     // Handle "My Activity" (self)
     let selfElement = existingElements.get('self');
     const selfExpanded = this.expandedFriendsState.get('self') ?? true;
-    const sortedUserActivities = this._sortActivitiesByType(this.userActivities);
+    const dedupUserActivities = this._deduplicateActivities(this.userActivities);
+    const sortedUserActivities = this._sortActivitiesByType(dedupUserActivities);
     if (!selfElement) {
       // Create new self element
       selfElement = this._createFriendItem('self', 'My Activity', sortedUserActivities, selfExpanded);
