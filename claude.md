@@ -24,19 +24,22 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
 
 ### Architectural Decisions
 
-#### 1. Identity & Authentication (Not Implemented Yet)
+#### 1. Identity & Authentication ✅ IMPLEMENTED
 - **Decision**: Use memorable identifiers (e.g., "VascillatingMonkeyCough") instead of real identities
 - **Rationale**: Privacy, decentralization, no account requirement
-- **Implementation**: Generate on first install, display in settings with copy button
+- **Implementation**: IdentityManager generates on first install, display in settings with copy button
 
-#### 2. Data Storage (Not Implemented Yet)
-- **Decision**: All data stored locally (IndexedDB + chrome.storage)
+#### 2. Data Storage ✅ IMPLEMENTED
+- **Decision**: All data stored locally (chrome.storage.local)
 - **Rationale**: No backend needed, user privacy, decentralized
+- **Implementation**: StorageManager abstraction with unified API
 - **Structure**:
   - User profile (identifier, services, tokens, Discord info)
   - Friend list (local_name, identifier, muted, hidden_services)
-  - Activity history (per friend)
+  - Activity history (per friend, deduplicated)
   - Messages (encrypted, per friend)
+  - Game libraries (cached, refreshed periodically)
+  - Activity datastore (for corruption tracking and recovery)
 
 #### 3. Nostr Integration (Partially Implemented)
 - **Decision**: Connect to hardcoded list of public relays
@@ -62,15 +65,19 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
 - **Rationale**: Nostr is decentralized and unreliable. Tracking completeness must be independent of relay behavior.
 - **Future Enhancement**: Unified scheduler/rate limiter for all Nostr publishes (see below)
 
-#### 5. Activity Publishing Strategy (Needs Re-evaluation 2026-08-03)
+#### 5. Activity Publishing Strategy ✅ IMPLEMENTED
 - **Problem**: Activity broadcasts (kind-1 events) drive the most frequent Nostr traffic and are sensitive to relay rate-limiting
-- **Note**: Previous performance testing (ACTIVITY-PUBLISHING-ANALYSIS.md) was based on simulated relay characteristics and flawed assumptions. Rate limits vary widely by relay operator and are not publicly documented.
 - **Current Approach**: Publishing activities every 12 seconds (~0.083 msg/s), well below any observed relay limits
-- **TODO**: 
-  - Implement unified rate limiting/scheduling to coordinate all event types (activities, time-sync, user actions, game library)
-  - Implement game library chunking (64KB max event size limit, not 10MB)
-  - Add monitoring to detect actual rate limiting errors from relays
-  - Establish safe publish rates based on real-world relay behavior, not simulated tests
+- **Note**: Previous performance testing infrastructure (mock-based) was removed 2026-08-04. Rate limits vary widely by relay operator and are not publicly documented. Current approach is conservative and monitored via real-world relay feedback.
+- **Completed**:
+  - ✅ Three-tier priority queue for publishing (user actions > profile updates > game library > activities)
+  - ✅ Unified rate limiting across all event types
+  - ✅ Activity deduplication and compression
+  - ✅ Monitoring for relay disconnections and failures
+- **Future Enhancements**:
+  - Implement game library chunking (64KB max event size limit)
+  - Add adaptive rate limiting based on per-relay error rates
+  - Establish safe publish rates based on real-world relay behavior
 
 #### 4. Content Script Lifecycle Management (2026-08-03) ✅ WORKING
 - **Decision**: Instance ownership pattern with INSTANCE_ID verification
@@ -92,7 +99,6 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
 - [x] Set up package.json and build pipeline
 - [x] Configure agent validation pipeline (AGENTS.md)
 - [x] Document development phases (PHASES.md)
-- [x] Establish development conventions (CONVENTIONS.md)
 - [x] **Phase 1: Architecture & Design** ✅ COMPLETE
   - [x] Design module hierarchy (11 core modules + services)
   - [x] Define data models (User, Friend, Activity, Message, Nostr)
@@ -402,11 +408,44 @@ See **PHASES.md** for detailed phase breakdown, deliverables, and success criter
 - [ ] Game recommendations based on friend groups
 - [ ] Multiplayer game matchmaking
 
+### Recent Work: Cleanup & Optimization (2026-08-04)
+
+**Documentation Consolidation:**
+- ✅ Removed flawed performance testing infrastructure (~7700 lines deleted)
+  - Deleted performance test harnesses and analysis documents
+  - Extracted generic metrics infrastructure for future use (src/modules/performance-metrics.ts)
+  - Rationalization: All conclusions were based on simulated relay characteristics, invalid for real-world deployment
+- ✅ Consolidated documentation (2600 → 1500 lines)
+  - Moved PHASES.md and RATE-LIMITING-PLAN.md to docs/
+  - Archived UI-dependent docs to docs/archived/ (pending games.ts implementation)
+  - Removed redundant CONVENTIONS.md (diverged from actual practices)
+  - Removed MVP.txt.txt (covered by README.md)
+- ✅ Updated documentation status notes
+  - PHASES.md: Added Phase 3-4 status indicator
+  - GAME_DISCOVERY_IMPLEMENTATION.md: Clarified games.ts UI pending implementation
+
+**Code Improvements (Recent Commits):**
+- ✅ Activity deduplication: Reduced duplicate activity state by deduplicating per service
+- ✅ Friend sync fix: Asymmetric data sync resolved by subscribing on friend accept
+- ✅ Game library refresh: Auto-trigger with loading state race condition fix
+- ✅ Disconnected state UX: Better favicon fallback and clearer status display
+- ✅ Storage consolidation: OAuth handler now uses StorageManager for consistent API
+- ✅ Console logging: Implemented console-to-FileLogger hook for automatic capture
+
+**Current Status (Session 2026-08-04):**
+- Phase 3-4: Core features implemented and tested ✅
+- Game Discovery: Backend complete; UI (games.ts) pending implementation
+- Activity datastore: 6-phase implementation plan established for data integrity layer
+- Logging: Console hook pattern + file rotation (2MB limit) implemented
+- Publishing: Three-tier priority queue, deduplication, and rate limiting working
+
 ### References
 
-- **MVP Spec**: Hang Time MVP.txt.txt (in root)
-- **Development Phases**: PHASES.md
-- **Agent Pipeline**: AGENTS.md, AGENT_ORCHESTRATION.md
+- **Project Overview**: README.md
+- **Development Phases**: docs/PHASES.md
+- **Agent Pipeline**: AGENTS.md
 - **Architecture**: docs/ARCHITECTURE.md
+- **Rate Limiting Strategy**: docs/RATE-LIMITING-PLAN.md
+- **Game Discovery Implementation**: docs/GAME_DISCOVERY_IMPLEMENTATION.md
 - **MV3 Content Script Lifecycle**: docs/MV3_CONTENT_SCRIPT_LIFECYCLE.md (extension reload recovery pattern)
-- **Reference Project**: ../tab-lifecycle-manager
+- **Archived Documentation**: docs/archived/ (historical, UI-dependent, or future features)
