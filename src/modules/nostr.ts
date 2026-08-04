@@ -231,6 +231,11 @@ export class RelayConnection implements IRelayConnection {
         since,
       };
 
+      console.debug(`[Nostr] 📡 Sending subscription to ${this.url}`);
+      console.debug(`[Nostr]    Authors (pubkey): ${identifier}`);
+      console.debug(`[Nostr]    Kinds: ${filter.kinds.join(', ')}`);
+      console.debug(`[Nostr]    Since: ${new Date(since * 1000).toISOString()}`);
+
       const message = JSON.stringify(['REQ', subscriptionId, filter]);
       this.ws.send(message);
       try {

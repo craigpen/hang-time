@@ -207,6 +207,7 @@ export class ActivityPublisher {
   private async _publishBundledActivities(activities: Activity[], mode: 'changed' | 'all' | 'compressed', config?: any): Promise<void> {
     try {
       const pubkey = await this.identityManager.getPubkey();
+      console.debug(`[Publisher] 📝 Publishing activities with pubkey: ${pubkey}`);
       const created_at = Math.floor(Date.now() / 1000);
       const kind = 10003; // Replaceable: only latest activity snapshot stored
 
