@@ -11,9 +11,19 @@ import { StorageManager } from './storage';
 import { generateActivityId } from './activity-utils';
 import type { PublishQueue } from './publish-queue';
 
-// Helper: Convert hex string to Uint8Array (for nostr-tools finalizeEvent)
+// Helper: Convert hex string to Uint8Array (for nostr-tools)
 function hexToBytes(hex: string): Uint8Array {
-  return new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+  if (!hex || typeof hex !== 'string') {
+    throw new Error(`hexToBytes: Expected hex string, got ${typeof hex}`);
+  }
+  if (hex.length % 2 !== 0) {
+    throw new Error(`hexToBytes: Hex string must have even length, got ${hex.length}`);
+  }
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
 }
 
 // Singleton instance with lazy initialization
