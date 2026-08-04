@@ -342,17 +342,16 @@
       <!-- BANDWIDTH SECTION -->
       <div class="settings-section">
         <h3>Bandwidth & Performance</h3>
-        <p class="help-text">Control how frequently your activity is published to Nostr relays. Adjust settings if experiencing rate limiting.</p>
 
         <label class="checkbox-label">
           <input type="checkbox" id="publisher-enabled-popup">
           <span>Enable Publishing</span>
         </label>
-        <p class="help-text">Publish your activity and settings to friends via Nostr relays. Disable to stop sharing.</p>
+        <p class="help-text">Publish your activity and settings to friends via Nostr relays. Disable to stop sharing all services.</p>
 
         <div style="margin-top: 12px;">
           <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.9em;">Publish Interval (seconds)</label>
-          <p class="help-text">How often to publish updates (default: 12 seconds). Increase this value if you experience rate limiting from Nostr relays.</p>
+          <p class="help-text">How often to publish updates (default: 12 seconds). Increasing this may help if you experience rate limiting from Nostr relays. Decreasing this value may cause publish failures due to rate limits.</p>
           <input type="number" id="publisher-rate-popup" min="5" max="120" step="1" placeholder="12" class="form-input" style="width: 80px;">
         </div>
 
