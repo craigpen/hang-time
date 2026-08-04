@@ -40,7 +40,7 @@ export class RelayConnection implements IRelayConnection {
   url: string;
   isConnected: boolean = false;
   private ws: WebSocket | null = null;
-  private subscriptions: Map<string, (event: NostrEvent) => Promise<void>> = new Map();
+  private subscriptions: Map<string, Set<(event: NostrEvent) => Promise<void>>> = new Map();
   private subscriptionId: number = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectAttempts: number = 0;
@@ -100,14 +100,16 @@ export class RelayConnection implements IRelayConnection {
 
             // Re-send all queued subscriptions
             console.debug(`[Nostr] Connection opened to ${this.url}, re-sending ${this.subscriptions.size} subscriptions`);
-            for (const [identifier, callback] of this.subscriptions.entries()) {
-              console.debug(`[Nostr] Re-sending subscription for ${identifier.substring(0, 16)}...`);
+            for (const [identifier, callbacks] of this.subscriptions.entries()) {
+              console.debug(`[Nostr] Re-sending subscription for ${identifier.substring(0, 16)}... (${callbacks.size} callbacks)`);
               if (identifier.startsWith('dm_')) {
                 // DM subscription: extract pubkey from dm_<pubkey> key
                 const pubkey = identifier.substring(3);
-                this._sendDMSubscription(pubkey, callback);
+                const anyCallback = callbacks.values().next().value; // Get any callback (just for protocol compliance)
+                this._sendDMSubscription(pubkey, anyCallback);
               } else {
-                this._sendSubscription(identifier, callback);
+                const anyCallback = callbacks.values().next().value; // Get any callback (just for protocol compliance)
+                this._sendSubscription(identifier, anyCallback);
               }
             }
 
@@ -180,7 +182,10 @@ export class RelayConnection implements IRelayConnection {
   }
 
   subscribe(identifier: string, callback: (event: NostrEvent) => Promise<void>): void {
-    this.subscriptions.set(identifier, callback);
+    if (!this.subscriptions.has(identifier)) {
+      this.subscriptions.set(identifier, new Set());
+    }
+    this.subscriptions.get(identifier)!.add(callback);
     console.debug(`[Nostr] Subscribe called for ${identifier.substring(0, 16)}... on ${this.url}, connected: ${this.isConnected}`);
 
     if (!this.isConnected || !this.ws) {
@@ -193,7 +198,10 @@ export class RelayConnection implements IRelayConnection {
 
   subscribeToDirectMessages(recipientPubkey: string, callback: (event: NostrEvent) => Promise<void>): void {
     const key = `dm_${recipientPubkey}`;
-    this.subscriptions.set(key, callback);
+    if (!this.subscriptions.has(key)) {
+      this.subscriptions.set(key, new Set());
+    }
+    this.subscriptions.get(key)!.add(callback);
     console.debug(`[Nostr] Subscribe to DMs for ${recipientPubkey.substring(0, 16)}... on ${this.url}, connected: ${this.isConnected}`);
 
     if (!this.isConnected || !this.ws) {
@@ -353,7 +361,7 @@ export class RelayConnection implements IRelayConnection {
     console.debug(`[Nostr] Current subscriptions: ${Array.from(this.subscriptions.keys()).map(k => k.substring(0, 16) + '...').join(', ')}`);
 
     let found = false;
-    for (const [identifier, callback] of this.subscriptions.entries()) {
+    for (const [identifier, callbacks] of this.subscriptions.entries()) {
       let matches = false;
 
       if (identifier.startsWith('dm_')) {
@@ -375,16 +383,18 @@ export class RelayConnection implements IRelayConnection {
 
       if (matches) {
         found = true;
-        console.debug(`[Nostr] Event matches subscription for ${identifier.substring(0, 16)}..., invoking callback`);
-        try {
-          const result = callback(event);
-          if (result instanceof Promise) {
-            result.catch((error) => {
-              console.error(`[Nostr] ❌ Async callback error for ${identifier.substring(0, 16)}...:`, error instanceof Error ? error.message : error);
-            });
+        console.debug(`[Nostr] Event matches subscription for ${identifier.substring(0, 16)}..., invoking ${callbacks.size} callback(s)`);
+        for (const callback of callbacks) {
+          try {
+            const result = callback(event);
+            if (result instanceof Promise) {
+              result.catch((error) => {
+                console.error(`[Nostr] ❌ Async callback error for ${identifier.substring(0, 16)}...:`, error instanceof Error ? error.message : error);
+              });
+            }
+          } catch (error) {
+            console.error(`[Nostr] ❌ Sync callback error for ${identifier.substring(0, 16)}...:`, error instanceof Error ? error.message : error);
           }
-        } catch (error) {
-          console.error(`[Nostr] ❌ Sync callback error for ${identifier.substring(0, 16)}...:`, error instanceof Error ? error.message : error);
         }
       }
     }
