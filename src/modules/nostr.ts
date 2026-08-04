@@ -576,12 +576,14 @@ export class RelayPool {
         const relayUrls = relays.map(r => r.url);
 
         // Use SimplePool to broadcast to all relays
-        const publishPromises = relayUrls.map((url) =>
-          this.simplePool.publish([url], event as any).then(
-            () => ({ relay: url, success: true, latency_ms: Date.now() - publishStart }),
-            (error) => ({ relay: url, success: false, error: (error as Error).message, latency_ms: Date.now() - publishStart })
-          )
-        );
+        const publishPromises = relayUrls.map(async (url) => {
+          try {
+            await this.simplePool.publish([url], event as any);
+            return { relay: url, success: true, latency_ms: Date.now() - publishStart };
+          } catch (error) {
+            return { relay: url, success: false, error: (error as Error).message, latency_ms: Date.now() - publishStart };
+          }
+        });
         const relayAttempts = await Promise.all(publishPromises);
 
         // Build results with per-relay info
