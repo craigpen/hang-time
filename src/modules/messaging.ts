@@ -1,10 +1,9 @@
 /**
  * Hang Time - Messaging System
- * Handles sending and receiving encrypted messages via Nostr kind-4
- * Also handles invites via parameterized replaceable events (kind 30001)
+ * Handles sending and receiving encrypted messages via Nostr kind-1059 (NIP-44)
  */
 
-import { finalizeEvent, nip04 } from 'nostr-tools';
+import { finalizeEvent, nip44 } from 'nostr-tools';
 import { Activity, NostrEvent, Friend } from '../types';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
@@ -44,116 +43,28 @@ export class MessagingManager {
   }
 
   /**
-   * Send a friend request notification (kind-30001, parameterized replaceable)
-   * Only latest friend request per recipient is stored on relays
+   * Send a friend request via encrypted kind-1059 (NIP-44)
+   * Returns the event ID for tracking/retry purposes
    */
-  async sendFriendRequest(recipientIdentifier: string, recipientPubkey: string, recipientDisplayName: string): Promise<void> {
-    const userProfile = await this.storageManager.getUserProfile();
-    if (!userProfile) {
-      throw new Error('User profile not found');
-    }
-
-    const pubkey = await this.identityManager.getPubkey();
-    const secretKeyHex = await this.identityManager.getSecretKey();
-
-    // Build tags with friend request metadata
-    // The 'd' tag identifies this as a friend request to this specific recipient (parameterized replaceable)
-    const tags = [
-      ['d', `friend_request_${recipientPubkey}`], // Unique identifier per recipient
-      ['is_notification', 'true'],
-      ['type', 'friend_request'],
-      ['recipient', recipientPubkey],
-      ['sender_identifier', userProfile.memorable_identifier],
-      ['sender_display_name', userProfile.nickname || userProfile.memorable_identifier],
-    ];
-
-    // Create kind-30001 parameterized replaceable friend request event
-    // Note: created_at will be refreshed by PublishQueue at actual publish time
-    const event = finalizeEvent({
-      kind: 30001,
-      tags,
-      content: `${userProfile.nickname || userProfile.memorable_identifier} added you as a friend`,
-      created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
-    }, hexToBytes(secretKeyHex)) as NostrEvent;
-
-    // Queue or publish the event
-    console.log(`[Messaging] 📤 Queuing friend request to ${recipientDisplayName} (${recipientPubkey.substring(0, 8)}...)`);
-    if (this.publishQueue) {
-      await this.publishQueue.enqueueUserAction(event, 'friend_request');
-    } else {
-      // Fallback if queue not initialized (shouldn't happen in normal flow)
-      await this.relayPool.publish(event, userProfile.publisher_config);
-    }
+  async sendFriendRequest(recipientIdentifier: string, recipientPubkey: string, recipientDisplayName: string): Promise<string> {
+    return this.sendFriendRequestMessage(recipientPubkey, recipientDisplayName);
   }
 
   /**
-   * Send an invite notification to a friend about an activity (kind-1, unencrypted)
+   * Send an invite via encrypted kind-1059 (NIP-44)
+   * Returns the event ID for tracking/retry purposes
    */
   async sendInvite(activity: Activity, recipientFriend: Friend): Promise<string> {
-    const userProfile = await this.storageManager.getUserProfile();
-    if (!userProfile) {
-      throw new Error('User profile not found');
-    }
+    const message: ActivityMessage = {
+      type: 'invite',
+      activity_id: activity.id || generateActivityId(activity.service, activity.url),
+      content: `${activity.content || activity.service}`,
+      timestamp: Date.now(),
+    };
 
-    const pubkey = await this.identityManager.getPubkey();
-
-    // Build tags with activity metadata and Discord link if available
-    const tags = [
-      ['is_notification', 'true'],
-      ['type', 'invite'],
-      ['activity_id', activity.id || generateActivityId(activity.service, activity.url)],
-      ['activity_name', activity.content || activity.service],
-      ['recipient', recipientFriend.pubkey],
-      ['service', activity.service],
-    ];
-
-    if (activity.url) {
-      tags.push(['url', activity.url]);
-    }
-
-    // Determine Discord link to include: prefer sender's, fall back to recipient's
-    let discordLink: string | undefined;
-
-    if (userProfile.discord_info) {
-      // Sender has Discord configured
-      discordLink = userProfile.discord_info;
-    } else {
-      // Sender doesn't have Discord, check if recipient has one
-      const recipientProfile = await this.storageManager.getFriendProfile(recipientFriend.pubkey);
-      if (recipientProfile?.discord_link) {
-        discordLink = recipientProfile.discord_link;
-      }
-    }
-
-    if (discordLink) {
-      tags.push(['discord_link', discordLink]);
-    }
-
-    // Add 'd' tag for parameterized replaceable event (unique per activity+recipient combo)
-    const activityIdForTag = activity.id || generateActivityId(activity.service, activity.url);
-    tags.push(['d', `invite_${activityIdForTag}_${recipientFriend.pubkey}`]);
-
-    const secretKeyHex = await this.identityManager.getSecretKey();
-
-    // Create kind-30001 parameterized replaceable invite event
-    // Note: created_at will be refreshed by PublishQueue at actual publish time
-    const event = finalizeEvent({
-      kind: 30001,
-      tags,
-      content: `Inviting ${recipientFriend.local_name} to ${activity.content || activity.service}`,
-      created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
-    }, hexToBytes(secretKeyHex)) as NostrEvent;
-
-    // Queue or publish the event
-    console.log(`[Messaging] 📤 Queuing invite to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);
-    if (this.publishQueue) {
-      await this.publishQueue.enqueueUserAction(event, 'invite');
-    } else {
-      // Fallback if queue not initialized
-      await this.relayPool.publish(event, userProfile.publisher_config);
-    }
-
-    return event.id; // Return event ID for tracking/retry
+    const eventId = await this._sendActivityMessage(recipientFriend, message);
+    console.debug('[Messaging] Sent invite for activity:', activity.service);
+    return eventId;
   }
 
   /**
@@ -206,7 +117,7 @@ export class MessagingManager {
   }
 
   /**
-   * Send friend request message via kind-4 (encrypted)
+   * Send friend request message via kind-1059 (NIP-44 encrypted)
    * Used when adding a friend to notify them (works even if they haven't added us yet)
    * Returns the event ID for tracking/retry purposes
    */
@@ -232,11 +143,11 @@ export class MessagingManager {
         timestamp: Date.now(),
       };
 
-      // Serialize and encrypt using nip04
+      // Serialize and encrypt using nip44
       const plaintext = JSON.stringify(message);
-      const encryptedContent = await nip04.encrypt(secretKey, recipientPubkey, plaintext);
+      const encryptedContent = await nip44.encrypt(recipientPubkey, plaintext);
 
-      // Create kind-4 event with message_type tag
+      // Create kind-1059 event with message_type tag
       const tags: Array<[string, string]> = [
         ['p', recipientPubkey],
         ['message_type', 'friend_request'],
@@ -245,14 +156,14 @@ export class MessagingManager {
       // Use finalizeEvent() for consistent event signing
       // Note: created_at will be refreshed by PublishQueue at actual publish time
       const event = finalizeEvent({
-        kind: 4,
+        kind: 1059,
         tags,
         content: encryptedContent,
         created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
       }, hexToBytes(secretKey)) as NostrEvent;
 
       // Queue or publish the event
-      console.log(`[Messaging] 📤 Queuing kind-4 friend request to ${recipientPubkey.substring(0, 8)}...`);
+      console.log(`[Messaging] 📤 Queuing kind-1059 friend request to ${recipientPubkey.substring(0, 8)}...`);
       if (this.publishQueue) {
         await this.publishQueue.enqueueUserAction(event, 'message');
       } else {
@@ -270,7 +181,7 @@ export class MessagingManager {
   }
 
   /**
-   * Internal: send encrypted activity message via kind-4
+   * Internal: send encrypted activity message via kind-1059 (NIP-44)
    * Returns the event ID for tracking/retry purposes
    */
   private async _sendActivityMessage(recipientFriend: Friend, message: ActivityMessage): Promise<string> {
@@ -283,11 +194,11 @@ export class MessagingManager {
       const pubkey = await this.identityManager.getPubkey();
       const secretKey = await this.identityManager.getSecretKey();
 
-      // Serialize message to JSON and encrypt using nip04 with recipient's pubkey
+      // Serialize message to JSON and encrypt using nip44 with recipient's pubkey
       const plaintext = JSON.stringify(message);
-      const encryptedContent = await nip04.encrypt(secretKey, recipientFriend.pubkey, plaintext);
+      const encryptedContent = await nip44.encrypt(recipientFriend.pubkey, plaintext);
 
-      // Create kind-4 event with recipient tag and message type
+      // Create kind-1059 event with recipient tag and message type
       const tags: Array<[string, string]> = [['p', recipientFriend.pubkey]];
 
       // Add message_type tag for routing (friend_request for accept/decline, chat for future chat)
@@ -300,14 +211,14 @@ export class MessagingManager {
       // Use finalizeEvent() for consistent event signing
       // Note: created_at will be refreshed by PublishQueue at actual publish time
       const event = finalizeEvent({
-        kind: 4,
+        kind: 1059,
         tags,
         content: encryptedContent,
         created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
       }, hexToBytes(secretKey)) as NostrEvent;
 
       // Queue or publish the event
-      console.log(`[Messaging] 📤 Queuing kind-4 ${message.type} to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);
+      console.log(`[Messaging] 📤 Queuing kind-1059 ${message.type} to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);
       if (this.publishQueue) {
         await this.publishQueue.enqueueUserAction(event, 'message');
       } else {
@@ -352,10 +263,28 @@ export class MessagingManager {
         return null;
       }
 
+      if (!encryptedContent) {
+        console.warn('[Messaging] Empty encrypted content, cannot decrypt');
+        return null;
+      }
+
+      console.debug('[Messaging] Decrypting content type:', typeof encryptedContent, 'length:', encryptedContent?.length, 'first 50 chars:', encryptedContent?.substring(0, 50));
+
       const secretKey = await this.identityManager.getSecretKey();
 
-      // Decrypt the message using nip04 with friend's pubkey (they sent it to us)
-      const plaintext = await nip04.decrypt(secretKey, friend.pubkey, encryptedContent);
+      // Decrypt the message using nip44 with friend's pubkey (they sent it to us)
+      let plaintext: string;
+      try {
+        plaintext = await nip44.decrypt(friend.pubkey, encryptedContent);
+      } catch (decryptError) {
+        console.error('[Messaging] Decryption failed - content may not be nip44-encrypted:', {
+          errorMessage: decryptError instanceof Error ? decryptError.message : String(decryptError),
+          contentType: typeof encryptedContent,
+          contentLength: encryptedContent?.length,
+          isSuspectedJSON: encryptedContent?.startsWith('{')
+        });
+        throw decryptError;
+      }
 
       // Parse the ActivityMessage structure
       const message: ActivityMessage = JSON.parse(plaintext);
