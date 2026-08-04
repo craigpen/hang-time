@@ -1072,7 +1072,7 @@ export class PopupController {
   }
 
   private _handleAcceptFriendRequest(friendId: string, friendName: string): void {
-    if (!confirm(`Accept ${friendName} as a friend? Note: You can have duplicates if you both add each other simultaneously.`)) {
+    if (!confirm(`Accept ${friendName} as a friend?`)) {
       return;
     }
 
