@@ -29,6 +29,30 @@ import { PublishQueue } from '../src/modules/publish-queue';
 import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName, DEFAULT_RELAY_URLS } from '../src/types';
 
 // ============================================================================
+// GLOBAL ERROR HANDLING
+// ============================================================================
+
+/**
+ * Catch unhandled promise rejections from SimplePool/Nostr operations
+ * These can occur when relay errors come back asynchronously
+ */
+globalThis.addEventListener?.('unhandledrejection', (event) => {
+  const error = event.reason;
+  const errorMsg = error instanceof Error ? error.message : String(error);
+
+  // Log but don't crash on "replaced: have newer event" — it's expected for replaceable kinds
+  if (errorMsg.includes('replaced') || errorMsg.includes('have newer event')) {
+    console.debug(`[Background] Relay rejected replaceable event (already has newer): ${errorMsg}`);
+    event.preventDefault(); // Prevent uncaught error
+  } else if (errorMsg.includes('rate-limited')) {
+    console.warn(`[Background] Relay rate-limited: ${errorMsg}`);
+    event.preventDefault();
+  } else {
+    console.error(`[Background] Unhandled rejection: ${errorMsg}`, event.reason);
+  }
+});
+
+// ============================================================================
 // GLOBAL STATE (recreated on each service worker restart)
 // ============================================================================
 
