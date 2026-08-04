@@ -375,9 +375,16 @@ export class RelayConnection implements IRelayConnection {
       if (matches) {
         found = true;
         console.debug(`[Nostr] Event matches subscription for ${identifier.substring(0, 16)}..., invoking callback`);
-        callback(event).catch((error) => {
-          console.error(`[Nostr] Callback error for ${identifier}:`, error);
-        });
+        try {
+          const result = callback(event);
+          if (result instanceof Promise) {
+            result.catch((error) => {
+              console.error(`[Nostr] ❌ Async callback error for ${identifier.substring(0, 16)}...:`, error instanceof Error ? error.message : error);
+            });
+          }
+        } catch (error) {
+          console.error(`[Nostr] ❌ Sync callback error for ${identifier.substring(0, 16)}...:`, error instanceof Error ? error.message : error);
+        }
       }
     }
     if (!found && this.subscriptions.size > 0) {
