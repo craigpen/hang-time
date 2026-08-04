@@ -3,7 +3,7 @@
  * Handles sending and receiving encrypted messages via Nostr kind-1059 (NIP-44)
  */
 
-import { finalizeEvent, nip44 } from 'nostr-tools';
+import { finalizeEvent, nip44, utils } from 'nostr-tools';
 import { Activity, NostrEvent, Friend } from '../types';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
@@ -155,8 +155,7 @@ export class MessagingManager {
 
       // Serialize and encrypt using nip44
       const plaintext = JSON.stringify(message);
-      const conversationKey = nip44.getConversationKey(hexToBytes(secretKey), hexToBytes(recipientPubkey));
-      const encryptedContent = await nip44.encrypt(conversationKey, plaintext);
+      const encryptedContent = await nip44.encrypt(secretKey, recipientPubkey, plaintext);
 
       // Create kind-1059 event with message_type tag
       const tags: Array<[string, string]> = [
@@ -207,8 +206,7 @@ export class MessagingManager {
 
       // Serialize message to JSON and encrypt using nip44 with recipient's pubkey
       const plaintext = JSON.stringify(message);
-      const conversationKey = nip44.getConversationKey(hexToBytes(secretKey), hexToBytes(recipientFriend.pubkey));
-      const encryptedContent = await nip44.encrypt(conversationKey, plaintext);
+      const encryptedContent = await nip44.encrypt(secretKey, recipientFriend.pubkey, plaintext);
 
       // Create kind-1059 event with recipient tag and message type
       const tags: Array<[string, string]> = [['p', recipientFriend.pubkey]];
@@ -287,8 +285,7 @@ export class MessagingManager {
       // Decrypt the message using nip44 with friend's pubkey (they sent it to us)
       let plaintext: string;
       try {
-        const conversationKey = nip44.getConversationKey(hexToBytes(secretKey), hexToBytes(friend.pubkey));
-        plaintext = await nip44.decrypt(conversationKey, encryptedContent);
+        plaintext = await nip44.decrypt(secretKey, friend.pubkey, encryptedContent);
       } catch (decryptError) {
         console.error('[Messaging] Decryption failed - content may not be nip44-encrypted:', {
           errorMessage: decryptError instanceof Error ? decryptError.message : String(decryptError),
