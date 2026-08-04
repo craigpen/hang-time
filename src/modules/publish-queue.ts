@@ -222,26 +222,35 @@ export class PublishQueue {
       if (eventToPublish) {
         // Refresh created_at to current time for replaceable/parameterized replaceable events
         const eventToPublishWithFreshTimestamp = await this._refreshEventTimestamp(eventToPublish);
-        await this.relayPool.publish(eventToPublishWithFreshTimestamp);
+        try {
+          await this.relayPool.publish(eventToPublishWithFreshTimestamp);
 
-        // If this was a user action, remove from queue and retry on failure
-        if (this.userActionQueue.length > 0) {
-          const pending = this.userActionQueue[0];
-          pending.retryCount++;
-
-          if (pending.retryCount >= this.MAX_RETRIES) {
-            // Exhausted retries, remove from queue
-            this.userActionQueue.shift();
-            console.warn(`[PublishQueue] ❌ Removed ${pending.type} after ${this.MAX_RETRIES} failed retries (event: ${pending.event.id.substring(0, 16)}..., created: ${new Date(pending.createdAt).toISOString()})`);
-          } else {
-            // Schedule retry
-            const backoffMs = this.RETRY_BACKOFF_MS[pending.retryCount - 1] || 60000;
-            pending.lastRetryAt = Date.now() + backoffMs;
-            console.log(`[PublishQueue] Scheduled retry for ${pending.type} in ${backoffMs}ms (attempt ${pending.retryCount}/${this.MAX_RETRIES})`);
+          // Publish succeeded, remove from queue
+          if (this.userActionQueue.length > 0) {
+            const pending = this.userActionQueue.shift();
+            console.debug(`[PublishQueue] ✅ Successfully published ${pending?.type}, removed from queue`);
+            await this._persistQueue();
           }
+        } catch (error) {
+          // Publish failed, retry with backoff
+          if (this.userActionQueue.length > 0) {
+            const pending = this.userActionQueue[0];
+            pending.retryCount++;
 
-          // Persist updated queue
-          await this._persistQueue();
+            if (pending.retryCount >= this.MAX_RETRIES) {
+              // Exhausted retries, remove from queue
+              this.userActionQueue.shift();
+              console.warn(`[PublishQueue] ❌ Removed ${pending.type} after ${this.MAX_RETRIES} failed retries (event: ${pending.event.id.substring(0, 16)}..., created: ${new Date(pending.createdAt).toISOString()})`);
+            } else {
+              // Schedule retry
+              const backoffMs = this.RETRY_BACKOFF_MS[pending.retryCount - 1] || 60000;
+              pending.lastRetryAt = Date.now() + backoffMs;
+              console.log(`[PublishQueue] Scheduled retry for ${pending.type} in ${backoffMs}ms (attempt ${pending.retryCount}/${this.MAX_RETRIES}) after error: ${error instanceof Error ? error.message : String(error)}`);
+            }
+
+            // Persist updated queue
+            await this._persistQueue();
+          }
         }
       } else {
         // No high-priority event, publish activity
