@@ -223,8 +223,38 @@
       <div class="settings-section">
         <h3>Activity Sources</h3>
 
-        <!-- Service Integrations Subsection -->
+        <!-- Browser Tabs Detection Subsection -->
         <div style="margin-bottom: 20px;">
+          <h4 style="margin: 0 0 12px 0; font-size: 0.9em; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">Browser Tabs</h4>
+          <p class="help-text" style="margin-bottom: 12px;">Automatically detect when you're watching videos and share with friends</p>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="service-youtube-tab-popup" data-service="youtube-tab" class="service-toggle">
+            <span>YouTube</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="service-netflix-tab-popup" data-service="netflix-tab" class="service-toggle">
+            <span>Netflix</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="service-twitch-tab-popup" data-service="twitch-tab" class="service-toggle">
+            <span>Twitch (Web)</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="service-video-tab-popup" data-service="video-tab" class="service-toggle">
+            <span>Other Video Sites</span>
+          </label>
+
+          <!-- URL Ignore List -->
+          <div style="margin-top: 12px;">
+            <label style="display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9em;">Ignore URLs (one per line)</label>
+            <p class="help-text" style="margin-bottom: 8px;">Domains/patterns to skip. Use * as wildcard for entire domain (e.g., youtube.com/watch?v=*)</p>
+            <textarea id="url-ignore-list-popup" placeholder="e.g., youtube.com/watch?v=*&#10;or use * for entire domain" class="form-input" style="font-family: monospace; font-size: 0.85em; height: 80px; resize: vertical;"></textarea>
+          </div>
+        </div>
+
+        <!-- Service Integrations Subsection -->
+        <div>
           <h4 style="margin: 0 0 12px 0; font-size: 0.9em; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">API Integrations</h4>
 
           <div class="service-row">
@@ -292,36 +322,6 @@
               <span>Enable Game Discovery</span>
             </label>
             <p class="help-text" style="margin-left: 24px;">Share your Steam library and discover games you have in common with friends</p>
-          </div>
-        </div>
-
-        <!-- Browser Tabs Detection Subsection -->
-        <div>
-          <h4 style="margin: 0 0 12px 0; font-size: 0.9em; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">Browser Tabs</h4>
-          <p class="help-text" style="margin-bottom: 12px;">Automatically detect when you're watching videos and share with friends</p>
-
-          <label class="checkbox-label">
-            <input type="checkbox" id="service-youtube-tab-popup" data-service="youtube-tab" class="service-toggle">
-            <span>YouTube</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" id="service-netflix-tab-popup" data-service="netflix-tab" class="service-toggle">
-            <span>Netflix</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" id="service-twitch-tab-popup" data-service="twitch-tab" class="service-toggle">
-            <span>Twitch (Web)</span>
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" id="service-video-tab-popup" data-service="video-tab" class="service-toggle">
-            <span>Other Video Sites</span>
-          </label>
-
-          <!-- URL Ignore List -->
-          <div style="margin-top: 12px;">
-            <label style="display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9em;">Ignore URLs (one per line)</label>
-            <p class="help-text" style="margin-bottom: 8px;">Domains/patterns to skip. Use * as wildcard for entire domain (e.g., youtube.com/watch?v=*)</p>
-            <textarea id="url-ignore-list-popup" placeholder="e.g., youtube.com/watch?v=*&#10;or use * for entire domain" class="form-input" style="font-family: monospace; font-size: 0.85em; height: 80px; resize: vertical;"></textarea>
           </div>
         </div>
       </div>
