@@ -238,7 +238,6 @@ export class MessagingManager {
       const encryptedContent = await encryptionManager.encrypt(plaintext, recipientPubkey, secretKey);
 
       const created_at = Math.floor(Date.now() / 1000);
-      const kind = 4;
 
       // Create kind-4 event with message_type tag
       const tags: Array<[string, string]> = [
@@ -246,21 +245,13 @@ export class MessagingManager {
         ['message_type', 'friend_request'],
       ];
 
-      const event: NostrEvent = {
-        id: '',
-        pubkey,
-        created_at,
-        kind,
+      // Use finalizeEvent() for consistent event signing
+      const event = finalizeEvent({
+        kind: 4,
         tags,
         content: encryptedContent,
-      };
-
-      // Compute event ID and sign
-      const eventData = [0, pubkey, created_at, kind, event.tags, encryptedContent];
-      const canonicalJson = JSON.stringify(eventData);
-      const eventId = await encryptionManager.sha256(canonicalJson);
-      event.id = eventId.substring(0, 64);
-      event.sig = encryptionManager.signEvent(event.id, secretKey);
+        created_at,
+      }, hexToBytes(secretKey)) as NostrEvent;
 
       // Queue or publish the event
       console.log(`[Messaging] 📤 Queuing kind-4 friend request to ${recipientPubkey.substring(0, 8)}...`);
@@ -299,7 +290,6 @@ export class MessagingManager {
       const encryptedContent = await encryptionManager.encrypt(plaintext, recipientFriend.pubkey, secretKey);
 
       const created_at = Math.floor(Date.now() / 1000);
-      const kind = 4; // Kind 4 = encrypted direct message
 
       // Create kind-4 event with recipient tag and message type
       const tags: Array<[string, string]> = [['p', recipientFriend.pubkey]];
@@ -311,23 +301,13 @@ export class MessagingManager {
         tags.push(['message_type', 'chat']);
       }
 
-      const event: NostrEvent = {
-        id: '', // Will be computed
-        pubkey,
-        created_at,
-        kind,
+      // Use finalizeEvent() for consistent event signing
+      const event = finalizeEvent({
+        kind: 4,
         tags,
         content: encryptedContent,
-      };
-
-      // Compute event ID (SHA-256 of canonical JSON)
-      const eventData = [0, pubkey, created_at, kind, event.tags, encryptedContent];
-      const canonicalJson = JSON.stringify(eventData);
-      const eventId = await encryptionManager.sha256(canonicalJson);
-      event.id = eventId.substring(0, 64);
-
-      // Sign event
-      event.sig = encryptionManager.signEvent(event.id, secretKey);
+        created_at,
+      }, hexToBytes(secretKey)) as NostrEvent;
 
       // Queue or publish the event
       console.log(`[Messaging] 📤 Queuing kind-4 ${message.type} to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);
