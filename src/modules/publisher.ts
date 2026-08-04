@@ -145,12 +145,6 @@ export class ActivityPublisher {
       Object.entries(currentActivities).forEach(([activityId, activity]) => {
         if (!activity) return;
 
-        // Skip disconnected activities (internal state, not for publishing to friends)
-        if (activity.state === 'disconnected') {
-          console.debug(`[Publisher] Skipping disconnected activity ${activity.service}`);
-          return;
-        }
-
         const issues = detectCorruption(activity);
         if (issues.length > 0) {
           console.warn(`[Publisher] Activity ${activity.service} (ID: ${activityId}) is corrupted:`, issues);
