@@ -239,17 +239,19 @@ export class GameLibraryManager {
     const API_BASE = 'https://api.steampowered.com';
 
     try {
+      const profile = await this.storage.getUserProfile();
+      if (!profile?.steam_config?.api_key) {
+        console.warn('[GameLibrary] Steam API key not configured, skipping game library fetch');
+        return [];
+      }
+
       const url = `${API_BASE}/IPlayerService/GetOwnedGames/v1/`;
       const params = new URLSearchParams({
         steamid: steamId,
         include_appinfo: 'true',
         include_played_free_games: 'true',
+        key: profile.steam_config.api_key,
       });
-
-      const profile = await this.storage.getUserProfile();
-      if (profile?.steam_config?.api_key) {
-        params.append('key', profile.steam_config.api_key);
-      }
 
       console.debug('[GameLibrary] Calling Steam API:', url);
       const response = await fetch(`${url}?${params}`);
