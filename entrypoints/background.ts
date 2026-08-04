@@ -1181,6 +1181,9 @@ async function _acceptFriendRequest(friendId?: string): Promise<ExtensionRespons
     // Accept the friend request
     await friendManager.acceptFriendRequest(friendId);
 
+    // Subscribe to friend's events (so we receive their game library, activities, etc.)
+    await _subscribeToFriend(friend.identifier);
+
     // Send acceptance notification back to the friend
     const messagingManager = getMessagingManager();
     const dummyActivity: Activity = {
