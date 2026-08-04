@@ -415,12 +415,15 @@ export class ActivityPublisher {
 
   private _toPublishableActivity(activity: Activity): any {
     // Only publish fields needed by receivers
+    // Normalize disconnected state to 'paused' for publishing (internal state not shared with friends)
+    const publishState = activity.state === 'disconnected' ? 'paused' : activity.state;
+
     return {
       id: activity.id,
       service: activity.service,
       content: activity.content,
       url: activity.url,
-      state: activity.state,
+      state: publishState,
       timestamp: activity.timestamp,
       metadata: activity.metadata ? {
         progress: activity.metadata.progress,
