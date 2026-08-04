@@ -136,6 +136,13 @@ export class PublishQueue {
    */
   private async _publishCycle(): Promise<void> {
     try {
+      // Check if publishing is enabled globally
+      const profile = await this.storageManager.getUserProfile();
+      if (profile?.publisher_config && !profile.publisher_config.enabled) {
+        console.debug('[PublishQueue] Publishing is disabled, skipping cycle');
+        return;
+      }
+
       let eventToPublish: NostrEvent | null = null;
 
       // Priority 1: User actions (always publish if pending)
