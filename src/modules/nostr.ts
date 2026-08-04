@@ -366,8 +366,8 @@ export class RelayConnection implements IRelayConnection {
       let matches = false;
 
       if (identifier.startsWith('dm_')) {
-        // DM subscription: route if event is kind-4 (we already filtered on server side)
-        if (event.kind === 4) {
+        // DM subscription: route if event is kind-1059 (NIP-44 encrypted messages)
+        if (event.kind === 1059) {
           matches = true;
         }
       } else {
