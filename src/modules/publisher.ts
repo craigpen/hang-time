@@ -10,7 +10,6 @@ import { Activity, NostrEvent, ServiceName, DEFAULT_RELAY_URLS } from '../types'
 import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
-import { encryptionManager } from './encryption';
 import { validateActivity, detectCorruption } from './activity-validation';
 import { GameLibraryManager } from './game-library';
 import type { PublishQueue } from './publish-queue';

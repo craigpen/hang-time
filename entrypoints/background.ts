@@ -5,6 +5,7 @@
  */
 
 import * as pako from 'pako';
+import { nip04, verifyEvent } from 'nostr-tools';
 import { RelayPool, relayPool } from '../src/modules/nostr';
 import { StorageManager, storageManager } from '../src/modules/storage';
 import { IdentityManager, initializeIdentityManager, identityManager } from '../src/modules/identity';
@@ -22,7 +23,6 @@ import { SpotifyService } from '../src/modules/services/spotify';
 import { TwitchService } from '../src/modules/services/twitch';
 import { initializeMetadataFetcher, metadataFetcher } from '../src/modules/metadata-fetcher';
 import { getActivityVerb, generateActivityId } from '../src/modules/activity-utils';
-import { encryptionManager } from '../src/modules/encryption';
 import { ActivityDiagnostics } from '../src/modules/activity-diagnostics';
 import { initializeFileLogger, getFileLogger } from '../src/modules/file-logger';
 import { PublishQueue } from '../src/modules/publish-queue';
@@ -1795,8 +1795,8 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
       }
 
       const secretKey = await identityManager.getSecretKey();
-      // Decrypt with sender's pubkey (event.pubkey), not our own
-      const plaintext = await encryptionManager.decrypt(event.content, event.pubkey, secretKey);
+      // Decrypt using nip04 with sender's pubkey (event.pubkey)
+      const plaintext = await nip04.decrypt(secretKey, event.pubkey, event.content);
       const message = JSON.parse(plaintext);
 
       if (message.type !== 'friend_request') {
@@ -1882,6 +1882,12 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
     console.debug(`[Friend] Details - pubkey: ${event.pubkey.substring(0, 8)}..., tags: ${JSON.stringify(event.tags.slice(0, 3))}`);
 
     try {
+      // Verify event signature using nostr-tools
+      if (!verifyEvent(event)) {
+        console.warn(`[Friend] Event signature verification failed for ${friendIdentifier} (kind ${event.kind})`);
+        return;
+      }
+
       // Fetch current friend state to check if active or pending
       const currentFriend = await friendManager.getFriendByIdentifier(friendIdentifier);
       const isPending = currentFriend?.state === 'pending';
@@ -2768,20 +2774,17 @@ async function publishDeletionRequest(eventId: string): Promise<void> {
     const userProfile = await storageManager.getUserProfile();
     if (!userProfile) return;
 
-    // Create kind 5 deletion event
-    const deletionEvent: NostrEvent = {
-      id: '',
-      pubkey: userProfile.pubkey,
-      created_at: Math.floor(Date.now() / 1000),
+    // Create and sign kind 5 deletion event using nostr-tools
+    const { finalizeEvent } = await import('nostr-tools');
+    const secretKeyHex = await identityManager.getSecretKey();
+    const hexToBytes = (hex: string) => new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+
+    const deletionEvent = finalizeEvent({
       kind: 5,
       tags: [['e', eventId]],
       content: 'Processed message',
-    };
-
-    // Sign and publish deletion request
-    const eventId_ = await _getEventId(deletionEvent);
-    deletionEvent.id = eventId_;
-    deletionEvent.sig = encryptionManager.signEvent(eventId_, userProfile.secret_key);
+      created_at: Math.floor(Date.now() / 1000),
+    }, hexToBytes(secretKeyHex)) as NostrEvent;
 
     console.log(`[Message] ðŸ“¤ Queuing deletion request for event: ${eventId.substring(0, 8)}...`);
     if (publishQueue) {

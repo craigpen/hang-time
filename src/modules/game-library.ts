@@ -8,7 +8,6 @@ import { OwnedGame, STORAGE_KEYS, NostrEvent, NostrError } from '../types';
 import { StorageManager } from './storage';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
-import { encryptionManager } from './encryption';
 import type { PublishQueue } from './publish-queue';
 
 // Helper: Convert hex string to Uint8Array (for nostr-tools finalizeEvent)

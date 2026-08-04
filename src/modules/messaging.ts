@@ -4,12 +4,11 @@
  * Also handles invites via parameterized replaceable events (kind 30001)
  */
 
-import { finalizeEvent } from 'nostr-tools';
+import { finalizeEvent, nip04 } from 'nostr-tools';
 import { Activity, NostrEvent, Friend } from '../types';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
 import { StorageManager } from './storage';
-import { encryptionManager } from './encryption';
 import { generateActivityId } from './activity-utils';
 import type { PublishQueue } from './publish-queue';
 
@@ -233,9 +232,9 @@ export class MessagingManager {
         timestamp: Date.now(),
       };
 
-      // Serialize and encrypt
+      // Serialize and encrypt using nip04
       const plaintext = JSON.stringify(message);
-      const encryptedContent = await encryptionManager.encrypt(plaintext, recipientPubkey, secretKey);
+      const encryptedContent = await nip04.encrypt(secretKey, recipientPubkey, plaintext);
 
       // Create kind-4 event with message_type tag
       const tags: Array<[string, string]> = [
@@ -284,9 +283,9 @@ export class MessagingManager {
       const pubkey = await this.identityManager.getPubkey();
       const secretKey = await this.identityManager.getSecretKey();
 
-      // Serialize message to JSON and encrypt with recipient's pubkey
+      // Serialize message to JSON and encrypt using nip04 with recipient's pubkey
       const plaintext = JSON.stringify(message);
-      const encryptedContent = await encryptionManager.encrypt(plaintext, recipientFriend.pubkey, secretKey);
+      const encryptedContent = await nip04.encrypt(secretKey, recipientFriend.pubkey, plaintext);
 
       // Create kind-4 event with recipient tag and message type
       const tags: Array<[string, string]> = [['p', recipientFriend.pubkey]];
@@ -355,8 +354,8 @@ export class MessagingManager {
 
       const secretKey = await this.identityManager.getSecretKey();
 
-      // Decrypt the message with friend's pubkey (they sent it to us)
-      const plaintext = await encryptionManager.decrypt(encryptedContent, friend.pubkey, secretKey);
+      // Decrypt the message using nip04 with friend's pubkey (they sent it to us)
+      const plaintext = await nip04.decrypt(secretKey, friend.pubkey, encryptedContent);
 
       // Parse the ActivityMessage structure
       const message: ActivityMessage = JSON.parse(plaintext);
