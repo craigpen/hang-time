@@ -376,19 +376,19 @@ export class PopupController {
                   stateIcon.textContent = '🎮';
                   stateIcon.title = 'Playing';
                 } else if (activity.state === 'disconnected') {
-                  // Content script disconnected: show red exclamation mark
+                  // Content script disconnected: show red circle with slash
                   stateIcon.innerHTML = `
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="state-icon-svg">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"></path>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" class="state-icon-svg">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <line x1="5" y1="19" x2="19" y2="5"></line>
                     </svg>
                   `;
-                  stateIcon.title = activity.metadata?.disconnected_reason || 'Disconnected - reload tab';
+                  stateIcon.title = 'Connection lost - reload tab';
 
-                  // Update content text to show disconnect message
+                  // Keep original content but style as disconnected
                   if (contentText) {
-                    contentText.textContent = 'Disconnected - reload tab';
-                    contentText.style.fontStyle = 'italic';
-                    contentText.style.opacity = '0.7';
+                    contentText.style.opacity = '0.5';
+                    contentText.style.textDecoration = 'line-through';
                   }
                 } else {
                   // Check if data is fresh from content script (for browser tabs)
@@ -736,15 +736,14 @@ export class PopupController {
         stateIcon.textContent = '🎮';
         stateIcon.title = 'Playing';
       } else if (activity.state === 'disconnected') {
-        // Content script disconnected (e.g., after extension restart): show warning icon
+        // Content script disconnected (e.g., after extension restart): show red circle with slash
         stateIcon.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="#EF4444" stroke="none" class="state-icon-svg">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" class="state-icon-svg">
             <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12" stroke="#FFF" stroke-width="2"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16" stroke="#FFF" stroke-width="2"></line>
+            <line x1="5" y1="19" x2="19" y2="5"></line>
           </svg>
         `;
-        stateIcon.title = activity.metadata?.disconnected_reason || 'Disconnected - reload tab';
+        stateIcon.title = 'Connection lost - reload tab';
       } else {
         // Check if data is fresh from content script (only for browser tabs)
         const isDataFresh = activity.is_fresh !== false; // Default to true if not set
@@ -1299,7 +1298,15 @@ export class PopupController {
     const faviconDiv = document.createElement('div');
     faviconDiv.className = 'activity-item-favicon';
     const img = document.createElement('img');
-    img.src = this._getFaviconUrl(activity.service);
+
+    // Prefer dynamic favicon from metadata (for video-tab), fallback to service icon, then Google's service
+    const dynamicFavicon = activity.metadata?.favicon;
+    const domain = activity.metadata?.domain || new URL(activity.url || '').hostname;
+    const faviconUrl = dynamicFavicon ?
+      (dynamicFavicon.startsWith('http') ? dynamicFavicon : `https:${dynamicFavicon}`) :
+      (this._getFaviconUrl(activity.service) || `https://www.google.com/s2/favicons?domain=${domain}`);
+
+    img.src = faviconUrl;
     img.alt = activity.service;
     img.onerror = () => {
       img.style.display = 'none';
@@ -1314,6 +1321,13 @@ export class PopupController {
     const contentText = document.createElement('span');
     contentText.className = 'activity-content-text';
     contentText.textContent = this._truncateActivityContent(activity.content);
+
+    // Apply disconnected styling
+    if (activity.state === 'disconnected') {
+      contentText.style.opacity = '0.5';
+      contentText.style.textDecoration = 'line-through';
+    }
+
     item.appendChild(contentText);
 
     // Action buttons container
