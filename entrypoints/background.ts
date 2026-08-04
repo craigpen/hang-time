@@ -1883,14 +1883,19 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
 
     try {
       // Verify event signature using nostr-tools
-      if (!verifyEvent(event)) {
-        console.warn(`[Friend] Event signature verification failed for ${friendIdentifier} (kind ${event.kind})`);
+      const isValid = verifyEvent(event);
+      console.debug(`[Friend] Event signature validation: ${isValid ? '✅ VALID' : '❌ INVALID'} (kind ${event.kind}, id: ${event.id.substring(0, 8)}...)`);
+
+      if (!isValid) {
+        console.warn(`[Friend] ❌ Event signature verification failed for ${friendIdentifier} (kind ${event.kind}, id: ${event.id.substring(0, 8)}...)`);
         return;
       }
 
       // Fetch current friend state to check if active or pending
       const currentFriend = await friendManager.getFriendByIdentifier(friendIdentifier);
       const isPending = currentFriend?.state === 'pending';
+      console.debug(`[Friend] Friend state: ${currentFriend?.local_name} (state: ${currentFriend?.state})`);
+      console.debug(`[Friend] Event kind: ${event.kind}, will process: ${event.kind === 0 || !isPending ? 'YES' : 'NO (pending friend)'}`);
 
       if (event.kind === 0) {
         // Profile event (always accept for both pending and active)
@@ -2109,12 +2114,11 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       const diagnostics = ActivityDiagnostics.getInstance(storageManager);
       const userProfile = await storageManager.getUserProfile();
 
-      console.log('[Background] Received activities from Nostr:', activities.map(a => ({
+      console.log('[Background] ✅ Successfully parsed activities from event (kind 10003):', activities.map(a => ({
         service: a.service,
         content: a.content,
         audio: a.audio,
         id: a.id,
-        url: a.url,
       })));
 
       // Record reception for each activity
@@ -2192,10 +2196,12 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         };
       }
 
+      console.debug(`[Background] 📦 Storing activities for ${friend.local_name}: ${Object.keys(newCurrentActivities).join(', ')}`);
       await storageManager.updateFriend(friend.id, {
         current_activities: newCurrentActivities,
         last_seen: Date.now(),
       });
+      console.log(`[Background] ✅ Stored ${Object.keys(newCurrentActivities).length} activities for ${friend.local_name}`);
 
       // Record processing success for each activity
       for (const activity of activities) {
