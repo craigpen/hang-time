@@ -613,7 +613,7 @@ async function initializeExtension(): Promise<void> {
       console.warn('[Background] Failed to subscribe to friend game libraries:', error);
     }
 
-    // Subscribe to incoming kind 4 (encrypted DM) messages
+    // Subscribe to incoming kind 1059 (encrypted DM) messages
     console.log('[Background] ðŸ”” Setting up incoming message subscription...');
     try {
       await _subscribeToIncomingMessages();
@@ -1278,7 +1278,7 @@ async function _addFriend(identifier?: string, localName?: string): Promise<Exte
     // Subscribe to friend's events (for receiving accept/decline responses)
     await _subscribeToFriend(identifier);
 
-    // Publish friend request message (kind-4, encrypted)
+    // Publish friend request message (kind-1059, encrypted)
     try {
       console.log(`[Background] Sending friend request message to ${localName} (${friend.pubkey.substring(0, 8)}...)`);
       const messagingManager = getMessagingManager();
@@ -1709,8 +1709,8 @@ async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
 // ============================================================================
 
 /**
- * Subscribe to incoming encrypted messages (kind 4) sent to the user
- * Note: Uses a dedicated subscription identifier to listen for all kind 4 events
+ * Subscribe to incoming encrypted messages (kind 1059) sent to the user
+ * Note: Uses a dedicated subscription identifier to listen for all kind 1059 events
  * Filtering for recipient happens in the callback
  */
 async function _subscribeToIncomingMessages(): Promise<void> {
@@ -1718,10 +1718,10 @@ async function _subscribeToIncomingMessages(): Promise<void> {
     const userPubkey = await identityManager.getPubkey();
     console.log(`[Message] ðŸ“§ Subscribing to incoming messages for ${userPubkey.substring(0, 8)}...`);
 
-    // Subscribe to kind-4 events where user's pubkey is in the 'p' tag
+    // Subscribe to kind-1059 events where user's pubkey is in the 'p' tag
     // RelayPool handles filtering server-side via #p filter
     relayPool.subscribeToDirectMessages(userPubkey, async (event: NostrEvent) => {
-      console.log(`[Message] ðŸ“¨ Received kind-4 event, processing...`);
+      console.log(`[Message] ðŸ“¨ Received kind-1059 event, processing...`);
 
       // Skip messages we published ourselves (relay echo)
       if (event.pubkey === userPubkey) {
@@ -1729,13 +1729,13 @@ async function _subscribeToIncomingMessages(): Promise<void> {
         return;
       }
 
-      // Validate event is kind-4 (already filtered by relay, but verify)
-      if (event.kind !== 4) {
-        console.debug(`[Message] Ignoring non-kind-4 event (kind ${event.kind})`);
+      // Validate event is kind-1059 (already filtered by relay, but verify)
+      if (event.kind !== 1059) {
+        console.debug(`[Message] Ignoring non-kind-1059 event (kind ${event.kind})`);
         return;
       }
 
-      console.debug(`[Message] Received kind-4 message from ${event.pubkey.substring(0, 8)}...`);
+      console.debug(`[Message] Received kind-1059 message from ${event.pubkey.substring(0, 8)}...`);
 
       try {
         // Check if already processed this message
@@ -1771,7 +1771,7 @@ async function _subscribeToIncomingMessages(): Promise<void> {
       }
     });
 
-    console.debug(`[Message] Subscribed to incoming kind-4 messages for user ${userPubkey.substring(0, 8)}...`);
+    console.debug(`[Message] Subscribed to incoming kind-1059 messages for user ${userPubkey.substring(0, 8)}...`);
   } catch (error) {
     console.error(`[Message] Failed to subscribe to incoming messages:`, error);
   }
@@ -1920,9 +1920,9 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
         } else {
           console.debug(`[Friend] Skipping kind-1 from pending friend ${friendIdentifier}`);
     }
-      } else if (event.kind === 4) {
-        // Kind-4 messages (always accept for both pending and active)
-        console.debug(`[Message] Handling incoming kind-4`);
+      } else if (event.kind === 1059) {
+        // Kind-1059 messages (always accept for both pending and active)
+        console.debug(`[Message] Handling incoming kind-1059`);
         await _handleMessageEvent(friendIdentifier, event);
       } else if (event.kind === 10003) {
         // Kind-10003 replaceable activities - only process if friend is active
@@ -2929,7 +2929,7 @@ async function retryPendingInvites(): Promise<void> {
 }
 
 /**
- * Track a pending kind-4 message (chat, accept, decline, friend_request)
+ * Track a pending kind-1059 message (chat, accept, decline, friend_request)
  */
 async function trackPendingMessage(eventId: string, messageType: 'join_accepted' | 'join_declined' | 'friend_request' | 'chat', friendId: string, activityId: string, content?: string): Promise<void> {
   const messageId = `${messageType}_${friendId}_${activityId}`;

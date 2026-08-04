@@ -11,7 +11,7 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
 - Friend management (memorable identifiers, local friend lists)
 - Real-time activity display (active friends cards)
 - Join actions (open content, time sync for video)
-- Encrypted chat (via Nostr kind 4)
+- Encrypted chat (via Nostr kind 1059, NIP-44)
 - Optional voice coordination (Discord link prompt)
 - Settings UI (service toggles, auth, notification preferences)
 
@@ -47,7 +47,7 @@ Hang Time is a decentralized browser extension for co-consuming content with fri
 - **Relays**: nostr.pub, relay.damus.io, nos.lol (configurable later)
 - **Event kinds**:
   - Kind 1: Activity events & activity invites (currently playing/streaming, join invitations)
-  - Kind 4: Encrypted messages (friend requests, accept/decline, chat)
+  - Kind 1059: Encrypted messages (NIP-44, friend requests, accept/decline, chat)
 
 #### 4. Nostr Message State Tracking (Implemented 2026-07-31)
 - **Problem**: Nostr relays have ephemeral/independent retention policies. Relay rate-limiting or rejection causes silent failures with no recovery.
@@ -164,7 +164,7 @@ See **PHASES.md** for detailed phase breakdown, deliverables, and success criter
   - MessagingManager for send/receive
   - Message storage with metadata
   - Unread message tracking
-  - Nostr kind 4 event publishing
+  - Nostr kind 1059 event publishing (NIP-44 encryption)
   - Message receive from relay subscriptions
   - Read/unread status management
   

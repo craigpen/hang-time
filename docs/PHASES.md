@@ -126,7 +126,7 @@ This document outlines the phased approach to building the Hang Time extension M
 
 ### Goals
 - Implement time-sync for YouTube/generic HTML5 video
-- Build encrypted chat system (Nostr kind 4)
+- Build encrypted chat system (Nostr kind 1059, NIP-44)
 - Add voice coordination prompt (Discord link)
 - Implement browse together mode
 - Create join action handlers for each service (open link, seek to time, etc.)

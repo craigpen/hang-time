@@ -7,7 +7,7 @@ Hang Time is a decentralized browser extension that enables real-time co-consump
 **Key Architectural Principles:**
 - **Modular Design**: Clear separation of concerns (activity detection, Nostr integration, UI, storage)
 - **Type Safety**: All modules use strict TypeScript with explicit types
-- **Security-First**: OAuth tokens stored locally, never logged, messages encrypted via Nostr kind 4
+- **Security-First**: OAuth tokens stored locally, never logged, messages encrypted via Nostr kind 1059 (NIP-44)
 - **Decentralized**: No backend—all communication via public Nostr relays
 - **Resilient**: Service worker state-less design; relays can reconnect automatically
 - **Observable**: Structured logging with module prefixes for debugging
@@ -42,7 +42,7 @@ hang-time/
 │   │   │   └── Add, remove, rename, mute friends
 │   │   │
 │   │   ├── messages.ts            [Encrypted chat]
-│   │   │   └── Send/receive encrypted Nostr kind 4 events
+│   │   │   └── Send/receive encrypted Nostr kind 1059 events (NIP-44)
 │   │   │
 │   │   ├── services/               [Activity detection per platform]
 │   │   │   ├── spotify.ts         [Spotify activity & OAuth]
@@ -433,7 +433,7 @@ class StorageManager {
 - **Scopes**: Only request necessary scopes
 
 ### Message Encryption
-- **Nostr kind 4**: Standard NIP-04 encryption
+- **Nostr kind 1059**: Standard NIP-44 encryption (modern, recommended)
 - **Never plaintext**: All chat encrypted end-to-end
 - **Decryption on receive**: Only recipient can decrypt
 

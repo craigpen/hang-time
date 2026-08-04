@@ -273,9 +273,9 @@ export class RelayConnection implements IRelayConnection {
       const subscriptionId = `dm_sub_${this.subscriptionId++}`;
       // Request recent DMs (last 24 hours)
       const since = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
-      // Subscribe to kind-4 events where our pubkey is in the 'p' tag
+      // Subscribe to kind-1059 events where our pubkey is in the 'p' tag (NIP-44 encrypted messages)
       const filter = {
-        kinds: [4],
+        kinds: [1059],
         '#p': [recipientPubkey],
         since,
         limit: 1000,
@@ -283,7 +283,7 @@ export class RelayConnection implements IRelayConnection {
 
       const message = JSON.stringify(['REQ', subscriptionId, filter]);
       this.ws.send(message);
-      console.debug(`[Nostr] Subscribed to DMs for ${recipientPubkey.substring(0, 16)}... (filter: ${JSON.stringify(filter)}) on ${this.url}`);
+      console.debug(`[Nostr] Subscribed to encrypted messages for ${recipientPubkey.substring(0, 16)}... (filter: ${JSON.stringify(filter)}) on ${this.url}`);
     } catch (error) {
       console.error(`[Nostr] Failed to subscribe to DMs on ${this.url}:`, error);
     }

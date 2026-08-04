@@ -24,7 +24,7 @@ Security audit of the Hang Time MVP extension covering OAuth, messaging, storage
 - [ ] State parameter validation
 
 ### 2. Message Encryption
-- [ ] Nostr kind 4 encryption (NIP-04)
+- [ ] Nostr kind 1059 encryption (NIP-44)
 - [ ] Key derivation
 - [ ] Plaintext storage checks
 - [ ] Message tampering protection
