@@ -99,6 +99,9 @@ class GenericVideoTracker {
 
     // Filter for main content: not known ads AND not in ad containers
     const mainContentVideos = visibleVideos.filter((v) => {
+      // Skip small videos (likely ads or widgets, not main content)
+      if (v.offsetWidth < 640 || v.offsetHeight < 360) return false;
+
       // Skip if duration is known to be short (ad indicator)
       if (v.duration > 0 && v.duration < 60) return false;
 
