@@ -567,6 +567,11 @@ body {
   width: 500px;
 }
 
+/* Hide main popup scrollbar when settings panel is open */
+body.settings-open {
+  overflow: hidden;
+}
+
 .settings-panel-header {
   display: flex;
   align-items: center;
@@ -625,6 +630,10 @@ body {
   margin: 0.5em 0 0 0;
   font-size: 0.8em;
   color: var(--text-tertiary);
+}
+
+.advanced-content {
+  display: none;
 }
 
 .checkbox-label,

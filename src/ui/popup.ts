@@ -1818,6 +1818,7 @@ export class PopupController {
   private _showSettingsPanel(): void {
     if (this.settingsPanel) {
       this.settingsPanel.style.display = 'flex';
+      document.body.classList.add('settings-open');
       // Resize popup to fit settings content
       this._resizePopupToFitSettings();
     }
@@ -1827,6 +1828,7 @@ export class PopupController {
     await this._saveSettingsPanel();
     if (this.settingsPanel) {
       this.settingsPanel.style.display = 'none';
+      document.body.classList.remove('settings-open');
       // Resize popup back to fit main content
       this._resizePopupToFitContent();
     }

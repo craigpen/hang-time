@@ -368,8 +368,8 @@
 
       <!-- ADVANCED SECTION (Collapsible) -->
       <div class="settings-section">
-        <div style="display: flex; align-items: center; cursor: pointer; user-select: none; margin-bottom: 0;" onclick="const content = this.parentElement.querySelector('.advanced-content'); const isHidden = content.style.display === 'none'; content.style.display = isHidden ? 'block' : 'none'; this.querySelector('.advanced-toggle').textContent = isHidden ? '▼' : '▶';">
-          <span class="advanced-toggle" style="margin-right: 8px; font-size: 0.9em; font-weight: bold;">▼</span>
+        <div style="display: flex; align-items: center; cursor: pointer; user-select: none; margin-bottom: 0;" onclick="const content = this.parentElement.querySelector('.advanced-content'); const isVisible = content.style.display === 'block'; content.style.display = isVisible ? 'none' : 'block'; this.querySelector('.advanced-toggle').textContent = isVisible ? '▶' : '▼';">
+          <span class="advanced-toggle" style="margin-right: 8px; font-size: 0.9em; font-weight: bold;">▶</span>
           <h3 style="margin: 0;">Advanced</h3>
         </div>
 
