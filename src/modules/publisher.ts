@@ -5,6 +5,7 @@
  */
 
 import * as pako from 'pako';
+import { finalizeEvent, getEventHash } from 'nostr-tools';
 import { Activity, NostrEvent, ServiceName, DEFAULT_RELAY_URLS } from '../types';
 import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
@@ -86,22 +87,14 @@ export class ActivityPublisher {
         tags.push(['discord_link', profile.discord_info]);
       }
 
-      // Create kind 0 profile event
-      const event: NostrEvent = {
-        id: '',
-        pubkey,
-        created_at,
+      // Create and sign kind 0 profile event using nostr-tools
+      const secretKey = await this.identityManager.getSecretKey();
+      const event = finalizeEvent({
         kind: 0,
         tags,
         content: '', // Kind 0 typically has empty content for profile data in tags
-      };
-
-      // Compute event ID and sign
-      const eventData = [0, pubkey, created_at, 0, event.tags, event.content];
-      const canonicalJson = JSON.stringify(eventData);
-      const eventId = await encryptionManager.sha256(canonicalJson);
-      event.id = eventId.substring(0, 64);
-      event.sig = encryptionManager.signEvent(event.id, await this.identityManager.getSecretKey());
+        created_at,
+      }, secretKey) as NostrEvent;
 
       // Mark profile as pending in queue
       console.log(`[Publisher] 📤 Profile update (nickname: ${profile.nickname || 'none'}, discord: ${profile.discord_info ? 'yes' : 'no'})`);
@@ -241,22 +234,14 @@ export class ActivityPublisher {
         tags.push(['compression', 'gzip']);
       }
 
-      // Compute event ID
-      const id = await this._computeEventId(pubkey, created_at, kind, tags, content);
-
-      // Sign the event
+      // Create and sign event using nostr-tools
       const secretKey = await this.identityManager.getSecretKey();
-      const sig = encryptionManager.signEvent(id, secretKey);
-
-      const event: NostrEvent = {
-        id,
-        pubkey,
-        created_at,
+      const event = finalizeEvent({
         kind,
         tags,
         content,
-        sig,
-      };
+        created_at,
+      }, secretKey) as NostrEvent;
 
       // Log event details
       const eventJson = JSON.stringify(event);
@@ -329,22 +314,14 @@ export class ActivityPublisher {
 
       const content = this._buildEventContent(activity);
 
-      // Compute event ID
-      const id = await this._computeEventId(pubkey, created_at, kind, tags, content);
-
-      // Sign the event
+      // Create and sign event using nostr-tools
       const secretKey = await this.identityManager.getSecretKey();
-      const sig = encryptionManager.signEvent(id, secretKey);
-
-      const event: NostrEvent = {
-        id,
-        pubkey,
-        created_at,
+      const event = finalizeEvent({
         kind,
         tags,
         content,
-        sig,
-      };
+        created_at,
+      }, secretKey) as NostrEvent;
 
       const eventJson = JSON.stringify(event);
       const eventSize = eventJson.length;
@@ -369,20 +346,6 @@ export class ActivityPublisher {
     parts.push(activity.content);
 
     return parts.filter((p) => p).join(' - ');
-  }
-
-  private async _computeEventId(
-    pubkey: string,
-    created_at: number,
-    kind: number,
-    tags: Array<[string, string]>,
-    content: string
-  ): Promise<string> {
-    // Nostr event ID = SHA-256 hash of canonical event format (NIP-01)
-    const eventData = [0, pubkey, created_at, kind, tags, content];
-    const canonicalJson = JSON.stringify(eventData);
-    const hash256 = await encryptionManager.sha256(canonicalJson);
-    return hash256.substring(0, 64);
   }
 
   private async _compressContent(content: string): Promise<string> {

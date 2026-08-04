@@ -34,6 +34,7 @@
   "dependencies": {
     "@noble/hashes": "^2.2.0",
     "@noble/secp256k1": "^3.1.0",
+    "nostr-tools": "^2.24.1",
     "pako": "^3.0.1",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
