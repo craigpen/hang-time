@@ -2247,21 +2247,27 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
       }
     }
 
-    // Remove any existing activity for this tab before storing the new one (prevent duplicates)
-    if (tabId !== undefined) {
-      const allActivities = await storageManager.getMyActivities();
-      const tabServices = ['video-tab', 'youtube-tab', 'netflix-tab', 'twitch-tab'];
-      for (const [activityId, activity] of Object.entries(allActivities)) {
-        if (activity?.metadata?.tabId === tabId && tabServices.includes(activity?.service)) {
-          // Different activity from same tab - remove the old one
-          if (activity.id !== value.id) {
-            console.debug(`[Background] 🗑️  Removing old activity for tab ${tabId}: ${activity.id}`);
+    // Remove any existing activities for this service to keep only the most recent
+    const allActivities = await storageManager.getMyActivities();
+    const tabServices = ['video-tab', 'youtube-tab', 'netflix-tab', 'twitch-tab'];
+
+    for (const [activityId, activity] of Object.entries(allActivities)) {
+      if (!activity) continue;
+
+      // Remove if same service (regardless of tab) with older timestamp
+      if (activity.service === value.service && tabServices.includes(activity.service)) {
+        if (activity.id !== value.id) {
+          const isOlder = (activity.timestamp || 0) < (value.timestamp || 0);
+          if (isOlder || tabId !== undefined) {
+            // Remove: either older timestamp, or from different tab (keep current tab's newer activity)
+            console.debug(`[Background] 🗑️  Removing old ${value.service} activity (id: ${activity.id}, timestamp: ${activity.timestamp})`);
             delete allActivities[activityId];
           }
         }
       }
-      await storageManager.setMyActivities(allActivities);
     }
+
+    await storageManager.setMyActivities(allActivities);
 
     // Store content script activity directly in MY_ACTIVITIES collection (single source of truth)
     const activityId = value.id || generateActivityId(value.service, value.url || '');
