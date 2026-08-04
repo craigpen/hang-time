@@ -310,3 +310,43 @@ Work in main or short-lived branches, run validation pipeline frequently:
 | 5: Testing | 2d | Tests, Audit, Release | Tests, Security, Builder, Dedup |
 | **Total** | **10-14 days** | Full MVP | All agents |
 
+---
+
+## Post-MVP Enhancements (Planned)
+
+### Video Co-Watch Overlay (High Priority)
+**Objective**: Improve video co-watching experience by providing integrated UI instead of requiring Discord coordination.
+
+**Features**:
+- Floating overlay panel on YouTube/Netflix/Twitch web pages
+- Show active co-viewers (friends currently watching same video)
+- Invite UI to add more friends to co-watch
+- Sync controls (manual sync, position display, watch-together indicator)
+- Integrated chat (without tab-switching)
+
+**UX**:
+- Hover/mouse movement triggers visibility (like YouTube player controls)
+- Auto-hide after 3 seconds inactivity
+- Pin icon to keep visible while chatting
+- Toggle in settings to enable/disable
+- Fixed corner positioning, doesn't block existing player controls
+
+**Why Post-MVP**:
+- MVP prioritizes core features: activity detection, friends, basic time-sync
+- Overlay enhancement, not core to MVP
+- Reuses existing infrastructure (time-sync, messaging, friend management)
+- Can be added incrementally
+
+**Reuses**:
+- Time-sync publishing/receiving (already works, needs better UX)
+- Encrypted messaging system
+- Friend management
+- Video activity detection (YouTube, Netflix, Twitch web)
+
+**Requires**:
+- New content script overlay system
+- Co-viewer detection logic (match friends by video title + URL)
+- Invite UI + notification flow
+- Better sync controls UI
+- Settings configuration
+
