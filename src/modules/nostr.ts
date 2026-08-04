@@ -274,10 +274,10 @@ export class RelayConnection implements IRelayConnection {
       // Request recent DMs (last 24 hours)
       const since = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
       // Subscribe to kind-1059 events (NIP-17 encrypted messages)
-      // Note: Relays filter p-tagged events via NIP-42 AUTH, not via filter tags
-      // Client-side filtering in callback validates 'p' tag matches recipientPubkey
+      // Use #p tag filter to only receive events where recipient's pubkey is in the p-tag
       const filter = {
         kinds: [1059],
+        '#p': [recipientPubkey],
         since,
         limit: 1000,
       };
