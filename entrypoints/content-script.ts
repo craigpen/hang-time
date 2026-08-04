@@ -534,7 +534,11 @@ function forceGlobalTeardown(): void {
 
 function isContextValid(): boolean {
   try {
-    return !!chrome.runtime?.id;
+    // Check if chrome API is available first (handles suspended tabs where context isn't ready)
+    if (typeof chrome === 'undefined' || !chrome.runtime) {
+      return false;
+    }
+    return !!chrome.runtime.id;
   } catch {
     return false;
   }
@@ -548,6 +552,19 @@ function establishConnection(): void {
 
   if (port) {
     return; // Already connected
+  }
+
+  // Guard against suspended tabs where chrome APIs aren't ready yet
+  if (typeof chrome === 'undefined' || !chrome.runtime) {
+    console.debug('[ContentScript] Chrome runtime not available yet (suspended tab?), will retry');
+    if ((window as any).hangTimeScriptActive === INSTANCE_ID && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      const backoff = INITIAL_BACKOFF_MS * Math.pow(2, reconnectAttempts);
+      reconnectAttempts++;
+      reconnectTimeoutId = setTimeout(() => {
+        establishConnection();
+      }, backoff);
+    }
+    return;
   }
 
   try {
@@ -595,20 +612,22 @@ function establishConnection(): void {
       }
     }, 5000); // Every 5 seconds (matches context check frequency)
   } catch (err) {
-    console.error('[ContentScript] Failed to establish connection:', err);
+    const errMsg = (err as Error).message || String(err);
+    console.error('[ContentScript] Failed to establish connection:', errMsg);
 
     // If context is invalid, stop trying. The old script's context is dead.
     // Background will re-inject a new instance when ready.
-    if ((err as Error).message?.includes('Extension context invalidated')) {
+    if (errMsg.includes('Extension context invalidated')) {
       console.warn('[ContentScript] Extension context invalidated—stopping retry loop. Awaiting re-injection.');
       performCleanup();
       return;
     }
 
-    // For other transient errors, retry with exponential backoff (only if still active instance)
+    // For other transient errors (including Chrome API unavailability), retry with exponential backoff
     if ((window as any).hangTimeScriptActive === INSTANCE_ID && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
       const backoff = INITIAL_BACKOFF_MS * Math.pow(2, reconnectAttempts);
       reconnectAttempts++;
+      console.debug(`[ContentScript] Retrying connection in ${backoff}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
       reconnectTimeoutId = setTimeout(() => {
         establishConnection();
       }, backoff);

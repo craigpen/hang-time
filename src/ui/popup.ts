@@ -1836,10 +1836,10 @@ export class PopupController {
 
   private _resizePopupToFitSettings(): void {
     const body = document.body;
-    // Don't resize body when settings panel is open - the fixed panel handles its own scrolling
-    // Setting minHeight causes overflow and scrollbars even with overflow: hidden
-    body.style.minHeight = '100px';
-    console.debug(`[Popup] Settings panel opened (using fixed positioning)`);
+    // Expand popup to show settings panel content comfortably
+    // Settings panel is position: fixed with independent scrolling (overflow-y: auto)
+    body.style.minHeight = '600px';
+    console.debug(`[Popup] Settings panel opened (min height: 600px)`);
   }
 
   private _resizePopupToFitContent(): void {
