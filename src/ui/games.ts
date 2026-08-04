@@ -1,9 +1,9 @@
 /**
- * Hang Time - Discovery Tab UI Controller
- * Manages the game discovery tab with filtering, sorting, and result display
+ * Hang Time - Games Tab UI Controller
+ * Manages the games tab with filtering, sorting, and result display
  */
 
-import { OwnedGame, GameMetadata, DiscoveryUIState, Friend } from '../types';
+import { OwnedGame, GameMetadata, GamesUIState, Friend } from '../types';
 import { GameLibraryManager } from '../modules/game-library';
 import { MetadataFetcher } from '../modules/metadata-fetcher';
 import { StorageManager } from '../modules/storage';
@@ -19,19 +19,19 @@ interface EnrichedGame extends OwnedGame {
 }
 
 /**
- * Controls the Discovery tab UI
+ * Controls the Games tab UI
  */
-export class DiscoveryTabController {
+export class GamesTabController {
   private gameLibraryManager: GameLibraryManager;
   private metadataFetcher: MetadataFetcher;
   private storage: StorageManager;
   private popupElement: HTMLElement | null = null;
-  private currentFilters: DiscoveryUIState['filters'] = {
+  private currentFilters: GamesUIState['filters'] = {
     genres: [],
     modes: [],
     playtime: 'all',
   };
-  private currentSort: DiscoveryUIState['sortBy'] = 'recent';
+  private currentSort: GamesUIState['sortBy'] = 'recent';
   private allFriends: Friend[] = [];
   private allGameMetadata: Map<number, GameMetadata> = new Map();
   private loading: boolean = false;
@@ -49,10 +49,10 @@ export class DiscoveryTabController {
   }
 
   /**
-   * Initialize the discovery tab controller
+   * Initialize the games tab controller
    */
   async init(): Promise<void> {
-    console.debug('[Discovery] Initializing');
+    console.debug('[Games] Initializing');
 
     // Load saved state
     await this._loadSavedState();
@@ -60,17 +60,17 @@ export class DiscoveryTabController {
     // Setup event listeners
     this._setupEventListeners();
 
-    console.debug('[Discovery] Initialization complete');
+    console.debug('[Games] Initialization complete');
   }
 
   /**
-   * Render the discovery tab
+   * Render the games tab
    */
   async render(): Promise<void> {
-    console.debug('[Discovery] Rendering');
+    console.debug('[Games] Rendering');
 
     if (!this.popupElement) {
-      console.error('[Discovery] Popup element not found');
+      console.error('[Games] Popup element not found');
       return;
     }
 
@@ -89,11 +89,11 @@ export class DiscoveryTabController {
       }
 
       this.allFriends = friendsResponse.data || [];
-      console.debug(`[Discovery] Loaded ${this.allFriends.length} friends`);
+      console.debug(`[Games] Loaded ${this.allFriends.length} friends`);
 
       // Get user's game library
       const myGames = await this.gameLibraryManager.getMyGameLibrary();
-      console.debug(`[Discovery] User owns ${myGames.length} games`);
+      console.debug(`[Games] User owns ${myGames.length} games`);
 
       if (myGames.length === 0) {
         this._showEmpty('Configure Steam to discover games with friends');
@@ -126,7 +126,7 @@ export class DiscoveryTabController {
         this._renderResultCards(filteredAndSorted);
       }
     } catch (error) {
-      console.error('[Discovery] Render error:', error);
+      console.error('[Games] Render error:', error);
       this._showError('Failed to load games');
     } finally {
       this.loading = false;
@@ -137,7 +137,7 @@ export class DiscoveryTabController {
    * Force refresh all data
    */
   async refresh(): Promise<void> {
-    console.debug('[Discovery] Refreshing');
+    console.debug('[Games] Refreshing');
     await this.render();
   }
 
@@ -147,15 +147,15 @@ export class DiscoveryTabController {
   private async _loadSavedState(): Promise<void> {
     try {
       const profile = await this.storage.getUserProfile();
-      const saved = profile?.discovery_ui_state;
+      const saved = profile?.games_ui_state;
 
       if (saved) {
         this.currentFilters = saved.filters;
         this.currentSort = saved.sortBy;
-        console.debug('[Discovery] Loaded saved state:', { filters: this.currentFilters, sort: this.currentSort });
+        console.debug('[Games] Loaded saved state:', { filters: this.currentFilters, sort: this.currentSort });
       }
     } catch (error) {
-      console.error('[Discovery] Failed to load saved state:', error);
+      console.error('[Games] Failed to load saved state:', error);
     }
   }
 
@@ -166,15 +166,15 @@ export class DiscoveryTabController {
     try {
       const profile = await this.storage.getUserProfile();
       if (profile) {
-        profile.discovery_ui_state = {
+        profile.games_ui_state = {
           filters: this.currentFilters,
           sortBy: this.currentSort,
         };
         await this.storage.setUserProfile(profile);
-        console.debug('[Discovery] Saved UI state');
+        console.debug('[Games] Saved UI state');
       }
     } catch (error) {
-      console.error('[Discovery] Failed to save state:', error);
+      console.error('[Games] Failed to save state:', error);
     }
   }
 
@@ -215,7 +215,7 @@ export class DiscoveryTabController {
     // Sort dropdown change
     if (sortDropdown) {
       sortDropdown.addEventListener('change', async () => {
-        this.currentSort = sortDropdown.value as DiscoveryUIState['sortBy'];
+        this.currentSort = sortDropdown.value as GamesUIState['sortBy'];
         await this._saveSavedState();
         await this.render();
       });
@@ -242,7 +242,7 @@ export class DiscoveryTabController {
     const playtimeRadios = document.querySelector(
       '.playtime-filter:checked'
     ) as HTMLInputElement | null;
-    const playtime = (playtimeRadios?.value || 'all') as DiscoveryUIState['filters']['playtime'];
+    const playtime = (playtimeRadios?.value || 'all') as GamesUIState['filters']['playtime'];
 
     this.currentFilters = { genres, modes, playtime };
     await this._saveSavedState();
@@ -324,7 +324,7 @@ export class DiscoveryTabController {
    * Private: Load cached metadata for all games (background fetcher handles new fetches)
    */
   private async _fetchAllGameMetadata(games: OwnedGame[]): Promise<void> {
-    console.debug(`[Discovery] Loading cached metadata for ${games.length} games`);
+    console.debug(`[Games] Loading cached metadata for ${games.length} games`);
 
     this.allGameMetadata.clear();
 
@@ -338,11 +338,11 @@ export class DiscoveryTabController {
         }
       } catch (error) {
         // Silently skip games without cached metadata
-        console.debug(`[Discovery] No cached metadata for appId ${game.appId}`);
+        console.debug(`[Games] No cached metadata for appId ${game.appId}`);
       }
     }
 
-    console.debug(`[Discovery] Loaded cached metadata for ${this.allGameMetadata.size}/${games.length} games`);
+    console.debug(`[Games] Loaded cached metadata for ${this.allGameMetadata.size}/${games.length} games`);
   }
 
   /**
@@ -379,7 +379,7 @@ export class DiscoveryTabController {
           friendNames.push(friend.local_name);
         }
       } catch (error) {
-        console.debug(`[Discovery] Failed to get library for friend ${friend.local_name}:`, error);
+        console.debug(`[Games] Failed to get library for friend ${friend.local_name}:`, error);
       }
     }
 
@@ -676,7 +676,7 @@ export class DiscoveryTabController {
 
       this._showToast(`Invited ${friendIds.length} friend${friendIds.length !== 1 ? 's' : ''}`);
     } catch (error) {
-      console.error('[Discovery] Failed to send invites:', error);
+      console.error('[Games] Failed to send invites:', error);
       this._showToast('Failed to send invites');
     }
   }

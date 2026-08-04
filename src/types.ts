@@ -9,7 +9,7 @@ import type {
   GameLibrary,
   GameMetadata,
   MetadataFetcherConfig,
-  DiscoveryUIState,
+  GamesUIState,
   GameDiscoveryConfig,
 } from './types/game-discovery';
 
@@ -18,7 +18,7 @@ export type {
   GameLibrary,
   GameMetadata,
   MetadataFetcherConfig,
-  DiscoveryUIState,
+  GamesUIState,
   GameDiscoveryConfig,
 };
 
@@ -76,7 +76,7 @@ export interface UserProfile {
     max_retries: number;
     backoff_base_ms: number;
   };
-  discovery_ui_state?: {
+  games_ui_state?: {
     filters: {
       genres: string[];
       modes: string[];

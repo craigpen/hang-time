@@ -1976,10 +1976,10 @@ body.settings-open .popup-container {
 }
 
 /* ============================================================================
-   Discovery Tab
+   Games Tab
    ============================================================================ */
 
-.discovery-header {
+.games-header {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1989,7 +1989,7 @@ body.settings-open .popup-container {
   flex-shrink: 0;
 }
 
-.discovery-controls {
+.games-controls {
   display: flex;
   gap: 8px;
   align-items: center;

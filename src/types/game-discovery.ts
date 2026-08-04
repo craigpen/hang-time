@@ -75,9 +75,9 @@ export interface MetadataFetcherConfig {
 // ============================================================================
 
 /**
- * Filter and sort preferences for the discovery tab
+ * Filter and sort preferences for the games tab
  */
-export interface DiscoveryUIState {
+export interface GamesUIState {
   filters: {
     genres: string[];
     modes: string[];

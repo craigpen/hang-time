@@ -1,9 +1,9 @@
 /**
- * Tests for Discovery Tab UI Controller
+ * Tests for Games Tab UI Controller
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DiscoveryTabController } from '../discovery';
+import { GamesTabController } from '../games';
 import { GameLibraryManager } from '../../modules/game-library';
 import { MetadataFetcher } from '../../modules/metadata-fetcher';
 import { StorageManager } from '../../modules/storage';
@@ -14,8 +14,8 @@ vi.mock('../../modules/game-library');
 vi.mock('../../modules/metadata-fetcher');
 vi.mock('../../modules/storage');
 
-describe('DiscoveryTabController', () => {
-  let controller: DiscoveryTabController;
+describe('GamesTabController', () => {
+  let controller: GamesTabController;
   let mockGameLibraryManager: any;
   let mockMetadataFetcher: any;
   let mockStorage: any;
@@ -29,11 +29,11 @@ describe('DiscoveryTabController', () => {
 
     // Create discovery tab HTML structure
     const discoveryTab = document.createElement('div');
-    discoveryTab.id = 'discovery-tab';
+    discoveryTab.id = 'games-tab';
     discoveryTab.className = 'tab-content';
 
     const header = document.createElement('div');
-    header.className = 'discovery-header';
+    header.className = 'games-header';
     header.innerHTML = `
       <button id="filters-button" class="filters-btn">🔽 Filters</button>
       <div id="active-filters" class="filter-chips"></div>

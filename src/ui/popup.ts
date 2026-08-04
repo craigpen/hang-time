@@ -7,7 +7,7 @@ import { Friend, Activity, ExtensionResponse, STORAGE_KEYS, DEFAULT_RELAY_URLS }
 import { StorageManager } from '../modules/storage';
 import { GameLibraryManager } from '../modules/game-library';
 import { MetadataFetcher } from '../modules/metadata-fetcher';
-import { DiscoveryTabController } from './discovery';
+import { GamesTabController } from './games';
 import { showInviteModal } from './invite-modal-builder';
 
 /**
@@ -63,7 +63,7 @@ export class PopupController {
   private refreshPaused: boolean = false;
   private pendingInvitesByActivity: Map<string, string> = new Map(); // activityId -> friendId with pending invite
   private storage: StorageManager = new StorageManager();
-  private discoveryTabController: DiscoveryTabController | null = null;
+  private gamesTabController: GamesTabController | null = null;
 
   static readonly MY_ACTIVITY_REFRESH_MS = 3000; // Keep "My Activity" responsive
   static readonly FALLBACK_FRIENDS_REFRESH_MS = 15000; // Safety net for missed Nostr messages
@@ -89,7 +89,7 @@ export class PopupController {
 
     this._setupEventListeners();
     this._setupTabNavigation();
-    this._setupDiscoveryController();
+    this._setupGamesController();
     this._setupMessageListener();
     this._setupStorageListener();
     await this._loadPendingInvites();
@@ -1780,10 +1780,10 @@ export class PopupController {
         if (tabContent) {
           tabContent.classList.add('active');
 
-          // If this is the discovery tab, render it
-          if (tabId === 'discovery-tab' && this.discoveryTabController) {
-            this.discoveryTabController.render().catch((error) => {
-              console.error('[Popup] Failed to render discovery tab:', error);
+          // If this is the games tab, render it
+          if (tabId === 'games-tab' && this.gamesTabController) {
+            this.gamesTabController.render().catch((error) => {
+              console.error('[Popup] Failed to render games tab:', error);
             });
           }
 
@@ -1796,22 +1796,22 @@ export class PopupController {
     console.debug('[Popup] Tab navigation initialized');
   }
 
-  private _setupDiscoveryController(): void {
+  private _setupGamesController(): void {
     try {
       const popupElement = document.getElementById('popup-container');
       const storage = this.storage;
       const gameLibraryManager = GameLibraryManager.getInstance(storage);
       const metadataFetcher = MetadataFetcher.getInstance(storage);
 
-      this.discoveryTabController = new DiscoveryTabController(popupElement, gameLibraryManager, metadataFetcher, storage);
+      this.gamesTabController = new GamesTabController(popupElement, gameLibraryManager, metadataFetcher, storage);
 
-      this.discoveryTabController.init().catch((error) => {
-        console.error('[Popup] Failed to initialize discovery controller:', error);
+      this.gamesTabController.init().catch((error) => {
+        console.error('[Popup] Failed to initialize games controller:', error);
       });
 
-      console.debug('[Popup] Discovery controller initialized');
+      console.debug('[Popup] Games controller initialized');
     } catch (error) {
-      console.error('[Popup] Error setting up discovery controller:', error);
+      console.error('[Popup] Error setting up games controller:', error);
     }
   }
 
