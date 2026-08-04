@@ -1735,6 +1735,13 @@ async function _subscribeToIncomingMessages(): Promise<void> {
         return;
       }
 
+      // Validate our pubkey is in the 'p' tag (client-side filtering per NIP-17)
+      const pTag = event.tags.find((t) => t[0] === 'p')?.[1];
+      if (pTag !== userPubkey) {
+        console.debug(`[Message] Ignoring kind-1059 event not meant for us (p-tag: ${pTag?.substring(0, 8) || 'none'})`);
+        return;
+      }
+
       console.debug(`[Message] Received kind-1059 message from ${event.pubkey.substring(0, 8)}...`);
 
       try {
