@@ -2370,10 +2370,20 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
       // Store pending invite and notify popup
       if (message.type === 'invite' && message.activity_id) {
         try {
-          console.debug(`[Message] 💌 Invite: Storing pending invite - activityId: ${message.activity_id}, friendId: ${friend.id}`);
+          console.debug(`[Message] 💌 Invite: Storing pending invite - activityId: ${message.activity_id}, service: ${message.service}, friendId: ${friend.id}`);
 
-          // Get the friend's current activity to include full details (URL, progress, etc.)
-          const activity = friend.current_activities?.[message.activity_id];
+          // Find the friend's activity that matches this invite
+          // Activities are stored by SERVICE in friend.current_activities, so search by activity_id
+          let activity = undefined;
+          if (friend.current_activities) {
+            for (const act of Object.values(friend.current_activities)) {
+              if (act?.id === message.activity_id) {
+                activity = act;
+                break;
+              }
+            }
+          }
+
           if (!activity) {
             console.warn(`[Message] Activity not found in friend's current activities for ID: ${message.activity_id}`);
           }
@@ -2383,7 +2393,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
             friendId: friend.id,
             activity: activity || {
               id: message.activity_id,
-              service: 'unknown',
+              service: message.service || 'unknown',
               content: message.content || 'unknown activity',
               timestamp: Date.now(),
               freshness_timestamp: Date.now(),

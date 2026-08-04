@@ -32,6 +32,7 @@ let instance: MessagingManager | null = null;
 export interface ActivityMessage {
   type: 'chat' | 'invite' | 'join_accepted' | 'join_declined';
   activity_id: string;
+  service?: string;
   content?: string;
   timestamp: number;
 }
@@ -68,6 +69,7 @@ export class MessagingManager {
     const message: ActivityMessage = {
       type: 'invite',
       activity_id: activity.id || generateActivityId(activity.service, activity.url),
+      service: activity.service,
       content: `${activity.content || activity.service}`,
       timestamp: Date.now(),
     };
