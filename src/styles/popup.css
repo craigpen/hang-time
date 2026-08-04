@@ -632,10 +632,6 @@ body.settings-open {
   color: var(--text-tertiary);
 }
 
-.advanced-content {
-  display: none;
-}
-
 .checkbox-label,
 .radio-label {
   display: flex;

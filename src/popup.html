@@ -366,31 +366,21 @@
         </label>
       </div>
 
-      <!-- ADVANCED SECTION (Collapsible) -->
+      <!-- TEST NOTIFICATIONS SECTION -->
       <div class="settings-section">
-        <div style="display: flex; align-items: center; cursor: pointer; user-select: none; margin-bottom: 0;" onclick="const content = this.parentElement.querySelector('.advanced-content'); const isVisible = content.style.display === 'block'; content.style.display = isVisible ? 'none' : 'block'; this.querySelector('.advanced-toggle').textContent = isVisible ? '▶' : '▼';">
-          <span class="advanced-toggle" style="margin-right: 8px; font-size: 0.9em; font-weight: bold;">▶</span>
-          <h3 style="margin: 0;">Advanced</h3>
-        </div>
+        <h3>Test Local Notifications</h3>
+        <p class="help-text" style="margin-bottom: 12px;">Click to verify local notifications are working</p>
+        <button id="test-notification-btn" class="btn-backup">Send Test Notification</button>
+      </div>
 
-        <div class="advanced-content">
-          <!-- Test Notifications -->
-          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-            <h4 style="margin: 0 0 12px 0;">Test Local Notifications</h4>
-            <p class="help-text" style="margin-bottom: 12px;">Click to verify local notifications are working</p>
-            <button id="test-notification-btn" class="btn-backup">Send Test Notification</button>
-          </div>
-
-          <!-- Backup & Restore -->
-          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-            <h4 style="margin: 0 0 12px 0;">Backup & Restore</h4>
-            <p class="help-text" style="margin-bottom: 12px;">Backup and restore your unique identifier and settings. Your unique identifier cannot be recovered if lost. All friend connections would need to be recreated—always keep backups secure.</p>
-            <div class="backup-buttons">
-              <button id="export-settings-popup-btn" class="btn-backup">Backup</button>
-              <button id="import-settings-popup-btn" class="btn-backup">Restore</button>
-              <input type="file" id="import-file-popup-input" accept=".json" style="display: none;" />
-            </div>
-          </div>
+      <!-- BACKUP & RESTORE SECTION -->
+      <div class="settings-section">
+        <h3>Backup & Restore</h3>
+        <p class="help-text" style="margin-bottom: 12px;">Backup and restore your unique identifier and settings. Your unique identifier cannot be recovered if lost. All friend connections would need to be recreated—always keep backups secure.</p>
+        <div class="backup-buttons">
+          <button id="export-settings-popup-btn" class="btn-backup">Backup</button>
+          <button id="import-settings-popup-btn" class="btn-backup">Restore</button>
+          <input type="file" id="import-file-popup-input" accept=".json" style="display: none;" />
         </div>
       </div>
     </div>
