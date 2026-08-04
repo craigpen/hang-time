@@ -9,6 +9,7 @@
 import { SimplePool } from 'nostr-tools';
 import { NostrEvent, NostrError, DEFAULT_RELAY_URLS } from '../types';
 import { getFileLogger } from './file-logger';
+import { nip11Handler } from './nip11-relay-info'; // Phase 4
 
 export interface IRelayConnection {
   url: string;
@@ -46,6 +47,12 @@ export class RelayConnection implements IRelayConnection {
   private pendingPublishes: Map<string, {resolve: () => void, reject: (error: Error) => void, timeout: NodeJS.Timeout}> = new Map();
   private heartbeatTimer: NodeJS.Timeout | null = null;
 
+  // Rate-limit tracking (Phase 4)
+  private isRateLimited: boolean = false;
+  private rateLimitedUntil: number = 0; // timestamp when relay will be ready
+  private rateLimitCount: number = 0;
+  private rateLimitBackoffMs: number = 60000; // 1 minute default backoff
+
   static readonly TIMEOUT_MS = 8000;
   static readonly RECONNECT_DELAY_MS = 3000;
   static readonly PUBLISH_TIMEOUT_MS = 5000;
@@ -53,6 +60,16 @@ export class RelayConnection implements IRelayConnection {
 
   constructor(url: string) {
     this.url = url;
+  }
+
+  // Health tracking accessors (Phase 4)
+  getHealthStatus() {
+    return {
+      isRateLimited: this.isRateLimited,
+      rateLimitedUntil: this.rateLimitedUntil,
+      rateLimitCount: this.rateLimitCount,
+      canPublish: !this.isRateLimited || Date.now() > this.rateLimitedUntil,
+    };
   }
 
   async connect(): Promise<void> {
@@ -124,6 +141,12 @@ export class RelayConnection implements IRelayConnection {
   }
 
   async publish(event: NostrEvent): Promise<void> {
+    // Phase 4: Check if rate-limit cooldown has expired
+    if (this.isRateLimited && Date.now() > this.rateLimitedUntil) {
+      this.isRateLimited = false;
+      console.debug(`[Nostr] Rate-limit cooldown expired for ${this.url}, ready to publish again`);
+    }
+
     console.debug(`[Nostr] Publish check for ${this.url}: isConnected=${this.isConnected}, ws=${this.ws ? 'exists' : 'null'}, ws.readyState=${this.ws?.readyState}`);
 
     if (!this.isConnected || !this.ws) {
@@ -272,6 +295,15 @@ export class RelayConnection implements IRelayConnection {
       } else if (type === 'OK' && message.length >= 4) {
         // Handle OK response: ["OK", <event_id>, <true|false>, <message>]
         const [, eventId, accepted, reason] = message;
+
+        // Phase 4: Rate-limit detection
+        if (!accepted && typeof reason === 'string' && reason.includes('rate-limited')) {
+          this.isRateLimited = true;
+          this.rateLimitCount++;
+          this.rateLimitedUntil = Date.now() + this.rateLimitBackoffMs;
+          console.warn(`[Nostr] Rate-limited by ${this.url}: ${reason} (count: ${this.rateLimitCount})`);
+        }
+
         const pending = this.pendingPublishes.get(eventId);
         if (pending) {
           clearTimeout(pending.timeout);
@@ -476,6 +508,16 @@ export class RelayPool {
       throw new NostrError('Failed to connect to any relays');
     }
 
+    // Phase 4: Fetch NIP-11 relay capabilities in background (non-blocking)
+    const connectedUrls = Array.from(this.relays.values())
+      .filter(r => r.isConnected)
+      .map(r => r.url);
+    if (connectedUrls.length > 0) {
+      nip11Handler.fetchRelayInfoBatch(connectedUrls).catch(err => {
+        console.debug('[NIP-11] Background fetch failed (non-critical):', err);
+      });
+    }
+
     try {
       const logger = getFileLogger();
       logger.log('RelayPool', 'INFO', 'Connected to relays', { count: connectedCount });
@@ -490,8 +532,11 @@ export class RelayPool {
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        // Filter relays: connected + selected in config
-        let relays = Array.from(this.relays.values()).filter((r) => r.isConnected);
+        // Filter relays: connected + not rate-limited + selected in config (Phase 4)
+        let relays = Array.from(this.relays.values()).filter((r) => {
+          const health = r.getHealthStatus();
+          return r.isConnected && health.canPublish;
+        });
         const allConnected = relays.map(r => r.url);
 
         if (config?.relays && typeof config.relays === 'object') {
@@ -510,6 +555,16 @@ export class RelayPool {
           if (disabled.length > 0) {
             console.log(`[Nostr] 🔄 Config: Relay selection - using ${selectedUrls.length}/${allConnected.length} relays (disabled: ${disabled.map(u => new URL(u).hostname).join(', ')})`);
           }
+        }
+
+        // Phase 4: Log if relays are excluded due to rate-limiting
+        const allRelays = Array.from(this.relays.values()).filter(r => r.isConnected);
+        const rateLimited = allRelays.filter(r => {
+          const health = r.getHealthStatus();
+          return health.isRateLimited && Date.now() < health.rateLimitedUntil;
+        });
+        if (rateLimited.length > 0) {
+          console.log(`[Nostr] ⏱️ Rate-limited relays excluded: ${rateLimited.map(r => new URL(r.url).hostname).join(', ')}`);
         }
 
         if (relays.length === 0) {

@@ -225,6 +225,37 @@ export interface NostrEvent {
   sig?: string;
 }
 
+// Nostr event kinds (Phase 4: ephemeral kinds for real-time features)
+export const NOSTR_KINDS = {
+  PROFILE: 0,
+  TEXT_NOTE: 1,
+  EPHEMERAL_MIN: 20000, // Ephemeral events not stored on relays
+  EPHEMERAL_MAX: 29999,
+  // Reserved for future use: chat, reactions, etc.
+  EPHEMERAL_CHAT: 20001, // Video overlay chat (Phase 4 placeholder)
+} as const;
+
+export function isEphemeralKind(kind: number): boolean {
+  return kind >= NOSTR_KINDS.EPHEMERAL_MIN && kind <= NOSTR_KINDS.EPHEMERAL_MAX;
+}
+
+export interface EphemeralEventData {
+  kind: number;
+  content: string;
+  tags: Array<[string, string]>;
+  created_at?: number;
+}
+
+// Phase 4: Helper to create ephemeral event payload (not stored on relays)
+export function createEphemeralEventPayload(data: EphemeralEventData) {
+  return {
+    kind: data.kind,
+    tags: data.tags,
+    content: data.content,
+    created_at: data.created_at || Math.floor(Date.now() / 1000),
+  };
+}
+
 export interface NostrFilter {
   ids?: string[];
   authors?: string[];
