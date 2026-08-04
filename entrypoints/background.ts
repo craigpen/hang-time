@@ -5,7 +5,7 @@
  */
 
 import * as pako from 'pako';
-import { nip04, verifyEvent } from 'nostr-tools';
+import { nip04, nip44, verifyEvent } from 'nostr-tools';
 import { RelayPool, relayPool } from '../src/modules/nostr';
 import { StorageManager, storageManager } from '../src/modules/storage';
 import { IdentityManager, initializeIdentityManager, identityManager } from '../src/modules/identity';
@@ -1757,6 +1757,7 @@ async function _subscribeToIncomingMessages(): Promise<void> {
         // Find which friend this is from
         const friends = await storageManager.getFriends();
         const sender = friends.find((f) => f.pubkey === event.pubkey);
+        console.debug(`[Message] DM sender lookup: event.pubkey=${event.pubkey.substring(0, 8)}..., found=${!!sender}, messageType=${messageType}, friendsList.length=${friends.length}`);
 
         if (sender) {
           // Known friend - handle normally
@@ -2364,6 +2365,49 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
         }
       } catch (error) {
         console.error('[Message] Failed to send message notification:', error);
+      }
+
+      // Store pending invite and notify popup
+      if (message.type === 'invite' && message.activity_id) {
+        try {
+          console.debug(`[Message] 💌 Invite: Storing pending invite - activityId: ${message.activity_id}, friendId: ${friend.id}`);
+
+          // Get the friend's current activity to include full details (URL, progress, etc.)
+          const activity = friend.current_activities?.[message.activity_id];
+          if (!activity) {
+            console.warn(`[Message] Activity not found in friend's current activities for ID: ${message.activity_id}`);
+          }
+
+          const pendingInvites = await storageManager.getPendingInvites();
+          pendingInvites[message.activity_id] = {
+            friendId: friend.id,
+            activity: activity || {
+              id: message.activity_id,
+              service: 'unknown',
+              content: message.content || 'unknown activity',
+              timestamp: Date.now(),
+              freshness_timestamp: Date.now(),
+              audio: 'off',
+              metadata: {},
+            },
+            sentAt: Date.now(),
+          };
+          await storageManager.setPendingInvites(pendingInvites);
+
+          // Notify popup if it's open
+          try {
+            await chrome.runtime.sendMessage({
+              type: 'INVITE_RECEIVED',
+              data: { activityId: message.activity_id, friendId: friend.id },
+            }).catch((error) => {
+              console.debug('[Message] Popup not open, stored invite in storage:', error instanceof Error ? error.message : error);
+            });
+          } catch (error) {
+            console.debug('[Message] Could not notify popup (not open), stored in storage:', error instanceof Error ? error.message : error);
+          }
+        } catch (error) {
+          console.error('[Message] Failed to store pending invite:', error);
+        }
       }
 
       // Notify popup about new message

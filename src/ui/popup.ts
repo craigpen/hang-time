@@ -62,6 +62,7 @@ export class PopupController {
   private currentServiceActivities: Map<string, Activity | null> = new Map();
   private refreshPaused: boolean = false;
   private pendingInvitesByActivity: Map<string, string> = new Map(); // activityId -> friendId with pending invite
+  private pendingInvitesData: Map<string, any> = new Map(); // activityId -> full pending invite data (activity, friendId, etc.)
   private storage: StorageManager = new StorageManager();
   private gamesTabController: GamesTabController | null = null;
 
@@ -871,7 +872,10 @@ export class PopupController {
         this._inviteToActivity(activity);
       } else if (currentHasPending) {
         console.debug('[Popup] Showing accept invite modal for:', friendId);
-        this._showAcceptInviteModal(activity, friendId!);
+        // Use the stored invite activity if available, otherwise use current activity
+        const storedInvite = activity.id ? this.pendingInvitesData.get(activity.id) : null;
+        const activityToShow = storedInvite?.activity || activity;
+        this._showAcceptInviteModal(activityToShow, friendId!);
       } else {
         this._joinActivity(activity, friendId);
       }
@@ -1214,8 +1218,10 @@ export class PopupController {
     try {
       const pendingInvites = await this.storage.getPendingInvites();
       this.pendingInvitesByActivity.clear();
+      this.pendingInvitesData.clear();
       for (const [activityId, inviteData] of Object.entries(pendingInvites)) {
         this.pendingInvitesByActivity.set(activityId, inviteData.friendId);
+        this.pendingInvitesData.set(activityId, inviteData);
       }
       console.debug('[Popup] Loaded pending invites from storage:', Array.from(this.pendingInvitesByActivity.entries()));
     } catch (error) {
@@ -2457,6 +2463,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
 
       // Collect notification preferences
       const notifFriendOnline = (document.getElementById('notif-friend-online-popup') as HTMLInputElement)?.checked ?? true;
+      const notifNewMessage = (document.getElementById('notif-new-message-popup') as HTMLInputElement)?.checked ?? true;
       const notifJoinSuggestion = (document.getElementById('notif-join-suggestion-popup') as HTMLInputElement)?.checked ?? false;
 
       // Collect publisher config
@@ -2478,6 +2485,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
           services_enabled: servicesEnabled,
           notification_preferences: {
             friend_online: notifFriendOnline,
+            new_message: notifNewMessage,
             join_suggestion: notifJoinSuggestion,
           },
           publisher_config: {

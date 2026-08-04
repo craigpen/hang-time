@@ -46,9 +46,11 @@ export class NotificationManager {
     try {
       console.debug(`[Notifications] notifyNewMessage called for ${friendName}`);
       const profile = await this.storage.getUserProfile();
+      console.debug(`[Notifications] full profile keys:`, profile ? Object.keys(profile) : 'null');
+      console.debug(`[Notifications] notification_preferences:`, profile?.notification_preferences);
       console.debug(`[Notifications] new_message setting:`, profile?.notification_preferences?.new_message);
       if (!profile?.notification_preferences?.new_message) {
-        console.debug(`[Notifications] new_message disabled, returning`);
+        console.debug(`[Notifications] new_message disabled/undefined, returning. Profile exists: ${!!profile}`);
         return;
       }
 

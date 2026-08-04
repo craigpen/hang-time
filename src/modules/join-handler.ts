@@ -92,6 +92,14 @@ export class JoinHandler {
    * Open video (Netflix/YouTube)
    */
   private async _joinVideo(activity: Activity): Promise<void> {
+    console.debug('[JoinHandler] _joinVideo called:', {
+      service: activity.service,
+      hasUrl: !!activity.url,
+      url: activity.url?.substring(0, 50),
+      progress: activity.metadata?.progress,
+      duration: activity.metadata?.duration,
+    });
+
     if (activity.url) {
       // Open in new tab
       chrome.tabs.create({ url: activity.url, active: true });

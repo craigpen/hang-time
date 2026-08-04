@@ -38,6 +38,13 @@ export class IdentityManager {
         await this.storage.setUserProfile(profile);
       }
 
+      // Migration: Add missing new_message notification preference
+      if (profile.notification_preferences && !('new_message' in profile.notification_preferences)) {
+        console.debug('[Identity] Migrating user profile: adding new_message notification preference');
+        profile.notification_preferences.new_message = true;
+        await this.storage.setUserProfile(profile);
+      }
+
       return profile.memorable_identifier;
     }
 
