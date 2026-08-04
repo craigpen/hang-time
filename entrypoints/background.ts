@@ -1877,6 +1877,9 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
     return;
   }
 
+  // Mark as subscribed BEFORE calling subscribe() to prevent race conditions
+  activeSubscriptions.set(pubkey, undefined);
+
   relayPool.subscribe(pubkey, async (event: NostrEvent) => {
     console.debug(`[Friend] Event from ${friendIdentifier} (kind ${event.kind})`);
     console.debug(`[Friend] Details - pubkey: ${event.pubkey.substring(0, 8)}..., tags: ${JSON.stringify(event.tags.slice(0, 3))}`);
@@ -1949,7 +1952,6 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
     }
   });
 
-  activeSubscriptions.set(pubkey, undefined);
   console.debug(`[Friend] Subscribed to: ${friendIdentifier} (pubkey: ${pubkey})`);
 }
 
