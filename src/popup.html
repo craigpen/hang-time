@@ -214,8 +214,8 @@
         <!-- Discord -->
         <div style="margin-top: 16px;">
           <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.9em;">Discord (Optional)</label>
-          <input type="text" id="discord-info-popup" placeholder="https://discord.gg/abc123" class="form-input">
           <p class="help-text">Server invite link for voice/chat during co-play. Get from Discord: Right-click server → Invite → Copy invite link</p>
+          <input type="text" id="discord-info-popup" placeholder="https://discord.gg/abc123" class="form-input">
         </div>
       </div>
 
@@ -298,6 +298,7 @@
         <!-- Browser Tabs Detection Subsection -->
         <div>
           <h4 style="margin: 0 0 12px 0; font-size: 0.9em; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">Browser Tabs</h4>
+          <p class="help-text" style="margin-bottom: 12px;">Automatically detect when you're watching videos and share with friends</p>
 
           <label class="checkbox-label">
             <input type="checkbox" id="service-youtube-tab-popup" data-service="youtube-tab" class="service-toggle">
@@ -315,7 +316,6 @@
             <input type="checkbox" id="service-video-tab-popup" data-service="video-tab" class="service-toggle">
             <span>Other Video Sites</span>
           </label>
-          <p class="help-text">Automatically detect when you're watching videos and share with friends</p>
 
           <!-- URL Ignore List -->
           <div style="margin-top: 12px;">
@@ -384,12 +384,12 @@
           <!-- Backup & Restore -->
           <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
             <h4 style="margin: 0 0 12px 0;">Backup & Restore</h4>
+            <p class="help-text" style="margin-bottom: 12px;">Download your settings to backup. Import to restore.</p>
             <div class="backup-buttons">
               <button id="export-settings-popup-btn" class="btn-backup">📥 Export</button>
               <button id="import-settings-popup-btn" class="btn-backup">📤 Import</button>
               <input type="file" id="import-file-popup-input" accept=".json" style="display: none;" />
             </div>
-            <p class="help-text">Download your settings to backup. Import to restore.</p>
           </div>
         </div>
       </div>
