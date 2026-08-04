@@ -155,7 +155,8 @@ export class MessagingManager {
 
       // Serialize and encrypt using nip44
       const plaintext = JSON.stringify(message);
-      const encryptedContent = await nip44.encrypt(secretKey, recipientPubkey, plaintext);
+      const conversationKey = nip44.getConversationKey(hexToBytes(secretKey), recipientPubkey);
+      const encryptedContent = await nip44.encrypt(plaintext, conversationKey);
 
       // Create kind-1059 event with message_type tag
       const tags: Array<[string, string]> = [
@@ -206,7 +207,8 @@ export class MessagingManager {
 
       // Serialize message to JSON and encrypt using nip44 with recipient's pubkey
       const plaintext = JSON.stringify(message);
-      const encryptedContent = await nip44.encrypt(secretKey, recipientFriend.pubkey, plaintext);
+      const conversationKey = nip44.getConversationKey(hexToBytes(secretKey), recipientFriend.pubkey);
+      const encryptedContent = await nip44.encrypt(plaintext, conversationKey);
 
       // Create kind-1059 event with recipient tag and message type
       const tags: Array<[string, string]> = [['p', recipientFriend.pubkey]];
@@ -285,7 +287,8 @@ export class MessagingManager {
       // Decrypt the message using nip44 with friend's pubkey (they sent it to us)
       let plaintext: string;
       try {
-        plaintext = await nip44.decrypt(secretKey, friend.pubkey, encryptedContent);
+        const conversationKey = nip44.getConversationKey(hexToBytes(secretKey), friend.pubkey);
+        plaintext = await nip44.decrypt(encryptedContent, conversationKey);
       } catch (decryptError) {
         console.error('[Messaging] Decryption failed - content may not be nip44-encrypted:', {
           errorMessage: decryptError instanceof Error ? decryptError.message : String(decryptError),
