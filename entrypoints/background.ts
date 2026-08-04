@@ -1802,8 +1802,10 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
       }
 
       const secretKey = await identityManager.getSecretKey();
-      // Decrypt using nip04 with sender's pubkey (event.pubkey)
-      const plaintext = await nip04.decrypt(secretKey, event.pubkey, event.content);
+      // Decrypt using nip44 with conversation key derived from our secret key and sender's pubkey
+      const hexToBytes = (hex: string) => new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+      const conversationKey = nip44.getConversationKey(hexToBytes(secretKey), event.pubkey);
+      const plaintext = await nip44.decrypt(event.content, conversationKey);
       const message = JSON.parse(plaintext);
 
       if (message.type !== 'friend_request') {
