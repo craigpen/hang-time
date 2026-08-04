@@ -872,10 +872,8 @@ export class PopupController {
         this._inviteToActivity(activity);
       } else if (currentHasPending) {
         console.debug('[Popup] Showing accept invite modal for:', friendId);
-        // Use the stored invite activity if available, otherwise use current activity
-        const storedInvite = activity.id ? this.pendingInvitesData.get(activity.id) : null;
-        const activityToShow = storedInvite?.activity || activity;
-        this._showAcceptInviteModal(activityToShow, friendId!);
+        // Use current activity (not stored invite) - stored activity may be stale placeholder from when invite arrived
+        this._showAcceptInviteModal(activity, friendId!);
       } else {
         this._joinActivity(activity, friendId);
       }
@@ -2625,6 +2623,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       acceptBtn.textContent = 'Opening...';
 
       // Accept: open activity and mark as joined
+      // Use the current activity from friend (fresh lookup) in case it changed since invite
       await this._joinActivity(activity, friendId);
 
       // Clear pending invite from memory and storage
