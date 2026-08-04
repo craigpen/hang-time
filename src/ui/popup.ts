@@ -2763,22 +2763,27 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       });
 
       if (profileResponse.success && profileResponse.data) {
-        const settings = {
+        const profile = profileResponse.data;
+        const friends = friendsResponse.success ? friendsResponse.data : [];
+
+        const backup = {
           version: '1.0',
           exported_at: new Date().toISOString(),
-          profile: profileResponse.data,
-          friends: friendsResponse.success ? friendsResponse.data : [],
+          data: {
+            ...profile,
+            friends: friends,
+          },
         };
 
-        const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `hang-time-settings-${Date.now()}.json`;
+        link.download = `hang-time-backup-${Date.now()}.json`;
         link.click();
         URL.revokeObjectURL(url);
 
-        console.debug('[Popup] Settings exported (including friends list)');
+        console.debug('[Popup] Settings backed up (including friends list)');
       }
     } catch (error) {
       console.error('[Popup] Export failed:', error);
