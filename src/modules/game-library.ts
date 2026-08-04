@@ -318,26 +318,17 @@ export class GameLibraryManager {
         timestamp: Date.now(),
       });
 
-      const event: NostrEvent = {
-        id: '',
-        pubkey,
-        created_at,
-        kind: 1,
+      // Use nostr-tools to create and sign the event
+      const { finalizeEvent } = await import('nostr-tools');
+      const event = finalizeEvent({
+        kind: 10003, // Replaceable: only latest game library snapshot stored
         tags: [
           ['t', 'game-library'],
           ['steam-id', steamId],
         ],
         content,
-      };
-
-      // Compute event ID (SHA256 of canonical JSON)
-      const eventData = [0, pubkey, created_at, 1, event.tags, content];
-      const canonicalJson = JSON.stringify(eventData);
-      const eventId = await encryptionManager.sha256(canonicalJson);
-      event.id = eventId.substring(0, 64);
-
-      // Sign the event
-      event.sig = encryptionManager.signEvent(event.id, secretKey);
+        created_at,
+      }, secretKey) as NostrEvent;
 
       console.debug(`[GameLibrary] Marking game library as due (${appIds.length} games)`);
 

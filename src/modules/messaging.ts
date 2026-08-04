@@ -1,8 +1,10 @@
 /**
  * Hang Time - Messaging System
  * Handles sending and receiving encrypted messages via Nostr kind-4
+ * Also handles invites via parameterized replaceable events (kind 30001)
  */
 
+import { finalizeEvent } from 'nostr-tools';
 import { Activity, NostrEvent, Friend } from '../types';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
@@ -38,8 +40,8 @@ export class MessagingManager {
   }
 
   /**
-   * Send a friend request notification (kind-1, unencrypted)
-   * Published when user adds a friend to prompt reciprocal add
+   * Send a friend request notification (kind-30001, parameterized replaceable)
+   * Only latest friend request per recipient is stored on relays
    */
   async sendFriendRequest(recipientIdentifier: string, recipientPubkey: string, recipientDisplayName: string): Promise<void> {
     const userProfile = await this.storageManager.getUserProfile();
@@ -49,9 +51,12 @@ export class MessagingManager {
 
     const pubkey = await this.identityManager.getPubkey();
     const created_at = Math.floor(Date.now() / 1000);
+    const secretKey = await this.identityManager.getSecretKey();
 
     // Build tags with friend request metadata
+    // The 'd' tag identifies this as a friend request to this specific recipient (parameterized replaceable)
     const tags = [
+      ['d', `friend_request_${recipientPubkey}`], // Unique identifier per recipient
       ['is_notification', 'true'],
       ['type', 'friend_request'],
       ['recipient', recipientPubkey],
@@ -59,22 +64,13 @@ export class MessagingManager {
       ['sender_display_name', userProfile.nickname || userProfile.memorable_identifier],
     ];
 
-    // Create kind-1 friend request event
-    const event: NostrEvent = {
-      id: '',
-      pubkey,
-      created_at,
-      kind: 1,
+    // Create kind-30001 parameterized replaceable friend request event
+    const event = finalizeEvent({
+      kind: 30001,
       tags,
       content: `${userProfile.nickname || userProfile.memorable_identifier} added you as a friend`,
-    };
-
-    // Compute event ID and sign
-    const eventData = [0, pubkey, created_at, 1, event.tags, event.content];
-    const canonicalJson = JSON.stringify(eventData);
-    const eventId = await encryptionManager.sha256(canonicalJson);
-    event.id = eventId.substring(0, 64);
-    event.sig = encryptionManager.signEvent(event.id, await this.identityManager.getSecretKey());
+      created_at,
+    }, secretKey) as NostrEvent;
 
     // Queue or publish the event
     console.log(`[Messaging] 📤 Queuing friend request to ${recipientDisplayName} (${recipientPubkey.substring(0, 8)}...)`);
@@ -130,22 +126,19 @@ export class MessagingManager {
       tags.push(['discord_link', discordLink]);
     }
 
-    // Create kind-1 notification event
-    const event: NostrEvent = {
-      id: '',
-      pubkey,
-      created_at,
-      kind: 1,
+    // Add 'd' tag for parameterized replaceable event (unique per activity+recipient combo)
+    const activityIdForTag = activity.id || generateActivityId(activity.service, activity.url);
+    tags.push(['d', `invite_${activityIdForTag}_${recipientFriend.pubkey}`]);
+
+    const secretKey = await this.identityManager.getSecretKey();
+
+    // Create kind-30001 parameterized replaceable invite event
+    const event = finalizeEvent({
+      kind: 30001,
       tags,
       content: `Inviting ${recipientFriend.local_name} to ${activity.content || activity.service}`,
-    };
-
-    // Compute event ID and sign
-    const eventData = [0, pubkey, created_at, 1, event.tags, event.content];
-    const canonicalJson = JSON.stringify(eventData);
-    const eventId = await encryptionManager.sha256(canonicalJson);
-    event.id = eventId.substring(0, 64);
-    event.sig = encryptionManager.signEvent(event.id, await this.identityManager.getSecretKey());
+      created_at,
+    }, secretKey) as NostrEvent;
 
     // Queue or publish the event
     console.log(`[Messaging] 📤 Queuing invite to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);

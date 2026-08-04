@@ -204,7 +204,7 @@ export class ActivityPublisher {
     try {
       const pubkey = await this.identityManager.getPubkey();
       const created_at = Math.floor(Date.now() / 1000);
-      const kind = 1;
+      const kind = 10003; // Replaceable: only latest activity snapshot stored
 
       // Create tags
       const tags: Array<[string, string]> = [
@@ -288,7 +288,7 @@ export class ActivityPublisher {
 
       const pubkey = await this.identityManager.getPubkey();
       const created_at = Math.floor(Date.now() / 1000);
-      const kind = 1;
+      const kind = 10003; // Replaceable: only latest activity snapshot stored
 
       // Ensure content is valid
       const activityContent = (activity.content || '').trim();
