@@ -569,7 +569,11 @@ body {
 
 /* Hide main popup scrollbar when settings panel is open */
 body.settings-open {
-  overflow: hidden;
+  overflow: hidden !important;
+}
+
+body.settings-open .popup-container {
+  overflow: hidden !important;
 }
 
 .settings-panel-header {
