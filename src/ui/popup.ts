@@ -1998,6 +1998,19 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         delta_publishing: false,
       };
 
+      // Load Publisher config
+      const publisherEnabledToggle = document.getElementById('publisher-enabled-popup') as HTMLInputElement;
+      if (publisherEnabledToggle) {
+        publisherEnabledToggle.checked = pubConfig.enabled ?? true;
+      }
+
+      const publisherRateInput = document.getElementById('publisher-rate-popup') as HTMLInputElement;
+      if (publisherRateInput) {
+        // Convert from ms to seconds for display
+        const rateSeconds = Math.round((pubConfig.rate_ms || 12000) / 1000);
+        publisherRateInput.value = rateSeconds.toString();
+      }
+
       // Load Low Bandwidth Mode toggle
       const lowBandwidthToggle = document.getElementById('low-bandwidth-mode-popup') as HTMLInputElement;
       if (lowBandwidthToggle) {
@@ -2222,6 +2235,18 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
     });
 
     // Low Bandwidth Mode toggle
+    // Publisher enabled toggle
+    const publisherEnabledToggle = document.getElementById('publisher-enabled-popup') as HTMLInputElement;
+    if (publisherEnabledToggle) {
+      publisherEnabledToggle.addEventListener('change', () => this._saveSettingsPanel());
+    }
+
+    // Publisher rate input
+    const publisherRateInput = document.getElementById('publisher-rate-popup') as HTMLInputElement;
+    if (publisherRateInput) {
+      publisherRateInput.addEventListener('change', () => this._saveSettingsPanel());
+    }
+
     const lowBandwidthToggle = document.getElementById('low-bandwidth-mode-popup') as HTMLInputElement;
     if (lowBandwidthToggle) {
       lowBandwidthToggle.addEventListener('change', () => this._saveSettingsPanel());
@@ -2472,7 +2497,10 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       const notifFriendOnline = (document.getElementById('notif-friend-online-popup') as HTMLInputElement)?.checked ?? true;
       const notifJoinSuggestion = (document.getElementById('notif-join-suggestion-popup') as HTMLInputElement)?.checked ?? false;
 
-      // Collect Low Bandwidth Mode toggle
+      // Collect publisher config
+      const publisherEnabled = (document.getElementById('publisher-enabled-popup') as HTMLInputElement)?.checked ?? true;
+      const publisherRateInput = (document.getElementById('publisher-rate-popup') as HTMLInputElement)?.value || '12';
+      const publisherRateSeconds = Math.max(5, Math.min(120, parseInt(publisherRateInput) || 12));
       const lowBandwidthMode = (document.getElementById('low-bandwidth-mode-popup') as HTMLInputElement)?.checked ?? false;
 
       // Collect game discovery setting
@@ -2491,6 +2519,8 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
             join_suggestion: notifJoinSuggestion,
           },
           publisher_config: {
+            enabled: publisherEnabled,
+            rate_ms: publisherRateSeconds * 1000,
             low_bandwidth_mode: lowBandwidthMode,
           },
           game_discovery_enabled: gameDiscoveryEnabled,
