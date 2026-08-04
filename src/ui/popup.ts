@@ -188,8 +188,7 @@ export class PopupController {
     // Handle "My Activity" (self)
     let selfElement = existingElements.get('self');
     const selfExpanded = this.expandedFriendsState.get('self') ?? true;
-    const dedupUserActivities = this._deduplicateActivities(this.userActivities);
-    const sortedUserActivities = this._sortActivitiesByType(dedupUserActivities);
+    const sortedUserActivities = this._sortActivitiesByType(this.userActivities);
     if (!selfElement) {
       // Create new self element
       selfElement = this._createFriendItem('self', 'My Activity', sortedUserActivities, selfExpanded);
@@ -270,8 +269,7 @@ export class PopupController {
           friendElement.classList.add('pending');
         } else {
           // Active friend: show activities
-          const dedupActivities = this._deduplicateActivities(Object.values(friend.current_activities || {}));
-          const activities = this._sortActivitiesByType(dedupActivities);
+          const activities = this._sortActivitiesByType(Object.values(friend.current_activities || {}));
 
           let friendElement = existingElements.get(friend.id);
           if (!friendElement) {
@@ -1428,56 +1426,6 @@ export class PopupController {
 
   private _truncateActivityContent(content: string): string {
     return content.length > 40 ? content.substring(0, 40) + '...' : content;
-  }
-
-  /**
-   * Aggressively deduplicate activities by ID (keep only one per unique ID)
-   * Also enforces: one activity per service type
-   * Prefers most recent activity (by timestamp)
-   */
-  private _deduplicateActivities(activities: Activity[]): Activity[] {
-    const seen = new Map<string, Activity>();
-    const seenByService = new Map<string, Activity>();
-
-    for (const activity of activities) {
-      const id = activity.id || '';
-      const service = activity.service;
-
-      // Check for duplicate activity ID
-      if (seen.has(id)) {
-        const existing = seen.get(id)!;
-        const isNewer = (activity.timestamp || 0) > (existing.timestamp || 0);
-        if (isNewer) {
-          seen.set(id, activity);
-          console.warn(`[Popup] Duplicate activity ID ${id} detected; keeping newer version`);
-        } else {
-          console.warn(`[Popup] Duplicate activity ID ${id} detected; keeping existing version`);
-        }
-        continue;
-      }
-
-      // Check for duplicate service (should never happen but enforce it)
-      if (seenByService.has(service)) {
-        const existing = seenByService.get(service)!;
-        const isNewer = (activity.timestamp || 0) > (existing.timestamp || 0);
-        console.warn(
-          `[Popup] Multiple activities for service ${service} detected; keeping ${isNewer ? 'newer' : 'existing'}`
-        );
-        if (isNewer) {
-          // Remove old from seen map and use new one
-          const oldId = existing.id || '';
-          if (oldId) seen.delete(oldId);
-          seen.set(id, activity);
-          seenByService.set(service, activity);
-        }
-        continue;
-      }
-
-      seen.set(id, activity);
-      seenByService.set(service, activity);
-    }
-
-    return Array.from(seen.values());
   }
 
   /**
