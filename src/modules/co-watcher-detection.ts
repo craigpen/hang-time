@@ -14,6 +14,8 @@ export interface CoWatchSession {
 }
 
 export class CoWatcherDetector {
+  private detectCallCount = 0;
+
   constructor(
     private storage: StorageManager,
     private friendManager: FriendManager
@@ -24,6 +26,9 @@ export class CoWatcherDetector {
    * Returns null if user is not watching or no friends are watching same activity
    */
   async detectCoWatchSession(): Promise<CoWatchSession | null> {
+    this.detectCallCount++;
+    // Log every call for debugging
+    console.debug(`[CoWatcher] detectCoWatchSession call #${this.detectCallCount}`);
     try {
       const profile = await this.storage.getUserProfile();
       if (!profile?.current_activity) {
