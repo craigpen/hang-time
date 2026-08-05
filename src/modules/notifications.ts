@@ -30,7 +30,7 @@ export class NotificationManager {
         title: `${friendName} is online`,
         message: `Now playing: ${activity}`,
         contextMessage: 'Click to join',
-        requireInteraction: true,
+        requireInteraction: false,
       });
 
       console.debug('[Notifications] Friend online notification sent for', friendName);
