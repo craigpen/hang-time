@@ -81,7 +81,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
     // First install: generate memorable identifier
     const profile = await storageManager.getUserProfile();
-    if (!profile) {
+    if (!profile && identityManager) {
       await identityManager.generateIdentifier();
       console.log('[Background] Generated user identifier');
     }
