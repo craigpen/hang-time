@@ -6,7 +6,7 @@
  * NIP-01 compliant with proper OK, NOTICE, and CLOSED handling
  */
 
-import { SimplePool, verifyEvent } from 'nostr-tools';
+import { SimplePool, verifyEvent, nip11, nip13 } from 'nostr-tools';
 import { NostrEvent, NostrError, DEFAULT_RELAY_URLS } from '../types';
 import { getFileLogger } from './file-logger';
 import { nip11Handler } from './nip11-relay-info'; // Phase 4
@@ -57,6 +57,9 @@ export class RelayConnection implements IRelayConnection {
   // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, then cap at 60s
   private readonly RATE_LIMIT_BACKOFF_MS = [1, 2, 4, 8, 16, 32, 60, 60, 60, 60].map(s => s * 1000);
 
+  // Proof-of-Work requirement per NIP-11
+  private minPowDifficulty: number = 0;
+
   static readonly TIMEOUT_MS = 8000;
   static readonly RECONNECT_DELAY_MS = 3000;
   static readonly PUBLISH_TIMEOUT_MS = 5000;
@@ -81,6 +84,30 @@ export class RelayConnection implements IRelayConnection {
       rateLimitCount: this.rateLimitCount,
       canPublish: !this.isRateLimited || Date.now() > this.rateLimitedUntil,
     };
+  }
+
+  /**
+   * Get the minimum proof-of-work difficulty required by this relay (NIP-11)
+   */
+  getMinPowDifficulty(): number {
+    return this.minPowDifficulty;
+  }
+
+  /**
+   * Fetch and cache relay's NIP-11 information (including PoW requirement)
+   */
+  private async _fetchRelayInfo(): Promise<void> {
+    try {
+      const info = await nip11.fetchRelayInformation(this.url);
+      this.minPowDifficulty = info.min_pow_difficulty ?? 0;
+      if (this.minPowDifficulty > 0) {
+        const hostname = new URL(this.url).hostname;
+        console.log(`[Nostr] Relay ${hostname} requires PoW difficulty: ${this.minPowDifficulty}`);
+      }
+    } catch (error) {
+      console.debug(`[Nostr] Could not fetch NIP-11 info for ${this.url}, assuming no PoW required:`, error);
+      this.minPowDifficulty = 0;
+    }
   }
 
   async connect(): Promise<void> {
@@ -108,6 +135,11 @@ export class RelayConnection implements IRelayConnection {
 
             // Start heartbeat to prevent proxy timeout
             this._startHeartbeat();
+
+            // Fetch relay info (NIP-11) to get PoW requirement
+            this._fetchRelayInfo().catch((err) => {
+              console.debug(`[Nostr] Failed to fetch relay info for ${this.url}:`, err);
+            });
 
             // Re-send all queued subscriptions
             console.debug(`[Nostr] Connection opened to ${this.url}, re-sending ${this.subscriptions.size} subscriptions`);
@@ -725,18 +757,36 @@ export class RelayPool {
 
         // Publish to all relays using SimplePool for better connection management
         const publishStart = Date.now();
-        const relayUrls = relays.map(r => r.url);
 
-        // Use SimplePool to broadcast to all relays
-        const publishPromises = relayUrls.map(async (url) => {
+        // Use SimplePool to broadcast to all relays (with per-relay PoW if needed)
+        const publishPromises = relays.map(async (relay) => {
           try {
-            console.debug(`[Nostr] Publishing event (kind=${event.kind}, id=${event.id.substring(0, 16)}..., created_at=${event.created_at}, now=${Math.floor(Date.now()/1000)}) to ${url}`);
-            await this.simplePool.publish([url], event as any);
+            const url = relay.url;
+
+            // Apply PoW if this relay requires it (NIP-13)
+            let eventToPublish = event;
+            const powRequired = relay.getMinPowDifficulty();
+            if (powRequired > 0) {
+              // Create unsigned copy for PoW mining
+              const unsigned = {
+                kind: event.kind,
+                tags: [...event.tags],
+                content: event.content,
+                created_at: event.created_at,
+              };
+              eventToPublish = nip13.minePow(unsigned as any, powRequired) as NostrEvent;
+              console.debug(
+                `[Nostr] Applied PoW difficulty ${powRequired} for relay ${new URL(url).hostname} before publishing`
+              );
+            }
+
+            console.debug(`[Nostr] Publishing event (kind=${eventToPublish.kind}, id=${eventToPublish.id.substring(0, 16)}..., created_at=${eventToPublish.created_at}, now=${Math.floor(Date.now()/1000)}) to ${url}`);
+            await this.simplePool.publish([url], eventToPublish as any);
             return { relay: url, success: true, latency_ms: Date.now() - publishStart };
           } catch (error) {
             const errorMsg = (error as Error).message;
-            console.error(`[Nostr] Publish FAILED (kind=${event.kind}, id=${event.id.substring(0, 16)}..., created_at=${event.created_at}) to ${url}: ${errorMsg}`);
-            return { relay: url, success: false, error: errorMsg, latency_ms: Date.now() - publishStart };
+            console.error(`[Nostr] Publish FAILED (kind=${event.kind}, id=${event.id.substring(0, 16)}..., created_at=${event.created_at}) to ${relay.url}: ${errorMsg}`);
+            return { relay: relay.url, success: false, error: errorMsg, latency_ms: Date.now() - publishStart };
           }
         });
         const relayAttempts = await Promise.all(publishPromises);
