@@ -128,6 +128,12 @@ let isRegisteringContentScripts = false;
 let isInitializing = false;
 
 /**
+ * Promise that resolves when initialization completes
+ * Allows concurrent calls to wait for the first initialization to finish
+ */
+let initializationPromise: Promise<void> | null = null;
+
+/**
  * Track fresh content script connections per tab
  * Tab ID -> timestamp of last connection
  */
@@ -378,14 +384,19 @@ async function initializeExtension(): Promise<void> {
   }
 
   if (isInitializing) {
-    console.debug('[Background] Initialization already in progress');
-    return;
+    console.debug('[Background] Initialization already in progress, waiting...');
+    // Return the existing promise so concurrent calls wait for initialization to complete
+    if (initializationPromise) {
+      return initializationPromise;
+    }
   }
 
   isInitializing = true;
 
-  try {
-    console.log('[Background] Initializing extension...');
+  // Create a promise that resolves when initialization completes
+  initializationPromise = (async () => {
+    try {
+      console.log('[Background] Initializing extension...');
 
     try {
       console.debug('[Background] Initializing storage...');
@@ -690,14 +701,19 @@ async function initializeExtension(): Promise<void> {
     // Start integration health monitoring
     _startIntegrationHealthCheck();
 
-    // Mark initialization as complete only after everything succeeds
-    initialized = true;
-  } catch (error) {
-    console.error('[Background] Initialization failed:', error);
-    throw error;
-  } finally {
-    isInitializing = false;
-  }
+      // Mark initialization as complete only after everything succeeds
+      initialized = true;
+    } catch (error) {
+      console.error('[Background] Initialization failed:', error);
+      throw error;
+    } finally {
+      isInitializing = false;
+      initializationPromise = null;
+    }
+  })();
+
+  // Wait for the initialization to complete
+  return initializationPromise;
 }
 
 /**
