@@ -111,9 +111,17 @@ chrome.runtime.onStartup?.addListener(async () => {
  * Ensures durability of recent changes
  */
 globalThis.addEventListener?.('beforeunload', () => {
-  console.debug('[Background] Service worker unloading, flushing cache...');
-  storageManager.forceSyncNow().catch(error => {
-    console.error('[Background] Failed to sync cache on unload:', error);
+  console.debug('[Background] Service worker unloading, flushing state...');
+  // Flush cache and event dedup state
+  Promise.all([
+    storageManager.forceSyncNow().catch(error => {
+      console.error('[Background] Failed to sync cache on unload:', error);
+    }),
+    persistEventDeduplicatorState().catch(error => {
+      console.error('[Background] Failed to persist event dedup on unload:', error);
+    })
+  ]).catch(() => {
+    // Silently ignore errors during shutdown
   });
 });
 
@@ -2640,7 +2648,9 @@ async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): 
       console.log(`[FriendRequest] âœ… ${friend.local_name} accepted your friend request`);
 
       // Notify the user (with deduplication to avoid multiple notifications from multiple relays)
+      console.debug(`[FriendRequest] Checking dedup for event: ${event.id.substring(0, 16)}...`);
       if (shouldNotifyForInvite(event.id)) {
+        console.log(`[FriendRequest] Will notify - dedup check passed`);
         // Mark as notified immediately to prevent race condition with multiple relays
         await markInviteNotified(event.id);
         const notificationManager = getNotificationManager();
@@ -2648,6 +2658,8 @@ async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): 
           `${friend.local_name} accepted your friend request`,
           'You are now friends!'
         );
+      } else {
+        console.log(`[FriendRequest] Suppressed duplicate notification for ${event.id.substring(0, 16)}...`);
       }
     } else {
       console.warn('[FriendRequest] Unexpected message type in friend request:', message.type);
@@ -2938,18 +2950,20 @@ async function initializeNotificationDedup(): Promise<void> {
   const now = Date.now();
   const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
 
-  console.debug(`[Background] Restoring notification dedup state: found ${stored.size} stored event IDs`);
+  console.debug(`[Dedup] Restoring notification dedup state: found ${stored.size} stored event IDs`);
 
   for (const [eventId, timestamp] of stored) {
     // Only keep recent entries (last 7 days)
     if (timestamp > oneWeekAgo) {
       notifiedInviteIds.set(eventId, timestamp);
-      console.debug(`[Background]   - Restored: ${eventId.substring(0, 16)}... (${Math.round((now - timestamp) / 1000)}s ago)`);
+      console.debug(`[Dedup]   - Restored: ${eventId.substring(0, 16)}... (${Math.round((now - timestamp) / 1000)}s ago)`);
     }
   }
 
   if (notifiedInviteIds.size > 0) {
-    console.log(`[Background] ✅ Loaded ${notifiedInviteIds.size} cached notification IDs`);
+    console.log(`[Dedup] ✅ Loaded ${notifiedInviteIds.size} cached notification IDs`);
+  } else {
+    console.log(`[Dedup] No cached notification IDs`);
   }
 }
 
@@ -2976,10 +2990,12 @@ async function initializeEventDeduplicator(): Promise<void> {
 async function persistEventDeduplicatorState(): Promise<void> {
   const { getEventDeduplicator } = await import('../src/modules/event-deduplicator');
   const dedup = getEventDeduplicator();
-  const deduped = new Set<string>(); // We need to extract the internal state somehow
+  const processed = dedup.getProcessedEventIds();
 
-  // For now, we'll call a method to get the processed events (need to add to EventDeduplicator)
-  // await storageManager.setProcessedEventIds(deduped);
+  if (processed.size > 0) {
+    await storageManager.setProcessedEventIds(processed);
+    console.debug(`[Dedup] Persisted ${processed.size} processed event IDs to storage`);
+  }
 }
 
 /**
