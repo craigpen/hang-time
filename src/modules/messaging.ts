@@ -110,6 +110,7 @@ export class MessagingManager {
     const message: ActivityMessage = {
       type: 'join_accepted',
       activity_id: activity.id || generateActivityId(activity.service, activity.url),
+      service: activity.service,
       timestamp: Date.now(),
     };
 
@@ -126,6 +127,7 @@ export class MessagingManager {
     const message: ActivityMessage = {
       type: 'join_declined',
       activity_id: activity.id || generateActivityId(activity.service, activity.url),
+      service: activity.service,
       timestamp: Date.now(),
     };
 
