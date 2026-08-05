@@ -3152,8 +3152,12 @@ async function _showDiscordCoordinationPrompt(friend: Friend): Promise<void> {
     const profile = await storageManager.getUserProfile();
     if (!profile) return;
 
+    // Get friend's Discord info from stored profile (keyed by pubkey)
+    const friendProfile = await storageManager.getFriendProfile(friend.pubkey);
+    const friendDiscordInfo = friendProfile?.discord_link;
+
     // Determine which Discord to use: friend's first, then user's
-    const discordInfo = selectDiscordServer(friend.discord_info, [
+    const discordInfo = selectDiscordServer(friendDiscordInfo, [
       { identifier: profile.memorable_identifier, discord_info: profile.discord_info },
     ]);
 

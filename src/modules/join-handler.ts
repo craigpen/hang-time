@@ -132,8 +132,12 @@ export class JoinHandler {
         return;
       }
 
+      // Get friend's Discord info from stored profile (keyed by pubkey)
+      const friendProfile = await this.storage.getFriendProfile(friend.pubkey);
+      const friendDiscordInfo = friendProfile?.discord_link;
+
       // Determine which Discord to use: friend's first, then user's, or other friends in alpha order
-      const discordInfo = selectDiscordServer(friend.discord_info, [
+      const discordInfo = selectDiscordServer(friendDiscordInfo, [
         { identifier: profile.memorable_identifier, discord_info: profile.discord_info },
       ]);
 
