@@ -1560,25 +1560,30 @@ export class PopupController {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return;
 
-      // Listen for activity updates from MY_ACTIVITIES (single source of truth)
-      if (changes[STORAGE_KEYS.MY_ACTIVITIES]) {
-        console.debug('[Popup] Activity data changed, refreshing...');
-        this._loadMyActivity().catch((error) => {
-          console.error('[Popup] Failed to refresh after storage change:', error);
-        });
-      }
+      // Collect keys that changed
+      const changedKeys = Object.keys(changes);
+      const keysToRefresh = changedKeys.filter(key =>
+        key === STORAGE_KEYS.MY_ACTIVITIES || key === STORAGE_KEYS.RECEIVED_INVITES
+      );
 
-      // Listen for received invites changes (so we update envelope when invite arrives)
-      if (changes[STORAGE_KEYS.RECEIVED_INVITES]) {
-        console.log('[Popup] Received invites changed in storage, reloading...');
-        // Refresh cache from storage before loading
-        this.storage.refreshReceivedInvitesFromStorage().then(() => {
-          this._loadPendingInvites().catch((error) => {
-            console.error('[Popup] Failed to reload received invites:', error);
-          });
-          // Refresh to update envelope colors
+      // Refresh changed keys from storage into cache (keeps cache in sync with background)
+      if (keysToRefresh.length > 0) {
+        console.debug('[Popup] Storage changed, refreshing cache for keys:', keysToRefresh);
+        this.storage.refreshKeysFromStorage(keysToRefresh).then(() => {
+          // Reload affected data
+          if (changedKeys.includes(STORAGE_KEYS.MY_ACTIVITIES)) {
+            this._loadMyActivity().catch((error) => {
+              console.error('[Popup] Failed to refresh activities:', error);
+            });
+          }
+          if (changedKeys.includes(STORAGE_KEYS.RECEIVED_INVITES)) {
+            this._loadPendingInvites().catch((error) => {
+              console.error('[Popup] Failed to reload received invites:', error);
+            });
+          }
+          // Refresh display for both activity and invite changes
           this.refreshFriends().catch((error) => {
-            console.error('[Popup] Failed to refresh after received invites change:', error);
+            console.error('[Popup] Failed to refresh display after storage change:', error);
           });
         }).catch((error) => {
           console.error('[Popup] Failed to refresh cache from storage:', error);

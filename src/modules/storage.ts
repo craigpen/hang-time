@@ -602,13 +602,23 @@ export class StorageManager {
   }
 
   /**
-   * Refresh received invites from storage (used when storage changes externally)
+   * Refresh specific keys from storage into cache (used when storage changes externally)
+   * This keeps the cache in sync when other components update storage
+   */
+  async refreshKeysFromStorage(keys: string[]): Promise<void> {
+    const data = await chrome.storage.local.get(keys);
+    for (const key of keys) {
+      if (data.hasOwnProperty(key)) {
+        this.cache.set(key, data[key]);
+      }
+    }
+  }
+
+  /**
+   * Refresh received invites from storage (convenience method for common case)
    */
   async refreshReceivedInvitesFromStorage(): Promise<void> {
-    const data = await chrome.storage.local.get([STORAGE_KEYS.RECEIVED_INVITES]);
-    if (data.hasOwnProperty(STORAGE_KEYS.RECEIVED_INVITES)) {
-      this.cache.set(STORAGE_KEYS.RECEIVED_INVITES, data[STORAGE_KEYS.RECEIVED_INVITES]);
-    }
+    await this.refreshKeysFromStorage([STORAGE_KEYS.RECEIVED_INVITES]);
   }
 
   /**
