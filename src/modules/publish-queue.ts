@@ -34,6 +34,7 @@ export class PublishQueue {
   private storageManager: StorageManager;
   private activityPublisher: ActivityPublisher | null = null;
   private identityManager: IdentityManager | null = null;
+  private isPublishing = false; // Semaphore to prevent concurrent publishes
 
   // Retry configuration
   private readonly MAX_RETRIES = 10;
@@ -183,12 +184,20 @@ export class PublishQueue {
    */
   private async _publishCycle(): Promise<void> {
     try {
+      // Prevent concurrent publishes (replaceable events rely on monotonic timestamps)
+      if (this.isPublishing) {
+        console.debug('[PublishQueue] Already publishing, skipping cycle');
+        return;
+      }
+
       // Check if publishing is enabled globally
       const profile = await this.storageManager.getUserProfile();
       if (profile?.publisher_config && !profile.publisher_config.enabled) {
         console.debug('[PublishQueue] Publishing is disabled, skipping cycle');
         return;
       }
+
+      this.isPublishing = true;
 
       let eventToPublish: NostrEvent | null = null;
 
@@ -263,6 +272,9 @@ export class PublishQueue {
       }
     } catch (error) {
       console.error('[PublishQueue] Publish cycle failed:', error);
+    } finally {
+      // Always clear the publishing semaphore
+      this.isPublishing = false;
     }
   }
 

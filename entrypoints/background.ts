@@ -1741,10 +1741,14 @@ async function _subscribeToIncomingMessages(): Promise<void> {
         return;
       }
 
-      // Validate our pubkey is in the 'p' tag (client-side filtering per NIP-17)
+      // Validate our pubkey is in the 'p' tag (required per NIP-17)
       const pTag = event.tags.find((t) => t[0] === 'p')?.[1];
+      if (!pTag) {
+        console.warn(`[Message] Kind-1059 event missing required p-tag: ${event.id.substring(0, 8)}`);
+        return;
+      }
       if (pTag !== userPubkey) {
-        console.debug(`[Message] Ignoring kind-1059 event not meant for us (p-tag: ${pTag?.substring(0, 8) || 'none'})`);
+        console.debug(`[Message] Ignoring kind-1059 event not meant for us (p-tag: ${pTag.substring(0, 8)})`);
         return;
       }
 
@@ -1772,12 +1776,10 @@ async function _subscribeToIncomingMessages(): Promise<void> {
         if (sender) {
           // Known friend - handle normally
           await _handleMessageEvent(sender.identifier, event);
-          await publishDeletionRequest(event.id);
         } else if (messageType === 'friend_request') {
           // Friend request from unknown sender - create as pending friend
           console.log(`[Message] ðŸ”” Friend Request: Received from ${event.pubkey.substring(0, 8)}...`);
           await _handleFriendRequestFromUnknownSender(event);
-          await publishDeletionRequest(event.id);
         } else {
           // Unknown message type from unknown sender - ignore
           console.debug(`[Message] Ignoring message from unknown sender (type=${messageType}): ${event.pubkey.substring(0, 8)}...`);
@@ -2861,41 +2863,6 @@ async function markInviteNotified(eventId: string): Promise<void> {
 
   // Persist to storage
   await storageManager.setNotifiedInviteIds(notifiedInviteIds);
-}
-
-/**
- * Publish a deletion request (NIP-09 kind 5) for a processed message
- */
-async function publishDeletionRequest(eventId: string): Promise<void> {
-  try {
-    if (!relayPool) return;
-
-    const userProfile = await storageManager.getUserProfile();
-    if (!userProfile) return;
-
-    // Create and sign kind 5 deletion event using nostr-tools
-    const { finalizeEvent } = await import('nostr-tools');
-    const secretKeyHex = await identityManager.getSecretKey();
-    const hexToBytes = (hex: string) => new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-
-    const deletionEvent = finalizeEvent({
-      kind: 5,
-      tags: [['e', eventId]],
-      content: 'Processed message',
-      created_at: Math.floor(Date.now() / 1000),
-    }, hexToBytes(secretKeyHex)) as NostrEvent;
-
-    console.log(`[Message] ðŸ“¤ Queuing deletion request for event: ${eventId.substring(0, 8)}...`);
-    if (publishQueue) {
-      await publishQueue.enqueueUserAction(deletionEvent, 'message');
-    } else {
-      // Fallback if queue not initialized
-      await relayPool.publish(deletionEvent);
-    }
-  } catch (error) {
-    console.debug(`[Message] Failed to publish deletion request:`, error);
-    // Non-fatal - continue anyway
-  }
 }
 
 /**
