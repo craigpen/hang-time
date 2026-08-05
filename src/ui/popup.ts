@@ -1221,9 +1221,7 @@ export class PopupController {
 
   private async _loadPendingInvites(): Promise<void> {
     try {
-      // Refresh from storage first (in case cache is stale)
-      await this.storage.refreshReceivedInvitesFromStorage();
-
+      // Read from cache (storage listener keeps it in sync)
       const receivedInvites = await this.storage.getReceivedInvites();
       console.log('[Popup] Raw received invites from storage:', receivedInvites);
       this.pendingInvitesByActivity.clear();
