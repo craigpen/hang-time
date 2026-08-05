@@ -122,9 +122,9 @@ export class PopupController {
 
   async refreshFriends(): Promise<void> {
     try {
-      // Don't reload pending invites from storage on every refresh
-      // They are kept in-memory and only loaded on startup and when messages arrive
-      // Reloading would lose pending invites that just came in via INVITE_RECEIVED message
+      // Reload pending invites from cache before rendering friends
+      // Cache is primary storage and always has the latest state
+      await this._loadPendingInvites();
 
       const response = await chrome.runtime.sendMessage({
         type: 'GET_ALL_ACTIVITIES',
