@@ -1917,23 +1917,6 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
       if (event.kind === 0) {
         // Profile event (always accept for both pending and active)
         await _handleProfileEvent(event);
-      } else if (event.kind === 1) {
-        // Activity/notification events - only process if friend is active
-        if (!isPending) {
-          // Check if this is a game-library event (tag t=game-library)
-          const isGameLibraryEvent = event.tags.find((t) => t[0] === 't' && t[1] === 'game-library');
-
-          if (isGameLibraryEvent) {
-            // Route to game library manager
-            const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
-            await gameLibraryManager.handleGameLibraryEvent(event);
-          } else {
-            // Activity event
-            await _handleActivityEvent(friendIdentifier, event);
-          }
-        } else {
-          console.debug(`[Friend] Skipping kind-1 from pending friend ${friendIdentifier}`);
-    }
       } else if (event.kind === 1059) {
         // Kind-1059 messages (always accept for both pending and active)
         console.debug(`[Message] Handling incoming kind-1059`);
