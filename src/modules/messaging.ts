@@ -68,6 +68,10 @@ export class MessagingManager {
    * Returns the event ID for tracking/retry purposes
    */
   async sendInvite(activity: Activity, recipientFriend: Friend): Promise<string> {
+    if (!activity.service) {
+      throw new Error(`Cannot send invite: activity missing service. Activity: ${JSON.stringify({ id: activity.id, content: activity.content })}`);
+    }
+
     const message: ActivityMessage = {
       type: 'invite',
       activity_id: activity.id || generateActivityId(activity.service, activity.url),
@@ -77,7 +81,7 @@ export class MessagingManager {
     };
 
     const eventId = await this._sendActivityMessage(recipientFriend, message);
-    console.debug('[Messaging] Sent invite for activity:', activity.service);
+    console.log('[Messaging] Sent invite for activity:', activity.service, 'to friend:', recipientFriend.local_name);
     return eventId;
   }
 

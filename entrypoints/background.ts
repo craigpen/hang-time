@@ -2800,6 +2800,11 @@ async function _sendInvite(activity?: any, friendId?: string): Promise<Extension
     return { success: false, error: 'Activity and friendId required' };
   }
 
+  if (!activity.service) {
+    console.error('[Invite] Cannot send invite: activity missing service', { activityId: activity.id, service: activity.service });
+    return { success: false, error: 'Activity must have a service to invite' };
+  }
+
   try {
     const friendManager = getFriendManager();
     const friend = await friendManager.getFriend(friendId);
