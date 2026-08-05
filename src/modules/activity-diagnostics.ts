@@ -4,6 +4,7 @@
  */
 
 import { StorageManager } from './storage';
+import { STORAGE_KEYS } from '../types';
 
 export interface ActivityDiagnosticRecord {
   activity_id: string;
@@ -82,7 +83,6 @@ export interface RelayHealthMetrics {
   last_error?: string;
 }
 
-const STORAGE_KEY = 'hang_time_diagnostics';
 const MAX_RECORDS = 500; // Keep last 500 activities
 
 export class ActivityDiagnostics {
@@ -370,7 +370,7 @@ export class ActivityDiagnostics {
    * Clear all diagnostics
    */
   async clearAll(): Promise<void> {
-    await chrome.storage.local.remove(STORAGE_KEY);
+    await this.storageManager.delete(STORAGE_KEYS.ACTIVITY_DIAGNOSTICS);
   }
 
   /**
@@ -402,8 +402,10 @@ export class ActivityDiagnostics {
 
   private async _getAllRecords(): Promise<ActivityDiagnosticRecord[]> {
     try {
-      const data = await chrome.storage.local.get(STORAGE_KEY);
-      return data[STORAGE_KEY] || [];
+      return await this.storageManager.get<ActivityDiagnosticRecord[]>(
+        STORAGE_KEYS.ACTIVITY_DIAGNOSTICS,
+        []
+      );
     } catch (error) {
       console.error('[ActivityDiagnostics] Failed to read records:', error);
       return [];
@@ -418,39 +420,39 @@ export class ActivityDiagnostics {
   }
 
   private async _appendRecord(record: ActivityDiagnosticRecord): Promise<void> {
-    const records = await this._getAllRecords();
-    records.push(record);
-
-    // Keep only recent records
-    if (records.length > MAX_RECORDS) {
-      records.splice(0, records.length - MAX_RECORDS);
-    }
-
     try {
-      await chrome.storage.local.set({ [STORAGE_KEY]: records });
+      const records = await this._getAllRecords();
+      records.push(record);
+
+      // Keep only recent records
+      if (records.length > MAX_RECORDS) {
+        records.splice(0, records.length - MAX_RECORDS);
+      }
+
+      await this.storageManager.set(STORAGE_KEYS.ACTIVITY_DIAGNOSTICS, records);
     } catch (error) {
       console.error('[ActivityDiagnostics] Failed to append record:', error);
     }
   }
 
   private async _updateRecord(record: ActivityDiagnosticRecord): Promise<void> {
-    const records = await this._getAllRecords();
-    const idx = records.findIndex((r) => r.activity_id === record.activity_id);
-
-    if (idx >= 0) {
-      // Update existing record
-      records[idx] = record;
-    } else {
-      // Create new record if doesn't exist
-      records.push(record);
-      // Keep only recent records
-      if (records.length > MAX_RECORDS) {
-        records.splice(0, records.length - MAX_RECORDS);
-      }
-    }
-
     try {
-      await chrome.storage.local.set({ [STORAGE_KEY]: records });
+      const records = await this._getAllRecords();
+      const idx = records.findIndex((r) => r.activity_id === record.activity_id);
+
+      if (idx >= 0) {
+        // Update existing record
+        records[idx] = record;
+      } else {
+        // Create new record if doesn't exist
+        records.push(record);
+        // Keep only recent records
+        if (records.length > MAX_RECORDS) {
+          records.splice(0, records.length - MAX_RECORDS);
+        }
+      }
+
+      await this.storageManager.set(STORAGE_KEYS.ACTIVITY_DIAGNOSTICS, records);
     } catch (error) {
       console.error('[ActivityDiagnostics] Failed to update record:', error);
     }

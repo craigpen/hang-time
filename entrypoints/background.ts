@@ -3592,7 +3592,7 @@ async function dumpHangTimeLogs() {
     console.log('[Background] Preparing logs for export...');
 
     // Store logs in a special key that the popup can access and download
-    await chrome.storage.local.set({ 'hang_time_logs_export': logs });
+    await storageManager.set(STORAGE_KEYS.LOGS_EXPORT, logs);
 
     console.log('[Background] Logs prepared in storage for export');
     console.log('[Background] Profiles found:', Object.keys(logs).join(', '));
