@@ -1938,9 +1938,6 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
         } else {
           console.debug(`[Friend] Skipping kind-10003 from pending friend ${friendIdentifier}`);
         }
-      } else if (event.kind === 30001) {
-        // Kind-30001 parameterized replaceable events (friend requests, invites)
-        await _handleActivityEvent(friendIdentifier, event);
       } else {
         console.debug(`[Friend] Ignoring event with kind ${event.kind}`);
       }

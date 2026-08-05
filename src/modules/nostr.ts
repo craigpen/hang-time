@@ -235,8 +235,8 @@ export class RelayConnection implements IRelayConnection {
       const since = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
       const filter = {
         authors: [identifier],
-        kinds: [1, 10003, 30001], // Activities (10003), invites (30001), legacy activities (1)
-        // Note: Kind-4 (DMs) are NOT included here - they're handled by a separate subscription with #p filtering
+        kinds: [10003], // Activities (replaceable event)
+        // Note: Kind-1059 encrypted messages are handled by a separate subscription with #p filtering
         since,
       };
 
