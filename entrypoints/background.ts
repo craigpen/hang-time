@@ -746,17 +746,43 @@ function _startCoWatcherDetectionCycle(): void {
         // Store the co-watch session for overlay to use
         await detector.setCurrentCoWatchSession(session);
 
-        // Log for debugging
-        console.debug('[Background] Co-watch session detected:', {
-          activity_id: session.activity_id,
-          host: session.host_friend_id,
-          co_watchers_count: session.co_watchers.length,
-        });
+        // Get host friend name for overlay
+        const hostFriend = await getFriendManager().getFriend(session.host_friend_id);
+        const hostName = hostFriend?.local_name || '?';
 
-        // TODO: Send co-watch session to overlay UI via content script
-        // window.postMessage({ type: 'HANG_TIME_CO_WATCH_UPDATE', data: session }, '*');
+        // Get current activity for playback position
+        const profile = await storageManager.getUserProfile();
+        const hostPosition = profile?.current_activity?.metadata?.progress || 0;
+        const userPosition = profile?.current_activity?.metadata?.progress || 0;
+
+        // Broadcast to all connected content scripts
+        for (const [tabId, port] of activeContentScriptPorts.entries()) {
+          try {
+            port.postMessage({
+              type: 'CO_WATCH_UPDATE',
+              data: {
+                activity_id: session.activity_id,
+                host_friend_id: session.host_friend_id,
+                host_name: hostName,
+                co_watchers: session.co_watchers,
+                host_position: hostPosition,
+                user_position: userPosition,
+                detected_at: session.detected_at,
+              },
+            });
+          } catch (e) {
+            console.debug(`[Background] Failed to send CO_WATCH_UPDATE to tab ${tabId}:`, e);
+          }
+        }
+
+        console.debug('[Background] Co-watch session detected and broadcast:', {
+          activity_id: session.activity_id,
+          host: hostName,
+          co_watchers_count: session.co_watchers.length,
+          tabs_notified: activeContentScriptPorts.size,
+        });
       } else {
-        // No co-watch session
+        // No co-watch session - clear it
         await detector.setCurrentCoWatchSession(null);
       }
     } catch (error) {
@@ -870,6 +896,42 @@ chrome.runtime.onConnect.addListener((port) => {
             port.postMessage({ type: 'PONG' });
           } catch (e) {
             console.debug(`[Background] Failed to send PONG:`, e);
+          }
+        } else if (message.type === 'GET_USER_ID') {
+          // Content script requesting user ID for overlay
+          try {
+            const profile = await storageManager.getUserProfile();
+            port.postMessage({ type: 'USER_ID', data: profile?.memorable_identifier || 'unknown' });
+          } catch (e) {
+            console.debug(`[Background] Failed to send USER_ID:`, e);
+          }
+        } else if (message.type === 'SYNC_REQUEST') {
+          // Content script sync button was clicked
+          try {
+            const syncHandler = getSyncHandler();
+            const detector = getCoWatcherDetector();
+            const coWatchSession = await detector.getCurrentCoWatchSession();
+
+            if (coWatchSession) {
+              console.debug('[Background] Sending sync request for activity:', coWatchSession.activity_id);
+              await syncHandler.sendSyncRequest(coWatchSession.host_friend_id, coWatchSession.activity_id);
+            } else {
+              console.debug('[Background] No co-watch session active for sync request');
+            }
+          } catch (e) {
+            console.error('[Background] Failed to handle sync request:', e);
+          }
+        } else if (message.type === 'OPEN_DISCORD') {
+          // Discord button was clicked
+          try {
+            const detector = getCoWatcherDetector();
+            const hostDetails = await detector.getHostFriendDetails();
+            if (hostDetails) {
+              console.debug('[Background] Opening Discord for host:', hostDetails.local_name);
+              // TODO: Get Discord link and open it
+            }
+          } catch (e) {
+            console.error('[Background] Failed to handle Discord button:', e);
           }
         } else if (message.type === 'CONTENT_SCRIPT_ACTIVITY') {
           await _handleContentScriptActivity(message.data?.key, message.data?.value, tabId);

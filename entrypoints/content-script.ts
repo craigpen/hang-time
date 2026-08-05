@@ -2,9 +2,11 @@
  * Hang Time - Generic Video Content Script with Lifecycle Management
  * Detects any <video> element on any platform with automatic recovery on extension reload
  * Works with YouTube, Netflix, Twitch, and potentially any video site
+ * Injects overlay UI for co-watching coordination
  */
 
 import { generateActivityId } from '../src/modules/activity-utils';
+import { OverlayUI } from '../src/modules/overlay-ui';
 
 // ============================================================================
 // LIFECYCLE MANAGEMENT - Simple, top-level flag and cleanup event
@@ -39,6 +41,10 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_BACKOFF_MS = 500;
 let reconnectTimeoutId: number | null = null;
 let tracker: GenericVideoTracker | null = null;
+
+// Overlay UI state
+let overlayUI: OverlayUI | null = null;
+let userId: string = ''; // Will be set from background message
 
 // ============================================================================
 // GENERIC VIDEO TRACKER CLASS
@@ -609,6 +615,81 @@ function establishConnection(): void {
       // Ignore ping failures
     }
 
+    // Setup message listeners for overlay updates
+    port.onMessage.addListener((message) => {
+      switch (message.type) {
+        case 'USER_ID':
+          // Store user ID for overlay
+          userId = message.data;
+          if (overlayUI) {
+            // Recreate overlay with correct user ID
+            overlayUI.destroy();
+            overlayUI = new OverlayUI(userId);
+            overlayUI.init();
+          }
+          console.debug('[ContentScript] Received user ID:', userId);
+          break;
+
+        case 'CO_WATCH_UPDATE':
+          if (!overlayUI) return;
+          // Update overlay with co-watcher info
+          if (message.data) {
+            const { host_friend_id, co_watchers, detected_at } = message.data;
+            overlayUI.setState({
+              activity_id: message.data.activity_id,
+              host_name: message.data.host_name || '?',
+              co_watchers: co_watchers || [],
+              host_position: message.data.host_position,
+            });
+            console.debug('[ContentScript] Updated overlay with co-watchers:', co_watchers);
+          }
+          break;
+
+        case 'SYNC_COMPLETE':
+          if (!overlayUI) return;
+          // Update progress after sync completes
+          if (message.data) {
+            const newPosition = message.data.position + message.data.elapsed;
+            overlayUI.setState({
+              user_position: newPosition,
+            });
+            console.debug('[ContentScript] Sync complete, updated position to:', newPosition);
+          }
+          break;
+
+        case 'CHAT_MESSAGE':
+          if (!overlayUI) return;
+          // Add message to overlay chat
+          if (message.data) {
+            overlayUI.addMessage(
+              message.data.sender,
+              message.data.sender_id,
+              message.data.content
+            );
+          }
+          break;
+
+        case 'ACTIVITY_UPDATE':
+          if (!overlayUI) return;
+          // Update overlay with current activity info
+          if (message.data) {
+            overlayUI.setState({
+              video_title: message.data.title,
+              user_position: message.data.position,
+            });
+          }
+          break;
+      }
+    });
+
+    // Initialize overlay UI and get user ID
+    try {
+      // Request user ID from background
+      port.postMessage({ type: 'GET_USER_ID' });
+    } catch (e) {
+      console.warn('[ContentScript] Failed to request user ID:', e);
+    }
+
     // Send frequent pings to keep service worker from suspending
     // MV3 service workers can suspend after ~30 seconds of inactivity,
     // so we ping every 5 seconds to keep it alive
@@ -658,6 +739,12 @@ function performCleanup(): void {
     tracker.destroy();
   }
 
+  // Destroy overlay UI
+  if (overlayUI) {
+    overlayUI.destroy();
+    overlayUI = null;
+  }
+
   // Disconnect port
   if (port) {
     try {
@@ -705,6 +792,7 @@ setTimeout(() => {
         establishConnection();
         tracker = new GenericVideoTracker();
         tracker.init();
+        initializeOverlay();
       }
     }, 2000);
     return;
@@ -713,4 +801,47 @@ setTimeout(() => {
   establishConnection();
   tracker = new GenericVideoTracker();
   tracker.init();
+  initializeOverlay();
 }, 100);
+
+/**
+ * Initialize overlay UI on video pages
+ */
+function initializeOverlay(): void {
+  if (overlayUI) return; // Already initialized
+
+  // Detect if this is a video page (YouTube, Netflix, Twitch)
+  const isVideoPage = document.querySelector('video') !== null;
+  if (!isVideoPage) {
+    console.debug('[ContentScript] Not a video page, skipping overlay');
+    return;
+  }
+
+  // Initialize overlay with temporary user ID (will be updated when background sends it)
+  overlayUI = new OverlayUI(userId || 'unknown');
+  overlayUI.init();
+
+  // Listen for overlay interactions
+  window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+
+    if (event.data.type === 'HANG_TIME_SYNC_REQUEST') {
+      // Sync button was clicked, send to background
+      if (port) {
+        port.postMessage({
+          type: 'SYNC_REQUEST',
+          data: { activity_id: event.data.activity_id },
+        });
+      }
+    } else if (event.data.type === 'HANG_TIME_OPEN_DISCORD') {
+      // Discord button was clicked, send to background
+      if (port) {
+        port.postMessage({
+          type: 'OPEN_DISCORD',
+        });
+      }
+    }
+  });
+
+  console.debug('[ContentScript] Overlay UI initialized');
+}
