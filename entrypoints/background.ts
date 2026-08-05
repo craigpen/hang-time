@@ -878,9 +878,14 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       return;
     }
 
-    // Skip special pages
-    if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
-      console.debug(`[Background] Skipping special page: ${tab.url.substring(0, 60)}`);
+    // Skip special pages (cannot inject into browser UI or system URLs)
+    if (
+      tab.url.startsWith('chrome://') ||
+      tab.url.startsWith('chrome-extension://') ||
+      tab.url.startsWith('edge://') ||
+      tab.url.startsWith('edge-extension://')
+    ) {
+      console.debug(`[Background] Skipping protected page: ${tab.url.substring(0, 60)}`);
       return;
     }
 

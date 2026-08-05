@@ -9,7 +9,8 @@ import { StorageManager } from './storage';
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const FETCH_TIMEOUT_MS = 5000; // 5 seconds
 const MAX_RETRIES = 3;
-const RATE_LIMIT_REQUESTS_PER_SECOND = 1.5;
+// Conservative: 1 request per 2 seconds to avoid Steam 429 rate limits
+const RATE_LIMIT_REQUESTS_PER_SECOND = 0.5;
 
 /**
  * Token bucket rate limiter for API requests
@@ -60,6 +61,7 @@ export class MetadataFetcher {
   private failedAppIds: Map<number, number> = new Map();
   private isProcessing: boolean = false;
   private processingIntervalId: NodeJS.Timeout | null = null;
+  private globalRateLimitedUntil: number = 0; // Pause all processing if we hit Steam's limit
 
   private constructor(private storage: StorageManager) {
     this.rateLimiter = new RateLimiter(RATE_LIMIT_REQUESTS_PER_SECOND);
@@ -206,6 +208,15 @@ export class MetadataFetcher {
       return;
     }
 
+    // Check if globally rate limited by Steam
+    if (Date.now() < this.globalRateLimitedUntil) {
+      const waitMs = this.globalRateLimitedUntil - Date.now();
+      console.warn(
+        `[Metadata] 🛑 Steam API globally rate limited, pausing for ${Math.round(waitMs / 1000)}s (${this.fetchQueue.length} items queued)`
+      );
+      return;
+    }
+
     this.isProcessing = true;
 
     try {
@@ -216,21 +227,26 @@ export class MetadataFetcher {
         try {
           const result = await this.fetchFromSteamAPI(appId);
 
-          // Handle rate limit response
+          // Handle rate limit response (429)
           if (result && result.__rateLimited) {
-            // Re-queue with backoff
+            // Implement exponential global backoff: start at 30s, increase with each event
+            const globalBackoffMs = Math.min(60000, 30000 * Math.pow(1.5, this.failedAppIds.size));
+            this.globalRateLimitedUntil = Date.now() + globalBackoffMs;
+
+            console.warn(
+              `[Metadata] ⚠️  Steam API returned 429 for appId ${appId}, pausing ALL requests for ${Math.round(globalBackoffMs / 1000)}s`
+            );
+
+            // Re-queue this appId at front of queue for later retry
             const retryCount = this.failedAppIds.get(appId) || 0;
             if (retryCount < MAX_RETRIES) {
-              const backoffMs = this.calculateBackoff(retryCount);
-              console.debug(`[Metadata] Rate limited for appId ${appId}, retrying after ${backoffMs}ms`);
-              // Add back to queue after delay
-              setTimeout(() => this.fetchQueue.push(appId), backoffMs);
+              this.fetchQueue.unshift(appId); // Put back at front
               this.failedAppIds.set(appId, retryCount + 1);
             } else {
               console.warn(`[Metadata] ⚠️  Max retries exceeded for appId ${appId} (rate limit)`);
               this.failedAppIds.delete(appId);
             }
-            continue;
+            break; // Stop processing; wait for global backoff to expire
           }
 
           // Handle timeout response
