@@ -474,6 +474,8 @@ async function initializeExtension(): Promise<void> {
       }
 
       console.debug(`[Background] Relay URLs: ${JSON.stringify(relayUrls)}`);
+      // Set storage manager for persisting subscription timestamps
+      relayPool.setStorageManager(storageManager);
       await relayPool.connect(relayUrls);
       console.debug(`[Background] Connected to Nostr (${relayPool.getConnectedRelayCount()} relays)`);
     } catch (error) {

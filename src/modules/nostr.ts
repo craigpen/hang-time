@@ -6,7 +6,7 @@
  * NIP-01 compliant with proper OK, NOTICE, and CLOSED handling
  */
 
-import { SimplePool } from 'nostr-tools';
+import { SimplePool, verifyEvent } from 'nostr-tools';
 import { NostrEvent, NostrError, DEFAULT_RELAY_URLS } from '../types';
 import { getFileLogger } from './file-logger';
 import { nip11Handler } from './nip11-relay-info'; // Phase 4
@@ -14,8 +14,8 @@ import { nip11Handler } from './nip11-relay-info'; // Phase 4
 export interface IRelayConnection {
   url: string;
   isConnected: boolean;
-  subscribe(identifier: string, callback: (event: NostrEvent) => Promise<void>): void;
-  subscribeToDirectMessages(recipientPubkey: string, callback: (event: NostrEvent) => Promise<void>): void;
+  subscribe(identifier: string, callback: (event: NostrEvent) => Promise<void>): Promise<void>;
+  subscribeToDirectMessages(recipientPubkey: string, callback: (event: NostrEvent) => Promise<void>): Promise<void>;
   publish(event: NostrEvent): Promise<void>;
   disconnect(): Promise<void>;
 }
@@ -46,6 +46,7 @@ export class RelayConnection implements IRelayConnection {
   private reconnectAttempts: number = 0;
   private pendingPublishes: Map<string, {resolve: () => void, reject: (error: Error) => void, timeout: NodeJS.Timeout}> = new Map();
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private storageManager: any = null; // StorageManager for persisting subscription timestamps
 
   // Rate-limit tracking (Phase 4)
   private isRateLimited: boolean = false;
@@ -60,6 +61,13 @@ export class RelayConnection implements IRelayConnection {
 
   constructor(url: string) {
     this.url = url;
+  }
+
+  /**
+   * Set storage manager for persisting subscription timestamps
+   */
+  setStorageManager(storage: any): void {
+    this.storageManager = storage;
   }
 
   // Health tracking accessors (Phase 4)
@@ -100,20 +108,25 @@ export class RelayConnection implements IRelayConnection {
 
             // Re-send all queued subscriptions
             console.debug(`[Nostr] Connection opened to ${this.url}, re-sending ${this.subscriptions.size} subscriptions`);
+            const subscriptionPromises: Promise<void>[] = [];
             for (const [identifier, callbacks] of this.subscriptions.entries()) {
               console.debug(`[Nostr] Re-sending subscription for ${identifier.substring(0, 16)}... (${callbacks.size} callbacks)`);
               if (identifier.startsWith('dm_')) {
                 // DM subscription: extract pubkey from dm_<pubkey> key
                 const pubkey = identifier.substring(3);
                 const anyCallback = callbacks.values().next().value; // Get any callback (just for protocol compliance)
-                this._sendDMSubscription(pubkey, anyCallback);
+                subscriptionPromises.push(this._sendDMSubscription(pubkey, anyCallback));
               } else {
                 const anyCallback = callbacks.values().next().value; // Get any callback (just for protocol compliance)
-                this._sendSubscription(identifier, anyCallback);
+                subscriptionPromises.push(this._sendSubscription(identifier, anyCallback));
               }
             }
 
-            resolve();
+            // Wait for all subscriptions to be sent
+            Promise.all(subscriptionPromises).then(() => resolve()).catch((err) => {
+              console.error(`[Nostr] Error sending subscriptions: ${err}`);
+              resolve(); // Resolve anyway to continue connection
+            });
           };
 
           this.ws.onmessage = (event) => {
@@ -181,7 +194,7 @@ export class RelayConnection implements IRelayConnection {
     });
   }
 
-  subscribe(identifier: string, callback: (event: NostrEvent) => Promise<void>): void {
+  async subscribe(identifier: string, callback: (event: NostrEvent) => Promise<void>): Promise<void> {
     if (!this.subscriptions.has(identifier)) {
       this.subscriptions.set(identifier, new Set());
     }
@@ -193,10 +206,10 @@ export class RelayConnection implements IRelayConnection {
       return;
     }
 
-    this._sendSubscription(identifier, callback);
+    await this._sendSubscription(identifier, callback);
   }
 
-  subscribeToDirectMessages(recipientPubkey: string, callback: (event: NostrEvent) => Promise<void>): void {
+  async subscribeToDirectMessages(recipientPubkey: string, callback: (event: NostrEvent) => Promise<void>): Promise<void> {
     const key = `dm_${recipientPubkey}`;
     if (!this.subscriptions.has(key)) {
       this.subscriptions.set(key, new Set());
@@ -209,7 +222,7 @@ export class RelayConnection implements IRelayConnection {
       return;
     }
 
-    this._sendDMSubscription(recipientPubkey, callback);
+    await this._sendDMSubscription(recipientPubkey, callback);
   }
 
   async disconnect(): Promise<void> {
@@ -217,7 +230,7 @@ export class RelayConnection implements IRelayConnection {
     console.debug(`[Nostr] Disconnected from relay: ${this.url}`);
   }
 
-  private _sendSubscription(identifier: string, _callback?: (event: NostrEvent) => Promise<void>): void {
+  private async _sendSubscription(identifier: string, _callback?: (event: NostrEvent) => Promise<void>): Promise<void> {
     if (!this.isConnected || !this.ws) {
       try {
         const logger = getFileLogger();
@@ -231,8 +244,22 @@ export class RelayConnection implements IRelayConnection {
 
     try {
       const subscriptionId = `sub_${this.subscriptionId++}`;
-      // Subscribe to recent and new events from friend (no limit for live subscription)
-      const since = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
+
+      // Calculate "since" timestamp: load persisted value or default to 24 hours ago
+      let since = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
+
+      if (this.storageManager) {
+        try {
+          const lastSync = await this.storageManager.get(`nostr_sub_since_${this.url}_${identifier}`);
+          if (lastSync && typeof lastSync === 'number') {
+            // Only move forward, never backward (prevent re-requesting old data)
+            since = Math.max(since, lastSync);
+          }
+        } catch (error) {
+          console.debug(`[Nostr] Failed to load persisted "since" for ${identifier}:`, error);
+        }
+      }
+
       const filter = {
         authors: [identifier],
         kinds: [10003], // Activities (replaceable event)
@@ -257,6 +284,15 @@ export class RelayConnection implements IRelayConnection {
         });
       } catch {}
       console.debug(`[Nostr] Subscribed to author ${identifier.substring(0, 16)}... (filter: ${JSON.stringify(filter)}) on ${this.url}`);
+
+      // Persist the "since" timestamp to resume from this point on reconnect
+      if (this.storageManager) {
+        try {
+          await this.storageManager.set(`nostr_sub_since_${this.url}_${identifier}`, since);
+        } catch (error) {
+          console.debug(`[Nostr] Failed to persist "since" timestamp:`, error);
+        }
+      }
     } catch (error) {
       try {
         const logger = getFileLogger();
@@ -266,13 +302,26 @@ export class RelayConnection implements IRelayConnection {
     }
   }
 
-  private _sendDMSubscription(recipientPubkey: string, _callback?: (event: NostrEvent) => Promise<void>): void {
+  private async _sendDMSubscription(recipientPubkey: string, _callback?: (event: NostrEvent) => Promise<void>): Promise<void> {
     if (!this.isConnected || !this.ws) return;
 
     try {
       const subscriptionId = `dm_sub_${this.subscriptionId++}`;
-      // Request recent DMs (last 24 hours)
-      const since = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
+
+      // Load persisted "since" or default to 24 hours ago
+      let since = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000);
+
+      if (this.storageManager) {
+        try {
+          const lastSync = await this.storageManager.get(`nostr_dm_since_${this.url}_${recipientPubkey}`);
+          if (lastSync && typeof lastSync === 'number') {
+            since = Math.max(since, lastSync);
+          }
+        } catch (error) {
+          console.debug(`[Nostr] Failed to load persisted DM "since":`, error);
+        }
+      }
+
       // Subscribe to kind-1059 events (NIP-17 encrypted messages)
       // Use #p tag filter to only receive events where recipient's pubkey is in the p-tag
       const filter = {
@@ -285,6 +334,15 @@ export class RelayConnection implements IRelayConnection {
       const message = JSON.stringify(['REQ', subscriptionId, filter]);
       this.ws.send(message);
       console.debug(`[Nostr] Subscribed to encrypted messages for ${recipientPubkey.substring(0, 16)}... (filter: ${JSON.stringify(filter)}) on ${this.url}`);
+
+      // Persist the "since" timestamp
+      if (this.storageManager) {
+        try {
+          await this.storageManager.set(`nostr_dm_since_${this.url}_${recipientPubkey}`, since);
+        } catch (error) {
+          console.debug(`[Nostr] Failed to persist DM "since" timestamp:`, error);
+        }
+      }
     } catch (error) {
       console.error(`[Nostr] Failed to subscribe to DMs on ${this.url}:`, error);
     }
@@ -405,15 +463,13 @@ export class RelayConnection implements IRelayConnection {
   }
 
   private _validateEvent(event: NostrEvent): boolean {
-    return !!(
-      event &&
-      typeof event.id === 'string' &&
-      typeof event.pubkey === 'string' &&
-      typeof event.created_at === 'number' &&
-      typeof event.kind === 'number' &&
-      Array.isArray(event.tags) &&
-      typeof event.content === 'string'
-    );
+    try {
+      // Verify event structure, signature, and hash per NIP-01
+      return verifyEvent(event);
+    } catch (error) {
+      console.debug(`[Nostr] Invalid event: ${error instanceof Error ? error.message : 'unknown error'}`);
+      return false;
+    }
   }
 
   private _cleanup(): void {
@@ -484,11 +540,23 @@ export class RelayPool {
   private relays: Map<string, RelayConnection> = new Map();
   private subscriptions: Map<string, Set<(event: NostrEvent) => Promise<void>>> = new Map();
   private simplePool: SimplePool;
+  private storageManager: any = null;
 
   static readonly DEFAULT_RELAYS = DEFAULT_RELAY_URLS;
 
   constructor() {
     this.simplePool = new SimplePool();
+  }
+
+  /**
+   * Set storage manager for persisting subscription timestamps
+   */
+  setStorageManager(storage: any): void {
+    this.storageManager = storage;
+    // Set it on all existing relay connections
+    for (const relay of this.relays.values()) {
+      relay.setStorageManager(storage);
+    }
   }
 
   async connect(relayUrls: string[]): Promise<void> {
@@ -504,6 +572,9 @@ export class RelayPool {
       }
 
       const relay = new RelayConnection(url);
+      if (this.storageManager) {
+        relay.setStorageManager(this.storageManager);
+      }
       this.relays.set(url, relay);
 
       try {
