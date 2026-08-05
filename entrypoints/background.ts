@@ -2591,6 +2591,19 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
           };
           await storageManager.setPendingInvites(pendingInvites);
 
+          // Fire notification for encrypted invite
+          const notificationManager = getNotificationManager();
+          const activityName = message.content || message.service || 'an activity';
+          const verb = getActivityVerb(message.service || 'unknown');
+          console.log(`[Message] 🔔 Invite: Firing notification for ${friend.local_name}`);
+          await notificationManager.notifyInvite(
+            friend.id,
+            friend.local_name,
+            activityName,
+            verb
+          );
+          console.log(`[Message] ✅ Invite: Notification fired for ${friend.local_name}`);
+
           // Notify popup if it's open
           try {
             await chrome.runtime.sendMessage({
