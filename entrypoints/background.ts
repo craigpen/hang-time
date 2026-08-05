@@ -3016,8 +3016,10 @@ async function markInviteNotified(eventId: string): Promise<void> {
   const now = Date.now();
   notifiedInviteIds.set(eventId, now);
 
-  // Persist to storage
+  // Persist to storage immediately (critical for dedup across reloads)
   await storageManager.setNotifiedInviteIds(notifiedInviteIds);
+  // Force immediate sync instead of batched (notification state must survive reload)
+  await storageManager.forceSyncNow();
 }
 
 /**
