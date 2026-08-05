@@ -122,8 +122,9 @@ export class PopupController {
 
   async refreshFriends(): Promise<void> {
     try {
-      // Reload pending invites from storage to refresh invite icon state
-      await this._loadPendingInvites();
+      // Don't reload pending invites from storage on every refresh
+      // They are kept in-memory and only loaded on startup and when messages arrive
+      // Reloading would lose pending invites that just came in via INVITE_RECEIVED message
 
       const response = await chrome.runtime.sendMessage({
         type: 'GET_ALL_ACTIVITIES',
@@ -828,11 +829,12 @@ export class PopupController {
     const isSelfActivity = friendId === 'self';
     const hasPendingInvite = activity.id && this.pendingInvitesByActivity.has(activity.id);
     if (!isSelfActivity) {
-      console.debug('[Popup] Rendering activity:', {
+      console.log('[Popup] Rendering friend activity:', {
         service: activity.service,
         activityId: activity.id,
         hasPendingInvite,
-        pendingInviteIds: Array.from(this.pendingInvitesByActivity.keys()),
+        pendingInviteMap: Array.from(this.pendingInvitesByActivity.keys()),
+        mapSize: this.pendingInvitesByActivity.size,
       });
     }
 
@@ -1220,13 +1222,14 @@ export class PopupController {
   private async _loadPendingInvites(): Promise<void> {
     try {
       const pendingInvites = await this.storage.getPendingInvites();
+      console.log('[Popup] Raw pending invites from storage:', pendingInvites);
       this.pendingInvitesByActivity.clear();
       this.pendingInvitesData.clear();
       for (const [activityId, inviteData] of Object.entries(pendingInvites)) {
         this.pendingInvitesByActivity.set(activityId, inviteData.friendId);
         this.pendingInvitesData.set(activityId, inviteData);
       }
-      console.debug('[Popup] Loaded pending invites from storage:', Array.from(this.pendingInvitesByActivity.entries()));
+      console.log('[Popup] Loaded pending invites - map size:', this.pendingInvitesByActivity.size, 'entries:', Array.from(this.pendingInvitesByActivity.entries()));
       console.debug('[Popup] Pending invite details:', Array.from(this.pendingInvitesData.entries()).map(([id, data]) => ({
         activityId: id,
         service: data.activity?.service,
