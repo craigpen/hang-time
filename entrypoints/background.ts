@@ -2557,6 +2557,15 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
       // Store pending invite and notify popup
       if (message.type === 'invite' && message.activity_id) {
         try {
+          // Rate limit notifications (don't spam user) - use message.activity_id as dedup key
+          if (!shouldNotifyForInvite(message.activity_id)) {
+            console.debug(`[Message] Invite ${message.activity_id.substring(0, 8)}... rate limited (< 20s since last notify), skipping notification`);
+            return;
+          }
+
+          // Mark as notified to track rate limit
+          await markInviteNotified(message.activity_id);
+
           console.debug(`[Message] 💌 Invite: Storing pending invite - activityId: ${message.activity_id}, service: ${message.service}, friendId: ${friend.id}`);
 
           // Find the friend's activity that matches this invite
@@ -2591,16 +2600,36 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
           };
           await storageManager.setPendingInvites(pendingInvites);
 
-          // Fire notification for encrypted invite
+          // Fire notification for encrypted invite (same as kind-1 handler)
           const notificationManager = getNotificationManager();
           const activityName = message.content || message.service || 'an activity';
           const verb = getActivityVerb(message.service || 'unknown');
+
+          // Get Discord info: try friend's Discord first, fall back to recipient's
+          let discordInfo: { owner: string; link: string } | undefined;
+          if (friend.discord_info) {
+            discordInfo = {
+              owner: friend.local_name,
+              link: friend.discord_info,
+            };
+          } else {
+            // Fallback: use recipient's Discord if available
+            const userProfile = await storageManager.getUserProfile();
+            if (userProfile?.discord_info) {
+              discordInfo = {
+                owner: 'your',
+                link: userProfile.discord_info,
+              };
+            }
+          }
+
           console.log(`[Message] 🔔 Invite: Firing notification for ${friend.local_name}`);
           await notificationManager.notifyInvite(
             friend.id,
             friend.local_name,
             activityName,
-            verb
+            verb,
+            discordInfo
           );
           console.log(`[Message] ✅ Invite: Notification fired for ${friend.local_name}`);
 
