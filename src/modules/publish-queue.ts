@@ -8,7 +8,7 @@
 
 import { finalizeEvent } from 'nostr-tools';
 import { NostrEvent } from '../types';
-import { RelayPool } from './nostr';
+import { RelayPool, type PublishResults } from './nostr';
 import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
 import type { ActivityPublisher } from './publisher';
@@ -19,6 +19,7 @@ export interface PendingPublish {
   retryCount: number;
   lastRetryAt: number;
   createdAt: number;
+  acceptedByRelays?: string[]; // Track which relays accepted this handshake message
 }
 
 export class PublishQueue {
@@ -232,29 +233,66 @@ export class PublishQueue {
         // Refresh created_at to current time for replaceable/parameterized replaceable events
         const eventToPublishWithFreshTimestamp = await this._refreshEventTimestamp(eventToPublish);
         try {
-          await this.relayPool.publish(eventToPublishWithFreshTimestamp);
+          const results = await this.relayPool.publish(eventToPublishWithFreshTimestamp);
 
-          // Publish succeeded, remove from queue
+          // Check if this is a handshake message (invite/friend_request) and if any relay accepted it
           if (this.userActionQueue.length > 0) {
-            const pending = this.userActionQueue.shift();
-            console.debug(`[PublishQueue] ✅ Successfully published ${pending?.type}, removed from queue`);
+            const pending = this.userActionQueue[0];
+            const isHandshake = pending.type === 'invite' || pending.type === 'friend_request';
+
+            if (isHandshake && results.overall_success) {
+              // Track which relays accepted this handshake
+              const acceptedRelays = results.relay_results
+                .filter(r => r.success)
+                .map(r => r.relay_url);
+
+              if (acceptedRelays.length > 0) {
+                if (!pending.acceptedByRelays) {
+                  pending.acceptedByRelays = [];
+                }
+                pending.acceptedByRelays.push(...acceptedRelays);
+
+                console.log(
+                  `[PublishQueue] ✅ Handshake ${pending.type} accepted by ${acceptedRelays.length} relay(s), stopping retries (event: ${pending.event.id.substring(0, 16)}...)`
+                );
+
+                // Handshake accepted by at least one relay, remove from queue
+                this.userActionQueue.shift();
+                await this._persistQueue();
+                return;
+              }
+            }
+
+            // For non-handshake or if no relay accepted, treat as success and remove
+            this.userActionQueue.shift();
+            console.debug(`[PublishQueue] ✅ Successfully published ${pending.type}, removed from queue`);
             await this._persistQueue();
           }
         } catch (error) {
           // Publish failed, retry with backoff
           if (this.userActionQueue.length > 0) {
             const pending = this.userActionQueue[0];
+            const isHandshake = pending.type === 'invite' || pending.type === 'friend_request';
+
             pending.retryCount++;
 
             if (pending.retryCount >= this.MAX_RETRIES) {
               // Exhausted retries, remove from queue
               this.userActionQueue.shift();
-              console.warn(`[PublishQueue] ❌ Removed ${pending.type} after ${this.MAX_RETRIES} failed retries (event: ${pending.event.id.substring(0, 16)}..., created: ${new Date(pending.createdAt).toISOString()})`);
+              const acceptedInfo = pending.acceptedByRelays?.length
+                ? ` (accepted by ${pending.acceptedByRelays.length} relay/relays)`
+                : '';
+              console.warn(
+                `[PublishQueue] ❌ Removed ${pending.type} after ${this.MAX_RETRIES} failed retries${acceptedInfo} (event: ${pending.event.id.substring(0, 16)}..., created: ${new Date(pending.createdAt).toISOString()})`
+              );
             } else {
-              // Schedule retry
+              // For handshakes, if no relay has accepted yet, keep retrying
+              // For other messages, use standard backoff
               const backoffMs = this.RETRY_BACKOFF_MS[pending.retryCount - 1] || 60000;
               pending.lastRetryAt = Date.now() + backoffMs;
-              console.log(`[PublishQueue] Scheduled retry for ${pending.type} in ${backoffMs}ms (attempt ${pending.retryCount}/${this.MAX_RETRIES}) after error: ${error instanceof Error ? error.message : String(error)}`);
+              console.log(
+                `[PublishQueue] Scheduled retry for ${pending.type} in ${backoffMs}ms (attempt ${pending.retryCount}/${this.MAX_RETRIES}) after error: ${error instanceof Error ? error.message : String(error)}`
+              );
             }
 
             // Persist updated queue
