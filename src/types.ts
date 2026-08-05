@@ -381,6 +381,7 @@ export const STORAGE_KEYS = {
   SETTINGS: 'hang_time_settings',
   VIDEO_DATA_METRICS: 'hang_time_video_data_metrics',
   PENDING_INVITES: 'hang_time_pending_invites',
+  RECEIVED_INVITES: 'hang_time_received_invites',
   PENDING_MESSAGES: 'hang_time_pending_messages',
   NOTIFIED_INVITE_IDS: 'hang_time_notified_invite_ids',
   OAUTH_CONFIG: 'hang_time_oauth_config',

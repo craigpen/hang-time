@@ -50,6 +50,7 @@ export class StorageManager {
         STORAGE_KEYS.SETTINGS,
         STORAGE_KEYS.VIDEO_DATA_METRICS,
         STORAGE_KEYS.PENDING_INVITES,
+        STORAGE_KEYS.RECEIVED_INVITES,
         STORAGE_KEYS.PENDING_MESSAGES,
         STORAGE_KEYS.NOTIFIED_INVITE_IDS,
         STORAGE_KEYS.OAUTH_CONFIG,
@@ -566,6 +567,38 @@ export class StorageManager {
     }
 
     return removedCount;
+  }
+
+  /**
+   * Get received invites (invites we received FROM friends, used for UI display)
+   */
+  async getReceivedInvites(): Promise<Record<string, any>> {
+    return this.get<Record<string, any>>(STORAGE_KEYS.RECEIVED_INVITES, {});
+  }
+
+  /**
+   * Set received invites
+   */
+  async setReceivedInvites(invites: Record<string, any>): Promise<void> {
+    await this.set(STORAGE_KEYS.RECEIVED_INVITES, invites);
+  }
+
+  /**
+   * Add or update a received invite
+   */
+  async upsertReceivedInvite(activityId: string, invite: any): Promise<void> {
+    const invites = await this.getReceivedInvites();
+    invites[activityId] = invite;
+    await this.setReceivedInvites(invites);
+  }
+
+  /**
+   * Remove a received invite
+   */
+  async removeReceivedInvite(activityId: string): Promise<void> {
+    const invites = await this.getReceivedInvites();
+    delete invites[activityId];
+    await this.setReceivedInvites(invites);
   }
 
   /**

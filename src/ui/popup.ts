@@ -1221,22 +1221,22 @@ export class PopupController {
 
   private async _loadPendingInvites(): Promise<void> {
     try {
-      const pendingInvites = await this.storage.getPendingInvites();
-      console.log('[Popup] Raw pending invites from storage:', pendingInvites);
+      const receivedInvites = await this.storage.getReceivedInvites();
+      console.log('[Popup] Raw received invites from storage:', receivedInvites);
       this.pendingInvitesByActivity.clear();
       this.pendingInvitesData.clear();
-      for (const [activityId, inviteData] of Object.entries(pendingInvites)) {
+      for (const [activityId, inviteData] of Object.entries(receivedInvites)) {
         this.pendingInvitesByActivity.set(activityId, inviteData.friendId);
         this.pendingInvitesData.set(activityId, inviteData);
       }
-      console.log('[Popup] Loaded pending invites - map size:', this.pendingInvitesByActivity.size, 'entries:', Array.from(this.pendingInvitesByActivity.entries()));
-      console.debug('[Popup] Pending invite details:', Array.from(this.pendingInvitesData.entries()).map(([id, data]) => ({
+      console.log('[Popup] Loaded received invites - map size:', this.pendingInvitesByActivity.size, 'entries:', Array.from(this.pendingInvitesByActivity.entries()));
+      console.debug('[Popup] Received invite details:', Array.from(this.pendingInvitesData.entries()).map(([id, data]) => ({
         activityId: id,
         service: data.activity?.service,
         friendId: data.friendId,
       })));
     } catch (error) {
-      console.error('[Popup] Failed to load pending invites:', error);
+      console.error('[Popup] Failed to load received invites:', error);
     }
   }
 
@@ -1565,15 +1565,15 @@ export class PopupController {
         });
       }
 
-      // Listen for pending invites changes (so we update envelope when invite arrives)
-      if (changes[STORAGE_KEYS.PENDING_INVITES]) {
-        console.log('[Popup] Pending invites changed in storage, reloading...');
+      // Listen for received invites changes (so we update envelope when invite arrives)
+      if (changes[STORAGE_KEYS.RECEIVED_INVITES]) {
+        console.log('[Popup] Received invites changed in storage, reloading...');
         this._loadPendingInvites().catch((error) => {
-          console.error('[Popup] Failed to reload pending invites:', error);
+          console.error('[Popup] Failed to reload received invites:', error);
         });
         // Refresh to update envelope colors
         this.refreshFriends().catch((error) => {
-          console.error('[Popup] Failed to refresh after pending invites change:', error);
+          console.error('[Popup] Failed to refresh after received invites change:', error);
         });
       }
     });
@@ -2663,9 +2663,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       if (activity.id) {
         this.pendingInvitesByActivity.delete(activity.id);
         // Also remove from persistent storage
-        const pendingInvites = await this.storage.getPendingInvites();
-        delete pendingInvites[activity.id];
-        await this.storage.setPendingInvites(pendingInvites);
+        await this.storage.removeReceivedInvite(activity.id);
         console.debug('[Popup] Declined invite for activity:', activity.id);
       }
       modal.remove();
@@ -2685,14 +2683,12 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       // Use the current activity from friend (fresh lookup) in case it changed since invite
       await this._joinActivity(activity, friendId);
 
-      // Clear pending invite from memory and storage
+      // Clear received invite from memory and storage
       if (activity.id) {
         this.pendingInvitesByActivity.delete(activity.id);
         // Also remove from persistent storage
-        const pendingInvites = await this.storage.getPendingInvites();
-        delete pendingInvites[activity.id];
-        await this.storage.setPendingInvites(pendingInvites);
-        console.debug('[Popup] Cleared pending invite for activity:', activity.id);
+        await this.storage.removeReceivedInvite(activity.id);
+        console.debug('[Popup] Cleared received invite for activity:', activity.id);
       }
 
       modal.remove();

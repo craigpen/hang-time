@@ -2299,13 +2299,15 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       );
       console.log(`[Background] âœ… Invite: Notification fired for ${friend.local_name}`);
 
-      // Store received invite in persistent storage with timestamp
+      // Store pending invite in persistent storage with timestamp
       if (activityId) {
-        console.debug(`[Background] ðŸ”” Invite: Storing received invite - activityId: ${activityId}, friendId: ${friend.id}`);
-        await storageManager.upsertReceivedInvite(activityId, {
+        console.debug(`[Background] ðŸ”” Invite: Storing pending invite - activityId: ${activityId}, friendId: ${friend.id}`);
+        const pendingInvites = await storageManager.getPendingInvites();
+        pendingInvites[activityId] = {
           friendId: friend.id,
           sentAt: Date.now(),
-        });
+        };
+        await storageManager.setPendingInvites(pendingInvites);
 
         // Also try to notify popup if it's open
         try {
@@ -2515,8 +2517,8 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
     }
 
     if (message?.type === 'join_accepted') {
-      // Route to appropriate handler based on message service
-      if (message.service === 'friend-request') {
+      // Route to appropriate handler based on activity service
+      if (message.activity?.service === 'friend-request') {
         await _handleFriendRequestAccepted(friend, event, message);
       } else {
         await _handleActivityAccepted(friend, event, message);
@@ -2590,8 +2592,8 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
             console.warn(`[Message] Activity not found in friend's current activities for ID: ${message.activity_id}`);
           }
 
-          // Store received invite separately from outgoing invite tracking
-          await storageManager.upsertReceivedInvite(message.activity_id, {
+          const pendingInvites = await storageManager.getPendingInvites();
+          pendingInvites[message.activity_id] = {
             friendId: friend.id,
             activity: activity || {
               id: message.activity_id,
@@ -2603,7 +2605,8 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
               metadata: {},
             },
             sentAt: Date.now(),
-          });
+          };
+          await storageManager.setPendingInvites(pendingInvites);
           // Ensure immediate persistence before notifying popup (don't rely on batched sync)
           await storageManager.forceSyncNow();
 
@@ -3547,14 +3550,10 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
     let removed = false;
 
     for (const [activityId, activity] of Object.entries(allActivities)) {
-      if (activity?.metadata?.tabId === tabId) {
-        // Clean up any tab-based video/stream activity (youtube-tab, netflix-tab, twitch-tab, video-tab)
-        const isTabActivity = activity?.service?.includes('-tab') || activity?.service === 'video-tab';
-        if (isTabActivity) {
-          console.debug(`[Background] Removing ${activity.service} activity for closed tab ${tabId}: ${activity.id}`);
-          delete allActivities[activityId];
-          removed = true;
-        }
+      if (activity?.metadata?.tabId === tabId && activity?.service === 'video-tab') {
+        console.debug(`[Background] ðŸ—‘ï¸  Removing activity for closed tab ${tabId}: ${activity.id}`);
+        delete allActivities[activityId];
+        removed = true;
       }
     }
 
