@@ -221,8 +221,10 @@ export class MessagingManager {
       // Create kind-1059 event with recipient tag and message type
       const tags: Array<[string, string]> = [['p', recipientFriend.pubkey]];
 
-      // Add message_type tag for routing (friend_request for accept/decline, chat for future chat)
-      if (message.type === 'join_accepted' || message.type === 'join_declined') {
+      // Add message_type tag for routing
+      if (message.type === 'invite') {
+        tags.push(['message_type', 'invite']);
+      } else if (message.type === 'join_accepted' || message.type === 'join_declined') {
         tags.push(['message_type', 'friend_request']);
       } else if (message.type === 'chat') {
         tags.push(['message_type', 'chat']);
@@ -323,6 +325,7 @@ export class MessagingManager {
         friend_identifier: friend.identifier,
         sender_identifier: friend.identifier,
         activity_id: message.activity_id,
+        service: message.service,
         type: message.type as 'chat' | 'invite' | 'join_accepted' | 'join_declined',
         content: message.content,
         is_outbound: false,
