@@ -2517,36 +2517,44 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
     }
 
     if (message?.type === 'join_accepted') {
-      // Handle friend request response
-      await _handleFriendRequestResponse(friend, event);
+      // Route to appropriate handler based on activity service
+      if (message.activity?.service === 'friend-request') {
+        await _handleFriendRequestAccepted(friend, event, message);
+      } else {
+        await _handleActivityAccepted(friend, event, message);
+      }
+      return;
+    }
+
+    if (message?.type === 'join_declined') {
+      await _handleActivityDeclined(friend, event, message);
+      return;
+    }
+
+    if (message?.type === 'sync_request') {
+      // Host receives sync request from guest
+      const syncHandler = getSyncHandler();
+      await syncHandler.handleSyncRequest(friend.id, message.activity_id);
+      return;
+    }
+
+    if (message?.type === 'sync_response') {
+      // Guest receives sync response from host
+      const syncHandler = getSyncHandler();
+      if (message.position !== undefined && message.sent_at !== undefined) {
+        await syncHandler.handleSyncResponse(friend.id, message.activity_id, message.position, message.sent_at);
+      } else {
+        console.warn('[Message] Sync response missing position or sent_at:', message);
+      }
       return;
     }
 
     if (message) {
-      // Send notification based on message type
+      // Send notification based on message type (if not already handled by early returns above)
       try {
         const notificationManager = getNotificationManager();
         if (message.type === 'invite') {
           // No notification for invites (handled by notifyInvite elsewhere)
-        } else if (message.type === 'join_accepted') {
-          // Check if we've already notified about this activity being accepted
-          const alreadyNotified = await storageManager.hasNotifiedActivityAcceptance(message.activity_id);
-
-          if (!alreadyNotified) {
-            // No notification for activity acceptance (temporal-only)
-            // Show Discord coordination prompt if available
-            await _showDiscordCoordinationPrompt(friend);
-
-            // Record that we've notified about this activity
-            await storageManager.recordActivityAcceptance({
-              activityId: message.activity_id,
-              firstAcceptorId: friend.id,
-              acceptedAt: Date.now(),
-              notifiedAt: Date.now(),
-            });
-          } else {
-            console.debug(`[Message] Activity ${message.activity_id} acceptance already notified, skipping duplicate`);
-          }
         } else if (message.type === 'chat') {
           // No notification for chat messages
         }
@@ -2665,7 +2673,110 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
 }
 
 /**
- * Handle friend request acceptance/decline responses
+ * Handle friend request acceptance (when friend accepts our friend request)
+ */
+async function _handleFriendRequestAccepted(friend: Friend, event: NostrEvent, message: any): Promise<void> {
+  try {
+    const friendManager = getFriendManager();
+
+    // Friend accepted the request - transition from pending to active (if not already)
+    if (friend.state === 'pending') {
+      await friendManager.acceptFriendRequest(friend.id);
+    }
+    console.log(`[FriendRequest] ✅ ${friend.local_name} accepted your friend request`);
+
+    // Notify the user (with deduplication to avoid multiple notifications from multiple relays)
+    console.debug(`[FriendRequest] Checking dedup for event: ${event.id.substring(0, 16)}...`);
+    if (shouldNotifyForInvite(event.id)) {
+      console.log(`[FriendRequest] Will notify - dedup check passed`);
+      // Mark as notified immediately to prevent race condition with multiple relays
+      await markInviteNotified(event.id);
+      const notificationManager = getNotificationManager();
+      await notificationManager.notify(
+        `${friend.local_name} accepted your friend request`,
+        'You are now friends!'
+      );
+    } else {
+      console.log(`[FriendRequest] Suppressed duplicate notification for ${event.id.substring(0, 16)}...`);
+    }
+  } catch (error) {
+    console.error('[FriendRequest] Failed to handle friend request acceptance:', error);
+  }
+}
+
+/**
+ * Handle activity invitation acceptance (when friend accepts our activity invite)
+ */
+async function _handleActivityAccepted(friend: Friend, event: NostrEvent, message: any): Promise<void> {
+  try {
+    if (!message.activity_id) {
+      console.warn('[Activity] Activity acceptance missing activity_id');
+      return;
+    }
+
+    // Check if we've already notified about this activity being accepted
+    const alreadyNotified = await storageManager.hasNotifiedActivityAcceptance(message.activity_id);
+
+    if (!alreadyNotified) {
+      // Show Discord coordination prompt if available
+      await _showDiscordCoordinationPrompt(friend);
+
+      // Record that we've notified about this activity
+      await storageManager.recordActivityAcceptance({
+        activityId: message.activity_id,
+        firstAcceptorId: friend.id,
+        acceptedAt: Date.now(),
+        notifiedAt: Date.now(),
+      });
+
+      console.log(`[Activity] 🎉 ${friend.local_name} accepted your activity invitation`);
+    } else {
+      console.debug(`[Activity] Activity ${message.activity_id} acceptance already notified, skipping duplicate`);
+    }
+  } catch (error) {
+    console.error('[Activity] Failed to handle activity acceptance:', error);
+  }
+}
+
+/**
+ * Handle activity invitation decline (when friend declines our activity invite)
+ * Updates envelope from green to gray, no notification
+ */
+async function _handleActivityDeclined(friend: Friend, event: NostrEvent, message: any): Promise<void> {
+  try {
+    if (!message.activity_id) {
+      console.warn('[Activity] Activity decline missing activity_id');
+      return;
+    }
+
+    console.log(`[Activity] 👋 ${friend.local_name} declined your activity invitation for ${message.activity_id.substring(0, 8)}...`);
+
+    // Track that friend declined this activity (for envelope state)
+    const declinedKey = `activity_declined_${message.activity_id}_${friend.id}`;
+    await storageManager.setStorage(declinedKey, {
+      activityId: message.activity_id,
+      friendId: friend.id,
+      declinedAt: Date.now(),
+    });
+
+    // Notify popup to update envelope state
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'ACTIVITY_DECLINED',
+        data: { activityId: message.activity_id, friendId: friend.id },
+      }).catch(() => {
+        // Popup not open, that's fine
+      });
+    } catch (error) {
+      console.debug('[Activity] Could not notify popup of activity decline:', error instanceof Error ? error.message : error);
+    }
+  } catch (error) {
+    console.error('[Activity] Failed to handle activity decline:', error);
+  }
+}
+
+/**
+ * Handle friend request acceptance/decline responses (LEGACY - deprecated, kept for reference)
  */
 async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): Promise<void> {
   try {
@@ -2680,29 +2791,8 @@ async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): 
       return;
     }
 
-    const friendManager = getFriendManager();
-
     if (message.type === 'join_accepted') {
-      // Friend accepted the request - transition from pending to active (if not already)
-      if (friend.state === 'pending') {
-        await friendManager.acceptFriendRequest(friend.id);
-      }
-      console.log(`[FriendRequest] âœ… ${friend.local_name} accepted your friend request`);
-
-      // Notify the user (with deduplication to avoid multiple notifications from multiple relays)
-      console.debug(`[FriendRequest] Checking dedup for event: ${event.id.substring(0, 16)}...`);
-      if (shouldNotifyForInvite(event.id)) {
-        console.log(`[FriendRequest] Will notify - dedup check passed`);
-        // Mark as notified immediately to prevent race condition with multiple relays
-        await markInviteNotified(event.id);
-        const notificationManager = getNotificationManager();
-        await notificationManager.notify(
-          `${friend.local_name} accepted your friend request`,
-          'You are now friends!'
-        );
-      } else {
-        console.log(`[FriendRequest] Suppressed duplicate notification for ${event.id.substring(0, 16)}...`);
-      }
+      await _handleFriendRequestAccepted(friend, event, message);
     } else {
       console.warn('[FriendRequest] Unexpected message type in friend request:', message.type);
     }
