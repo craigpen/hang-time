@@ -1261,18 +1261,12 @@ export class PopupController {
   }
 
   private _renderMyActivity(activities: Activity[]): void {
-    // Sort activities by most recent accessed time
-    const sorted = [...activities].sort((a, b) => {
-      const aTime = (a.metadata?.lastAccessed as number) || a.timestamp || 0;
-      const bTime = (b.metadata?.lastAccessed as number) || b.timestamp || 0;
-      return bTime - aTime;
-    });
+    // Store activities (will be sorted by type in refreshFriends)
+    this.userActivities = activities;
 
-    console.debug('[Popup] My Activity sorted order:', sorted.map(a => a.service).join(' → '));
-    this.userActivities = sorted;
+    console.debug('[Popup] My Activity updated, will be sorted by type in render');
 
     // Re-render the friends list (including "My Activity" section) with updated activities
-    // Get current friends to re-render with sorted My Activity
     this.refreshFriends().catch((error) => {
       console.error('[Popup] Failed to re-render after activity update:', error);
     });
@@ -1450,27 +1444,49 @@ export class PopupController {
    * Sort activities by type: videos first, streams second, games last
    */
   private _sortActivitiesByType(activities: Activity[]): Activity[] {
-    const typeOrder: { [key: string]: number } = {
-      // Videos first
-      'youtube-tab': 0,
-      'netflix-tab': 1,
-      'video-tab': 2,
-      // Streams second
-      'twitch-tab': 3,
-      'twitch-api': 4,
-      // Music third
-      'spotify-api': 5,
-      // Games last
-      'steam-api': 6,
-      // Other
-      'discord-api': 7,
+    // Group activities by type category
+    const videos: Activity[] = [];
+    const streams: Activity[] = [];
+    const music: Activity[] = [];
+    const games: Activity[] = [];
+
+    for (const activity of activities) {
+      switch (activity.service) {
+        case 'youtube-tab':
+        case 'netflix-tab':
+        case 'video-tab':
+          videos.push(activity);
+          break;
+        case 'twitch-tab':
+        case 'twitch-api':
+          streams.push(activity);
+          break;
+        case 'spotify-api':
+          music.push(activity);
+          break;
+        case 'steam-api':
+          games.push(activity);
+          break;
+        default:
+          // Other services (discord, etc.) go to games
+          games.push(activity);
+      }
+    }
+
+    // Sort each group by timestamp (most recent first)
+    const sortByTimestamp = (a: Activity, b: Activity) => {
+      const aTime = a.timestamp || 0;
+      const bTime = b.timestamp || 0;
+      return bTime - aTime;
     };
 
-    return [...activities].sort((a, b) => {
-      const orderA = typeOrder[a.service] ?? 99;
-      const orderB = typeOrder[b.service] ?? 99;
-      return orderA - orderB;
-    });
+    videos.sort(sortByTimestamp);
+    streams.sort(sortByTimestamp);
+    music.sort(sortByTimestamp);
+    games.sort(sortByTimestamp);
+
+    // Concatenate in priority order: videos → streams → music → games
+    return [...videos, ...streams, ...music, ...games];
   }
 
   private _setupMessageListener(): void {
