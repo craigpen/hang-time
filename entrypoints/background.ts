@@ -2482,52 +2482,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       return;
     }
   }
-
-  // Single activity event (legacy format or future use)
-  const activity = _parseActivityEvent(event);
-  const wasActive = Object.keys(friend.current_activities || {}).length > 0;
-
-  // Handle stopped activities (removal signal)
-  if (activity.state === 'stopped') {
-    const updatedActivities = { ...friend.current_activities };
-    delete updatedActivities[activity.service];
-    await storageManager.updateFriend(friend.id, {
-      current_activities: updatedActivities,
-      last_seen: Date.now(),
-    });
-    return;
-  }
-
-  // Update single activity
-  await storageManager.updateFriend(friend.id, {
-    current_activities: {
-      ...friend.current_activities,
-      [activity.service]: activity,
-    },
-    last_seen: Date.now(),
-  });
-
-  await storageManager.addActivityToHistory(friend.id, activity);
-
-  // Send notification if friend came online (any new activity)
-  if (!wasActive) {
-    try {
-      const notificationManager = getNotificationManager();
-      await notificationManager.notifyFriendOnline(friend.id, friend.local_name, activity.content);
-    } catch (error) {
-      console.error('[Background] Failed to send online notification:', error);
-    }
-  }
-
-  // Notify popup
-  try {
-    await chrome.runtime.sendMessage({
-      type: 'FRIEND_ACTIVITY_UPDATED',
-      data: { friendId: friend.id, activity },
-    });
-  } catch (error) {
-    // Popup not open
-  }
+  // All activities are published as bulk events; no legacy single-activity fallback
 }
 
 async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {
@@ -2808,39 +2763,6 @@ async function _markActivityAsDisconnected(tabId: number): Promise<void> {
   } catch (err) {
     console.error(`[Background] Failed to mark activity as disconnected:`, err);
   }
-}
-
-function _parseActivityEvent(event: NostrEvent) {
-  const serviceTag = event.tags.find((t) => t[0] === 'service')?.[1] ?? 'idle';
-  const contentTag = event.tags.find((t) => t[0] === 'content')?.[1] ?? '';
-  const urlTag = event.tags.find((t) => t[0] === 'url')?.[1];
-  const activityIdTag = event.tags.find((t) => t[0] === 'activity_id')?.[1];
-  const audioTag = event.tags.find((t) => t[0] === 'audio')?.[1] as 'on' | 'off' | undefined;
-
-  // Use content tag, fallback to event.content, but never use URL as content
-  let finalContent = (contentTag || event.content || '').trim();
-
-  // Safety check: if content looks like a URL, use a generic fallback
-  if (finalContent.includes('http') || finalContent.includes('youtube.com') || finalContent.includes('twitch.tv') || finalContent.includes('netflix.com') || finalContent.includes('spotify.com')) {
-    finalContent = `Activity on ${serviceTag}`;
-  }
-
-  // If empty after all that, use fallback
-  if (!finalContent) {
-    finalContent = `Activity on ${serviceTag}`;
-  }
-
-  const activity: Activity = {
-    service: serviceTag,
-    content: finalContent,
-    url: urlTag,
-    id: activityIdTag,
-    timestamp: event.created_at * 1000,
-    audio: audioTag ?? 'off',
-    metadata: {},
-  };
-
-  return activity;
 }
 
 async function _getFriend(friendId?: string): Promise<ExtensionResponse> {

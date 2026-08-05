@@ -1,9 +1,11 @@
 /**
  * Hang Time - File Logger
  * Writes all console logs to storage for debugging
- * Logs are stored in chrome.storage.local and can be queried directly
- * Implements hybrid approach: clears on startup, trims at 2MB during session
+ * Logs are buffered in memory and flushed to StorageManager periodically
+ * StorageManager caches logs and syncs every 5 seconds
  */
+
+import { StorageManager } from './storage';
 
 const MAX_LOG_SIZE_BYTES = 2 * 1024 * 1024; // 2MB limit
 
@@ -12,10 +14,12 @@ export class FileLogger {
   private flushTimer: NodeJS.Timeout | null = null;
   private profileId: string = 'unknown';
   private storageKey: string = '';
+  private storage: StorageManager;
 
-  constructor(profileId: string) {
+  constructor(profileId: string, storage: StorageManager) {
     this.profileId = profileId;
     this.storageKey = `hang_time_file_logs_${profileId}`;
+    this.storage = storage;
   }
 
   /**
@@ -25,7 +29,7 @@ export class FileLogger {
   async init(): Promise<void> {
     // Clear old logs from storage for fresh session
     try {
-      await chrome.storage.local.remove(this.storageKey);
+      await this.storage.delete(this.storageKey);
     } catch (error) {
       console.error('[FileLogger] Failed to clear old logs:', error);
     }
@@ -63,7 +67,7 @@ export class FileLogger {
   }
 
   /**
-   * Flush logs to file via chrome storage (which we can read)
+   * Flush logs to StorageManager (which caches and batches to storage)
    * Implements size-based trimming: keeps logs under 2MB by removing oldest entries
    */
   async flush(): Promise<void> {
@@ -78,13 +82,21 @@ export class FileLogger {
 
     try {
       let logsText = this.logsBuffer.join('\n');
-      const storageKey = `hang_time_file_logs_${this.profileId}`;
 
-      // Store in chrome.storage.local
-      await chrome.storage.local.set({ [storageKey]: logsText });
+      // Get existing logs (if any)
+      const existing = await this.storage.get<string>(this.storageKey, '');
 
-      // Check size and trim if necessary (hybrid approach: clears on startup, trims during session)
-      await this._trimLogsIfNeeded(storageKey);
+      // Append new logs to existing logs (append-only pattern)
+      const allLogs = existing ? existing + '\n' + logsText : logsText;
+
+      // Store in StorageManager (will be cached and synced to storage)
+      await this.storage.set(this.storageKey, allLogs);
+
+      // Check size and trim if necessary
+      await this._trimLogsIfNeeded();
+
+      // Clear buffer after successful flush
+      this.logsBuffer = [];
     } catch (error) {
       console.error('[FileLogger] Failed to flush logs:', error);
     }
@@ -93,10 +105,9 @@ export class FileLogger {
   /**
    * Trim oldest log entries if storage exceeds 2MB
    */
-  private async _trimLogsIfNeeded(storageKey: string): Promise<void> {
+  private async _trimLogsIfNeeded(): Promise<void> {
     try {
-      const data = await chrome.storage.local.get(storageKey);
-      const logsText = data[storageKey] as string;
+      const logsText = await this.storage.get<string>(this.storageKey, '');
 
       if (!logsText) return;
 
@@ -117,7 +128,7 @@ export class FileLogger {
         const trimmedMiddle = middle.slice(removeCount);
 
         const trimmedLogs = [...header, ...trimmedMiddle, ...footer].join('\n');
-        await chrome.storage.local.set({ [storageKey]: trimmedLogs });
+        await this.storage.set(this.storageKey, trimmedLogs);
 
         const newSize = new Blob([trimmedLogs]).size;
         console.debug(`[FileLogger] Trimmed logs: ${(sizeBytes / 1024 / 1024).toFixed(2)}MB → ${(newSize / 1024 / 1024).toFixed(2)}MB`);
@@ -132,10 +143,8 @@ export class FileLogger {
    */
   async getAllLogs(): Promise<string> {
     await this.flush();
-    const storageKey = `hang_time_file_logs_${this.profileId}`;
     try {
-      const data = await chrome.storage.local.get(storageKey);
-      return data[storageKey] || '';
+      return await this.storage.get<string>(this.storageKey, '') || '';
     } catch {
       return this.logsBuffer.join('\n');
     }
@@ -146,9 +155,8 @@ export class FileLogger {
    */
   async clear(): Promise<void> {
     this.logsBuffer = [];
-    const storageKey = `hang_time_file_logs_${this.profileId}`;
     try {
-      await chrome.storage.local.remove(storageKey);
+      await this.storage.delete(this.storageKey);
     } catch (error) {
       console.error('[FileLogger] Failed to clear logs:', error);
     }
@@ -158,8 +166,8 @@ export class FileLogger {
 // Global logger instance
 let loggerInstance: FileLogger | null = null;
 
-export function initializeFileLogger(profileId: string): FileLogger {
-  loggerInstance = new FileLogger(profileId);
+export function initializeFileLogger(profileId: string, storage: StorageManager): FileLogger {
+  loggerInstance = new FileLogger(profileId, storage);
   loggerInstance.init().catch(e => console.error('Failed to init logger:', e));
   return loggerInstance;
 }

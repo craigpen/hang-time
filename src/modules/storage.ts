@@ -288,34 +288,16 @@ export class StorageManager {
       console.error(`[Storage] Friend not found! Looking for: ${friendId}, available IDs: ${friends.map(f => f.id).join(', ')}`);
       throw new StorageError('Friend not found', { friendId });
     }
-    console.debug(`[Storage] Found friend: ${friend.local_name}, merging updates:`, updates);
-    // Merge activities separately to combine service objects
+    console.debug(`[Storage] Found friend: ${friend.local_name}, applying updates`);
+    // Replace activities completely (no merge—we always publish full state)
     if (updates.current_activities) {
-      const merged = { ...friend.current_activities, ...updates.current_activities };
-      // Clean up old service name keys (e.g., remove 'netflix' if 'netflix-tab' exists)
-      const cleaned: Partial<Record<string, any>> = {};
-      const serviceMap = new Map<string, string>(); // baseService -> key
-
-      Object.entries(merged).forEach(([key, value]) => {
-        const baseService = key.replace('-api', '').replace('-tab', '');
-        serviceMap.set(baseService, key);
-      });
-
-      // Keep only the qualified service names
-      Object.entries(merged).forEach(([key, value]) => {
-        if ((key.includes('-api') || key.includes('-tab')) ||
-            !Object.keys(merged).some(k => k.replace('-api', '').replace('-tab', '') === key && (k.includes('-api') || k.includes('-tab')))) {
-          cleaned[key] = value;
-        }
-      });
-
-      friend.current_activities = cleaned;
+      friend.current_activities = updates.current_activities;
     }
-    // Merge other fields
+    // Apply other updates
     const { current_activities, ...otherUpdates } = updates;
     Object.assign(friend, otherUpdates);
     const activeServices = Object.keys(friend.current_activities || {});
-    console.debug(`[Storage] After merge: active_services=${activeServices.join(',')}`);
+    console.debug(`[Storage] Updated friend: active_services=${activeServices.join(',')}`);
     await this.setFriends(friends);
     console.debug(`[Storage] setFriends completed`);
   }

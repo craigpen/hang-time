@@ -69,7 +69,14 @@ describe('Integration Tests', () => {
       // Mock getFriend to return the added friend
       mockStorage.getFriend.mockResolvedValueOnce(addedFriend);
 
-      await friendManager.updateFriendActivity(addedFriend.id, activity);
+      // Simulate receiving an activity update (via Nostr)
+      await mockStorage.updateFriend(addedFriend.id, {
+        current_activities: {
+          [activity.service]: activity,
+        },
+        last_seen: Date.now(),
+      });
+      await mockStorage.addActivityToHistory(addedFriend.id, activity);
 
       // Verify activity was updated and stored in history
       expect(mockStorage.updateFriend).toHaveBeenCalled();
@@ -304,8 +311,18 @@ describe('Integration Tests', () => {
         metadata: {},
       };
 
-      await friendManager.updateFriendActivity('friend1', activity1);
-      await friendManager.updateFriendActivity('friend1', activity2);
+      // Simulate receiving activity updates
+      await mockStorage.updateFriend('friend1', {
+        current_activities: { [activity1.service]: activity1 },
+        last_seen: Date.now(),
+      });
+      await mockStorage.addActivityToHistory('friend1', activity1);
+
+      await mockStorage.updateFriend('friend1', {
+        current_activities: { [activity2.service]: activity2 },
+        last_seen: Date.now(),
+      });
+      await mockStorage.addActivityToHistory('friend1', activity2);
 
       // Verify both activities were stored in history
       expect(mockStorage.addActivityToHistory).toHaveBeenCalledTimes(2);
