@@ -46,13 +46,16 @@ export class RelayConnection implements IRelayConnection {
   private reconnectAttempts: number = 0;
   private pendingPublishes: Map<string, {resolve: () => void, reject: (error: Error) => void, timeout: NodeJS.Timeout}> = new Map();
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private lastHeartbeatTime: number = 0; // Track last time we received any message from relay
+  private heartbeatMonitorTimer: NodeJS.Timeout | null = null; // Monitor for stale connections
   private storageManager: any = null; // StorageManager for persisting subscription timestamps
 
-  // Rate-limit tracking (Phase 4)
+  // Rate-limit tracking with exponential backoff (Phase 4)
   private isRateLimited: boolean = false;
   private rateLimitedUntil: number = 0; // timestamp when relay will be ready
   private rateLimitCount: number = 0;
-  private rateLimitBackoffMs: number = 60000; // 1 minute default backoff
+  // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, then cap at 60s
+  private readonly RATE_LIMIT_BACKOFF_MS = [1, 2, 4, 8, 16, 32, 60, 60, 60, 60].map(s => s * 1000);
 
   static readonly TIMEOUT_MS = 8000;
   static readonly RECONNECT_DELAY_MS = 3000;
@@ -350,6 +353,9 @@ export class RelayConnection implements IRelayConnection {
 
   private _handleMessage(data: string): void {
     try {
+      // Update heartbeat tracking - we received a response from relay
+      this.lastHeartbeatTime = Date.now();
+
       const message = JSON.parse(data);
 
       if (!Array.isArray(message) || message.length < 2) {
@@ -369,12 +375,19 @@ export class RelayConnection implements IRelayConnection {
         // Handle OK response: ["OK", <event_id>, <true|false>, <message>]
         const [, eventId, accepted, reason] = message;
 
-        // Phase 4: Rate-limit detection
+        // Phase 4: Rate-limit detection with exponential backoff
         if (!accepted && typeof reason === 'string' && reason.includes('rate-limited')) {
           this.isRateLimited = true;
           this.rateLimitCount++;
-          this.rateLimitedUntil = Date.now() + this.rateLimitBackoffMs;
-          console.warn(`[Nostr] Rate-limited by ${this.url}: ${reason} (count: ${this.rateLimitCount})`);
+
+          // Calculate exponential backoff with jitter
+          const backoffIndex = Math.min(this.rateLimitCount - 1, this.RATE_LIMIT_BACKOFF_MS.length - 1);
+          const baseBackoffMs = this.RATE_LIMIT_BACKOFF_MS[backoffIndex];
+          const jitter = Math.random() * 1000; // Add 0-1s jitter
+          const totalBackoffMs = baseBackoffMs + jitter;
+
+          this.rateLimitedUntil = Date.now() + totalBackoffMs;
+          console.warn(`[Nostr] Rate-limited by ${this.url}: ${reason} (attempt ${this.rateLimitCount}, backoff: ${Math.round(totalBackoffMs)}ms)`);
         }
 
         const pending = this.pendingPublishes.get(eventId);
@@ -383,6 +396,9 @@ export class RelayConnection implements IRelayConnection {
           this.pendingPublishes.delete(eventId);
           if (accepted) {
             console.debug(`[Nostr] Event ${eventId} accepted by ${this.url}`);
+            // Reset rate-limit counter on success
+            this.rateLimitCount = 0;
+            this.isRateLimited = false;
             pending.resolve();
           } else {
             console.error(`[Nostr] Event ${eventId} rejected by ${this.url}: ${reason}`);
@@ -465,7 +481,25 @@ export class RelayConnection implements IRelayConnection {
   private _validateEvent(event: NostrEvent): boolean {
     try {
       // Verify event structure, signature, and hash per NIP-01
-      return verifyEvent(event);
+      if (!verifyEvent(event)) {
+        return false;
+      }
+
+      // Validate created_at is reasonably close to current time (±60 minutes)
+      const now = Math.floor(Date.now() / 1000);
+      const timeDiffSeconds = Math.abs(event.created_at - now);
+      const MAX_TIME_DIFF_SECONDS = 3600; // 60 minutes
+
+      if (timeDiffSeconds > MAX_TIME_DIFF_SECONDS) {
+        console.warn(
+          `[Nostr] Event ${event.id.substring(0, 16)}... has unreasonable created_at: ${new Date(
+            event.created_at * 1000
+          ).toISOString()} (${Math.round(timeDiffSeconds / 60)} minutes off current time)`
+        );
+        return false;
+      }
+
+      return true;
     } catch (error) {
       console.debug(`[Nostr] Invalid event: ${error instanceof Error ? error.message : 'unknown error'}`);
       return false;
@@ -481,6 +515,11 @@ export class RelayConnection implements IRelayConnection {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
+    }
+
+    if (this.heartbeatMonitorTimer) {
+      clearInterval(this.heartbeatMonitorTimer);
+      this.heartbeatMonitorTimer = null;
     }
 
     // Clean up pending publishes
@@ -504,6 +543,9 @@ export class RelayConnection implements IRelayConnection {
   }
 
   private _startHeartbeat(): void {
+    // Initialize heartbeat timestamp
+    this.lastHeartbeatTime = Date.now();
+
     // Send heartbeat every 25 seconds to prevent proxy idle timeout
     // Most proxies/NAT devices have 30-60 second idle timeout
     this.heartbeatTimer = setInterval(() => {
@@ -514,6 +556,21 @@ export class RelayConnection implements IRelayConnection {
           this.ws.send(JSON.stringify(['CLOSE', 'heartbeat']));
         } catch (error) {
           console.debug(`[Nostr] Heartbeat failed on ${this.url}:`, error);
+        }
+      }
+    }, RelayConnection.HEARTBEAT_INTERVAL_MS);
+
+    // Monitor connection health: verify we're receiving responses from relay
+    this.heartbeatMonitorTimer = setInterval(() => {
+      if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        const timeSinceLastMessage = Date.now() - this.lastHeartbeatTime;
+        // If we haven't heard from relay in 50+ seconds (double heartbeat interval + margin), connection is stale
+        if (timeSinceLastMessage > 50000) {
+          console.warn(
+            `[Nostr] Connection to ${this.url} is stale (no response for ${Math.round(timeSinceLastMessage / 1000)}s), reconnecting...`
+          );
+          this._cleanup();
+          this._attemptReconnect();
         }
       }
     }, RelayConnection.HEARTBEAT_INTERVAL_MS);
