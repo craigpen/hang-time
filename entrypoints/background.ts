@@ -2827,15 +2827,18 @@ async function initializeNotificationDedup(): Promise<void> {
   const now = Date.now();
   const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
 
+  console.debug(`[Background] Restoring notification dedup state: found ${stored.size} stored event IDs`);
+
   for (const [eventId, timestamp] of stored) {
     // Only keep recent entries (last 7 days)
     if (timestamp > oneWeekAgo) {
       notifiedInviteIds.set(eventId, timestamp);
+      console.debug(`[Background]   - Restored: ${eventId.substring(0, 16)}... (${Math.round((now - timestamp) / 1000)}s ago)`);
     }
   }
 
-  if (stored.size > 0) {
-    console.log(`[Background] Loaded ${notifiedInviteIds.size} cached notification IDs`);
+  if (notifiedInviteIds.size > 0) {
+    console.log(`[Background] ✅ Loaded ${notifiedInviteIds.size} cached notification IDs`);
   }
 }
 
@@ -2852,14 +2855,21 @@ function hasNotifiedForInvite(eventId: string): boolean {
 function shouldNotifyForInvite(eventId: string): boolean {
   // If never notified, return true
   if (!notifiedInviteIds.has(eventId)) {
+    console.debug(`[Notification] New event, will notify: ${eventId.substring(0, 16)}...`);
     return true;
   }
 
   // Check if enough time has passed since last notification
   const lastNotifiedAt = notifiedInviteIds.get(eventId)!;
   const timeSinceLastNotification = Date.now() - lastNotifiedAt;
+  const shouldNotify = timeSinceLastNotification >= INVITE_NOTIFICATION_RATE_LIMIT_MS;
 
-  return timeSinceLastNotification >= INVITE_NOTIFICATION_RATE_LIMIT_MS;
+  if (!shouldNotify) {
+    const remainingMs = INVITE_NOTIFICATION_RATE_LIMIT_MS - timeSinceLastNotification;
+    console.warn(`[Notification] ⏱️  Suppressing duplicate notification for ${eventId.substring(0, 16)}... (rate limit: ${Math.round(remainingMs / 1000)}s remaining)`);
+  }
+
+  return shouldNotify;
 }
 
 async function markInviteNotified(eventId: string): Promise<void> {
