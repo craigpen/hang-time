@@ -840,6 +840,12 @@ function initializeOverlay(): void {
           type: 'OPEN_DISCORD',
         });
       }
+    } else if (event.data.type === 'HANG_TIME_SYNC_COMPLETE') {
+      // Sync response received from host, update playback position
+      const { activity_id, position, elapsed } = event.data.data;
+      console.debug('[ContentScript] Sync complete for activity:', activity_id, 'position:', position, 'elapsed:', elapsed, 'ms');
+      // UI/overlay can handle visual feedback of sync completion
+      // Position update already applied by sync handler in background
     }
   });
 

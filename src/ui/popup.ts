@@ -1524,6 +1524,17 @@ export class PopupController {
             console.error('[Popup] Failed to refresh after invite:', error);
           });
         }
+      } else if (message.type === 'ACTIVITY_DECLINED') {
+        // Friend declined activity invitation - update envelope state
+        const { activityId, friendId } = message.data;
+        if (activityId && friendId) {
+          console.debug('[Popup] Activity declined for:', activityId, 'from friend:', friendId);
+          // Remove from pending invites and refresh to show gray envelope
+          this.pendingInvitesByActivity.delete(activityId);
+          this.refreshFriends().catch((error) => {
+            console.error('[Popup] Failed to refresh after decline:', error);
+          });
+        }
       }
     });
   }
