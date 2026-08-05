@@ -737,10 +737,17 @@ function _startPeriodicCleanup(): void {
 function _startCoWatcherDetectionCycle(): void {
   const DETECTION_INTERVAL_MS = 5000; // 5 seconds, synced with activity detection
 
+  let lastSession: any = null;
   setInterval(async () => {
     try {
       const detector = getCoWatcherDetector();
       const session = await detector.detectCoWatchSession();
+
+      // Only log/broadcast if session state changed
+      const sessionChanged = JSON.stringify(session) !== JSON.stringify(lastSession);
+      if (!sessionChanged) return;
+
+      lastSession = session;
 
       if (session) {
         // Store the co-watch session for overlay to use
@@ -775,18 +782,18 @@ function _startCoWatcherDetectionCycle(): void {
           }
         }
 
-        console.debug('[Background] Co-watch session detected and broadcast:', {
+        console.debug('[Background] Co-watch session detected:', {
           activity_id: session.activity_id,
           host: hostName,
           co_watchers_count: session.co_watchers.length,
-          tabs_notified: activeContentScriptPorts.size,
         });
       } else {
         // No co-watch session - clear it
         await detector.setCurrentCoWatchSession(null);
+        console.debug('[Background] Co-watch session ended');
       }
     } catch (error) {
-      console.debug('[Background] Co-watcher detection cycle error:', error);
+      console.error('[Background] Co-watcher detection cycle error:', error);
     }
   });
 
