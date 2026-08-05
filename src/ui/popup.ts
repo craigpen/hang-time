@@ -1615,8 +1615,10 @@ export class PopupController {
           await new Promise(resolve => setTimeout(resolve, 500));
 
           // Retrieve logs from storage
-          const data = await chrome.storage.local.get('hang_time_logs_export');
-          const logs = data['hang_time_logs_export'] as Record<string, string>;
+          const logs = await this.storage.get<Record<string, string>>(
+            STORAGE_KEYS.LOGS_EXPORT,
+            {}
+          );
 
           if (!logs || Object.keys(logs).length === 0) {
             toastManager.show('❌ No logs found', { duration: 3000 });
