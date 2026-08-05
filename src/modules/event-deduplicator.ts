@@ -59,6 +59,14 @@ export class EventDeduplicator {
   }
 
   /**
+   * Unmark an event as processed (for error recovery)
+   * Use this if processing fails and you want to retry
+   */
+  unmark(eventId: string): void {
+    this.processed.delete(eventId);
+  }
+
+  /**
    * Clear deduplication state (useful for testing)
    */
   clear(): void {
