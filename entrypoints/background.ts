@@ -26,6 +26,8 @@ import { getActivityVerb, generateActivityId } from '../src/modules/activity-uti
 import { ActivityDiagnostics } from '../src/modules/activity-diagnostics';
 import { initializeFileLogger, getFileLogger } from '../src/modules/file-logger';
 import { PublishQueue } from '../src/modules/publish-queue';
+import { initializeCoWatcherDetector, getCoWatcherDetector } from '../src/modules/co-watcher-detection';
+import { initializeSyncHandler, getSyncHandler } from '../src/modules/sync-handler';
 import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName, DEFAULT_RELAY_URLS } from '../src/types';
 
 // ============================================================================
@@ -641,6 +643,25 @@ async function initializeExtension(): Promise<void> {
       console.warn('[Background] Could not run initial integrity check:', error);
     }
 
+    // Initialize co-watcher detection (for overlay)
+    try {
+      initializeCoWatcherDetector(storageManager, friendManager);
+      console.debug('[Background] Co-watcher detector initialized');
+    } catch (error) {
+      console.error('[Background] Failed to initialize co-watcher detector:', error);
+    }
+
+    // Initialize sync handler (for playback sync)
+    try {
+      initializeSyncHandler(relayPool, storageManager, identityManager, friendManager);
+      if (publishQueue) {
+        getSyncHandler().setPublishQueue(publishQueue);
+      }
+      console.debug('[Background] Sync handler initialized');
+    } catch (error) {
+      console.error('[Background] Failed to initialize sync handler:', error);
+    }
+
     console.log('[Background] Initialization complete');
 
     // Register message handlers for debugging
@@ -648,6 +669,9 @@ async function initializeExtension(): Promise<void> {
 
     // Start periodic integrity checks and cleanup
     _startPeriodicCleanup();
+
+    // Start co-watcher detection cycle
+    _startCoWatcherDetectionCycle();
 
     // Start integration health monitoring
     _startIntegrationHealthCheck();
@@ -705,6 +729,43 @@ function _startPeriodicCleanup(): void {
   console.debug('[Background] Periodic cleanup started (every 5 minutes)');
 }
 
+/**
+ * Co-Watcher Detection Cycle
+ * Runs every 5 seconds to detect which friends are watching the same activity
+ * Updates the overlay with co-watcher info and determines host
+ */
+function _startCoWatcherDetectionCycle(): void {
+  const DETECTION_INTERVAL_MS = 5000; // 5 seconds, synced with activity detection
+
+  setInterval(async () => {
+    try {
+      const detector = getCoWatcherDetector();
+      const session = await detector.detectCoWatchSession();
+
+      if (session) {
+        // Store the co-watch session for overlay to use
+        await detector.setCurrentCoWatchSession(session);
+
+        // Log for debugging
+        console.debug('[Background] Co-watch session detected:', {
+          activity_id: session.activity_id,
+          host: session.host_friend_id,
+          co_watchers_count: session.co_watchers.length,
+        });
+
+        // TODO: Send co-watch session to overlay UI via content script
+        // window.postMessage({ type: 'HANG_TIME_CO_WATCH_UPDATE', data: session }, '*');
+      } else {
+        // No co-watch session
+        await detector.setCurrentCoWatchSession(null);
+      }
+    } catch (error) {
+      console.debug('[Background] Co-watcher detection cycle error:', error);
+    }
+  });
+
+  console.debug('[Background] Co-watcher detection cycle started (every 5 seconds)');
+}
 
 /**
  * Integration Health Monitoring (Steam, Spotify, Twitch, Discord)
