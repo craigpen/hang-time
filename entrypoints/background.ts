@@ -1988,6 +1988,17 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
   if (isNotificationTag === 'true') {
     // Handle notification event
     console.debug(`[Background] Received invite notification from ${friend.local_name}`);
+
+    // Deduplicate across relays
+    const { getEventDeduplicator } = await import('../src/modules/event-deduplicator');
+    const dedup = getEventDeduplicator();
+    const isFirstTime = await dedup.checkAndMark(event.id);
+
+    if (!isFirstTime) {
+      console.debug(`[Background] Notification ${event.id.substring(0, 8)}... duplicate from relay, skipping`);
+      return;
+    }
+
     if (typeTag === 'friend_request') {
       // Friend request notification - prompt user to accept/decline
       const senderDisplayName = event.tags.find((t) => t[0] === 'sender_display_name')?.[1] || friend.local_name;
@@ -2016,13 +2027,23 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         console.debug('[Background] Could not notify popup of friend request:', error instanceof Error ? error.message : error);
       }
     } else if (typeTag === 'invite') {
-      // Rate limit: only notify if 20+ seconds have passed since last notification
+      // First: deduplicate across relays (prevent processing same event twice)
+      const { getEventDeduplicator } = await import('../src/modules/event-deduplicator');
+      const dedup = getEventDeduplicator();
+      const isFirstTime = await dedup.checkAndMark(event.id);
+
+      if (!isFirstTime) {
+        console.debug(`[Background] Invite ${event.id.substring(0, 8)}... duplicate from relay, skipping`);
+        return;
+      }
+
+      // Second: rate limit notifications (don't spam user)
       if (!shouldNotifyForInvite(event.id)) {
         console.debug(`[Background] Invite ${event.id.substring(0, 8)}... rate limited (< 20s since last notify), skipping notification`);
         return;
       }
 
-      // Mark as notified immediately to prevent race condition with multiple relays
+      // Mark as notified to track rate limit
       await markInviteNotified(event.id);
 
       const service = event.tags.find((t) => t[0] === 'service')?.[1] || 'an activity';
