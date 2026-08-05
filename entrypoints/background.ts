@@ -1931,6 +1931,17 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
       } else if (event.kind === 1059) {
         // Kind-1059 messages (always accept for both pending and active)
         console.debug(`[Message] Handling incoming kind-1059`);
+
+        // Deduplicate at friend handler level (prevent duplicate processing from DM subscription)
+        const { getEventDeduplicator } = await import('../src/modules/event-deduplicator');
+        const dedup = getEventDeduplicator();
+        const isFirstTime = await dedup.checkAndMark(event.id);
+
+        if (!isFirstTime) {
+          console.debug(`[Message] Already processed event ${event.id.substring(0, 8)}... (from friend handler), ignoring duplicate`);
+          return;
+        }
+
         await _handleMessageEvent(friendIdentifier, event);
       } else if (event.kind === 10003) {
         // Kind-10003 replaceable activities - only process if friend is active
