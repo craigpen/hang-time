@@ -37,6 +37,7 @@ export class CoWatcherDetector {
       }
 
       const userActivityId = profile.current_activity.id;
+      const userTimestamp = profile.current_activity.timestamp || Date.now();
       const friends = await this.friendManager.getAllFriends();
 
       if (!friends || friends.length === 0) {
@@ -46,9 +47,11 @@ export class CoWatcherDetector {
 
       // Find all friends watching the same activity
       const coWatchers: Array<{
-        friend_id: string;
+        friend_id: string | null; // null for user
         timestamp: number;
-      }> = [];
+      }> = [
+        { friend_id: null, timestamp: userTimestamp } // Include user in host determination
+      ];
 
       for (const friend of friends) {
         if (!friend.current_activities) continue;
@@ -64,7 +67,8 @@ export class CoWatcherDetector {
         }
       }
 
-      if (coWatchers.length === 0) {
+      if (coWatchers.length === 1) {
+        // Only user watching this activity
         console.debug('[CoWatcher] No co-watchers found for activity', userActivityId);
         return null;
       }
@@ -72,8 +76,11 @@ export class CoWatcherDetector {
       // Sort by timestamp to find host (earliest = host)
       coWatchers.sort((a, b) => a.timestamp - b.timestamp);
 
-      const hostFriendId = coWatchers[0].friend_id;
-      const otherCoWatchers = coWatchers.slice(1).map(cw => cw.friend_id);
+      const hostEntry = coWatchers[0];
+      const hostFriendId = hostEntry.friend_id === null ? 'self' : hostEntry.friend_id;
+      const otherCoWatchers = coWatchers.slice(1)
+        .filter(cw => cw.friend_id !== null)
+        .map(cw => cw.friend_id as string);
 
       const session: CoWatchSession = {
         activity_id: userActivityId,
