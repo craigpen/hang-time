@@ -1553,7 +1553,7 @@ export class PopupController {
   }
 
   private _setupStorageListener(): void {
-    // Listen for MY_ACTIVITIES changes in storage
+    // Listen for changes in storage
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return;
 
@@ -1562,6 +1562,18 @@ export class PopupController {
         console.debug('[Popup] Activity data changed, refreshing...');
         this._loadMyActivity().catch((error) => {
           console.error('[Popup] Failed to refresh after storage change:', error);
+        });
+      }
+
+      // Listen for pending invites changes (so we update envelope when invite arrives)
+      if (changes[STORAGE_KEYS.PENDING_INVITES]) {
+        console.log('[Popup] Pending invites changed in storage, reloading...');
+        this._loadPendingInvites().catch((error) => {
+          console.error('[Popup] Failed to reload pending invites:', error);
+        });
+        // Refresh to update envelope colors
+        this.refreshFriends().catch((error) => {
+          console.error('[Popup] Failed to refresh after pending invites change:', error);
         });
       }
     });
