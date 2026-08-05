@@ -84,6 +84,13 @@ export interface UserProfile {
     };
     sortBy: 'most-friends' | 'score' | 'recent' | 'alphabetical';
   };
+  current_activity?: Activity;
+  current_co_watch_session?: {
+    activity_id: string;
+    host_friend_id: string;
+    co_watchers: string[];
+    detected_at: number;
+  } | null;
 }
 
 export type ServiceName = 'spotify-api' | 'twitch-api' | 'steam-api' | 'discord-api'

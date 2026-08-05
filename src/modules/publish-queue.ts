@@ -14,7 +14,7 @@ import { IdentityManager } from './identity';
 import type { ActivityPublisher } from './publisher';
 
 export interface PendingPublish {
-  type: 'invite' | 'friend_request' | 'message';
+  type: 'invite' | 'friend_request' | 'message' | 'sync_request' | 'sync_response';
   event: NostrEvent;
   retryCount: number;
   lastRetryAt: number;
@@ -23,7 +23,8 @@ export interface PendingPublish {
 }
 
 export class PublishQueue {
-  private userActionQueue: PendingPublish[] = [];
+  private immediateQueue: PendingPublish[] = []; // Highest priority: sync requests/responses
+  private userActionQueue: PendingPublish[] = []; // High priority: friend requests, invites, messages
   private profileUpdatePending = false;
   private profileUpdateEvent: NostrEvent | null = null;
   private gameLibraryDue = false;
@@ -70,6 +71,26 @@ export class PublishQueue {
 
     this.userActionQueue.push(pendingPublish);
     console.log(`[PublishQueue] Enqueued ${type} (queue size: ${this.userActionQueue.length})`);
+
+    // Persist to storage
+    await this._persistQueue();
+  }
+
+  /**
+   * Enqueue immediate message (sync request/response)
+   * Publishes with highest priority ahead of all other messages
+   */
+  async enqueueImmediate(event: NostrEvent, type: 'sync_request' | 'sync_response'): Promise<void> {
+    const pendingPublish: PendingPublish = {
+      type,
+      event,
+      retryCount: 0,
+      lastRetryAt: Date.now(),
+      createdAt: Date.now(),
+    };
+
+    this.immediateQueue.push(pendingPublish);
+    console.log(`[PublishQueue] Enqueued ${type} (immediate, queue size: ${this.immediateQueue.length})`);
 
     // Persist to storage
     await this._persistQueue();
@@ -202,8 +223,15 @@ export class PublishQueue {
 
       let eventToPublish: NostrEvent | null = null;
 
-      // Priority 1: User actions (always publish if pending)
-      if (this.userActionQueue.length > 0) {
+      // Priority 0: Immediate (sync requests/responses - highest priority)
+      if (this.immediateQueue.length > 0) {
+        const pending = this.immediateQueue[0];
+        eventToPublish = pending.event;
+        console.log(`[PublishQueue] Publishing priority 0 (immediate): ${pending.type}`);
+        this.lastEventReplacedActivity = false;
+      }
+      // Priority 1: User actions (friend requests, invites, messages)
+      else if (this.userActionQueue.length > 0) {
         const pending = this.userActionQueue[0];
         eventToPublish = pending.event;
         console.log(`[PublishQueue] Publishing priority 1: ${pending.type}`);
@@ -235,8 +263,20 @@ export class PublishQueue {
         try {
           const results = await this.relayPool.publish(eventToPublishWithFreshTimestamp);
 
+          // Handle immediate queue (sync requests/responses)
+          if (this.immediateQueue.length > 0) {
+            const pending = this.immediateQueue[0];
+            // Immediate messages are fire-and-forget after relay acceptance
+            if (results.overall_success) {
+              this.immediateQueue.shift();
+              console.debug(`[PublishQueue] ✅ Successfully published ${pending.type} (immediate), removed from queue`);
+              await this._persistQueue();
+              return;
+            }
+            // If publish failed, keep in queue for retry
+          }
           // Check if this is a handshake message (invite/friend_request) and if any relay accepted it
-          if (this.userActionQueue.length > 0) {
+          else if (this.userActionQueue.length > 0) {
             const pending = this.userActionQueue[0];
             const isHandshake = pending.type === 'invite' || pending.type === 'friend_request';
 
@@ -270,7 +310,13 @@ export class PublishQueue {
           }
         } catch (error) {
           // Publish failed, retry with backoff
-          if (this.userActionQueue.length > 0) {
+          if (this.immediateQueue.length > 0) {
+            const pending = this.immediateQueue[0];
+            pending.retryCount++;
+            pending.lastRetryAt = Date.now();
+            console.warn(`[PublishQueue] Immediate ${pending.type} failed, retrying... (attempt ${pending.retryCount})`);
+            await this._persistQueue();
+          } else if (this.userActionQueue.length > 0) {
             const pending = this.userActionQueue[0];
             const isHandshake = pending.type === 'invite' || pending.type === 'friend_request';
 

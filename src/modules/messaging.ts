@@ -30,11 +30,13 @@ function hexToBytes(hex: string): Uint8Array {
 let instance: MessagingManager | null = null;
 
 export interface ActivityMessage {
-  type: 'chat' | 'invite' | 'join_accepted' | 'join_declined';
+  type: 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response';
   activity_id: string;
   service?: string;
   content?: string;
   timestamp: number;
+  position?: number; // For sync_response: current playback position (seconds)
+  sent_at?: number; // For sync_response: when host sent this response
 }
 
 export class MessagingManager {
