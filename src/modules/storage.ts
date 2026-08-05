@@ -23,13 +23,130 @@ import {
 
 
 export class StorageManager {
+  // ============================================================================
+  // CACHING INFRASTRUCTURE
+  // ============================================================================
+
+  private cache: Map<string, any> = new Map();
+  private syncTimer: NodeJS.Timeout | null = null;
+  private syncScheduled = false;
+  private isInitialized = false;
+
   /**
-   * Get value from storage
+   * Initialize cache from storage (call on extension startup)
+   */
+  async init(): Promise<void> {
+    if (this.isInitialized) return;
+
+    try {
+      // Only load static string keys (not functions like MESSAGES, ACTIVITY_HISTORY)
+      const staticKeys = [
+        STORAGE_KEYS.USER_PROFILE,
+        STORAGE_KEYS.FRIENDS_LIST,
+        STORAGE_KEYS.OAUTH_TOKENS,
+        STORAGE_KEYS.CURRENT_ACTIVITY,
+        STORAGE_KEYS.MY_ACTIVITIES,
+        STORAGE_KEYS.SETTINGS,
+        STORAGE_KEYS.VIDEO_DATA_METRICS,
+        STORAGE_KEYS.PENDING_INVITES,
+        STORAGE_KEYS.PENDING_MESSAGES,
+        STORAGE_KEYS.NOTIFIED_INVITE_IDS,
+        STORAGE_KEYS.OAUTH_CONFIG,
+        STORAGE_KEYS.NETFLIX_TITLE,
+        STORAGE_KEYS.NETFLIX_TITLE_DATA,
+        STORAGE_KEYS.CONTENT_SCRIPT_HEALTH,
+        STORAGE_KEYS.INTEGRATION_HEALTH,
+        STORAGE_KEYS.NETFLIX_EXTRACTION_LOGS,
+        STORAGE_KEYS.NETFLIX_DEBUG_CAPTURES,
+        STORAGE_KEYS.ACTIVITY_PROVENANCE_MAP,
+        STORAGE_KEYS.MY_GAME_LIBRARY,
+        STORAGE_KEYS.FRIEND_GAME_LIBRARIES,
+        STORAGE_KEYS.GAME_METADATA_CACHE,
+        STORAGE_KEYS.FRIEND_PROFILES,
+        STORAGE_KEYS.ACTIVITY_ACCEPTANCES,
+      ];
+
+      const data = await chrome.storage.local.get(staticKeys);
+
+      for (const key of staticKeys) {
+        if (data.hasOwnProperty(key)) {
+          this.cache.set(key, data[key]);
+        }
+      }
+
+      this.isInitialized = true;
+      console.debug('[Storage] Cache initialized from storage');
+    } catch (error) {
+      console.error('[Storage] Failed to initialize cache:', error);
+      this.isInitialized = true;
+    }
+  }
+
+  /**
+   * Schedule sync to storage (batched, max once per 5 seconds)
+   */
+  private scheduleSyncToStorage(): void {
+    if (this.syncScheduled) return;
+
+    this.syncScheduled = true;
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+
+    this.syncTimer = setTimeout(() => {
+      this.syncToStorage().catch(error => {
+        console.error('[Storage] Sync failed:', error);
+      });
+      this.syncScheduled = false;
+    }, 5000);
+  }
+
+  /**
+   * Flush all cache changes to storage (called by scheduler and on exit)
+   */
+  async syncToStorage(): Promise<void> {
+    if (this.cache.size === 0) return;
+
+    try {
+      const updates: Record<string, any> = {};
+      for (const [key, value] of this.cache.entries()) {
+        if (value !== undefined) {
+          updates[key] = value;
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await chrome.storage.local.set(updates);
+        console.debug(`[Storage] Synced ${Object.keys(updates).length} keys to storage`);
+      }
+    } catch (error) {
+      console.error('[Storage] Failed to sync cache to storage:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Force immediate sync (used on extension unload)
+   */
+  async forceSyncNow(): Promise<void> {
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+    this.syncTimer = null;
+    this.syncScheduled = false;
+    await this.syncToStorage();
+  }
+
+  /**
+   * Get value from cache (cache-first, never falls back to storage)
+   * In cache-first model, if key is not in cache during runtime, it means:
+   * 1. Cache wasn't initialized properly (init() failed)
+   * 2. Key is not a static key that should be pre-loaded
+   * Either way, returning default is correct behavior.
    */
   async get<T>(key: string, defaultValue?: T): Promise<T | undefined> {
     try {
-      const result = await chrome.storage.local.get(key);
-      return result[key] ?? defaultValue;
+      if (this.cache.has(key)) {
+        return this.cache.get(key) ?? defaultValue;
+      }
+      // Cache miss - return default, don't fallback to storage
+      return defaultValue;
     } catch (error) {
       console.error(`[Storage] Failed to get ${key}:`, error);
       throw new StorageError(`Failed to get ${key}`, { key, error });
@@ -37,11 +154,12 @@ export class StorageManager {
   }
 
   /**
-   * Set value in storage
+   * Set value in cache and schedule storage sync
    */
   async set<T>(key: string, value: T): Promise<void> {
     try {
-      await chrome.storage.local.set({ [key]: value });
+      this.cache.set(key, value);
+      this.scheduleSyncToStorage();
     } catch (error) {
       console.error(`[Storage] Failed to set ${key}:`, error);
       throw new StorageError(`Failed to set ${key}`, { key, error });
@@ -49,13 +167,14 @@ export class StorageManager {
   }
 
   /**
-   * Update nested object in storage (merge with existing)
+   * Update nested object in cache and schedule storage sync
    */
   async update<T extends Record<string, any>>(key: string, updates: Partial<T>): Promise<void> {
     try {
       const current = (await this.get<T>(key)) as T | undefined;
       const merged = { ...current, ...updates };
-      await this.set(key, merged);
+      this.cache.set(key, merged);
+      this.scheduleSyncToStorage();
     } catch (error) {
       console.error(`[Storage] Failed to update ${key}:`, error);
       throw new StorageError(`Failed to update ${key}`, { key, error });
@@ -63,11 +182,13 @@ export class StorageManager {
   }
 
   /**
-   * Delete key from storage
+   * Delete key from cache and schedule storage sync
+   * Sets to undefined so syncToStorage removes it from persistent storage
    */
   async delete(key: string): Promise<void> {
     try {
-      await chrome.storage.local.remove(key);
+      this.cache.set(key, undefined);
+      this.scheduleSyncToStorage();
     } catch (error) {
       console.error(`[Storage] Failed to delete ${key}:`, error);
       throw new StorageError(`Failed to delete ${key}`, { key, error });
@@ -75,11 +196,13 @@ export class StorageManager {
   }
 
   /**
-   * Clear all storage
+   * Clear all cache and schedule storage sync (via forceSyncNow for immediate effect)
    */
   async clear(): Promise<void> {
     try {
-      await chrome.storage.local.clear();
+      this.cache.clear();
+      // Use immediate sync to clear storage right away
+      await this.forceSyncNow();
       console.debug('[Storage] Cleared all data');
     } catch (error) {
       console.error('[Storage] Failed to clear:', error);
@@ -704,12 +827,17 @@ export class StorageManager {
   // ============================================================================
 
   /**
-   * Get all data at once (useful for initialization)
+   * Get all data from cache (never from storage)
    */
   async getAllData(): Promise<Record<string, unknown>> {
     try {
-      const data = await chrome.storage.local.get();
-      return data as Record<string, unknown>;
+      const data: Record<string, unknown> = {};
+      for (const [key, value] of this.cache.entries()) {
+        if (value !== undefined) {
+          data[key] = value;
+        }
+      }
+      return data;
     } catch (error) {
       console.error('[Storage] Failed to get all data:', error);
       throw new StorageError('Failed to get all data', { error });
@@ -740,6 +868,9 @@ export class StorageManager {
    */
   async initialize(): Promise<void> {
     try {
+      // Initialize cache from storage first
+      await this.init();
+
       const profile = await this.getUserProfile();
       if (!profile) {
         console.debug('[Storage] Initializing storage with defaults');
@@ -765,13 +896,18 @@ export class StorageManager {
   }
 
   /**
-   * Import data (for restore)
+   * Import data (for restore) - loads into cache and syncs to storage
    */
   async importData(jsonData: string): Promise<void> {
     try {
       const data = JSON.parse(jsonData);
-      await chrome.storage.local.clear();
-      await chrome.storage.local.set(data);
+      // Clear cache and load imported data
+      this.cache.clear();
+      for (const [key, value] of Object.entries(data)) {
+        this.cache.set(key, value);
+      }
+      // Force immediate sync to storage
+      await this.forceSyncNow();
       console.debug('[Storage] Data imported successfully');
     } catch (error) {
       console.error('[Storage] Import failed:', error);
