@@ -497,7 +497,7 @@ async function initializeExtension(): Promise<void> {
     }
 
     // Initialize messaging manager
-    initializeMessagingManager(storageManager, identityManager, relayPool);
+    initializeMessagingManager(storageManager, getIdentityManager(), relayPool);
     messagingManager = getMessagingManager();
     console.debug('[Background] Messaging manager initialized');
 
@@ -523,7 +523,7 @@ async function initializeExtension(): Promise<void> {
 
     // Set Nostr dependencies for game library manager
     const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
-    gameLibraryManager.setNostrDependencies(relayPool, identityManager);
+    gameLibraryManager.setNostrDependencies(relayPool, getIdentityManager());
     console.debug('[Background] Game library manager Nostr dependencies set');
 
     // Fetch user's game library (enabled by default for MVP)
@@ -570,7 +570,7 @@ async function initializeExtension(): Promise<void> {
 
     // Initialize activity publisher (publishes to Nostr)
     try {
-      activityPublisher = new ActivityPublisher(relayPool, storageManager, identityManager);
+      activityPublisher = new ActivityPublisher(relayPool, storageManager, getIdentityManager());
       console.debug('[Background] ActivityPublisher created');
       await activityPublisher.start();
       console.debug('[Background] Activity publisher started');
@@ -664,7 +664,7 @@ async function initializeExtension(): Promise<void> {
 
     // Initialize sync handler (for playback sync)
     try {
-      initializeSyncHandler(relayPool, storageManager, identityManager, friendManager);
+      initializeSyncHandler(relayPool, storageManager, getIdentityManager(), friendManager);
       if (publishQueue) {
         getSyncHandler().setPublishQueue(publishQueue);
       }
