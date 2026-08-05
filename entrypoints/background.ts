@@ -1749,8 +1749,12 @@ async function _subscribeToIncomingMessages(): Promise<void> {
       console.debug(`[Message] Received kind-1059 message from ${event.pubkey.substring(0, 8)}...`);
 
       try {
-        // Check if already processed this message
-        if (isMessageAlreadyProcessed(event.id)) {
+        // Atomically check and mark to prevent race condition with multiple relay deliveries
+        const { getEventDeduplicator } = await import('../src/modules/event-deduplicator');
+        const dedup = getEventDeduplicator();
+        const isFirstTime = await dedup.checkAndMark(event.id);
+
+        if (!isFirstTime) {
           console.debug(`[Message] Already processed event ${event.id.substring(0, 8)}..., ignoring duplicate`);
           return;
         }
@@ -1766,13 +1770,11 @@ async function _subscribeToIncomingMessages(): Promise<void> {
         if (sender) {
           // Known friend - handle normally
           await _handleMessageEvent(sender.identifier, event);
-          await markMessageProcessed(event.id);
           await publishDeletionRequest(event.id);
         } else if (messageType === 'friend_request') {
           // Friend request from unknown sender - create as pending friend
           console.log(`[Message] ðŸ”” Friend Request: Received from ${event.pubkey.substring(0, 8)}...`);
           await _handleFriendRequestFromUnknownSender(event);
-          await markMessageProcessed(event.id);
           await publishDeletionRequest(event.id);
         } else {
           // Unknown message type from unknown sender - ignore
