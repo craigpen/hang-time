@@ -697,9 +697,17 @@ export class IdentityManager {
 }
 
 // Singleton instance created on demand
-export let identityManager: IdentityManager;
+let identityManager: IdentityManager | undefined;
 
 // Initialize singleton (called from background.ts)
 export function initializeIdentityManager(storage: StorageManager): void {
   identityManager = new IdentityManager(storage);
+}
+
+// Safe getter - throws if not initialized (consistent with other managers)
+export function getIdentityManager(): IdentityManager {
+  if (!identityManager) {
+    throw new Error('IdentityManager not initialized');
+  }
+  return identityManager;
 }

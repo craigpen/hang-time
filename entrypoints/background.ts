@@ -8,7 +8,7 @@ import * as pako from 'pako';
 import { nip04, nip44, verifyEvent } from 'nostr-tools';
 import { RelayPool, relayPool } from '../src/modules/nostr';
 import { StorageManager, storageManager } from '../src/modules/storage';
-import { IdentityManager, initializeIdentityManager, identityManager } from '../src/modules/identity';
+import { IdentityManager, initializeIdentityManager, getIdentityManager } from '../src/modules/identity';
 import { FriendManager, initializeFriendManager, getFriendManager } from '../src/modules/friends';
 import { MessagingManager, initializeMessagingManager, getMessagingManager } from '../src/modules/messaging';
 import { NotificationManager, initializeNotificationManager, getNotificationManager } from '../src/modules/notifications';
@@ -81,8 +81,8 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
     // First install: generate memorable identifier
     const profile = await storageManager.getUserProfile();
-    if (!profile && identityManager) {
-      await identityManager.generateIdentifier();
+    if (!profile) {
+      await getIdentityManager().generateIdentifier();
       console.log('[Background] Generated user identifier');
     }
 
@@ -433,7 +433,7 @@ async function initializeExtension(): Promise<void> {
       console.debug('[Background] Identity manager initialized');
 
       // Generate or load user identifier
-      const identifier = await identityManager.getIdentifier();
+      const identifier = await getIdentityManager().getIdentifier();
       console.debug(`[Background] User identifier: ${identifier}`);
     } catch (error) {
       console.error('[Background] Identity initialization failed:', error);
@@ -1896,8 +1896,8 @@ async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
  */
 async function _subscribeToIncomingMessages(): Promise<void> {
   try {
-    const userPubkey = await identityManager.getPubkey();
-    console.log(`[Message] ðŸ“§ Subscribing to incoming messages for ${userPubkey.substring(0, 8)}...`);
+    const userPubkey = await getIdentityManager().getPubkey();
+    console.log(`[Message] ðŸ”§ Subscribing to incoming messages for ${userPubkey.substring(0, 8)}...`);
 
     // Subscribe to kind-1059 events where user's pubkey is in the 'p' tag
     // RelayPool handles filtering server-side via #p filter
@@ -1987,7 +1987,7 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
         return;
       }
 
-      const secretKey = await identityManager.getSecretKey();
+      const secretKey = await getIdentityManager().getSecretKey();
       // Decrypt using nip44 with conversation key derived from our secret key and sender's pubkey
       const hexToBytes = (hex: string) => new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
       const conversationKey = nip44.getConversationKey(hexToBytes(secretKey), event.pubkey);
