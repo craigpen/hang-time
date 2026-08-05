@@ -18,6 +18,7 @@ import {
   ActivityHistory,
   PendingInvite,
   PendingMessage,
+  ActivityAcceptance,
 } from '../types';
 
 
@@ -490,6 +491,31 @@ export class StorageManager {
     const messages = await this.getPendingMessages();
     delete messages[messageId];
     await this.setPendingMessages(messages);
+  }
+
+  /**
+   * Track which activities have already triggered acceptance notifications
+   * Prevents showing duplicate notifications when multiple people accept
+   */
+  async getActivityAcceptances(): Promise<Record<string, ActivityAcceptance>> {
+    return this.get<Record<string, ActivityAcceptance>>(STORAGE_KEYS.ACTIVITY_ACCEPTANCES, {});
+  }
+
+  /**
+   * Record that we've shown a notification for an activity's first acceptance
+   */
+  async recordActivityAcceptance(acceptance: ActivityAcceptance): Promise<void> {
+    const acceptances = await this.getActivityAcceptances();
+    acceptances[acceptance.activityId] = acceptance;
+    await this.set(STORAGE_KEYS.ACTIVITY_ACCEPTANCES, acceptances);
+  }
+
+  /**
+   * Check if we've already notified about an activity being accepted
+   */
+  async hasNotifiedActivityAcceptance(activityId: string): Promise<boolean> {
+    const acceptances = await this.getActivityAcceptances();
+    return !!acceptances[activityId];
   }
 
   /**

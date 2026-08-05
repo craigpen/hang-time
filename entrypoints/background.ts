@@ -2365,9 +2365,24 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
         if (message.type === 'invite') {
           await notificationManager.notifyNewMessage(friend.id, friend.local_name, `invited you to join`);
         } else if (message.type === 'join_accepted') {
-          await notificationManager.notifyNewMessage(friend.id, friend.local_name, `joined your activity`);
-          // Show Discord coordination prompt if available
-          await _showDiscordCoordinationPrompt(friend);
+          // Check if we've already notified about this activity being accepted
+          const alreadyNotified = await storageManager.hasNotifiedActivityAcceptance(message.activity_id);
+
+          if (!alreadyNotified) {
+            await notificationManager.notifyNewMessage(friend.id, friend.local_name, `joined your activity`);
+            // Show Discord coordination prompt if available
+            await _showDiscordCoordinationPrompt(friend);
+
+            // Record that we've notified about this activity
+            await storageManager.recordActivityAcceptance({
+              activityId: message.activity_id,
+              firstAcceptorId: friend.id,
+              acceptedAt: Date.now(),
+              notifiedAt: Date.now(),
+            });
+          } else {
+            console.debug(`[Message] Activity ${message.activity_id} acceptance already notified, skipping duplicate`);
+          }
         } else if (message.type === 'chat') {
           await notificationManager.notifyNewMessage(friend.id, friend.local_name, message.content || 'sent a message');
         }

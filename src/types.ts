@@ -212,6 +212,13 @@ export interface PendingMessage {
   lastError?: string; // Last error message from relay
 }
 
+export interface ActivityAcceptance {
+  activityId: string; // Which activity got accepted
+  firstAcceptorId: string; // Friend ID of first person to accept
+  acceptedAt: number; // When first acceptance was received
+  notifiedAt: number; // When we showed the notification
+}
+
 // ============================================================================
 // NOSTR PROTOCOL
 // ============================================================================
@@ -381,6 +388,7 @@ export const STORAGE_KEYS = {
   FRIEND_GAME_LIBRARIES: 'hang_time_friend_game_libraries',
   GAME_METADATA_CACHE: 'hang_time_game_metadata_cache',
   FRIEND_PROFILES: 'hang_time_friend_profiles',
+  ACTIVITY_ACCEPTANCES: 'hang_time_activity_acceptances',
   MESSAGES: (friendId: string) => `hang_time_messages_${friendId}`,
   ACTIVITY_HISTORY: (friendId: string) => `hang_time_activity_history_${friendId}`,
 } as const;
