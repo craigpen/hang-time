@@ -80,6 +80,22 @@ export class EventDeduplicator {
   size(): number {
     return this.processed.size;
   }
+
+  /**
+   * Get all processed event IDs (for persistence to storage)
+   */
+  getProcessedEventIds(): Set<string> {
+    return new Set(this.processed);
+  }
+
+  /**
+   * Restore processed event IDs from storage (called on startup)
+   */
+  restoreFromStorage(eventIds: Set<string>): void {
+    for (const eventId of eventIds) {
+      this.processed.add(eventId);
+    }
+  }
 }
 
 // Singleton instance

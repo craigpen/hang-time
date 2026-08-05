@@ -496,6 +496,10 @@ async function initializeExtension(): Promise<void> {
     await initializeNotificationDedup();
     console.debug('[Background] Notification deduplication initialized');
 
+    // Initialize event deduplicator (restores from storage to prevent duplicates after reload)
+    await initializeEventDeduplicator();
+    console.debug('[Background] Event deduplicator initialized');
+
     // Initialize activity datastore (validates all activity writes)
     initializeActivityDatastore(storageManager);
     console.debug('[Background] Activity datastore initialized');
@@ -676,6 +680,12 @@ function _startPeriodicCleanup(): void {
 
       // Remove stale Netflix titles (24+ hours old)
       const staleNetflixTitles = await storageManager.removeStaleNetflixTitle();
+
+      // Persist event deduplicator state to storage
+      const { getEventDeduplicator } = await import('../src/modules/event-deduplicator');
+      const dedup = getEventDeduplicator();
+      const processedEventIds = dedup.getProcessedEventIds();
+      await storageManager.setProcessedEventIds(processedEventIds);
 
       if (corruptedRemoved > 0 || ghostsRemoved > 0 || expiredInvites > 0 || staleNetflixTitles > 0) {
         console.log('[Background] ðŸ§¹ Cleanup cycle complete:', {
@@ -2851,6 +2861,35 @@ async function initializeNotificationDedup(): Promise<void> {
   if (notifiedInviteIds.size > 0) {
     console.log(`[Background] ✅ Loaded ${notifiedInviteIds.size} cached notification IDs`);
   }
+}
+
+/**
+ * Initialize EventDeduplicator from storage (survives extension reload)
+ */
+async function initializeEventDeduplicator(): Promise<void> {
+  const { getEventDeduplicator } = await import('../src/modules/event-deduplicator');
+  const stored = await storageManager.getProcessedEventIds();
+  const dedup = getEventDeduplicator();
+
+  console.debug(`[Background] Restoring event dedup state: found ${stored.size} stored event IDs`);
+
+  // Restore processed events from storage
+  if (stored.size > 0) {
+    dedup.restoreFromStorage(stored);
+    console.log(`[Background] ✅ Loaded ${stored.size} processed event IDs`);
+  }
+}
+
+/**
+ * Persist EventDeduplicator state to storage (called after major message processing)
+ */
+async function persistEventDeduplicatorState(): Promise<void> {
+  const { getEventDeduplicator } = await import('../src/modules/event-deduplicator');
+  const dedup = getEventDeduplicator();
+  const deduped = new Set<string>(); // We need to extract the internal state somehow
+
+  // For now, we'll call a method to get the processed events (need to add to EventDeduplicator)
+  // await storageManager.setProcessedEventIds(deduped);
 }
 
 /**

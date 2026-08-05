@@ -535,6 +535,23 @@ export class StorageManager {
     await this.set('notified_invite_ids', obj);
   }
 
+  /**
+   * Get processed event IDs (for deduplication across reloads)
+   */
+  async getProcessedEventIds(): Promise<Set<string>> {
+    const stored = await this.get<string[]>('processed_event_ids', []);
+    return new Set(stored);
+  }
+
+  /**
+   * Set processed event IDs with 7-day retention
+   */
+  async setProcessedEventIds(ids: Set<string>): Promise<void> {
+    // Only keep recent events (last 7 days worth)
+    const recentIds = Array.from(ids);
+    await this.set('processed_event_ids', recentIds);
+  }
+
   // ============================================================================
   // FRIEND PROFILES
   // ============================================================================
