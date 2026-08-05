@@ -2383,20 +2383,12 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         }
       }
 
-      // Store all activities atomically, merging with existing to preserve fields from delta publishing
+      // Store all activities atomically, merging with existing to preserve local metadata
+      // Only include activities from the published event (removes closed tabs/services)
       // When multiple activities have same service (e.g. multiple youtube tabs), keep the most recent
       const newCurrentActivities: Partial<Record<ServiceName, Activity>> = {};
 
-      // First, keep existing activities that aren't being updated
-      if (friend.current_activities) {
-        for (const [service, activity] of Object.entries(friend.current_activities)) {
-          if (!activities.find(a => a.service === service)) {
-            newCurrentActivities[service as ServiceName] = activity;
-          }
-        }
-      }
-
-      // Then add/update with new activities, keeping only the most recent per service
+      // Process new activities, keeping only the most recent per service
       const activitiesByService: Partial<Record<ServiceName, Activity>> = {};
       for (const activity of activities) {
         const existing = activitiesByService[activity.service];
