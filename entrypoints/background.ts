@@ -2517,8 +2517,8 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
     }
 
     if (message?.type === 'join_accepted') {
-      // Route to appropriate handler based on activity service
-      if (message.activity?.service === 'friend-request') {
+      // Route to appropriate handler based on message service
+      if (message.service === 'friend-request') {
         await _handleFriendRequestAccepted(friend, event, message);
       } else {
         await _handleActivityAccepted(friend, event, message);
