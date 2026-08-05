@@ -1221,6 +1221,9 @@ export class PopupController {
 
   private async _loadPendingInvites(): Promise<void> {
     try {
+      // Refresh from storage first (in case cache is stale)
+      await this.storage.refreshReceivedInvitesFromStorage();
+
       const receivedInvites = await this.storage.getReceivedInvites();
       console.log('[Popup] Raw received invites from storage:', receivedInvites);
       this.pendingInvitesByActivity.clear();
@@ -1568,12 +1571,17 @@ export class PopupController {
       // Listen for received invites changes (so we update envelope when invite arrives)
       if (changes[STORAGE_KEYS.RECEIVED_INVITES]) {
         console.log('[Popup] Received invites changed in storage, reloading...');
-        this._loadPendingInvites().catch((error) => {
-          console.error('[Popup] Failed to reload received invites:', error);
-        });
-        // Refresh to update envelope colors
-        this.refreshFriends().catch((error) => {
-          console.error('[Popup] Failed to refresh after received invites change:', error);
+        // Refresh cache from storage before loading
+        this.storage.refreshReceivedInvitesFromStorage().then(() => {
+          this._loadPendingInvites().catch((error) => {
+            console.error('[Popup] Failed to reload received invites:', error);
+          });
+          // Refresh to update envelope colors
+          this.refreshFriends().catch((error) => {
+            console.error('[Popup] Failed to refresh after received invites change:', error);
+          });
+        }).catch((error) => {
+          console.error('[Popup] Failed to refresh cache from storage:', error);
         });
       }
     });

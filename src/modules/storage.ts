@@ -602,6 +602,16 @@ export class StorageManager {
   }
 
   /**
+   * Refresh received invites from storage (used when storage changes externally)
+   */
+  async refreshReceivedInvitesFromStorage(): Promise<void> {
+    const data = await chrome.storage.local.get([STORAGE_KEYS.RECEIVED_INVITES]);
+    if (data.hasOwnProperty(STORAGE_KEYS.RECEIVED_INVITES)) {
+      this.cache.set(STORAGE_KEYS.RECEIVED_INVITES, data[STORAGE_KEYS.RECEIVED_INVITES]);
+    }
+  }
+
+  /**
    * Get pending messages (kind-4: chat, accept, decline, friend_request)
    */
   async getPendingMessages(): Promise<Record<string, PendingMessage>> {
