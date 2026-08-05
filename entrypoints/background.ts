@@ -490,6 +490,10 @@ async function initializeExtension(): Promise<void> {
     initializeNotificationManager(storageManager);
     console.debug('[Background] Notification manager initialized');
 
+    // Initialize notification deduplication (restores state from storage)
+    await initializeNotificationDedup();
+    console.debug('[Background] Notification deduplication initialized');
+
     // Initialize activity datastore (validates all activity writes)
     initializeActivityDatastore(storageManager);
     console.debug('[Background] Activity datastore initialized');
@@ -2036,6 +2040,9 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         return;
       }
 
+      // Mark as notified immediately to prevent race condition with multiple relays
+      await markInviteNotified(event.id);
+
       const service = event.tags.find((t) => t[0] === 'service')?.[1] || 'an activity';
       const activityName = event.tags.find((t) => t[0] === 'activity_name')?.[1] || service;
       const activityId = event.tags.find((t) => t[0] === 'activity_id')?.[1];
@@ -2073,7 +2080,6 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         verb,
         discordInfo
       );
-      await markInviteNotified(event.id);
       console.log(`[Background] âœ… Invite: Notification fired for ${friend.local_name}`);
 
       // Store pending invite in persistent storage with timestamp
