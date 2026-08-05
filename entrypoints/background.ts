@@ -107,6 +107,17 @@ chrome.runtime.onStartup?.addListener(async () => {
 });
 
 /**
+ * Service worker unload: flush cache to storage before shutdown
+ * Ensures durability of recent changes
+ */
+globalThis.addEventListener?.('beforeunload', () => {
+  console.debug('[Background] Service worker unloading, flushing cache...');
+  storageManager.forceSyncNow().catch(error => {
+    console.error('[Background] Failed to sync cache on unload:', error);
+  });
+});
+
+/**
  * Lock to prevent concurrent content script registration attempts
  */
 let isRegisteringContentScripts = false;
@@ -389,7 +400,7 @@ async function initializeExtension(): Promise<void> {
     try {
       const userProfile = await storageManager.getUserProfile();
       const profileId = userProfile?.memorable_identifier || 'unknown';
-      initializeFileLogger(profileId);
+      initializeFileLogger(profileId, storageManager);
       const logger = getFileLogger();
       _hookConsoleToFileLogger(logger);
     } catch (error) {
@@ -670,6 +681,9 @@ async function initializeExtension(): Promise<void> {
     // Start periodic integrity checks and cleanup
     _startPeriodicCleanup();
 
+    // Start storage cache sync cycle
+    _startCacheSyncCycle();
+
     // Start co-watcher detection cycle
     _startCoWatcherDetectionCycle();
 
@@ -730,6 +744,17 @@ function _startPeriodicCleanup(): void {
 }
 
 /**
+ * Storage Cache Sync Cycle
+ * Relies on scheduleSyncToStorage() debouncing from writes
+ * This function is a placeholder for future explicit sync needs
+ */
+function _startCacheSyncCycle(): void {
+  // Sync is triggered by scheduleSyncToStorage() on cache writes
+  // No need for a separate interval - the debouncing handles it
+  console.debug('[Background] Storage cache sync ready (debounced on writes)');
+}
+
+/**
  * Co-Watcher Detection Cycle
  * Runs every 5 seconds to detect which friends are watching the same activity
  * Updates the overlay with co-watcher info and determines host
@@ -738,7 +763,12 @@ function _startCoWatcherDetectionCycle(): void {
   const DETECTION_INTERVAL_MS = 5000; // 5 seconds, synced with activity detection
 
   let lastSession: any = null;
+  let callCount = 0;
   setInterval(async () => {
+    callCount++;
+    if (callCount <= 3 || callCount % 100 === 0) {
+      console.debug(`[Background] Co-watcher cycle #${callCount} firing`);
+    }
     try {
       const detector = getCoWatcherDetector();
       const session = await detector.detectCoWatchSession();
@@ -795,7 +825,7 @@ function _startCoWatcherDetectionCycle(): void {
     } catch (error) {
       console.error('[Background] Co-watcher detection cycle error:', error);
     }
-  });
+  }, DETECTION_INTERVAL_MS);
 
   console.debug('[Background] Co-watcher detection cycle started (every 5 seconds)');
 }
