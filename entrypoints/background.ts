@@ -2607,6 +2607,8 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
             sentAt: Date.now(),
           };
           await storageManager.setPendingInvites(pendingInvites);
+          // Ensure immediate persistence before notifying popup (don't rely on batched sync)
+          await storageManager.forceSyncNow();
 
           // Fire notification for encrypted invite (same as kind-1 handler)
           const notificationManager = getNotificationManager();
