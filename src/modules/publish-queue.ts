@@ -51,9 +51,13 @@ export class PublishQueue {
   /**
    * Set the IdentityManager (called from background.ts after initialization)
    */
-  setIdentityManager(identityManager: IdentityManager): void {
+  setIdentityManager(identityManager: IdentityManager | undefined): void {
+    if (!identityManager) {
+      console.error('[PublishQueue] setIdentityManager called with undefined/null!');
+      return;
+    }
     this.identityManager = identityManager;
-    console.debug('[PublishQueue] IdentityManager wired');
+    console.debug('[PublishQueue] IdentityManager wired successfully');
   }
 
   /**
@@ -171,7 +175,7 @@ export class PublishQueue {
    */
   private async _refreshEventTimestamp(event: NostrEvent): Promise<NostrEvent> {
     if (!this.identityManager) {
-      console.warn('[PublishQueue] IdentityManager not available, publishing with stale timestamp');
+      console.warn('[PublishQueue] ⚠️  IdentityManager not set, publishing with stale timestamp');
       return event;
     }
 
@@ -189,7 +193,7 @@ export class PublishQueue {
 
       return refreshedEvent;
     } catch (error) {
-      console.error('[PublishQueue] Failed to refresh event timestamp:', error);
+      console.error('[PublishQueue] ❌ Failed to refresh event timestamp (this.identityManager set:', !!this.identityManager, '):', error instanceof Error ? error.message : error);
       return event;
     }
   }
