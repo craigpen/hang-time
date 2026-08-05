@@ -51,6 +51,7 @@ export class OverlayUI {
 
     this.container = document.createElement('div');
     this.container.id = 'hang-time-overlay';
+    this.container.className = 'hidden'; // Start hidden, show only when co-watch detected
     this.container.innerHTML = `
       <style id="hang-time-overlay-styles">
         #hang-time-overlay {
@@ -312,10 +313,19 @@ export class OverlayUI {
   }
 
   /**
-   * Show overlay
+   * Show overlay (only if there's an active co-watch session or pinned)
    */
   show(): void {
     if (!this.container) return;
+
+    // Only show if:
+    // 1. There's an active co-watch session (has host_name or co_watchers)
+    // 2. OR the overlay is pinned
+    const hasCoWatchSession = this.state.host_name || this.state.co_watchers.length > 0;
+    if (!hasCoWatchSession && !this.state.pinned) {
+      return;
+    }
+
     this.container.classList.remove('hidden');
     this.state.visible = true;
     if (!this.state.pinned) {
