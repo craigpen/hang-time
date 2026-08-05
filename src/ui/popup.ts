@@ -827,8 +827,13 @@ export class PopupController {
 
     const isSelfActivity = friendId === 'self';
     const hasPendingInvite = activity.id && this.pendingInvitesByActivity.has(activity.id);
-    if (activity.id && !isSelfActivity) {
-      console.debug('[Popup] Activity:', activity.service, 'id:', activity.id, 'pending:', hasPendingInvite, 'map:', Array.from(this.pendingInvitesByActivity.keys()));
+    if (!isSelfActivity) {
+      console.debug('[Popup] Rendering activity:', {
+        service: activity.service,
+        activityId: activity.id,
+        hasPendingInvite,
+        pendingInviteIds: Array.from(this.pendingInvitesByActivity.keys()),
+      });
     }
 
     // First button - Invite (for self) or Join/Accept (for friends)
@@ -1222,6 +1227,11 @@ export class PopupController {
         this.pendingInvitesData.set(activityId, inviteData);
       }
       console.debug('[Popup] Loaded pending invites from storage:', Array.from(this.pendingInvitesByActivity.entries()));
+      console.debug('[Popup] Pending invite details:', Array.from(this.pendingInvitesData.entries()).map(([id, data]) => ({
+        activityId: id,
+        service: data.activity?.service,
+        friendId: data.friendId,
+      })));
     } catch (error) {
       console.error('[Popup] Failed to load pending invites:', error);
     }
