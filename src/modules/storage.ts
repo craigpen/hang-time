@@ -630,7 +630,7 @@ export class StorageManager {
    * Returns Map<eventId, timestamp>
    */
   async getNotifiedInviteIds(): Promise<Map<string, number>> {
-    const stored = await this.get<Record<string, number>>('notified_invite_ids', {});
+    const stored = await this.get<Record<string, number>>(STORAGE_KEYS.NOTIFIED_INVITE_IDS, {});
     return new Map(Object.entries(stored));
   }
 
@@ -639,7 +639,7 @@ export class StorageManager {
    */
   async setNotifiedInviteIds(ids: Map<string, number>): Promise<void> {
     const obj = Object.fromEntries(ids);
-    await this.set('notified_invite_ids', obj);
+    await this.set(STORAGE_KEYS.NOTIFIED_INVITE_IDS, obj);
   }
 
   /**
