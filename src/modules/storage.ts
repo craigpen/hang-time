@@ -34,6 +34,7 @@ export class StorageManager {
 
   /**
    * Initialize cache from storage (call on extension startup)
+   * FAILS HARD if cache initialization fails - no silent degradation
    */
   async init(): Promise<void> {
     if (this.isInitialized) return;
@@ -75,10 +76,12 @@ export class StorageManager {
       }
 
       this.isInitialized = true;
-      console.debug('[Storage] Cache initialized from storage');
+      console.debug('[Storage] Cache initialized from storage with', this.cache.size, 'keys');
     } catch (error) {
       console.error('[Storage] Failed to initialize cache:', error);
-      this.isInitialized = true;
+      // FAIL HARD - don't mark as initialized if loading fails
+      // This ensures get() won't return phantom defaults
+      throw new StorageError('Cache initialization failed - cannot continue without valid storage', { error });
     }
   }
 
