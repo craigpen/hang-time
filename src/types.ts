@@ -123,6 +123,7 @@ export interface Friend {
   current_activities: Partial<Record<ServiceName, Activity>>;
   state: 'pending' | 'active'; // pending = invite sent, awaiting accept; active = mutual friends
   initiated_by_me?: boolean; // true if we sent the friend request, false if they sent it, undefined for active friends
+  discord_info?: string; // Discord server invite link for coordination
 }
 
 export interface FriendList extends Array<Friend> {}

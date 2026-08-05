@@ -3,8 +3,9 @@
  * Handles opening/joining friend's activity
  */
 
-import { Activity } from '../types';
+import { Activity, Friend } from '../types';
 import { StorageManager } from './storage';
+import { selectDiscordServer } from './activity-utils';
 
 export class JoinHandler {
   constructor(private storage: StorageManager) {}
@@ -119,14 +120,29 @@ export class JoinHandler {
    */
   private async _promptDiscord(friendName: string): Promise<void> {
     try {
-      const profile = await this.storage.getUserProfile();
-
-      if (!profile?.discord_info) {
-        console.debug('[JoinHandler] Discord not configured');
+      const friend = await this.storage.getFriend(friendName);
+      if (!friend) {
+        console.debug('[JoinHandler] Friend not found for Discord prompt');
         return;
       }
 
-      const discordUrl = this._parseDiscordInfo(profile.discord_info);
+      const profile = await this.storage.getUserProfile();
+      if (!profile) {
+        console.debug('[JoinHandler] User profile not found');
+        return;
+      }
+
+      // Determine which Discord to use: friend's first, then user's, or other friends in alpha order
+      const discordInfo = selectDiscordServer(friend.discord_info, [
+        { identifier: profile.memorable_identifier, discord_info: profile.discord_info },
+      ]);
+
+      if (!discordInfo) {
+        console.debug('[JoinHandler] No Discord server configured for coordination');
+        return;
+      }
+
+      const discordUrl = this._parseDiscordInfo(discordInfo);
 
       if (discordUrl) {
         // Create notification

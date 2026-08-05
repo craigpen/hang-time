@@ -129,3 +129,21 @@ export function getActivityVerb(service: string): 'play' | 'watch' | 'listen' {
       return 'watch';
   }
 }
+
+/**
+ * Determine which Discord server to use for coordination
+ * Algorithm: inviter first, then iterate through invitees in alphabetical order
+ * All participants independently calculate the same result
+ */
+export function selectDiscordServer(
+  inviterDiscord: string | undefined,
+  inviteeDiscords: Array<{ identifier: string; discord_info?: string }>
+): string | undefined {
+  if (inviterDiscord) {
+    return inviterDiscord;
+  }
+
+  // Sort by identifier and find first with discord_info
+  const sorted = [...inviteeDiscords].sort((a, b) => a.identifier.localeCompare(b.identifier));
+  return sorted.find((invitee) => invitee.discord_info)?.discord_info;
+}

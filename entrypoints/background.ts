@@ -2366,6 +2366,8 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
           await notificationManager.notifyNewMessage(friend.id, friend.local_name, `invited you to join`);
         } else if (message.type === 'join_accepted') {
           await notificationManager.notifyNewMessage(friend.id, friend.local_name, `joined your activity`);
+          // Show Discord coordination prompt if available
+          await _showDiscordCoordinationPrompt(friend);
         } else if (message.type === 'chat') {
           await notificationManager.notifyNewMessage(friend.id, friend.local_name, message.content || 'sent a message');
         }
@@ -3122,6 +3124,54 @@ async function retryPendingMessages(): Promise<void> {
 
   if (retryCount > 0) {
     console.log(`[Background] Retried ${retryCount} pending messages`);
+  }
+}
+
+/**
+ * Show Discord coordination prompt when someone joins your activity
+ * Uses the same selection algorithm as the joiner: inviter first, then invitees
+ */
+async function _showDiscordCoordinationPrompt(friend: Friend): Promise<void> {
+  try {
+    const { selectDiscordServer } = await import('../modules/activity-utils');
+    const profile = await storageManager.getUserProfile();
+    if (!profile) return;
+
+    // Determine which Discord to use: friend's first, then user's
+    const discordInfo = selectDiscordServer(friend.discord_info, [
+      { identifier: profile.memorable_identifier, discord_info: profile.discord_info },
+    ]);
+
+    if (!discordInfo) return;
+
+    // Parse the Discord URL
+    let discordUrl = discordInfo;
+    if (!discordUrl.startsWith('http')) {
+      if (discordUrl.includes('discord.gg/')) {
+        discordUrl = `https://${discordUrl}`;
+      } else {
+        return; // Can't parse as URL
+      }
+    }
+
+    // Show notification with Discord button
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('public/icon-48.png'),
+      title: 'Ready to Coordinate',
+      message: `${friend.local_name} joined! Want to chat on Discord?`,
+      buttons: [{ title: 'Open Discord' }, { title: 'Dismiss' }],
+      requireInteraction: false,
+    });
+
+    // Listen for button clicks
+    chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+      if (buttonIndex === 0 && discordUrl) {
+        chrome.tabs.create({ url: discordUrl, active: true });
+      }
+    });
+  } catch (error) {
+    console.debug('[Background] Discord coordination prompt failed:', error);
   }
 }
 
