@@ -250,19 +250,28 @@ export class MessagingManager {
       }
 
       // Store in local message history as outbound
-      const localMessage = {
+      const localMessage: any = {
         id: event.id,
         friend_id: recipientFriend.id,
         friend_identifier: recipientFriend.identifier,
         sender_identifier: userProfile.memorable_identifier,
         activity_id: message.activity_id,
-        type: message.type as 'chat' | 'invite' | 'join_accepted' | 'join_declined',
+        service: message.service,
+        type: message.type as 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response',
         content: message.content,
         is_outbound: true,
         timestamp: message.timestamp,
         read: true,
         nostr_event_id: event.id,
       };
+
+      // Add sync-specific fields if present
+      if (message.position !== undefined) {
+        localMessage.position = message.position;
+      }
+      if (message.sent_at !== undefined) {
+        localMessage.sent_at = message.sent_at;
+      }
 
       await this.storageManager.addActivityMessage(recipientFriend.id, message.activity_id, localMessage);
 
@@ -319,19 +328,27 @@ export class MessagingManager {
       }
 
       // Create message record
-      const storedMessage = {
+      const storedMessage: any = {
         id: `${friend.id}_${timestamp}`,
         friend_id: friend.id,
         friend_identifier: friend.identifier,
         sender_identifier: friend.identifier,
         activity_id: message.activity_id,
         service: message.service,
-        type: message.type as 'chat' | 'invite' | 'join_accepted' | 'join_declined',
+        type: message.type as 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response',
         content: message.content,
         is_outbound: false,
         timestamp: message.timestamp || timestamp,
         read: false,
       };
+
+      // Add sync-specific fields if present
+      if (message.position !== undefined) {
+        storedMessage.position = message.position;
+      }
+      if (message.sent_at !== undefined) {
+        storedMessage.sent_at = message.sent_at;
+      }
 
       // Store in IndexedDB
       await this.storageManager.addActivityMessage(friend.id, message.activity_id, storedMessage);
