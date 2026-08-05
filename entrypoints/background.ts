@@ -3550,10 +3550,14 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
     let removed = false;
 
     for (const [activityId, activity] of Object.entries(allActivities)) {
-      if (activity?.metadata?.tabId === tabId && activity?.service === 'video-tab') {
-        console.debug(`[Background] ðŸ—‘ï¸  Removing activity for closed tab ${tabId}: ${activity.id}`);
-        delete allActivities[activityId];
-        removed = true;
+      if (activity?.metadata?.tabId === tabId) {
+        // Clean up any tab-based video/stream activity (youtube-tab, netflix-tab, twitch-tab, video-tab)
+        const isTabActivity = activity?.service?.includes('-tab') || activity?.service === 'video-tab';
+        if (isTabActivity) {
+          console.debug(`[Background] Removing ${activity.service} activity for closed tab ${tabId}: ${activity.id}`);
+          delete allActivities[activityId];
+          removed = true;
+        }
       }
     }
 
