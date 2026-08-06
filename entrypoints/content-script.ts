@@ -694,20 +694,19 @@ function establishConnection(): void {
 
         case 'CO_WATCH_UPDATE':
           if (!overlayUI) return;
-          // Update overlay with co-watcher info
+          // Update overlay with co-watch data
           if (message.data) {
-            const { host_friend_id, co_watchers, detected_at } = message.data;
             overlayUI.setState({
               activity_id: message.data.activity_id,
-              host_friend_id: message.data.host_friend_id,
-              host_name: message.data.host_name || '?',
-              co_watchers: co_watchers || [],
-              host_position: message.data.host_position,
-              host_position_timestamp: message.data.host_position_timestamp,
-              user_position: message.data.user_position,
-              user_position_timestamp: message.data.user_position_timestamp,
+              host_nickname: message.data.host_nickname,
+              watching_together: message.data.watching_together || [],
+              host_progress: message.data.host_progress,
+              host_duration: message.data.host_duration,
             });
-            console.debug('[ContentScript] Updated overlay with co-watchers:', co_watchers);
+            console.debug('[ContentScript] Updated overlay:', {
+              host: message.data.host_nickname,
+              watching: message.data.watching_together?.join(', '),
+            });
           }
           break;
 

@@ -860,44 +860,35 @@ function _startCoWatcherDetectionCycle(): void {
         const userPosition = profile?.current_activity?.metadata?.progress;
         const userPositionTimestamp = profile?.current_activity?.contentTimestamp;
 
-        // Build co-watchers list with names
-        const coWatchersWithNames: string[] = [];
+        // Build watching_together list: host + co-watchers
+        const watchingTogether: string[] = [hostName];
         for (const coWatcherId of session.co_watchers) {
           let coWatcherName: string;
           if (coWatcherId === 'self') {
-            // Self is in co-watchers when not host
             const profile = await storageManager.getUserProfile();
             coWatcherName = profile?.nickname || profile?.memorable_identifier || 'You';
           } else {
-            // Friend is a co-watcher
             const coWatcherFriend = await getFriendManager().getFriend(coWatcherId);
             coWatcherName = coWatcherFriend?.local_name || coWatcherId;
           }
-          coWatchersWithNames.push(coWatcherName);
+          watchingTogether.push(coWatcherName);
         }
 
         // Broadcast to all connected content scripts
         console.debug(`[Background] Broadcasting CO_WATCH_UPDATE to ${activeContentScriptPorts.size} content scripts`);
-        console.debug(`[OverlayDebug] CO_WATCH_UPDATE: host_friend_id=${session.host_friend_id}, hostName="${hostName}", co_watchers=${coWatchersWithNames.join(',')}`);
         for (const [tabId, port] of activeContentScriptPorts.entries()) {
           try {
             port.postMessage({
               type: 'CO_WATCH_UPDATE',
               data: {
                 activity_id: session.activity_id,
-                host_friend_id: session.host_friend_id,
-                host_name: hostName,
-                video_title: videoTitle,
-                video_duration: videoDuration,
-                co_watchers: coWatchersWithNames,
-                host_position: hostPosition,
-                host_position_timestamp: hostPositionTimestamp,
-                user_position: userPosition,
-                user_position_timestamp: userPositionTimestamp,
-                detected_at: session.detected_at,
+                host_nickname: hostName,
+                watching_together: watchingTogether,
+                host_progress: hostPosition,
+                host_duration: videoDuration,
               },
             });
-            console.debug(`[Background] ✅ Sent CO_WATCH_UPDATE to tab ${tabId}: host=${hostName}, watchers=${session.co_watchers.length}`);
+            console.debug(`[Background] ✅ Sent CO_WATCH_UPDATE: activity=${session.activity_id}, host=${hostName}, watching=${watchingTogether.join(', ')}`);
           } catch (e) {
             console.debug(`[Background] Failed to send CO_WATCH_UPDATE to tab ${tabId}:`, e);
           }

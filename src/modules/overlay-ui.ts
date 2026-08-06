@@ -7,9 +7,8 @@ export interface OverlayState {
   visible: boolean;
   pinned: boolean;
   opacity: number; // 0-100
-  host_name?: string;
-  host_friend_id?: string;
-  co_watchers: string[]; // Friend local names
+  host_nickname?: string;
+  watching_together: string[]; // list of nicknames watching together
   messages: Array<{
     id: string;
     sender: string;
@@ -17,13 +16,9 @@ export interface OverlayState {
     content: string;
     timestamp: number;
   }>;
-  host_position?: number; // seconds
-  host_position_timestamp?: number; // when host position was measured (ms)
-  video_duration?: number; // total duration in seconds
-  user_position?: number; // seconds
-  user_position_timestamp?: number; // when user position was measured (ms)
+  host_progress?: number; // host's progress in seconds
+  host_duration?: number; // total duration in seconds
   activity_id?: string;
-  video_title?: string;
 }
 
 export class OverlayUI {
@@ -39,7 +34,7 @@ export class OverlayUI {
     visible: false,
     pinned: false,
     opacity: 80,
-    co_watchers: [],
+    watching_together: [],
     messages: [],
   };
 
@@ -444,9 +439,9 @@ export class OverlayUI {
     if (!this.container) return;
 
     // Only show if:
-    // 1. There's an active co-watch session (has host_name or co_watchers)
+    // 1. There's an active co-watch session (watching_together list)
     // 2. OR the overlay is pinned
-    const hasCoWatchSession = this.state.host_name || this.state.co_watchers.length > 0;
+    const hasCoWatchSession = this.state.watching_together.length > 0;
     if (!hasCoWatchSession && !this.state.pinned) {
       return;
     }
@@ -540,32 +535,20 @@ export class OverlayUI {
     const markerEl = document.getElementById('progress-bar-marker') as HTMLElement;
     const syncBtn = document.getElementById('progress-sync-button') as HTMLElement;
 
-    if (fillEl && this.state.host_position !== undefined && this.state.video_duration !== undefined && this.state.video_duration > 0) {
-      // Use same calculation as popup: progress / duration * 100
-      const hostPercent = Math.min((this.state.host_position / this.state.video_duration) * 100, 100);
+    if (fillEl && this.state.host_progress !== undefined && this.state.host_duration && this.state.host_duration > 0) {
+      // Simple calculation: progress / duration * 100
+      const hostPercent = Math.min((this.state.host_progress / this.state.host_duration) * 100, 100);
       fillEl.style.width = hostPercent + '%';
     }
 
-    // Show user position marker only if not the host
-    const isHost = this.userId === this.state.host_friend_id;
+    // Hide marker - simplified approach
     if (markerEl) {
-      if (isHost || this.state.user_position === undefined || this.state.user_position_timestamp === undefined) {
-        markerEl.style.display = 'none';
-      } else if (this.state.video_duration && this.state.video_duration > 0) {
-        // Use same calculation as popup: progress / duration * 100
-        const userPercent = Math.min((this.state.user_position / this.state.video_duration) * 100, 100);
-        markerEl.style.left = userPercent + '%';
-        markerEl.style.display = 'block';
-      }
+      markerEl.style.display = 'none';
     }
 
-    // Show sync button only for non-hosts
+    // Hide sync button - simplified approach
     if (syncBtn) {
-      if (isHost) {
-        syncBtn.style.display = 'none';
-      } else {
-        syncBtn.style.display = 'block';
-      }
+      syncBtn.style.display = 'none';
     }
   }
 
@@ -576,18 +559,21 @@ export class OverlayUI {
     const header = document.getElementById('attendees-header');
     if (!header) return;
 
-    // Build list: host first, then other co-watchers (nicknames only)
-    const parts: string[] = [];
-
-    // Host (in blue)
-    if (this.state.host_name) {
-      parts.push(`<span class="attendee-host">${this.escapeHtml(this.state.host_name)}<span class="attendee-host-label">(host)</span></span>`);
+    if (!this.state.watching_together || this.state.watching_together.length === 0) {
+      header.innerHTML = 'Watching together: Loading...';
+      return;
     }
 
-    // Other co-watchers (nicknames only, no "(you)" indicator)
-    if (this.state.co_watchers && this.state.co_watchers.length > 0) {
-      for (const watcher of this.state.co_watchers) {
-        parts.push(this.escapeHtml(watcher));
+    // First person (host) is highlighted in blue, others are plain
+    const parts: string[] = [];
+    for (let i = 0; i < this.state.watching_together.length; i++) {
+      const name = this.escapeHtml(this.state.watching_together[i]);
+      if (i === 0) {
+        // Host
+        parts.push(`<span class="attendee-host">${name}<span class="attendee-host-label">(host)</span></span>`);
+      } else {
+        // Co-watchers
+        parts.push(name);
       }
     }
 
