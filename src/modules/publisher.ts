@@ -386,6 +386,8 @@ export class ActivityPublisher {
     // Normalize disconnected state to 'paused' for publishing (internal state not shared with friends)
     const publishState = activity.state === 'disconnected' ? 'paused' : activity.state;
 
+    console.debug(`[TimestampMigration:Publisher] Publishing activity ${activity.id} with contentTimestamp=${activity.contentTimestamp} (timestamp=${activity.timestamp})`);
+
     return {
       id: activity.id,
       service: activity.service,
@@ -393,6 +395,7 @@ export class ActivityPublisher {
       url: activity.url,
       state: publishState,
       timestamp: activity.timestamp,
+      contentTimestamp: activity.contentTimestamp, // Immutable start-watching time for reliable host determination
       metadata: activity.metadata ? {
         progress: activity.metadata.progress,
         duration: activity.metadata.duration,

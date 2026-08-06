@@ -2410,6 +2410,11 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         id: a.id,
       })));
 
+      // Debug: log contentTimestamp for each activity
+      for (const activity of activities) {
+        console.debug(`[TimestampMigration:ActivityReceiver] Received activity ${activity.id} with contentTimestamp=${activity.contentTimestamp} (timestamp=${activity.timestamp})`);
+      }
+
       // Record reception for each activity
       for (const activity of activities) {
         await diagnostics.recordReception(
@@ -2467,7 +2472,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       for (const [service, activity] of Object.entries(activitiesByService)) {
         const existingActivity = friend.current_activities?.[service as ServiceName];
 
-        newCurrentActivities[service as ServiceName] = {
+        const merged = {
           ...existingActivity,  // Start with existing (preserves local fields)
           ...activity,          // Override with published fields
           metadata: {
@@ -2475,6 +2480,9 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
             ...activity.metadata,           // Override with published metadata
           }
         };
+
+        console.debug(`[TimestampMigration:ActivityMerge] Merged activity ${activity.id}: contentTimestamp=${merged.contentTimestamp} (from published=${activity.contentTimestamp})`);
+        newCurrentActivities[service as ServiceName] = merged;
       }
 
       console.debug(`[Background] 📦 Storing activities for ${friend.local_name}: ${Object.keys(newCurrentActivities).join(', ')}`);
