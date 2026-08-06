@@ -18,6 +18,7 @@ export interface OverlayState {
   }>;
   host_progress?: number; // host's progress in seconds
   host_duration?: number; // total duration in seconds
+  user_progress?: number; // user's own progress in seconds
   activity_id?: string;
 }
 
@@ -541,9 +542,15 @@ export class OverlayUI {
       fillEl.style.width = hostPercent + '%';
     }
 
-    // Hide marker - simplified approach
+    // Show user position marker if user has progress (non-host position indicator)
     if (markerEl) {
-      markerEl.style.display = 'none';
+      if (this.state.user_progress !== undefined && this.state.host_duration && this.state.host_duration > 0) {
+        const userPercent = Math.min((this.state.user_progress / this.state.host_duration) * 100, 100);
+        markerEl.style.left = userPercent + '%';
+        markerEl.style.display = 'block';
+      } else {
+        markerEl.style.display = 'none';
+      }
     }
 
     // Hide sync button - simplified approach

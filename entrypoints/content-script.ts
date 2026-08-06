@@ -702,6 +702,7 @@ function establishConnection(): void {
               watching_together: message.data.watching_together || [],
               host_progress: message.data.host_progress,
               host_duration: message.data.host_duration,
+              user_progress: message.data.user_progress,
             });
             console.debug('[ContentScript] Updated overlay:', {
               host: message.data.host_nickname,
