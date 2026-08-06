@@ -589,8 +589,12 @@ export class OverlayUI {
 
     // Show arrow marker only if user is NOT the host, has progress, and gap is > 5 seconds
     if (markerEl) {
-      if (!this._state.is_user_host && this._state.user_progress !== undefined && this._state.host_progress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
-        const gap = Math.abs(this._state.user_progress - this._state.host_progress);
+      if (!this._state.is_user_host && this._state.user_progress !== undefined && this._state.host_progress !== undefined && this._state.host_progress_timestamp !== undefined && this._state.host_duration && this._state.host_duration > 0) {
+        // Calculate where host actually is now (not just when we last measured)
+        const elapsedSinceHostMeasure = (Date.now() - this._state.host_progress_timestamp) / 1000;
+        const hostCurrentPosition = this._state.host_progress + elapsedSinceHostMeasure;
+
+        const gap = Math.abs(this._state.user_progress - hostCurrentPosition);
         const SYNC_THRESHOLD = 5; // seconds
 
         if (gap > SYNC_THRESHOLD) {
