@@ -175,6 +175,18 @@ export class OverlayUI {
           clip-path: polygon(100% 0%, 100% 100%, 0% 50%);
         }
 
+        .progress-bar-host-marker {
+          position: absolute;
+          top: 0;
+          width: 2px;
+          height: 100%;
+          background: white;
+          left: 0%;
+          transition: left 0.1s linear;
+          box-shadow: 0 0 3px rgba(255, 255, 255, 0.8);
+          pointer-events: none;
+        }
+
         .attendees-header {
           padding: 8px 12px;
           font-size: 12px;
@@ -337,6 +349,7 @@ export class OverlayUI {
         <div class="progress-bar-wrapper">
           <div class="progress-bar-container">
             <div class="progress-bar-fill" id="progress-bar-fill"></div>
+            <div class="progress-bar-host-marker" id="progress-bar-host-marker"></div>
             <div class="progress-bar-marker" id="progress-bar-marker"></div>
           </div>
           <button id="progress-sync-button" title="Sync to host position">↻</button>
@@ -542,6 +555,7 @@ export class OverlayUI {
     }
 
     const fillEl = document.getElementById('progress-bar-fill') as HTMLElement;
+    const hostMarkerEl = document.getElementById('progress-bar-host-marker') as HTMLElement;
     const markerEl = document.getElementById('progress-bar-marker') as HTMLElement;
     const syncBtn = document.getElementById('progress-sync-button') as HTMLElement;
 
@@ -549,6 +563,11 @@ export class OverlayUI {
       // Simple calculation: progress / duration * 100
       const hostPercent = Math.min((this.state.host_progress / this.state.host_duration) * 100, 100);
       fillEl.style.width = hostPercent + '%';
+
+      // Position host marker at host's current position
+      if (hostMarkerEl) {
+        hostMarkerEl.style.left = hostPercent + '%';
+      }
     }
 
     // Show arrow marker only if user is NOT the host and has progress
