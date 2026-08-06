@@ -180,10 +180,10 @@ export class OverlayUI {
           top: 0;
           width: 2px;
           height: 100%;
-          background: white;
+          background: #ff6b6b;
           left: 0%;
           transition: left 0.1s linear;
-          box-shadow: 0 0 3px rgba(255, 255, 255, 0.8);
+          box-shadow: 0 0 3px rgba(255, 107, 107, 0.8);
           pointer-events: none;
         }
 
