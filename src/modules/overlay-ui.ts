@@ -279,10 +279,10 @@ export class OverlayUI {
         }
 
         .opacity-slider {
-          width: 50px;
-          height: 16px;
+          width: 60px;
+          height: 20px;
           cursor: pointer;
-          accent-color: #2da6ff;
+          accent-color: #6b7280;
           flex-shrink: 0;
         }
 
@@ -299,13 +299,6 @@ export class OverlayUI {
 
         #discord-button:hover {
           opacity: 0.8;
-        }
-
-        .opacity-slider {
-          width: 60px;
-          height: 20px;
-          cursor: pointer;
-          accent-color: #2da6ff;
         }
 
         .chat-container {
