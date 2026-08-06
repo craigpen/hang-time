@@ -126,8 +126,10 @@ export class OverlayUI {
           height: 8px;
           background: rgba(255, 255, 255, 0.2);
           border-radius: 4px;
-          overflow: hidden;
+          overflow: visible;
           position: relative;
+          display: flex;
+          align-items: center;
         }
 
         #progress-sync-button {
@@ -159,8 +161,8 @@ export class OverlayUI {
           top: 50%;
           transform: translateY(-50%);
           left: 0%;
-          width: 14px;
-          height: 14px;
+          width: 16px;
+          height: 20px;
           background: #ff6b6b;
           transition: left 0.1s linear;
           user-select: none;
@@ -177,13 +179,14 @@ export class OverlayUI {
 
         .progress-bar-host-marker {
           position: absolute;
-          top: 0;
-          width: 2px;
-          height: 100%;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 3px;
+          height: 20px;
           background: #ff6b6b;
           left: 0%;
           transition: left 0.1s linear;
-          box-shadow: 0 0 3px rgba(255, 107, 107, 0.8);
+          box-shadow: 0 0 4px rgba(255, 107, 107, 0.8);
           pointer-events: none;
         }
 
