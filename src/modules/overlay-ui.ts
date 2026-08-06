@@ -456,6 +456,12 @@ export class OverlayUI {
       }
       discordButton.addEventListener('click', () => this.onDiscordClick());
     }
+
+    // Sync button (for non-hosts only)
+    const syncButton = document.getElementById('progress-sync-button');
+    if (syncButton) {
+      syncButton.addEventListener('click', () => this.onSyncClick());
+    }
   }
 
   /**
@@ -593,9 +599,13 @@ export class OverlayUI {
       }
     }
 
-    // Hide sync button - simplified approach
+    // Show sync button only for non-hosts
     if (syncBtn) {
-      syncBtn.style.display = 'none';
+      if (!this.state.is_user_host) {
+        syncBtn.style.display = 'block';
+      } else {
+        syncBtn.style.display = 'none';
+      }
     }
   }
 
