@@ -891,6 +891,7 @@ function _startCoWatcherDetectionCycle(): void {
                 host_progress: hostPosition,
                 host_duration: videoDuration,
                 user_progress: userPosition,
+                is_user_host: session.host_friend_id === 'self',
               },
             });
             console.debug(`[Background] ✅ Sent CO_WATCH_UPDATE: activity=${session.activity_id}, host=${hostName}, watching=${watchingTogether.join(', ')}`);

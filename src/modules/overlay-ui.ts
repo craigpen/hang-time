@@ -20,6 +20,7 @@ export interface OverlayState {
   host_duration?: number; // total duration in seconds
   user_progress?: number; // user's own progress in seconds
   activity_id?: string;
+  is_user_host?: boolean; // true if the user is the host
 }
 
 export class OverlayUI {
@@ -542,9 +543,9 @@ export class OverlayUI {
       fillEl.style.width = hostPercent + '%';
     }
 
-    // Show user position marker if user has progress (non-host position indicator)
+    // Show user position marker only if user is NOT the host and has progress
     if (markerEl) {
-      if (this.state.user_progress !== undefined && this.state.host_duration && this.state.host_duration > 0) {
+      if (!this.state.is_user_host && this.state.user_progress !== undefined && this.state.host_duration && this.state.host_duration > 0) {
         const userPercent = Math.min((this.state.user_progress / this.state.host_duration) * 100, 100);
         markerEl.style.left = userPercent + '%';
         markerEl.style.display = 'block';

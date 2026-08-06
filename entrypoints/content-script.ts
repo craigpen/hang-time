@@ -717,6 +717,7 @@ function establishConnection(): void {
               host_progress: message.data.host_progress,
               host_duration: message.data.host_duration,
               user_progress: message.data.user_progress,
+              is_user_host: message.data.is_user_host,
             });
             console.debug('[ContentScript] Updated overlay:', {
               host: message.data.host_nickname,
