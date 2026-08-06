@@ -895,7 +895,7 @@ function _startCoWatcherDetectionCycle(): void {
                 host_progress_timestamp: hostPositionTimestamp,
                 host_state: hostState,
                 host_duration: videoDuration,
-                user_progress: userProgress,
+                user_progress: userPosition,
                 is_user_host: session.host_friend_id === 'self',
               },
             });
