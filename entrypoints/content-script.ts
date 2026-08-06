@@ -716,6 +716,7 @@ function establishConnection(): void {
               watching_together: message.data.watching_together || [],
               host_progress: message.data.host_progress,
               host_progress_timestamp: message.data.host_progress_timestamp,
+              host_state: message.data.host_state,
               host_duration: message.data.host_duration,
               user_progress: message.data.user_progress,
               is_user_host: message.data.is_user_host,

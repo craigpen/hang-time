@@ -18,6 +18,7 @@ export interface OverlayState {
   }>;
   host_progress?: number; // host's progress in seconds
   host_progress_timestamp?: number; // when host's progress was measured
+  host_state?: string; // playing or paused
   host_duration?: number; // total duration in seconds
   user_progress?: number; // user's own progress in seconds
   activity_id?: string;
@@ -358,6 +359,7 @@ export class OverlayUI {
           Watching together: Loading...
         </div>
         <div class="progress-bar-wrapper">
+          <div class="host-state-indicator" id="host-state-indicator" style="min-width: 24px; font-size: 11px; color: rgba(255,255,255,0.6); text-align: center;">-</div>
           <div class="progress-bar-container">
             <div class="progress-bar-fill" id="progress-bar-fill"></div>
             <div class="progress-bar-host-marker" id="progress-bar-host-marker"></div>
@@ -575,6 +577,18 @@ export class OverlayUI {
     const hostMarkerEl = document.getElementById('progress-bar-host-marker') as HTMLElement;
     const markerEl = document.getElementById('progress-bar-marker') as HTMLElement;
     const syncBtn = document.getElementById('progress-sync-button') as HTMLElement;
+    const stateIndicator = document.getElementById('host-state-indicator') as HTMLElement;
+
+    // Update host state indicator
+    if (stateIndicator) {
+      if (this._state.host_state === 'playing') {
+        stateIndicator.textContent = '▶';
+      } else if (this._state.host_state === 'paused') {
+        stateIndicator.textContent = '⏸';
+      } else {
+        stateIndicator.textContent = '-';
+      }
+    }
 
     if (fillEl && this._state.host_progress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
       // Simple calculation: progress / duration * 100
@@ -600,21 +614,14 @@ export class OverlayUI {
       if (!this._state.is_user_host && this._state.user_progress !== undefined && this._state.host_progress !== undefined && this._state.host_progress_timestamp !== undefined && this._state.host_duration && this._state.host_duration > 0) {
         // Calculate where host actually is now (not just when we last measured)
         // Note: progress values are in milliseconds, elapsed is in ms
+        // Only extrapolate forward if host is playing, not if paused
         const elapsedSinceHostMeasureMs = Date.now() - this._state.host_progress_timestamp;
-        const hostCurrentPosition = this._state.host_progress + elapsedSinceHostMeasureMs;
+        const hostCurrentPosition = this._state.host_state === 'playing'
+          ? this._state.host_progress + elapsedSinceHostMeasureMs
+          : this._state.host_progress;
 
         const gap = Math.abs(this._state.user_progress - hostCurrentPosition);
         const SYNC_THRESHOLD = 5000; // 5 seconds in milliseconds
-
-        console.debug('[OverlayUI] Gap calculation:', {
-          userProgress: this._state.user_progress,
-          hostProgress: this._state.host_progress,
-          elapsedMs: elapsedSinceHostMeasureMs,
-          hostCurrentPosition,
-          gap,
-          threshold: SYNC_THRESHOLD,
-          shouldShow: gap > SYNC_THRESHOLD,
-        });
 
         if (gap > SYNC_THRESHOLD) {
           const userPercent = Math.min((this._state.user_progress / this._state.host_duration) * 100, 100);

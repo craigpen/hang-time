@@ -826,6 +826,7 @@ function _startCoWatcherDetectionCycle(): void {
         let videoTitle = 'Loading video...';
         let hostPosition: number | undefined;
         let hostPositionTimestamp: number | undefined;
+        let hostState: string | undefined;
         let videoDuration: number | undefined;
 
         let userPosition: number | undefined;
@@ -837,6 +838,7 @@ function _startCoWatcherDetectionCycle(): void {
           if (hostActivity?.content) {
             videoTitle = hostActivity.content;
             videoDuration = hostActivity.metadata?.duration;
+            hostState = hostActivity.state;
             // Use progress measured now, timestamp when measured
             if (hostActivity?.metadata?.progress !== undefined) {
               hostPosition = hostActivity.metadata.progress;
@@ -851,6 +853,7 @@ function _startCoWatcherDetectionCycle(): void {
           if (hostActivity && hostActivity.content) {
             videoTitle = hostActivity.content;
             videoDuration = hostActivity.metadata?.duration;
+            hostState = hostActivity.state;
             // Use progress measured now, timestamp when measured
             if (hostActivity?.metadata?.progress !== undefined) {
               hostPosition = hostActivity.metadata.progress;
@@ -890,8 +893,9 @@ function _startCoWatcherDetectionCycle(): void {
                 watching_together: watchingTogether,
                 host_progress: hostPosition,
                 host_progress_timestamp: hostPositionTimestamp,
+                host_state: hostState,
                 host_duration: videoDuration,
-                user_progress: userPosition,
+                user_progress: userProgress,
                 is_user_host: session.host_friend_id === 'self',
               },
             });
