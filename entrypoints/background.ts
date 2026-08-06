@@ -1049,6 +1049,20 @@ chrome.runtime.onConnect.addListener((port) => {
           } catch (e) {
             console.error('[Background] Failed to handle Discord button:', e);
           }
+        } else if (message.type === 'GET_ACTIVITY_CONTENT_TIMESTAMP') {
+          // Content script is checking if we have an existing contentTimestamp for this activity in StorageManager
+          const activityId = message.data?.activityId;
+          if (activityId && port) {
+            const myActivities = await storageManager.getMyActivities();
+            const activity = myActivities?.[activityId];
+            port.postMessage({
+              type: 'ACTIVITY_CONTENT_TIMESTAMP',
+              data: {
+                activityId: activityId,
+                contentTimestamp: activity?.contentTimestamp || null,
+              },
+            });
+          }
         } else if (message.type === 'CONTENT_SCRIPT_ACTIVITY') {
           await _handleContentScriptActivity(message.data?.key, message.data?.value, tabId);
         } else if (message.type === 'CONTENT_SCRIPT_ORPHANED') {

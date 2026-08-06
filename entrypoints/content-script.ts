@@ -154,9 +154,20 @@ class GenericVideoTracker {
     }
     const newActivityId = generateActivityId(service, url);
 
-    // If this is a new activity, reset the content timestamp
+    // If this is a new activity, get or create the content timestamp from StorageManager
     if (newActivityId !== this.currentActivityId) {
       this.currentActivityId = newActivityId;
+
+      // Request existing contentTimestamp from background's StorageManager (primary memory storage)
+      // This persists across page reloads in the same tab
+      if (port) {
+        port.postMessage({
+          type: 'GET_ACTIVITY_CONTENT_TIMESTAMP',
+          data: { activityId: newActivityId },
+        });
+      }
+
+      // Use current time as default (will be replaced if background responds with stored value)
       this.currentActivityContentTimestamp = Date.now();
       console.log(`[TimestampMigration:ContentTimestamp] SET for new activity ${newActivityId}`);
     }
@@ -661,6 +672,14 @@ function establishConnection(): void {
     // Setup message listeners for overlay updates
     port.onMessage.addListener((message) => {
       switch (message.type) {
+        case 'ACTIVITY_CONTENT_TIMESTAMP':
+          // Background returned stored contentTimestamp for this activity
+          if (message.data?.activityId === tracker?.['currentActivityId'] && message.data?.contentTimestamp) {
+            tracker['currentActivityContentTimestamp'] = message.data.contentTimestamp;
+            console.debug(`[TimestampMigration:ContentTimestamp] REUSED from StorageManager: ${message.data.contentTimestamp}`);
+          }
+          break;
+
         case 'USER_ID':
           // Store user ID for overlay
           userId = message.data;
