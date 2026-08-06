@@ -809,14 +809,39 @@ function _startCoWatcherDetectionCycle(): void {
         await detector.setCurrentCoWatchSession(session);
 
         // Get host friend name and activity for overlay
-        const hostFriend = await getFriendManager().getFriend(session.host_friend_id);
-        const hostName = hostFriend?.local_name || '?';
+        let hostName = '?';
+        let hostFriend: any = null;
+
+        if (session.host_friend_id === 'self') {
+          const profile = await storageManager.getUserProfile();
+          hostName = profile?.memorable_identifier || 'You';
+        } else {
+          hostFriend = await getFriendManager().getFriend(session.host_friend_id);
+          hostName = hostFriend?.local_name || '?';
+        }
 
         // Get activity title and position from host friend's activities
         let videoTitle = 'Loading video...';
         let hostPosition = 0;
         let hostPositionTimestamp = Date.now();
-        if (hostFriend?.current_activities) {
+
+        if (session.host_friend_id === 'self') {
+          // Get host activity from user profile (self is host)
+          const profile = await storageManager.getUserProfile();
+          const hostActivity = profile?.current_activity;
+          if (hostActivity?.id === session.activity_id) {
+            if (hostActivity?.content) {
+              videoTitle = hostActivity.content;
+            }
+            if (hostActivity?.metadata?.progress !== undefined) {
+              hostPosition = hostActivity.metadata.progress;
+            }
+            if (hostActivity?.timestamp) {
+              hostPositionTimestamp = hostActivity.timestamp;
+            }
+            console.debug(`[Background] Host is self: position=${hostPosition}s (timestamp=${hostPositionTimestamp})`);
+          }
+        } else if (hostFriend?.current_activities) {
           const hostActivity = Object.values(hostFriend.current_activities).find(a => a?.id === session.activity_id);
           if (hostActivity?.content) {
             videoTitle = hostActivity.content;
@@ -827,6 +852,7 @@ function _startCoWatcherDetectionCycle(): void {
           if (hostActivity?.timestamp) {
             hostPositionTimestamp = hostActivity.timestamp;
           }
+          console.debug(`[Background] Host is friend: position=${hostPosition}s (timestamp=${hostPositionTimestamp})`);
         }
 
         // Get current activity for playback position
