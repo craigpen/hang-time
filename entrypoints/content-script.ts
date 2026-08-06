@@ -157,6 +157,7 @@ class GenericVideoTracker {
     // If this is a new activity, get or create the content timestamp from StorageManager
     if (newActivityId !== this.currentActivityId) {
       this.currentActivityId = newActivityId;
+      this.currentActivityContentTimestamp = undefined; // Wait for response or timeout
 
       // Request existing contentTimestamp from background's StorageManager (primary memory storage)
       // This persists across page reloads in the same tab
@@ -167,9 +168,14 @@ class GenericVideoTracker {
         });
       }
 
-      // Use current time as default (will be replaced if background responds with stored value)
-      this.currentActivityContentTimestamp = Date.now();
-      console.log(`[TimestampMigration:ContentTimestamp] SET for new activity ${newActivityId}`);
+      // Fallback: if no response in 200ms, use current time
+      setTimeout(() => {
+        if (this.currentActivityContentTimestamp === undefined) {
+          this.currentActivityContentTimestamp = Date.now();
+          console.log(`[TimestampMigration:ContentTimestamp] FALLBACK: using current time for activity ${newActivityId}`);
+        }
+      }, 200);
+      console.log(`[TimestampMigration:ContentTimestamp] WAITING for stored timestamp for activity ${newActivityId}`);
     }
 
     const playHandler = () => this._sendPlaybackUpdate();
