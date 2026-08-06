@@ -584,7 +584,7 @@ export class OverlayUI {
     const header = document.getElementById('attendees-header');
     if (!header) return;
 
-    // Build list: host first, then other co-watchers, then self
+    // Build list: host first, then other co-watchers (nicknames only)
     const parts: string[] = [];
 
     // Host (in blue)
@@ -592,16 +592,11 @@ export class OverlayUI {
       parts.push(`<span class="attendee-host">${this.escapeHtml(this.state.host_name)}<span class="attendee-host-label">(host)</span></span>`);
     }
 
-    // Other co-watchers
+    // Other co-watchers (nicknames only, no "(you)" indicator)
     if (this.state.co_watchers && this.state.co_watchers.length > 0) {
       for (const watcher of this.state.co_watchers) {
         parts.push(this.escapeHtml(watcher));
       }
-    }
-
-    // Self (only if not already the host)
-    if (this.state.host_friend_id !== 'self') {
-      parts.push('(you)');
     }
 
     header.innerHTML = `Watching together: ${parts.join(', ')}`;

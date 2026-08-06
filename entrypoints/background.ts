@@ -831,6 +831,7 @@ function _startCoWatcherDetectionCycle(): void {
           // Get host activity from user profile (self is host)
           const profile = await storageManager.getUserProfile();
           const hostActivity = profile?.current_activity;
+          console.debug(`[ProgressDebug] Self is host: activity_id=${session.activity_id}, currentActivity=${hostActivity?.id}, progress=${hostActivity?.metadata?.progress}`);
           if (hostActivity?.id === session.activity_id) {
             if (hostActivity?.content) {
               videoTitle = hostActivity.content;
@@ -845,16 +846,17 @@ function _startCoWatcherDetectionCycle(): void {
           }
         } else if (hostFriend?.current_activities) {
           const hostActivity = Object.values(hostFriend.current_activities).find(a => a?.id === session.activity_id);
-          if (hostActivity?.content) {
-            videoTitle = hostActivity.content;
+          if (hostActivity) {
+            if (hostActivity.content) {
+              videoTitle = hostActivity.content;
+            }
+            if (hostActivity.metadata?.progress !== undefined) {
+              hostPosition = hostActivity.metadata.progress;
+            }
+            if (hostActivity.timestamp) {
+              hostPositionTimestamp = hostActivity.timestamp;
+            }
           }
-          if (hostActivity?.metadata?.progress !== undefined) {
-            hostPosition = hostActivity.metadata.progress;
-          }
-          if (hostActivity?.timestamp) {
-            hostPositionTimestamp = hostActivity.timestamp;
-          }
-          console.debug(`[Background] Host is friend: position=${hostPosition}s (timestamp=${hostPositionTimestamp})`);
         }
 
         // Get current activity for playback position
