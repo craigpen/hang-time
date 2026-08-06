@@ -814,9 +814,11 @@ function _startCoWatcherDetectionCycle(): void {
 
         if (session.host_friend_id === 'self') {
           const profile = await storageManager.getUserProfile();
-          hostName = profile?.memorable_identifier || 'You';
+          // Use nickname if set, else memorable_identifier
+          hostName = profile?.nickname || profile?.memorable_identifier || 'You';
         } else {
           hostFriend = await getFriendManager().getFriend(session.host_friend_id);
+          // Use local_name (the nickname the user gave this friend)
           hostName = hostFriend?.local_name || '?';
         }
 
@@ -870,6 +872,7 @@ function _startCoWatcherDetectionCycle(): void {
 
         // Broadcast to all connected content scripts
         console.debug(`[Background] Broadcasting CO_WATCH_UPDATE to ${activeContentScriptPorts.size} content scripts`);
+        console.debug(`[OverlayDebug] CO_WATCH_UPDATE: host_friend_id=${session.host_friend_id}, hostName="${hostName}", co_watchers=${coWatchersWithNames.join(',')}`);
         for (const [tabId, port] of activeContentScriptPorts.entries()) {
           try {
             port.postMessage({
