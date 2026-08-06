@@ -869,16 +869,74 @@ function _startCoWatcherDetectionCycle(): void {
 
         // Build watching_together list: host + co-watchers
         const watchingTogether: string[] = [hostName];
+        const friendManager = getFriendManager();
         for (const coWatcherId of session.co_watchers) {
           let coWatcherName: string;
           if (coWatcherId === 'self') {
             const profile = await storageManager.getUserProfile();
             coWatcherName = profile?.nickname || profile?.memorable_identifier || 'You';
           } else {
-            const coWatcherFriend = await getFriendManager().getFriend(coWatcherId);
+            const coWatcherFriend = await friendManager.getFriend(coWatcherId);
             coWatcherName = coWatcherFriend?.local_name || coWatcherId;
           }
           watchingTogether.push(coWatcherName);
+        }
+
+        // Get recent messages for this activity
+        const recentMessages: Array<{
+          id: string;
+          sender: string;
+          sender_id: string;
+          content: string;
+          timestamp: number;
+        }> = [];
+
+        try {
+          // Get messages from all co-watchers for this activity
+          for (const coWatcherId of session.co_watchers) {
+            if (coWatcherId === 'self') continue; // Skip self
+
+            const friend = await friendManager.getFriend(coWatcherId);
+            if (!friend) continue;
+
+            const activityMessages = await storageManager.getActivityMessages(coWatcherId, session.activity_id);
+            if (activityMessages && activityMessages.length > 0) {
+              // Get last 10 messages
+              const recentActivityMessages = activityMessages.slice(-10);
+              for (const msg of recentActivityMessages) {
+                recentMessages.push({
+                  id: msg.id,
+                  sender: friend.local_name,
+                  sender_id: msg.sender_id,
+                  content: msg.content,
+                  timestamp: msg.timestamp,
+                });
+              }
+            }
+          }
+
+          // Also get messages from user's own activity if they sent any
+          const profile = await storageManager.getUserProfile();
+          const userId = profile?.id || 'self';
+          const myActivityMessages = await storageManager.getActivityMessages(userId, session.activity_id);
+          if (myActivityMessages && myActivityMessages.length > 0) {
+            const recentMyMessages = myActivityMessages.slice(-10);
+            for (const msg of recentMyMessages) {
+              const senderName = profile?.nickname || profile?.memorable_identifier || 'You';
+              recentMessages.push({
+                id: msg.id,
+                sender: senderName,
+                sender_id: msg.sender_id,
+                content: msg.content,
+                timestamp: msg.timestamp,
+              });
+            }
+          }
+
+          // Sort by timestamp
+          recentMessages.sort((a, b) => a.timestamp - b.timestamp);
+        } catch (e) {
+          console.debug('[Background] Failed to get messages for overlay:', e);
         }
 
         // Broadcast to all connected content scripts
@@ -897,9 +955,10 @@ function _startCoWatcherDetectionCycle(): void {
                 host_duration: videoDuration,
                 user_progress: userPosition,
                 is_user_host: session.host_friend_id === 'self',
+                messages: recentMessages,
               },
             });
-            console.debug(`[Background] ✅ Sent CO_WATCH_UPDATE: activity=${session.activity_id}, host=${hostName}, watching=${watchingTogether.join(', ')}`);
+            console.debug(`[Background] ✅ Sent CO_WATCH_UPDATE: activity=${session.activity_id}, host=${hostName}, watching=${watchingTogether.join(', ')}, messages=${recentMessages.length}`);
           } catch (e) {
             console.debug(`[Background] Failed to send CO_WATCH_UPDATE to tab ${tabId}:`, e);
           }
@@ -1078,6 +1137,40 @@ chrome.runtime.onConnect.addListener((port) => {
                 contentTimestamp: timestamp,
               },
             });
+          }
+        } else if (message.type === 'SEND_MESSAGE') {
+          // Message sent from overlay, send to co-watchers
+          try {
+            const detector = getCoWatcherDetector();
+            const coWatchSession = await detector.getCurrentCoWatchSession();
+
+            if (!coWatchSession) {
+              console.warn('[Background] No co-watch session active for message');
+              return;
+            }
+
+            const friendManager = getFriendManager();
+            const messagingManager = getMessagingManager();
+
+            // Send to all co-watchers except self
+            for (const friendId of coWatchSession.co_watchers) {
+              if (friendId === 'self') continue; // Skip self
+
+              const friend = await friendManager.getFriend(friendId);
+              if (!friend) continue;
+
+              // Create a minimal activity object for messaging
+              const activity: any = {
+                id: coWatchSession.activity_id,
+                service: 'co-watch',
+                content: 'Co-watch message',
+              };
+
+              await messagingManager.sendChatMessage(activity, friend, message.data?.content);
+              console.debug(`[Background] Message sent to ${friend.local_name}`);
+            }
+          } catch (e) {
+            console.error('[Background] Failed to send message:', e);
           }
         } else if (message.type === 'CONTENT_SCRIPT_ACTIVITY') {
           await _handleContentScriptActivity(message.data?.key, message.data?.value, tabId);

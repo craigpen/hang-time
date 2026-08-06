@@ -720,10 +720,12 @@ function establishConnection(): void {
               host_duration: message.data.host_duration,
               user_progress: message.data.user_progress,
               is_user_host: message.data.is_user_host,
+              messages: message.data.messages || [],
             });
             console.debug('[ContentScript] Updated overlay:', {
               host: message.data.host_nickname,
               watching: message.data.watching_together?.join(', '),
+              messages: message.data.messages?.length || 0,
             });
           }
           break;
@@ -932,6 +934,17 @@ function initializeOverlay(): void {
         } else {
           console.warn('[ContentScript] Cannot sync - missing host progress or timestamp data');
         }
+      }
+    } else if (event.data.type === 'HANG_TIME_SEND_MESSAGE') {
+      // Message was sent from overlay, forward to background
+      if (port) {
+        port.postMessage({
+          type: 'SEND_MESSAGE',
+          data: {
+            content: event.data.data?.content,
+            activity_id: event.data.data?.activity_id,
+          },
+        });
       }
     } else if (event.data.type === 'HANG_TIME_OPEN_DISCORD') {
       // Discord button was clicked, send to background

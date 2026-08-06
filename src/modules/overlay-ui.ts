@@ -23,6 +23,7 @@ export interface OverlayState {
   user_progress?: number; // user's own progress in seconds
   activity_id?: string;
   is_user_host?: boolean; // true if the user is the host
+  user_nickname?: string; // current user's nickname for sending messages
 }
 
 export class OverlayUI {
@@ -34,6 +35,7 @@ export class OverlayUI {
   private dragStartY = 0;
   private dragStartLeft = 0;
   private dragStartTop = 0;
+  private userColorMap: Map<string, string> = new Map(); // sender_id -> color
   private _state: OverlayState = {
     visible: false,
     pinned: false,
@@ -377,6 +379,56 @@ export class OverlayUI {
         .message-user .message-sender {
           text-align: right;
         }
+
+        .message-input-container {
+          padding: 8px;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          display: flex;
+          gap: 6px;
+          align-items: flex-end;
+        }
+
+        #message-input {
+          flex: 1;
+          min-height: 20px;
+          max-height: 60px;
+          padding: 4px 6px;
+          background: rgba(255, 255, 255, 0.05);
+          border: none;
+          border-radius: 2px;
+          color: white;
+          font-size: 12px;
+          font-family: inherit;
+          resize: none;
+          outline: none;
+          overflow-y: auto;
+        }
+
+        #message-input::placeholder {
+          color: rgba(255, 255, 255, 0.3);
+        }
+
+        #message-input:focus {
+          background: rgba(255, 255, 255, 0.08);
+        }
+
+        #send-button {
+          padding: 4px 8px;
+          background: transparent;
+          border: none;
+          color: rgba(255, 255, 255, 0.5);
+          cursor: pointer;
+          font-size: 14px;
+          transition: color 0.2s;
+        }
+
+        #send-button:hover {
+          color: rgba(255, 255, 255, 0.8);
+        }
+
+        #send-button:active {
+          color: #4ade80;
+        }
       </style>
 
       <div class="overlay-header">
@@ -405,6 +457,11 @@ export class OverlayUI {
 
       <div class="chat-container" id="chat-container">
         <div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>
+      </div>
+
+      <div class="message-input-container">
+        <textarea id="message-input" placeholder="Send a message..." rows="1"></textarea>
+        <button id="send-button" title="Send message">↑</button>
       </div>
     `;
 
@@ -505,6 +562,85 @@ export class OverlayUI {
     if (syncButton) {
       syncButton.addEventListener('click', () => this.onSyncClick());
     }
+
+    // Message input and send button
+    const messageInput = document.getElementById('message-input') as HTMLTextAreaElement;
+    const sendButton = document.getElementById('send-button');
+
+    if (messageInput) {
+      // Auto-expand textarea as user types
+      messageInput.addEventListener('input', (e) => {
+        const textarea = e.target as HTMLTextAreaElement;
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 60) + 'px';
+      });
+
+      // Send on Enter (Shift+Enter for newline)
+      messageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          this.onSendMessage(messageInput);
+        }
+      });
+    }
+
+    if (sendButton) {
+      sendButton.addEventListener('click', () => this.onSendMessage(messageInput));
+    }
+  }
+
+  /**
+   * Send message
+   */
+  private onSendMessage(input: HTMLTextAreaElement | null): void {
+    if (!input) return;
+
+    const content = input.value.trim();
+    if (!content) return;
+
+    // Send message via postMessage
+    window.postMessage({
+      type: 'HANG_TIME_SEND_MESSAGE',
+      data: {
+        content,
+        activity_id: this._state.activity_id,
+      }
+    }, '*');
+
+    // Clear input and reset height
+    input.value = '';
+    input.style.height = '20px';
+  }
+
+  /**
+   * Get color for user (deterministic based on sender_id)
+   */
+  private getUserColor(senderId: string): string {
+    if (this.userColorMap.has(senderId)) {
+      return this.userColorMap.get(senderId)!;
+    }
+
+    // Generate deterministic color from senderId hash
+    const colors = [
+      '#60a5fa', // blue
+      '#34d399', // green
+      '#fbbf24', // amber
+      '#f87171', // red
+      '#a78bfa', // purple
+      '#fb7185', // rose
+      '#06b6d4', // cyan
+      '#ec4899', // pink
+    ];
+
+    let hash = 0;
+    for (let i = 0; i < senderId.length; i++) {
+      hash = ((hash << 5) - hash) + senderId.charCodeAt(i);
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+
+    const color = colors[Math.abs(hash) % colors.length];
+    this.userColorMap.set(senderId, color);
+    return color;
   }
 
   /**
@@ -732,11 +868,12 @@ export class OverlayUI {
     container.innerHTML = this._state.messages
       .map(msg => {
         const isUser = msg.sender_id === this.userId;
+        const userColor = this.getUserColor(msg.sender_id);
         return `
           <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}">
             <div>
-              <div class="message-sender">${msg.sender}</div>
-              <div class="message-content">${this.escapeHtml(msg.content)}</div>
+              <div class="message-sender" style="color: ${userColor}">${msg.sender}</div>
+              <div class="message-content" style="${isUser ? `background: rgba(74, 222, 128, 0.3); color: white;` : `background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.9);`}">${this.escapeHtml(msg.content)}</div>
             </div>
           </div>
         `;
