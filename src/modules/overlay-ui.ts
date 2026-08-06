@@ -17,6 +17,7 @@ export interface OverlayState {
     timestamp: number;
   }>;
   host_progress?: number; // host's progress in seconds
+  host_progress_timestamp?: number; // when host's progress was measured
   host_duration?: number; // total duration in seconds
   user_progress?: number; // user's own progress in seconds
   activity_id?: string;
@@ -32,7 +33,7 @@ export class OverlayUI {
   private dragStartY = 0;
   private dragStartLeft = 0;
   private dragStartTop = 0;
-  private state: OverlayState = {
+  private _state: OverlayState = {
     visible: false,
     pinned: false,
     opacity: 80,
@@ -41,6 +42,13 @@ export class OverlayUI {
   };
 
   constructor(private userId: string) {}
+
+  /**
+   * Get current overlay state (read-only access)
+   */
+  get state(): Readonly<OverlayState> {
+    return this._state as Readonly<OverlayState>;
+  }
 
   /**
    * Initialize overlay on page
@@ -378,7 +386,7 @@ export class OverlayUI {
 
     slider.addEventListener('input', (e) => {
       const value = (e.target as HTMLInputElement).value;
-      this.state.opacity = parseInt(value);
+      this._state.opacity = parseInt(value);
       this.updateOpacity();
     });
 
@@ -390,7 +398,7 @@ export class OverlayUI {
    */
   private updateOpacity(): void {
     if (!this.container) return;
-    const opacity = this.state.opacity / 100;
+    const opacity = this._state.opacity / 100;
     this.container.style.opacity = opacity.toString();
   }
 
@@ -413,7 +421,7 @@ export class OverlayUI {
 
     // Hide overlay after inactivity (unless pinned)
     document.addEventListener('mousemove', () => {
-      if (!this.state.pinned && !this.isDragging) {
+      if (!this._state.pinned && !this.isDragging) {
         this.resetHideTimer();
       }
     });
@@ -473,14 +481,14 @@ export class OverlayUI {
     // Only show if:
     // 1. There's an active co-watch session (watching_together list)
     // 2. OR the overlay is pinned
-    const hasCoWatchSession = this.state.watching_together.length > 0;
-    if (!hasCoWatchSession && !this.state.pinned) {
+    const hasCoWatchSession = this._state.watching_together.length > 0;
+    if (!hasCoWatchSession && !this._state.pinned) {
       return;
     }
 
     this.container.classList.remove('hidden');
-    this.state.visible = true;
-    if (!this.state.pinned) {
+    this._state.visible = true;
+    if (!this._state.pinned) {
       this.resetHideTimer();
     }
   }
@@ -491,7 +499,7 @@ export class OverlayUI {
   hide(): void {
     if (!this.container) return;
     this.container.classList.add('hidden');
-    this.state.visible = false;
+    this._state.visible = false;
   }
 
   /**
@@ -506,27 +514,27 @@ export class OverlayUI {
    * Toggle pin state
    */
   togglePin(): void {
-    this.state.pinned = !this.state.pinned;
+    this._state.pinned = !this._state.pinned;
     const button = document.getElementById('pin-button');
     if (button) {
-      if (this.state.pinned) {
+      if (this._state.pinned) {
         button.classList.add('pinned');
       } else {
         button.classList.remove('pinned');
       }
     }
-    if (this.state.pinned) {
+    if (this._state.pinned) {
       if (this.hideTimer) clearTimeout(this.hideTimer);
     }
-    console.debug('[OverlayUI] Pin toggled:', this.state.pinned);
+    console.debug('[OverlayUI] Pin toggled:', this._state.pinned);
   }
 
   /**
    * Sync button clicked
    */
   private onSyncClick(): void {
-    console.debug('[OverlayUI] Sync button clicked, activity:', this.state.activity_id);
-    window.postMessage({ type: 'HANG_TIME_SYNC_REQUEST', data: { activity_id: this.state.activity_id } }, '*');
+    console.debug('[OverlayUI] Sync button clicked, activity:', this._state.activity_id);
+    window.postMessage({ type: 'HANG_TIME_SYNC_REQUEST', data: { activity_id: this._state.activity_id } }, '*');
   }
 
   /**
@@ -541,7 +549,7 @@ export class OverlayUI {
    * Update overlay state and rendering
    */
   setState(newState: Partial<OverlayState>): void {
-    this.state = { ...this.state, ...newState };
+    this._state = { ...this._state, ...newState };
     this.render();
   }
 
@@ -568,9 +576,9 @@ export class OverlayUI {
     const markerEl = document.getElementById('progress-bar-marker') as HTMLElement;
     const syncBtn = document.getElementById('progress-sync-button') as HTMLElement;
 
-    if (fillEl && this.state.host_progress !== undefined && this.state.host_duration && this.state.host_duration > 0) {
+    if (fillEl && this._state.host_progress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
       // Simple calculation: progress / duration * 100
-      const hostPercent = Math.min((this.state.host_progress / this.state.host_duration) * 100, 100);
+      const hostPercent = Math.min((this._state.host_progress / this._state.host_duration) * 100, 100);
       fillEl.style.width = hostPercent + '%';
 
       // Position host marker at host's current position
@@ -581,15 +589,15 @@ export class OverlayUI {
 
     // Show arrow marker only if user is NOT the host and has progress
     if (markerEl) {
-      if (!this.state.is_user_host && this.state.user_progress !== undefined && this.state.host_progress !== undefined && this.state.host_duration && this.state.host_duration > 0) {
-        const userPercent = Math.min((this.state.user_progress / this.state.host_duration) * 100, 100);
+      if (!this._state.is_user_host && this._state.user_progress !== undefined && this._state.host_progress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
+        const userPercent = Math.min((this._state.user_progress / this._state.host_duration) * 100, 100);
         markerEl.style.left = userPercent + '%';
 
         // Arrow points toward host
         markerEl.classList.remove('arrow-left', 'arrow-right');
-        if (this.state.user_progress < this.state.host_progress) {
+        if (this._state.user_progress < this._state.host_progress) {
           markerEl.classList.add('arrow-right'); // User behind, arrow points right (toward host ahead)
-        } else if (this.state.user_progress > this.state.host_progress) {
+        } else if (this._state.user_progress > this._state.host_progress) {
           markerEl.classList.add('arrow-left'); // User ahead, arrow points left (toward host behind)
         }
 
@@ -601,7 +609,7 @@ export class OverlayUI {
 
     // Show sync button only for non-hosts
     if (syncBtn) {
-      if (!this.state.is_user_host) {
+      if (!this._state.is_user_host) {
         syncBtn.style.display = 'block';
       } else {
         syncBtn.style.display = 'none';
@@ -616,15 +624,15 @@ export class OverlayUI {
     const header = document.getElementById('attendees-header');
     if (!header) return;
 
-    if (!this.state.watching_together || this.state.watching_together.length === 0) {
+    if (!this._state.watching_together || this._state.watching_together.length === 0) {
       header.innerHTML = 'Watching together: Loading...';
       return;
     }
 
     // First person (host) is highlighted in blue, others are plain
     const parts: string[] = [];
-    for (let i = 0; i < this.state.watching_together.length; i++) {
-      const name = this.escapeHtml(this.state.watching_together[i]);
+    for (let i = 0; i < this._state.watching_together.length; i++) {
+      const name = this.escapeHtml(this._state.watching_together[i]);
       if (i === 0) {
         // Host
         parts.push(`<span class="attendee-host">${name}<span class="attendee-host-label">(host)</span></span>`);
@@ -644,12 +652,12 @@ export class OverlayUI {
     const container = document.getElementById('chat-container');
     if (!container) return;
 
-    if (this.state.messages.length === 0) {
+    if (this._state.messages.length === 0) {
       container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>';
       return;
     }
 
-    container.innerHTML = this.state.messages
+    container.innerHTML = this._state.messages
       .map(msg => {
         const isUser = msg.sender_id === this.userId;
         return `
@@ -680,7 +688,7 @@ export class OverlayUI {
    * Add message to chat
    */
   addMessage(sender: string, senderId: string, content: string): void {
-    this.state.messages.push({
+    this._state.messages.push({
       id: Date.now().toString(),
       sender,
       sender_id: senderId,
@@ -689,8 +697,8 @@ export class OverlayUI {
     });
 
     // Keep only last 50 messages
-    if (this.state.messages.length > 50) {
-      this.state.messages = this.state.messages.slice(-50);
+    if (this._state.messages.length > 50) {
+      this._state.messages = this._state.messages.slice(-50);
     }
 
     this.renderMessages();

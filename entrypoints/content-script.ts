@@ -715,6 +715,7 @@ function establishConnection(): void {
               host_nickname: message.data.host_nickname,
               watching_together: message.data.watching_together || [],
               host_progress: message.data.host_progress,
+              host_progress_timestamp: message.data.host_progress_timestamp,
               host_duration: message.data.host_duration,
               user_progress: message.data.user_progress,
               is_user_host: message.data.is_user_host,
@@ -907,12 +908,24 @@ function initializeOverlay(): void {
     if (event.source !== window) return;
 
     if (event.data.type === 'HANG_TIME_SYNC_REQUEST') {
-      // Sync button was clicked, send to background
-      if (port) {
-        port.postMessage({
-          type: 'SYNC_REQUEST',
-          data: { activity_id: event.data.activity_id },
-        });
+      // Sync button was clicked - calculate and seek locally
+      if (overlayUI && overlayUI.state) {
+        const hostProgress = overlayUI.state.host_progress;
+        const hostProgressTimestamp = overlayUI.state.host_progress_timestamp;
+
+        if (hostProgress !== undefined && hostProgressTimestamp !== undefined && activeVideoElement) {
+          // Calculate synced position: host_progress + elapsed time since measurement
+          const elapsedSeconds = (Date.now() - hostProgressTimestamp) / 1000;
+          const syncedPosition = hostProgress + elapsedSeconds;
+
+          console.log(`[ContentScript] 🔄 Syncing video: host was at ${hostProgress}s, measured ${elapsedSeconds.toFixed(1)}s ago, seeking to ${syncedPosition.toFixed(1)}s`);
+          activeVideoElement.currentTime = syncedPosition;
+
+          // Notify overlay of sync completion
+          window.postMessage({ type: 'HANG_TIME_SYNC_COMPLETE', data: { position: syncedPosition } }, '*');
+        } else {
+          console.warn('[ContentScript] Cannot sync - missing host progress or timestamp data');
+        }
       }
     } else if (event.data.type === 'HANG_TIME_OPEN_DISCORD') {
       // Discord button was clicked, send to background
