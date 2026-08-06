@@ -589,13 +589,32 @@ export class OverlayUI {
 
     // Show arrow marker only if user is NOT the host, has progress, and gap is > 5 seconds
     if (markerEl) {
+      console.debug('[OverlayUI] Arrow render check:', {
+        is_user_host: this._state.is_user_host,
+        user_progress: this._state.user_progress,
+        host_progress: this._state.host_progress,
+        host_progress_timestamp: this._state.host_progress_timestamp,
+        host_duration: this._state.host_duration,
+      });
+
       if (!this._state.is_user_host && this._state.user_progress !== undefined && this._state.host_progress !== undefined && this._state.host_progress_timestamp !== undefined && this._state.host_duration && this._state.host_duration > 0) {
         // Calculate where host actually is now (not just when we last measured)
-        const elapsedSinceHostMeasure = (Date.now() - this._state.host_progress_timestamp) / 1000;
-        const hostCurrentPosition = this._state.host_progress + elapsedSinceHostMeasure;
+        // Note: progress values are in milliseconds, elapsed is in ms
+        const elapsedSinceHostMeasureMs = Date.now() - this._state.host_progress_timestamp;
+        const hostCurrentPosition = this._state.host_progress + elapsedSinceHostMeasureMs;
 
         const gap = Math.abs(this._state.user_progress - hostCurrentPosition);
-        const SYNC_THRESHOLD = 5; // seconds
+        const SYNC_THRESHOLD = 5000; // 5 seconds in milliseconds
+
+        console.debug('[OverlayUI] Gap calculation:', {
+          userProgress: this._state.user_progress,
+          hostProgress: this._state.host_progress,
+          elapsed: elapsedSinceHostMeasure,
+          hostCurrentPosition,
+          gap,
+          threshold: SYNC_THRESHOLD,
+          shouldShow: gap > SYNC_THRESHOLD,
+        });
 
         if (gap > SYNC_THRESHOLD) {
           const userPercent = Math.min((this._state.user_progress / this._state.host_duration) * 100, 100);
