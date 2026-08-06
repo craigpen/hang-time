@@ -83,11 +83,11 @@ export class CoWatcherDetector {
       // Build co-watcher list for the matched activity
       const coWatchers: Array<{
         friend_id: string | null; // null for user
-        timestamp: number; // contentTimestamp if available, fallback to timestamp
+        timestamp: number; // contentTimestamp - immutable start time
       }> = [
         {
           friend_id: null,
-          timestamp: userActivity?.contentTimestamp || userActivity?.timestamp || matchedActivityTimestamp
+          timestamp: userActivity?.contentTimestamp
         } // Include user
       ];
 
@@ -96,11 +96,14 @@ export class CoWatcherDetector {
 
         for (const activity of Object.values(friend.current_activities)) {
           if (activity?.id === matchedActivityId) {
-            coWatchers.push({
-              friend_id: friend.id,
-              timestamp: activity.contentTimestamp || activity.timestamp || 0,
-            });
-            console.debug(`[TimestampMigration:CoWatcherHost] friend=${friend.id} using timestamp=${activity.contentTimestamp ? 'contentTimestamp' : 'timestamp'} (value=${activity.contentTimestamp || activity.timestamp})`);
+            if (activity.contentTimestamp) {
+              coWatchers.push({
+                friend_id: friend.id,
+                timestamp: activity.contentTimestamp,
+              });
+            } else {
+              console.warn(`[TimestampMigration] MISSING contentTimestamp for friend=${friend.id}, activity=${activity.id}`);
+            }
             break; // Only count each friend once per matched activity
           }
         }
@@ -111,6 +114,14 @@ export class CoWatcherDetector {
         console.debug('[CoWatcher] No co-watchers found for activity', matchedActivityId);
         return null;
       }
+
+      // Log what's actually in coWatchers before sort
+      console.debug(`[TimestampMigration] coWatchers before sort:`, coWatchers.map(cw => ({
+        friend_id: cw.friend_id,
+        timestamp: cw.timestamp,
+        userContentTs: cw.friend_id === null ? userActivity?.contentTimestamp : undefined,
+        userActualTs: cw.friend_id === null ? userActivity?.timestamp : undefined,
+      })));
 
       // Sort by contentTimestamp (or fallback to timestamp) to find host (earliest = host)
       // Tiebreaker: if timestamps within 1 second, sort by friend_id for deterministic results
