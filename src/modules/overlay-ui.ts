@@ -587,21 +587,28 @@ export class OverlayUI {
       }
     }
 
-    // Show arrow marker only if user is NOT the host and has progress
+    // Show arrow marker only if user is NOT the host, has progress, and gap is > 5 seconds
     if (markerEl) {
       if (!this._state.is_user_host && this._state.user_progress !== undefined && this._state.host_progress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
-        const userPercent = Math.min((this._state.user_progress / this._state.host_duration) * 100, 100);
-        markerEl.style.left = userPercent + '%';
+        const gap = Math.abs(this._state.user_progress - this._state.host_progress);
+        const SYNC_THRESHOLD = 5; // seconds
 
-        // Arrow points toward host
-        markerEl.classList.remove('arrow-left', 'arrow-right');
-        if (this._state.user_progress < this._state.host_progress) {
-          markerEl.classList.add('arrow-right'); // User behind, arrow points right (toward host ahead)
-        } else if (this._state.user_progress > this._state.host_progress) {
-          markerEl.classList.add('arrow-left'); // User ahead, arrow points left (toward host behind)
+        if (gap > SYNC_THRESHOLD) {
+          const userPercent = Math.min((this._state.user_progress / this._state.host_duration) * 100, 100);
+          markerEl.style.left = userPercent + '%';
+
+          // Arrow points toward host
+          markerEl.classList.remove('arrow-left', 'arrow-right');
+          if (this._state.user_progress < this._state.host_progress) {
+            markerEl.classList.add('arrow-right'); // User behind, arrow points right (toward host ahead)
+          } else if (this._state.user_progress > this._state.host_progress) {
+            markerEl.classList.add('arrow-left'); // User ahead, arrow points left (toward host behind)
+          }
+
+          markerEl.style.display = 'block';
+        } else {
+          markerEl.style.display = 'none';
         }
-
-        markerEl.style.display = 'block';
       } else {
         markerEl.style.display = 'none';
       }
