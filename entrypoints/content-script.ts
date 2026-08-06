@@ -248,9 +248,9 @@ class GenericVideoTracker {
     this._removeVideoListeners();
     this.activeVideoElement = null;
     this.cachedNetflixTitle = null;
-    this.currentActivityId = null;
-    this.currentActivityContentTimestamp = null;
-    console.log('[TimestampMigration:ContentTimestamp] CLEAR on video emptied');
+    // Don't clear currentActivityId or contentTimestamp - they persist if we re-hook the same video
+    // (emptied fires during seeking/buffering, not just when video actually closes)
+    console.log('[TimestampMigration:ContentTimestamp] Video emptied, searching for video again');
     setTimeout(() => this._findAndHookVideo(), 100);
   }
 
