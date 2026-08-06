@@ -540,10 +540,9 @@ export class OverlayUI {
     const markerEl = document.getElementById('progress-bar-marker') as HTMLElement;
     const syncBtn = document.getElementById('progress-sync-button') as HTMLElement;
 
-    if (fillEl && this.state.host_position !== undefined) {
+    if (fillEl && this.state.host_position !== undefined && this.state.video_duration !== undefined && this.state.video_duration > 0) {
       // Use same calculation as popup: progress / duration * 100
-      const maxDuration = (this.state.video_duration && this.state.video_duration > 0) ? this.state.video_duration : 7200;
-      const hostPercent = Math.min((this.state.host_position / maxDuration) * 100, 100);
+      const hostPercent = Math.min((this.state.host_position / this.state.video_duration) * 100, 100);
       fillEl.style.width = hostPercent + '%';
     }
 
@@ -552,10 +551,9 @@ export class OverlayUI {
     if (markerEl) {
       if (isHost || this.state.user_position === undefined || this.state.user_position_timestamp === undefined) {
         markerEl.style.display = 'none';
-      } else {
+      } else if (this.state.video_duration && this.state.video_duration > 0) {
         // Use same calculation as popup: progress / duration * 100
-        const maxDuration = (this.state.video_duration && this.state.video_duration > 0) ? this.state.video_duration : 7200;
-        const userPercent = Math.min((this.state.user_position / maxDuration) * 100, 100);
+        const userPercent = Math.min((this.state.user_position / this.state.video_duration) * 100, 100);
         markerEl.style.left = userPercent + '%';
         markerEl.style.display = 'block';
       }
