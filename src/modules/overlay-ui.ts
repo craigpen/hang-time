@@ -217,7 +217,14 @@ export class OverlayUI {
           margin-left: 2px;
         }
 
-        .host-state-playing {
+        .host-state-indicator {
+          min-width: 24px;
+          font-size: 11px;
+          color: rgba(255, 255, 255, 0.6);
+          text-align: center;
+        }
+
+        .host-state-indicator.host-state-playing {
           color: #4ade80;
         }
 
@@ -363,7 +370,7 @@ export class OverlayUI {
           Watching together: Loading...
         </div>
         <div class="progress-bar-wrapper">
-          <div class="host-state-indicator" id="host-state-indicator" style="min-width: 24px; font-size: 11px; color: rgba(255,255,255,0.6); text-align: center;">-</div>
+          <div class="host-state-indicator" id="host-state-indicator">-</div>
           <div class="progress-bar-container">
             <div class="progress-bar-fill" id="progress-bar-fill"></div>
             <div class="progress-bar-host-marker" id="progress-bar-host-marker"></div>
