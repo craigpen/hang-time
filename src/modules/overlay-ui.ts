@@ -280,10 +280,39 @@ export class OverlayUI {
 
         .opacity-slider {
           width: 60px;
-          height: 20px;
+          height: 6px;
           cursor: pointer;
           accent-color: #6b7280;
           flex-shrink: 0;
+          -webkit-appearance: none;
+          appearance: none;
+          background: rgba(107, 114, 128, 0.3);
+          border-radius: 3px;
+          outline: none;
+        }
+
+        .opacity-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          background: #6b7280;
+          cursor: pointer;
+        }
+
+        .opacity-slider::-moz-range-thumb {
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          background: #6b7280;
+          cursor: pointer;
+          border: none;
+        }
+
+        .opacity-slider::-moz-range-track {
+          background: transparent;
+          border: none;
         }
 
         .sync-button:hover {
