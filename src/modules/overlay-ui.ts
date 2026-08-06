@@ -159,13 +159,20 @@ export class OverlayUI {
           top: 50%;
           transform: translateY(-50%);
           left: 0%;
+          width: 14px;
+          height: 14px;
+          background: #ff6b6b;
           transition: left 0.1s linear;
-          font-size: 16px;
-          color: #ff6b6b;
-          font-weight: bold;
-          line-height: 1;
           user-select: none;
           pointer-events: none;
+        }
+
+        .progress-bar-marker.arrow-right {
+          clip-path: polygon(0% 0%, 0% 100%, 100% 50%);
+        }
+
+        .progress-bar-marker.arrow-left {
+          clip-path: polygon(100% 0%, 100% 100%, 0% 50%);
         }
 
         .attendees-header {
@@ -551,12 +558,11 @@ export class OverlayUI {
         markerEl.style.left = userPercent + '%';
 
         // Arrow points toward host
+        markerEl.classList.remove('arrow-left', 'arrow-right');
         if (this.state.user_progress < this.state.host_progress) {
-          markerEl.textContent = '→'; // User behind, arrow points right (toward host ahead)
+          markerEl.classList.add('arrow-right'); // User behind, arrow points right (toward host ahead)
         } else if (this.state.user_progress > this.state.host_progress) {
-          markerEl.textContent = '←'; // User ahead, arrow points left (toward host behind)
-        } else {
-          markerEl.textContent = '•'; // Same position, just a dot
+          markerEl.classList.add('arrow-left'); // User ahead, arrow points left (toward host behind)
         }
 
         markerEl.style.display = 'block';
