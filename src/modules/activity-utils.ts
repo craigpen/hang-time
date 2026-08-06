@@ -30,6 +30,9 @@ function extractStableId(service: string, url?: string): string {
 
     switch (service.toLowerCase()) {
       case 'video-tab':
+      case 'youtube-tab':
+      case 'netflix-tab':
+      case 'twitch-tab':
         // Generic video detector - try to extract ID based on domain
         // YouTube: extract video ID from v parameter or path
         if (url.includes('youtube.com') || url.includes('youtu.be')) {

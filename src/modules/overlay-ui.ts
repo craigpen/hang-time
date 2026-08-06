@@ -8,6 +8,7 @@ export interface OverlayState {
   pinned: boolean;
   opacity: number; // 0-100
   host_name?: string;
+  host_friend_id?: string;
   co_watchers: string[]; // Friend local names
   messages: Array<{
     id: string;
@@ -17,13 +18,22 @@ export interface OverlayState {
     timestamp: number;
   }>;
   host_position?: number; // seconds
+  host_position_timestamp?: number; // when host position was measured (ms)
   user_position?: number; // seconds
+  user_position_timestamp?: number; // when user position was measured (ms)
+  activity_id?: string;
   video_title?: string;
 }
 
 export class OverlayUI {
   private container: HTMLElement | null = null;
   private hideTimer: NodeJS.Timeout | null = null;
+  private progressUpdateInterval: NodeJS.Timeout | null = null;
+  private isDragging = false;
+  private dragStartX = 0;
+  private dragStartY = 0;
+  private dragStartLeft = 0;
+  private dragStartTop = 0;
   private state: OverlayState = {
     visible: false,
     pinned: false,
@@ -40,6 +50,7 @@ export class OverlayUI {
   init(): void {
     this.createOverlayContainer();
     this.setupEventListeners();
+    this.startProgressAnimation();
     console.debug('[OverlayUI] Initialized');
   }
 
@@ -60,9 +71,9 @@ export class OverlayUI {
           right: 20px;
           width: 320px;
           max-height: 80vh;
-          background: rgba(0, 0, 0, 0.8);
+          background: rgba(0, 0, 0, 0.95);
           border-radius: 8px;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
           z-index: 9999;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           color: white;
@@ -79,25 +90,63 @@ export class OverlayUI {
         .overlay-header {
           padding: 12px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          cursor: grab;
+          user-select: none;
+        }
+
+        .overlay-header:active {
+          cursor: grabbing;
+        }
+
+        .header-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
         }
 
         .video-title {
           font-size: 14px;
           font-weight: 600;
-          margin-bottom: 8px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
           text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+          flex: 1;
+        }
+
+        .progress-bar-wrapper {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          margin-top: 8px;
         }
 
         .progress-bar-container {
-          width: 100%;
-          height: 4px;
+          flex: 1;
+          height: 8px;
           background: rgba(255, 255, 255, 0.2);
-          border-radius: 2px;
+          border-radius: 4px;
           overflow: hidden;
           position: relative;
+        }
+
+        #progress-sync-button {
+          display: none;
+          padding: 4px 6px;
+          background: rgba(255, 255, 255, 0.15);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          color: white;
+          border-radius: 3px;
+          cursor: pointer;
+          font-size: 11px;
+          white-space: nowrap;
+          transition: all 0.2s ease;
+        }
+
+        #progress-sync-button:hover {
+          background: rgba(255, 255, 255, 0.25);
         }
 
         .progress-bar-fill {
@@ -124,50 +173,91 @@ export class OverlayUI {
           padding: 8px 12px;
           font-size: 12px;
           color: rgba(255, 255, 255, 0.7);
-          background: rgba(255, 255, 255, 0.05);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-          text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
+          margin-bottom: 4px;
         }
 
-        .button-row {
+        .attendee-host {
+          color: #2da6ff;
+          font-weight: 600;
+        }
+
+        .attendee-host-label {
+          color: rgba(255, 255, 255, 0.5);
+          font-size: 10px;
+          margin-left: 2px;
+        }
+
+        .icon-buttons {
           display: flex;
-          gap: 8px;
-          padding: 8px 12px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          gap: 6px;
           align-items: center;
+          flex-shrink: 0;
         }
 
-        .overlay-button {
-          flex: 1;
-          padding: 6px 8px;
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          color: white;
-          border-radius: 4px;
+        .icon-button {
+          width: 20px;
+          height: 20px;
+          padding: 0;
+          background: transparent;
+          border: 1px solid rgba(255, 255, 255, 0.4);
+          border-radius: 2px;
           cursor: pointer;
-          font-size: 12px;
-          font-weight: 500;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           transition: all 0.2s ease;
-          white-space: nowrap;
-          text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
+          font-size: 12px;
         }
 
-        .overlay-button:hover {
-          background: rgba(255, 255, 255, 0.15);
-          border-color: rgba(255, 255, 255, 0.3);
+        .icon-button:hover {
+          border-color: rgba(255, 255, 255, 0.7);
         }
 
-        .overlay-button:active {
-          background: rgba(255, 255, 255, 0.2);
+        #pin-button.pinned {
+          background: #ff6b6b;
+          border-color: #ff6b6b;
         }
 
-        .sync-button {
-          background: rgba(45, 166, 255, 0.8);
-          border-color: rgba(45, 166, 255, 1);
+        #discord-button {
+          width: 20px;
+          height: 20px;
+          padding: 0;
+          background-size: 18px 18px;
+          background-position: center;
+          background-repeat: no-repeat;
+          background-color: transparent;
+          border: 1px solid rgba(255, 255, 255, 0.4);
+          border-radius: 2px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        #discord-button:hover {
+          border-color: rgba(255, 255, 255, 0.7);
+          opacity: 0.9;
+        }
+
+        .opacity-slider {
+          width: 50px;
+          height: 16px;
+          cursor: pointer;
+          accent-color: #2da6ff;
+          flex-shrink: 0;
         }
 
         .sync-button:hover {
           background: rgba(45, 166, 255, 0.9);
+        }
+
+        #discord-button {
+          background-size: 18px 18px;
+          background-position: center;
+          background-repeat: no-repeat;
+          font-size: 0;
+        }
+
+        #discord-button:hover {
+          opacity: 0.8;
         }
 
         .opacity-slider {
@@ -227,23 +317,26 @@ export class OverlayUI {
       </style>
 
       <div class="overlay-header">
-        <div class="video-title" id="overlay-title">Loading...</div>
-        <div class="progress-bar-container">
-          <div class="progress-bar-fill" id="progress-bar-fill"></div>
-          <div class="progress-bar-marker" id="progress-bar-marker"></div>
+        <div class="header-top">
+          <div class="video-title" id="overlay-title">Loading...</div>
+          <div class="icon-buttons">
+            <input type="range" min="10" max="100" value="80" class="opacity-slider" id="opacity-slider" title="Overlay opacity">
+            <button class="icon-button" id="discord-button" title="Open Discord with host"></button>
+            <button class="icon-button" id="pin-button" title="Pin overlay">📌</button>
+          </div>
+        </div>
+        <div class="attendees-header" id="attendees-header">
+          Watching together: Loading...
+        </div>
+        <div class="progress-bar-wrapper">
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" id="progress-bar-fill"></div>
+            <div class="progress-bar-marker" id="progress-bar-marker"></div>
+          </div>
+          <button id="progress-sync-button" title="Sync to host position">↻</button>
         </div>
       </div>
 
-      <div class="attendees-header" id="attendees-header">
-        Watching with: Loading...
-      </div>
-
-      <div class="button-row">
-        <button class="overlay-button sync-button" id="sync-button">↻ Sync</button>
-        <button class="overlay-button" id="pin-button">📌</button>
-        <button class="overlay-button" id="discord-button">🎮</button>
-        <input type="range" min="10" max="100" value="80" class="opacity-slider" id="opacity-slider" title="Overlay opacity">
-      </div>
 
       <div class="chat-container" id="chat-container">
         <div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>
@@ -284,14 +377,44 @@ export class OverlayUI {
    */
   private setupEventListeners(): void {
     // Show overlay on mouse move
-    document.addEventListener('mousemove', () => this.show());
+    document.addEventListener('mousemove', (e) => {
+      this.show();
+      // Handle dragging
+      if (this.isDragging && this.container) {
+        const deltaX = e.clientX - this.dragStartX;
+        const deltaY = e.clientY - this.dragStartY;
+        this.container.style.left = (this.dragStartLeft + deltaX) + 'px';
+        this.container.style.top = (this.dragStartTop + deltaY) + 'px';
+        this.container.style.right = 'auto';
+      }
+    });
 
     // Hide overlay after inactivity (unless pinned)
     document.addEventListener('mousemove', () => {
-      if (!this.state.pinned) {
+      if (!this.state.pinned && !this.isDragging) {
         this.resetHideTimer();
       }
     });
+
+    // Stop dragging on mouse up
+    document.addEventListener('mouseup', () => {
+      this.isDragging = false;
+    });
+
+    // Start dragging on header mouse down
+    if (this.container) {
+      const header = this.container.querySelector('.overlay-header') as HTMLElement;
+      if (header) {
+        header.addEventListener('mousedown', (e: MouseEvent) => {
+          this.isDragging = true;
+          this.dragStartX = e.clientX;
+          this.dragStartY = e.clientY;
+          const rect = this.container!.getBoundingClientRect();
+          this.dragStartLeft = rect.left;
+          this.dragStartTop = rect.top;
+        });
+      }
+    }
 
     // Pin button
     const pinButton = document.getElementById('pin-button');
@@ -299,15 +422,16 @@ export class OverlayUI {
       pinButton.addEventListener('click', () => this.togglePin());
     }
 
-    // Sync button
-    const syncButton = document.getElementById('sync-button');
-    if (syncButton) {
-      syncButton.addEventListener('click', () => this.onSyncClick());
-    }
-
     // Discord button
     const discordButton = document.getElementById('discord-button');
     if (discordButton) {
+      // Set Discord icon using chrome.runtime.getURL for proper extension URL
+      try {
+        const iconUrl = chrome.runtime.getURL('public/icons/discord.png');
+        discordButton.style.backgroundImage = `url('${iconUrl}')`;
+      } catch (e) {
+        console.debug('[OverlayUI] Could not load Discord icon:', e);
+      }
       discordButton.addEventListener('click', () => this.onDiscordClick());
     }
   }
@@ -357,8 +481,11 @@ export class OverlayUI {
     this.state.pinned = !this.state.pinned;
     const button = document.getElementById('pin-button');
     if (button) {
-      button.textContent = this.state.pinned ? '📌' : '📌';
-      button.style.opacity = this.state.pinned ? '1' : '0.6';
+      if (this.state.pinned) {
+        button.classList.add('pinned');
+      } else {
+        button.classList.remove('pinned');
+      }
     }
     if (this.state.pinned) {
       if (this.hideTimer) clearTimeout(this.hideTimer);
@@ -370,9 +497,8 @@ export class OverlayUI {
    * Sync button clicked
    */
   private onSyncClick(): void {
-    console.debug('[OverlayUI] Sync button clicked');
-    // This will be wired to send sync_request message
-    window.postMessage({ type: 'HANG_TIME_SYNC_REQUEST' }, '*');
+    console.debug('[OverlayUI] Sync button clicked, activity:', this.state.activity_id);
+    window.postMessage({ type: 'HANG_TIME_SYNC_REQUEST', data: { activity_id: this.state.activity_id } }, '*');
   }
 
   /**
@@ -406,33 +532,79 @@ export class OverlayUI {
   private renderHeader(): void {
     const titleEl = document.getElementById('overlay-title');
     if (titleEl) {
-      titleEl.textContent = this.state.video_title || 'Loading video...';
+      titleEl.textContent = 'Hang Time';
     }
 
     const fillEl = document.getElementById('progress-bar-fill') as HTMLElement;
     const markerEl = document.getElementById('progress-bar-marker') as HTMLElement;
+    const syncBtn = document.getElementById('progress-sync-button') as HTMLElement;
 
-    if (fillEl && markerEl && this.state.host_position !== undefined && this.state.user_position !== undefined) {
+    if (fillEl && this.state.host_position !== undefined && this.state.host_position_timestamp !== undefined) {
+      // Calculate host's current position by adding elapsed time since measurement
+      const elapsedSeconds = (Date.now() - this.state.host_position_timestamp) / 1000;
+      const hostCurrentPosition = this.state.host_position + elapsedSeconds;
+
       // Assume 2 hour max video for progress calculation
       const maxDuration = 7200;
-      const hostPercent = Math.min((this.state.host_position / maxDuration) * 100, 100);
-      const userPercent = Math.min((this.state.user_position / maxDuration) * 100, 100);
-
+      const hostPercent = Math.min((hostCurrentPosition / maxDuration) * 100, 100);
       fillEl.style.width = hostPercent + '%';
-      markerEl.style.left = userPercent + '%';
+    }
+
+    // Show user position marker only if not the host
+    const isHost = this.userId === this.state.host_friend_id;
+    if (markerEl) {
+      if (isHost || this.state.user_position === undefined || this.state.user_position_timestamp === undefined) {
+        markerEl.style.display = 'none';
+      } else {
+        // Calculate user's current position by adding elapsed time since measurement
+        const elapsedSeconds = (Date.now() - this.state.user_position_timestamp) / 1000;
+        const userCurrentPosition = this.state.user_position + elapsedSeconds;
+
+        const maxDuration = 7200;
+        const userPercent = Math.min((userCurrentPosition / maxDuration) * 100, 100);
+        markerEl.style.left = userPercent + '%';
+        markerEl.style.display = 'block';
+      }
+    }
+
+    // Show sync button only for non-hosts
+    if (syncBtn) {
+      if (isHost) {
+        syncBtn.style.display = 'none';
+      } else {
+        syncBtn.style.display = 'block';
+      }
     }
   }
 
   /**
-   * Render attendees list
+   * Render attendees list with host highlighted
    */
   private renderAttendees(): void {
     const header = document.getElementById('attendees-header');
     if (!header) return;
 
-    const host = this.state.host_name || '?';
-    const others = this.state.co_watchers.length > 0 ? `, ${this.state.co_watchers.join(', ')}` : '';
-    header.textContent = `Watching with: ${host}${others}`;
+    // Build list: host first, then other co-watchers, then self
+    const parts: string[] = [];
+
+    // Host (in blue)
+    if (this.state.host_name) {
+      parts.push(`<span class="attendee-host">${this.escapeHtml(this.state.host_name)}<span class="attendee-host-label">(host)</span></span>`);
+    }
+
+    // Other co-watchers
+    if (this.state.co_watchers && this.state.co_watchers.length > 0) {
+      for (const watcher of this.state.co_watchers) {
+        parts.push(this.escapeHtml(watcher));
+      }
+    }
+
+    // Self (only if not already the host)
+    if (this.state.host_friend_id !== 'self') {
+      parts.push('(you)');
+    }
+
+    header.innerHTML = `Watching together: ${parts.join(', ')}`;
   }
 
   /**
@@ -495,6 +667,18 @@ export class OverlayUI {
   }
 
   /**
+   * Start progress bar animation loop (updates every second to simulate 1sec/1sec playback)
+   */
+  private startProgressAnimation(): void {
+    if (this.progressUpdateInterval) {
+      clearInterval(this.progressUpdateInterval);
+    }
+    this.progressUpdateInterval = setInterval(() => {
+      this.renderHeader();
+    }, 1000);
+  }
+
+  /**
    * Destroy overlay
    */
   destroy(): void {
@@ -504,6 +688,9 @@ export class OverlayUI {
     }
     if (this.hideTimer) {
       clearTimeout(this.hideTimer);
+    }
+    if (this.progressUpdateInterval) {
+      clearInterval(this.progressUpdateInterval);
     }
   }
 }

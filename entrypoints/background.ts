@@ -6,6 +6,7 @@
 
 import * as pako from 'pako';
 import { nip04, nip44, verifyEvent } from 'nostr-tools';
+import { STORAGE_KEYS } from '../src/types';
 import { RelayPool, relayPool } from '../src/modules/nostr';
 import { StorageManager, storageManager } from '../src/modules/storage';
 import { IdentityManager, initializeIdentityManager, getIdentityManager } from '../src/modules/identity';
@@ -807,16 +808,42 @@ function _startCoWatcherDetectionCycle(): void {
         // Store the co-watch session for overlay to use
         await detector.setCurrentCoWatchSession(session);
 
-        // Get host friend name for overlay
+        // Get host friend name and activity for overlay
         const hostFriend = await getFriendManager().getFriend(session.host_friend_id);
         const hostName = hostFriend?.local_name || '?';
 
+        // Get activity title and position from host friend's activities
+        let videoTitle = 'Loading video...';
+        let hostPosition = 0;
+        let hostPositionTimestamp = Date.now();
+        if (hostFriend?.current_activities) {
+          const hostActivity = Object.values(hostFriend.current_activities).find(a => a?.id === session.activity_id);
+          if (hostActivity?.content) {
+            videoTitle = hostActivity.content;
+          }
+          if (hostActivity?.metadata?.progress !== undefined) {
+            hostPosition = hostActivity.metadata.progress;
+          }
+          if (hostActivity?.timestamp) {
+            hostPositionTimestamp = hostActivity.timestamp;
+          }
+        }
+
         // Get current activity for playback position
         const profile = await storageManager.getUserProfile();
-        const hostPosition = profile?.current_activity?.metadata?.progress || 0;
         const userPosition = profile?.current_activity?.metadata?.progress || 0;
+        const userPositionTimestamp = profile?.current_activity?.timestamp || Date.now();
+
+        // Build co-watchers list with names
+        const coWatchersWithNames: string[] = [];
+        for (const coWatcherId of session.co_watchers) {
+          const coWatcherFriend = await getFriendManager().getFriend(coWatcherId);
+          const coWatcherName = coWatcherFriend?.local_name || coWatcherId;
+          coWatchersWithNames.push(coWatcherName);
+        }
 
         // Broadcast to all connected content scripts
+        console.debug(`[Background] Broadcasting CO_WATCH_UPDATE to ${activeContentScriptPorts.size} content scripts`);
         for (const [tabId, port] of activeContentScriptPorts.entries()) {
           try {
             port.postMessage({
@@ -825,12 +852,16 @@ function _startCoWatcherDetectionCycle(): void {
                 activity_id: session.activity_id,
                 host_friend_id: session.host_friend_id,
                 host_name: hostName,
-                co_watchers: session.co_watchers,
+                video_title: videoTitle,
+                co_watchers: coWatchersWithNames,
                 host_position: hostPosition,
+                host_position_timestamp: hostPositionTimestamp,
                 user_position: userPosition,
+                user_position_timestamp: userPositionTimestamp,
                 detected_at: session.detected_at,
               },
             });
+            console.debug(`[Background] ✅ Sent CO_WATCH_UPDATE to tab ${tabId}: host=${hostName}, watchers=${session.co_watchers.length}`);
           } catch (e) {
             console.debug(`[Background] Failed to send CO_WATCH_UPDATE to tab ${tabId}:`, e);
           }
@@ -1247,6 +1278,31 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
       // Orphaned content script notifying that it lost context
       await _markActivityAsDisconnected(0); // tabId unknown, but we only have one video-tab activity
       return { success: true };
+
+    case 'DEBUG_STORAGE':
+      try {
+        const profile = await storageManager.getUserProfile();
+        const myActivities = await storageManager.getMyActivities();
+        const friends = await storageManager.getFriends();
+        return {
+          success: true,
+          data: {
+            currentActivity: profile?.current_activity || null,
+            myActivities: myActivities || {},
+            friendsCount: friends?.length || 0,
+            firstFriend: friends?.[0] ? {
+              id: friends[0].id,
+              name: friends[0].local_name,
+              currentActivities: friends[0].current_activities || {},
+            } : null,
+          },
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to query storage',
+        };
+      }
 
     default:
       return {
@@ -2591,6 +2647,8 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
           }
 
           // Store received invite separately from outgoing invite tracking
+          console.log(`[STORAGE_DEBUG_START] About to upsert invite ${message.activity_id.substring(0, 8)}`);
+
           await storageManager.upsertReceivedInvite(message.activity_id, {
             friendId: friend.id,
             activity: activity || {
@@ -2604,8 +2662,18 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
             },
             sentAt: Date.now(),
           });
+          console.log(`[STORAGE_DEBUG] Upsert complete, syncing...`);
+
           // Ensure immediate persistence before notifying popup (don't rely on batched sync)
           await storageManager.forceSyncNow();
+
+          // Verify it made it to storage
+          const verifyInvites = await storageManager.getReceivedInvites();
+          const hasInvite = message.activity_id in verifyInvites;
+          console.log(`[STORAGE_DEBUG] RECEIVED_INVITES has ${Object.keys(verifyInvites).length} entries. Has this invite? ${hasInvite}`);
+          if (!hasInvite) {
+            console.error(`[STORAGE_BUG] Invite ${message.activity_id.substring(0, 8)} NOT in storage after upsert!`);
+          }
 
           // Fire notification for encrypted invite (same as kind-1 handler)
           const notificationManager = getNotificationManager();
@@ -2854,9 +2922,14 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
     // If this is an activity update, trigger detection cycle to process it
     if (key.startsWith('content_script_activity_')) {
       console.debug(`[Background] ðŸ”„ Triggering activity detection from content script update`);
-      await activityDetector.detectAndPublish().catch((error) => {
+      try {
+        await activityDetector.detectAndPublish();
+        // Verify current_activity was set
+        const profile = await storageManager.getUserProfile();
+        console.debug(`[Background] ✅ detectAndPublish complete. Current activity now:`, profile?.current_activity?.id);
+      } catch (error) {
         console.error('[Background] Error in detectAndPublish:', error);
-      });
+      }
     }
 
     return { success: true };
@@ -3579,6 +3652,9 @@ console.log('[Background] Service worker loaded');
  */
 async function dumpHangTimeLogs() {
   try {
+    // Force sync all pending changes to storage (FileLogger writes via StorageManager which batches every 5s)
+    await storageManager.forceSyncNow();
+
     const data = await chrome.storage.local.get(null);
     const logs: Record<string, string> = {};
 
@@ -3593,6 +3669,8 @@ async function dumpHangTimeLogs() {
 
     // Store logs in a special key that the popup can access and download
     await storageManager.set(STORAGE_KEYS.LOGS_EXPORT, logs);
+    // Ensure immediate persistence (popup reads this 500ms later)
+    await storageManager.forceSyncNow();
 
     console.log('[Background] Logs prepared in storage for export');
     console.log('[Background] Profiles found:', Object.keys(logs).join(', '));

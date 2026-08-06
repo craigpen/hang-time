@@ -30,51 +30,96 @@ export class CoWatcherDetector {
     // Log every call for debugging
     console.debug(`[CoWatcher] detectCoWatchSession call #${this.detectCallCount}`);
     try {
-      const profile = await this.storage.getUserProfile();
-      if (!profile?.current_activity) {
-        console.debug('[CoWatcher] No current activity');
+      // Get all user activities (not just current)
+      const myActivities = await this.storage.getMyActivities();
+      if (!myActivities || Object.keys(myActivities).length === 0) {
+        console.debug('[CoWatcher] No user activities');
         return null;
       }
 
-      const userActivityId = profile.current_activity.id;
-      const userTimestamp = profile.current_activity.timestamp || Date.now();
       const friends = await this.friendManager.getAllFriends();
-
       if (!friends || friends.length === 0) {
         console.debug('[CoWatcher] No friends to check');
         return null;
       }
 
-      // Find all friends watching the same activity
+      // Find matching activity ID across all user and friend activities
+      let matchedActivityId: string | null = null;
+      let matchedActivityTimestamp = 0;
+
+      for (const userActivity of Object.values(myActivities)) {
+        if (!userActivity?.id) continue;
+
+        for (const friend of friends) {
+          if (!friend.current_activities) continue;
+
+          for (const friendActivity of Object.values(friend.current_activities)) {
+            if (friendActivity?.id === userActivity.id) {
+              console.debug(`[CoWatcher] ✅ Match found: ${userActivity.service} (${userActivity.id})`);
+              matchedActivityId = userActivity.id;
+              matchedActivityTimestamp = userActivity.timestamp || Date.now();
+              break;
+            }
+          }
+          if (matchedActivityId) break;
+        }
+        if (matchedActivityId) break;
+      }
+
+      if (!matchedActivityId) {
+        console.debug('[CoWatcher] No matching activities found');
+        return null;
+      }
+
+      // Find user's matched activity to get contentTimestamp
+      let userActivity: any = null;
+      for (const activity of Object.values(myActivities)) {
+        if (activity?.id === matchedActivityId) {
+          userActivity = activity;
+          break;
+        }
+      }
+
+      // Build co-watcher list for the matched activity
       const coWatchers: Array<{
         friend_id: string | null; // null for user
-        timestamp: number;
+        timestamp: number; // contentTimestamp if available, fallback to timestamp
       }> = [
-        { friend_id: null, timestamp: userTimestamp } // Include user in host determination
+        {
+          friend_id: null,
+          timestamp: userActivity?.contentTimestamp || userActivity?.timestamp || matchedActivityTimestamp
+        } // Include user
       ];
 
       for (const friend of friends) {
         if (!friend.current_activities) continue;
 
         for (const activity of Object.values(friend.current_activities)) {
-          if (activity?.id === userActivityId) {
+          if (activity?.id === matchedActivityId) {
             coWatchers.push({
               friend_id: friend.id,
-              timestamp: activity.timestamp || 0,
+              timestamp: activity.contentTimestamp || activity.timestamp || 0,
             });
-            break; // Only count each friend once
+            console.debug(`[TimestampMigration:CoWatcherHost] friend=${friend.id} using timestamp=${activity.contentTimestamp ? 'contentTimestamp' : 'timestamp'} (value=${activity.contentTimestamp || activity.timestamp})`);
+            break; // Only count each friend once per matched activity
           }
         }
       }
 
       if (coWatchers.length === 1) {
         // Only user watching this activity
-        console.debug('[CoWatcher] No co-watchers found for activity', userActivityId);
+        console.debug('[CoWatcher] No co-watchers found for activity', matchedActivityId);
         return null;
       }
 
-      // Sort by timestamp to find host (earliest = host)
-      coWatchers.sort((a, b) => a.timestamp - b.timestamp);
+      // Sort by contentTimestamp (or fallback to timestamp) to find host (earliest = host)
+      coWatchers.sort((a, b) => {
+        const diff = a.timestamp - b.timestamp;
+        if (diff !== 0) {
+          console.debug(`[TimestampMigration:CoWatcherHost] Sorting: a(${a.friend_id})=${a.timestamp} vs b(${b.friend_id})=${b.timestamp} => ${diff < 0 ? 'a is host' : 'b is host'}`);
+        }
+        return diff;
+      });
 
       const hostEntry = coWatchers[0];
       const hostFriendId = hostEntry.friend_id === null ? 'self' : hostEntry.friend_id;
@@ -83,7 +128,7 @@ export class CoWatcherDetector {
         .map(cw => cw.friend_id as string);
 
       const session: CoWatchSession = {
-        activity_id: userActivityId,
+        activity_id: matchedActivityId,
         host_friend_id: hostFriendId,
         co_watchers: otherCoWatchers,
         detected_at: Date.now(),
@@ -94,6 +139,7 @@ export class CoWatcherDetector {
         host: hostFriendId,
         co_watchers_count: otherCoWatchers.length,
       });
+      console.debug(`[TimestampMigration:CoWatcherHost] ✅ Host determined: ${hostFriendId} with timestamp=${hostEntry.timestamp}`);
 
       return session;
     } catch (error) {

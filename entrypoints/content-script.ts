@@ -59,6 +59,8 @@ class GenericVideoTracker {
   private lastReportTimestamp: number = 0;
   private videoSearchTimeout: number | null = null;
   private cachedNetflixTitle: string | null = null;
+  private currentActivityId: string | null = null;
+  private currentActivityContentTimestamp: number | null = null;
 
   constructor() {}
 
@@ -139,6 +141,26 @@ class GenericVideoTracker {
     this.activeVideoElement = currentVideo;
     console.log('[ContentScript] 🎬 Video element detected and hooked');
 
+    // Generate activity ID to check if this is a new video
+    const url = window.location.href;
+    let service: 'youtube-tab' | 'netflix-tab' | 'twitch-tab' | 'video-tab' = 'video-tab';
+    const domain = window.location.hostname;
+    if (domain.includes('youtube.com') || domain.includes('youtu.be')) {
+      service = 'youtube-tab';
+    } else if (domain.includes('netflix.com')) {
+      service = 'netflix-tab';
+    } else if (domain.includes('twitch.tv')) {
+      service = 'twitch-tab';
+    }
+    const newActivityId = generateActivityId(service, url);
+
+    // If this is a new activity, reset the content timestamp
+    if (newActivityId !== this.currentActivityId) {
+      this.currentActivityId = newActivityId;
+      this.currentActivityContentTimestamp = Date.now();
+      console.log(`[TimestampMigration:ContentTimestamp] SET for new activity ${newActivityId}`);
+    }
+
     const playHandler = () => this._sendPlaybackUpdate();
     const pauseHandler = () => {
       if (!document.hidden) {
@@ -209,16 +231,21 @@ class GenericVideoTracker {
     this._removeVideoListeners();
     this.activeVideoElement = null;
     this.cachedNetflixTitle = null;
+    this.currentActivityId = null;
+    this.currentActivityContentTimestamp = null;
+    console.log('[TimestampMigration:ContentTimestamp] CLEAR on video emptied');
     setTimeout(() => this._findAndHookVideo(), 100);
   }
 
   private _sendPlaybackUpdate(): void {
     if (!this._isContextValid()) {
+      console.warn('[ContentScript] Context invalid, terminating');
       forceGlobalTeardown();
       return;
     }
 
     if (!this.activeVideoElement) {
+      console.warn('[ContentScript] No active video element');
       return;
     }
 
@@ -273,6 +300,13 @@ class GenericVideoTracker {
 
     const activityId = generateActivityId(service, url);
 
+    // Use stored contentTimestamp if this is the same activity, otherwise set it
+    if (activityId !== this.currentActivityId) {
+      this.currentActivityId = activityId;
+      this.currentActivityContentTimestamp = Date.now();
+      console.log(`[TimestampMigration:ContentTimestamp] SET for activity ${activityId}`);
+    }
+
     const activity = {
       id: activityId,
       service: service,
@@ -280,6 +314,7 @@ class GenericVideoTracker {
       state: isPaused ? 'paused' : 'playing',
       timestamp: Date.now(),
       url: url,
+      contentTimestamp: this.currentActivityContentTimestamp || Date.now(),
       metadata: {
         duration,
         progress: currentTime,
@@ -289,18 +324,26 @@ class GenericVideoTracker {
     };
 
     // Only send if we still own this tab
-    if (port && (window as any).hangTimeScriptActive === INSTANCE_ID) {
-      try {
-        port.postMessage({
-          type: 'CONTENT_SCRIPT_ACTIVITY',
-          data: {
-            key: 'content_script_activity_video-tab',
-            value: activity,
-          },
-        });
-      } catch (err) {
-        // Silently fail if port is dead
-      }
+    if (!port) {
+      console.warn('[ContentScript] No port connected');
+      return;
+    }
+    if ((window as any).hangTimeScriptActive !== INSTANCE_ID) {
+      console.warn('[ContentScript] Instance check failed: hangTimeScriptActive=' + (window as any).hangTimeScriptActive + ' vs INSTANCE_ID=' + INSTANCE_ID);
+      return;
+    }
+
+    try {
+      console.log('[ContentScript] 📤 Sending activity:', activity.id, activity.service);
+      port.postMessage({
+        type: 'CONTENT_SCRIPT_ACTIVITY',
+        data: {
+          key: 'content_script_activity_video-tab',
+          value: activity,
+        },
+      });
+    } catch (err) {
+      console.error('[ContentScript] Failed to send activity:', err);
     }
   }
 
@@ -543,10 +586,10 @@ class GenericVideoTracker {
 function forceGlobalTeardown(): void {
   console.log(`[ContentScript] 🛑 Instance ${INSTANCE_ID} detected context loss/ownership loss, forcefully terminating...`);
 
-  // Mark as inactive BEFORE cleanup to block any concurrent operations
-  (window as any).hangTimeScriptActive = false;
+  // Don't clear hangTimeScriptActive - a new instance has already claimed it
+  // Clearing it to false would break the new instance's lifecycle checks at line 292 and 504
+  // Just proceed with cleanup without touching the instance flag
 
-  // Then cleanup
   performCleanup();
 }
 
@@ -637,9 +680,13 @@ function establishConnection(): void {
             const { host_friend_id, co_watchers, detected_at } = message.data;
             overlayUI.setState({
               activity_id: message.data.activity_id,
+              host_friend_id: message.data.host_friend_id,
               host_name: message.data.host_name || '?',
               co_watchers: co_watchers || [],
               host_position: message.data.host_position,
+              host_position_timestamp: message.data.host_position_timestamp,
+              user_position: message.data.user_position,
+              user_position_timestamp: message.data.user_position_timestamp,
             });
             console.debug('[ContentScript] Updated overlay with co-watchers:', co_watchers);
           }
@@ -731,8 +778,8 @@ function establishConnection(): void {
 function performCleanup(): void {
   console.log('[ContentScript] 🧹 SELF-DESTRUCT: Starting complete cleanup');
 
-  // Clear active flag FIRST so no new work starts
-  (window as any).hangTimeScriptActive = false;
+  // Don't touch hangTimeScriptActive - new instance already claimed it and needs it for lifecycle checks
+  // Clearing it would break the new instance's ability to send activities and perform its duties
 
   // Stop the video tracker (kills polling interval and observers)
   if (tracker) {

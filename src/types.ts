@@ -147,6 +147,7 @@ export interface Activity {
   state?: 'playing' | 'paused' | 'stopped' | 'disconnected'; // Activity state: playing, paused, stopped, or disconnected (content script lost connection)
   timestamp: number; // When activity was detected
   freshness_timestamp: number; // When data was last refreshed (for calculating age and freshness)
+  contentTimestamp?: number; // When content actually started (set by content script at first detection) - immutable for host determination
   is_fresh?: boolean; // Whether data came from responsive content script (true) or stored/stale data (false)
   provenance?: 'LOCAL_TAB' | 'LOCAL_STEAM' | 'LOCAL_SPOTIFY' | 'LOCAL_TWITCH' | 'FRIEND' | 'TEST'; // Source of activity: user's tab, Steam/Spotify/Twitch API, friend's data, or test
   metadata: {

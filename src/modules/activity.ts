@@ -144,8 +144,8 @@ export class ActivityDetector {
       // Populate my_activities from datastore (single source of truth)
       await this._updateMyActivitiesFromDatastore();
 
-      // Store most recent activity for backwards compatibility
-      await this.storageManager.setCurrentActivity(allActivities[0]);
+      // Store first activity for backwards compatibility
+      await this.storageManager.setCurrentActivity(validatedActivities[0]);
 
       if (!activityIdsChanged) {
         // Same activities, only state/audio might have changed (oscillation)
@@ -186,6 +186,11 @@ export class ActivityDetector {
       } catch {}
       return [];
     }
+
+    // DEBUG: Check what's in MY_ACTIVITIES
+    const myActivities = await this.storageManager.getMyActivities();
+    const myActivityIds = Object.keys(myActivities);
+    console.log(`[Activity] detectAllActiveActivities: MY_ACTIVITIES has ${myActivityIds.length} activities:`, myActivityIds.map(id => `${id}:${myActivities[id]?.service || '?'}`));
 
     const activities: Activity[] = [];
     const seenServices = new Set<string>();

@@ -344,7 +344,11 @@ export class StorageManager {
   }
 
   async setCurrentActivity(activity: Activity): Promise<void> {
+    console.log(`[Storage] setCurrentActivity called with:`, { id: activity.id, service: activity.service, content: activity.content?.substring(0, 30) });
     await this.set(STORAGE_KEYS.CURRENT_ACTIVITY, activity);
+    // Verify it was set
+    const verify = await this.get<Activity>(STORAGE_KEYS.CURRENT_ACTIVITY);
+    console.log(`[Storage] ✅ setCurrentActivity verified in cache:`, { id: verify?.id, service: verify?.service });
   }
 
   async getMyActivities(): Promise<Partial<Record<string, Activity>>> {

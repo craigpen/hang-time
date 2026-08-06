@@ -75,6 +75,9 @@ export class PopupController {
     // Initialize toast manager
     toastManager.init();
 
+    // Initialize storage manager (loads cache from secondary storage on startup)
+    await this.storage.init();
+
     this.friendsList = document.getElementById('friends-list');
     this.noFriendsPlaceholder = document.getElementById('no-friends');
     this.addFriendForm = document.getElementById('add-friend-form');
