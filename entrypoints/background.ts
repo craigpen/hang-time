@@ -2919,6 +2919,8 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
       value.metadata.tabId = tabId;
     }
 
+    console.debug(`[TimestampMigration:ContentScriptStorage] Storing activity ${activityId} with contentTimestamp=${value.contentTimestamp} (timestamp=${value.timestamp})`);
+
     await storageManager.updateMyActivity(activityId, value);
     console.debug(`[Background] âœ… Stored activity in MY_ACTIVITIES:`, {
       id: activityId,
