@@ -172,7 +172,7 @@ export class OverlayUI {
           left: 0%;
           width: 16px;
           height: 20px;
-          background: #4ade80;
+          background: #ff6b6b;
           transition: left 0.1s linear;
           user-select: none;
           pointer-events: none;
@@ -192,10 +192,10 @@ export class OverlayUI {
           transform: translateY(-50%);
           width: 3px;
           height: 20px;
-          background: #4ade80;
+          background: #ff6b6b;
           left: 0%;
           transition: left 0.1s linear;
-          box-shadow: 0 0 4px rgba(74, 222, 128, 0.8);
+          box-shadow: 0 0 4px rgba(255, 107, 107, 0.8);
           pointer-events: none;
         }
 
