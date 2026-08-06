@@ -156,15 +156,16 @@ export class OverlayUI {
 
         .progress-bar-marker {
           position: absolute;
-          top: -2px;
-          width: 8px;
-          height: 8px;
-          background: #ff6b6b;
-          border-radius: 50%;
-          border: 2px solid white;
+          top: 50%;
+          transform: translateY(-50%);
           left: 0%;
           transition: left 0.1s linear;
-          box-shadow: 0 0 4px rgba(255, 107, 107, 0.6);
+          font-size: 16px;
+          color: #ff6b6b;
+          font-weight: bold;
+          line-height: 1;
+          user-select: none;
+          pointer-events: none;
         }
 
         .attendees-header {
@@ -543,11 +544,21 @@ export class OverlayUI {
       fillEl.style.width = hostPercent + '%';
     }
 
-    // Show user position marker only if user is NOT the host and has progress
+    // Show arrow marker only if user is NOT the host and has progress
     if (markerEl) {
-      if (!this.state.is_user_host && this.state.user_progress !== undefined && this.state.host_duration && this.state.host_duration > 0) {
+      if (!this.state.is_user_host && this.state.user_progress !== undefined && this.state.host_progress !== undefined && this.state.host_duration && this.state.host_duration > 0) {
         const userPercent = Math.min((this.state.user_progress / this.state.host_duration) * 100, 100);
         markerEl.style.left = userPercent + '%';
+
+        // Arrow points toward host
+        if (this.state.user_progress < this.state.host_progress) {
+          markerEl.textContent = '→'; // User behind, arrow points right (toward host ahead)
+        } else if (this.state.user_progress > this.state.host_progress) {
+          markerEl.textContent = '←'; // User ahead, arrow points left (toward host behind)
+        } else {
+          markerEl.textContent = '•'; // Same position, just a dot
+        }
+
         markerEl.style.display = 'block';
       } else {
         markerEl.style.display = 'none';
