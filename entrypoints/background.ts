@@ -828,9 +828,11 @@ function _startCoWatcherDetectionCycle(): void {
         let hostPositionTimestamp: number | undefined;
         let videoDuration: number | undefined;
 
+        let userPosition: number | undefined;
+        const myActivities = await storageManager.getMyActivities();
+
         if (session.host_friend_id === 'self') {
           // Host is self: use my activity from myActivities (where content script stores it)
-          const myActivities = await storageManager.getMyActivities();
           const hostActivity = myActivities?.[session.activity_id];
           if (hostActivity?.content) {
             videoTitle = hostActivity.content;
@@ -840,6 +842,8 @@ function _startCoWatcherDetectionCycle(): void {
               hostPosition = hostActivity.metadata.progress;
               hostPositionTimestamp = Date.now(); // When we measured this position
             }
+            // User position is same as host position when user is host
+            userPosition = hostActivity.metadata?.progress;
           }
         } else if (hostFriend?.current_activities) {
           // Host is friend: use friend's activity
@@ -853,12 +857,12 @@ function _startCoWatcherDetectionCycle(): void {
               hostPositionTimestamp = Date.now(); // When we measured this position
             }
           }
+          // Get user's position for this same activity from myActivities
+          const userActivity = myActivities?.[session.activity_id];
+          if (userActivity?.metadata?.progress !== undefined) {
+            userPosition = userActivity.metadata.progress;
+          }
         }
-
-        // Get current activity for playback position
-        const profile = await storageManager.getUserProfile();
-        const userPosition = profile?.current_activity?.metadata?.progress;
-        const userPositionTimestamp = profile?.current_activity?.contentTimestamp;
 
         // Build watching_together list: host + co-watchers
         const watchingTogether: string[] = [hostName];
