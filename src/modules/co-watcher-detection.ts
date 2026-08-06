@@ -116,7 +116,7 @@ export class CoWatcherDetector {
       coWatchers.sort((a, b) => {
         const diff = a.timestamp - b.timestamp;
         if (diff !== 0) {
-          console.debug(`[TimestampMigration:CoWatcherHost] Sorting: a(${a.friend_id})=${a.timestamp} vs b(${b.friend_id})=${b.timestamp} => ${diff < 0 ? 'a is host' : 'b is host'}`);
+          console.debug(`[TimestampMigration:CoWatcherHost] Sorting activity=${matchedActivityId}: a(${a.friend_id})=${a.timestamp} vs b(${b.friend_id})=${b.timestamp} => ${diff < 0 ? 'a is host' : 'b is host'}`);
         }
         return diff;
       });
