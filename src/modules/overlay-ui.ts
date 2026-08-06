@@ -609,7 +609,7 @@ export class OverlayUI {
         console.debug('[OverlayUI] Gap calculation:', {
           userProgress: this._state.user_progress,
           hostProgress: this._state.host_progress,
-          elapsed: elapsedSinceHostMeasure,
+          elapsedMs: elapsedSinceHostMeasureMs,
           hostCurrentPosition,
           gap,
           threshold: SYNC_THRESHOLD,
