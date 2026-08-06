@@ -824,8 +824,8 @@ function _startCoWatcherDetectionCycle(): void {
 
         // Get activity title and position from host friend's activities
         let videoTitle = 'Loading video...';
-        let hostPosition = 0;
-        let hostPositionTimestamp = Date.now();
+        let hostPosition: number | undefined;
+        let hostPositionTimestamp: number | undefined;
 
         if (session.host_friend_id === 'self') {
           // Host is self: use my activity
@@ -854,8 +854,8 @@ function _startCoWatcherDetectionCycle(): void {
 
         // Get current activity for playback position
         const profile = await storageManager.getUserProfile();
-        const userPosition = profile?.current_activity?.metadata?.progress || 0;
-        const userPositionTimestamp = profile?.current_activity?.timestamp || Date.now();
+        const userPosition = profile?.current_activity?.metadata?.progress;
+        const userPositionTimestamp = profile?.current_activity?.contentTimestamp;
 
         // Build co-watchers list with names
         const coWatchersWithNames: string[] = [];
