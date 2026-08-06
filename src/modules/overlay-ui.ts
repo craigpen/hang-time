@@ -191,7 +191,7 @@ export class OverlayUI {
         }
 
         .attendees-header {
-          padding: 8px 12px;
+          padding: 8px 0;
           font-size: 12px;
           color: rgba(255, 255, 255, 0.7);
           margin-bottom: 4px;
