@@ -160,7 +160,7 @@ export class OverlayUI {
 
         .progress-bar-fill {
           height: 100%;
-          background: linear-gradient(90deg, #4da6ff, #1a7fff);
+          background: linear-gradient(90deg, #4ade80, #22c55e);
           width: 0%;
           transition: width 0.1s linear;
         }
@@ -172,7 +172,7 @@ export class OverlayUI {
           left: 0%;
           width: 16px;
           height: 20px;
-          background: #ff6b6b;
+          background: #4ade80;
           transition: left 0.1s linear;
           user-select: none;
           pointer-events: none;
@@ -192,10 +192,10 @@ export class OverlayUI {
           transform: translateY(-50%);
           width: 3px;
           height: 20px;
-          background: #ff6b6b;
+          background: #4ade80;
           left: 0%;
           transition: left 0.1s linear;
-          box-shadow: 0 0 4px rgba(255, 107, 107, 0.8);
+          box-shadow: 0 0 4px rgba(74, 222, 128, 0.8);
           pointer-events: none;
         }
 
@@ -207,7 +207,7 @@ export class OverlayUI {
         }
 
         .attendee-host {
-          color: #2da6ff;
+          color: #4ade80;
           font-weight: 600;
         }
 
@@ -215,6 +215,10 @@ export class OverlayUI {
           color: rgba(255, 255, 255, 0.5);
           font-size: 10px;
           margin-left: 2px;
+        }
+
+        .host-state-playing {
+          color: #4ade80;
         }
 
         .icon-buttons {
@@ -581,8 +585,10 @@ export class OverlayUI {
 
     // Update host state indicator
     if (stateIndicator) {
+      stateIndicator.classList.remove('host-state-playing');
       if (this._state.host_state === 'playing') {
         stateIndicator.textContent = '▶';
+        stateIndicator.classList.add('host-state-playing');
       } else if (this._state.host_state === 'paused') {
         stateIndicator.textContent = '⏸';
       } else {
