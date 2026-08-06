@@ -860,8 +860,16 @@ function _startCoWatcherDetectionCycle(): void {
         // Build co-watchers list with names
         const coWatchersWithNames: string[] = [];
         for (const coWatcherId of session.co_watchers) {
-          const coWatcherFriend = await getFriendManager().getFriend(coWatcherId);
-          const coWatcherName = coWatcherFriend?.local_name || coWatcherId;
+          let coWatcherName: string;
+          if (coWatcherId === 'self') {
+            // Self is in co-watchers when not host
+            const profile = await storageManager.getUserProfile();
+            coWatcherName = profile?.nickname || profile?.memorable_identifier || 'You';
+          } else {
+            // Friend is a co-watcher
+            const coWatcherFriend = await getFriendManager().getFriend(coWatcherId);
+            coWatcherName = coWatcherFriend?.local_name || coWatcherId;
+          }
           coWatchersWithNames.push(coWatcherName);
         }
 

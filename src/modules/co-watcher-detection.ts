@@ -9,7 +9,7 @@ import { FriendManager } from './friends';
 export interface CoWatchSession {
   activity_id: string;
   host_friend_id: string;
-  co_watchers: string[]; // Friend IDs of other co-watchers (excluding host)
+  co_watchers: string[]; // Friend IDs of other co-watchers (excluding host), or 'self' if user is co-watcher
   detected_at: number;
 }
 
@@ -134,8 +134,7 @@ export class CoWatcherDetector {
       }
 
       const otherCoWatchers = coWatchers.slice(1)
-        .filter(cw => cw.friend_id !== null)
-        .map(cw => cw.friend_id as string);
+        .map(cw => cw.friend_id === null ? 'self' : cw.friend_id);
 
       const session: CoWatchSession = {
         activity_id: matchedActivityId,
