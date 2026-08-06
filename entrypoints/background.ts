@@ -833,10 +833,10 @@ function _startCoWatcherDetectionCycle(): void {
           const hostActivity = myActivities?.[session.activity_id];
           if (hostActivity?.content) {
             videoTitle = hostActivity.content;
-            // Use progress + contentTimestamp to extrapolate current position
-            if (hostActivity?.metadata?.progress !== undefined && hostActivity?.contentTimestamp) {
+            // Use progress measured now, timestamp when measured
+            if (hostActivity?.metadata?.progress !== undefined) {
               hostPosition = hostActivity.metadata.progress;
-              hostPositionTimestamp = hostActivity.contentTimestamp;
+              hostPositionTimestamp = Date.now(); // When we measured this position
             }
           }
         } else if (hostFriend?.current_activities) {
@@ -844,10 +844,10 @@ function _startCoWatcherDetectionCycle(): void {
           const hostActivity = Object.values(hostFriend.current_activities).find(a => a?.id === session.activity_id);
           if (hostActivity && hostActivity.content) {
             videoTitle = hostActivity.content;
-            // Use progress + contentTimestamp to extrapolate current position
-            if (hostActivity?.metadata?.progress !== undefined && hostActivity?.contentTimestamp) {
+            // Use progress measured now, timestamp when measured
+            if (hostActivity?.metadata?.progress !== undefined) {
               hostPosition = hostActivity.metadata.progress;
-              hostPositionTimestamp = hostActivity.contentTimestamp;
+              hostPositionTimestamp = Date.now(); // When we measured this position
             }
           }
         }
