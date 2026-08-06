@@ -207,6 +207,7 @@ export function validateActivity(data: Partial<Activity> & { provenance?: Activi
     state: validatedState,
     audio: data.audio || 'off',
     timestamp: data.timestamp,
+    contentTimestamp: data.contentTimestamp,
     freshness_timestamp: data.freshness_timestamp || data.timestamp || Date.now(),
     is_fresh: data.is_fresh,
     metadata: {
