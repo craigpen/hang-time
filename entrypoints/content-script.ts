@@ -913,16 +913,21 @@ function initializeOverlay(): void {
         const hostProgress = overlayUI.state.host_progress;
         const hostProgressTimestamp = overlayUI.state.host_progress_timestamp;
 
-        if (hostProgress !== undefined && hostProgressTimestamp !== undefined && activeVideoElement) {
-          // Calculate synced position: host_progress + elapsed time since measurement
-          const elapsedSeconds = (Date.now() - hostProgressTimestamp) / 1000;
-          const syncedPosition = hostProgress + elapsedSeconds;
+        if (hostProgress !== undefined && hostProgressTimestamp !== undefined) {
+          const videoElement = document.querySelector('video') as HTMLVideoElement;
+          if (videoElement) {
+            // Calculate synced position: host_progress + elapsed time since measurement
+            const elapsedSeconds = (Date.now() - hostProgressTimestamp) / 1000;
+            const syncedPosition = hostProgress + elapsedSeconds;
 
-          console.log(`[ContentScript] 🔄 Syncing video: host was at ${hostProgress}s, measured ${elapsedSeconds.toFixed(1)}s ago, seeking to ${syncedPosition.toFixed(1)}s`);
-          activeVideoElement.currentTime = syncedPosition;
+            console.log(`[ContentScript] 🔄 Syncing video: host was at ${hostProgress}s, measured ${elapsedSeconds.toFixed(1)}s ago, seeking to ${syncedPosition.toFixed(1)}s`);
+            videoElement.currentTime = syncedPosition;
 
-          // Notify overlay of sync completion
-          window.postMessage({ type: 'HANG_TIME_SYNC_COMPLETE', data: { position: syncedPosition } }, '*');
+            // Notify overlay of sync completion
+            window.postMessage({ type: 'HANG_TIME_SYNC_COMPLETE', data: { position: syncedPosition } }, '*');
+          } else {
+            console.warn('[ContentScript] Cannot sync - no video element found');
+          }
         } else {
           console.warn('[ContentScript] Cannot sync - missing host progress or timestamp data');
         }
