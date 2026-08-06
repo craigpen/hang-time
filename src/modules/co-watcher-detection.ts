@@ -120,12 +120,13 @@ export class CoWatcherDetector {
 
         if (Math.abs(diff) > TIMESTAMP_THRESHOLD) {
           // Timestamps far enough apart - use timestamp alone
-          console.debug(`[TimestampMigration:CoWatcherHost] Sorting activity=${matchedActivityId}: a(${a.friend_id})=${a.timestamp} vs b(${b.friend_id})=${b.timestamp} => ${diff < 0 ? 'a is host' : 'b is host'}`);
+          const result = diff < 0 ? -1 : 1;
+          console.debug(`[TimestampMigration] SORT activity=${matchedActivityId}: a(${a.friend_id}/${a.timestamp}ms) vs b(${b.friend_id}/${b.timestamp}ms), diff=${diff}ms => winner=${result < 0 ? 'a' : 'b'}`);
           return diff;
         } else {
           // Timestamps within threshold - use friend_id as tiebreaker for stability
           const tiebreakerDiff = (a.friend_id || '').localeCompare(b.friend_id || '');
-          console.debug(`[TimestampMigration:CoWatcherHost] Timestamps within threshold (${Math.abs(diff)}ms) - tiebreak by friend_id: a(${a.friend_id}) vs b(${b.friend_id}) => ${tiebreakerDiff < 0 ? 'a' : tiebreakerDiff > 0 ? 'b' : 'equal'}`);
+          console.debug(`[TimestampMigration] SORT (TIEBREAK) activity=${matchedActivityId}: within ${Math.abs(diff)}ms threshold, a(${a.friend_id}) vs b(${b.friend_id}) => winner=${tiebreakerDiff < 0 ? 'a' : tiebreakerDiff > 0 ? 'b' : 'equal'}`);
           return tiebreakerDiff;
         }
       });

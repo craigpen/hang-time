@@ -1063,11 +1063,13 @@ chrome.runtime.onConnect.addListener((port) => {
           if (activityId && port) {
             const myActivities = await storageManager.getMyActivities();
             const activity = myActivities?.[activityId];
+            const timestamp = activity?.contentTimestamp || null;
+            console.debug(`[TimestampMigration] GET_ACTIVITY_CONTENT_TIMESTAMP: activityId=${activityId}, found=${!!activity}, contentTimestamp=${timestamp}`);
             port.postMessage({
               type: 'ACTIVITY_CONTENT_TIMESTAMP',
               data: {
                 activityId: activityId,
-                contentTimestamp: activity?.contentTimestamp || null,
+                contentTimestamp: timestamp,
               },
             });
           }
@@ -2965,7 +2967,7 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
       value.metadata.tabId = tabId;
     }
 
-    console.debug(`[TimestampMigration:ContentScriptStorage] Storing activity ${activityId} with contentTimestamp=${value.contentTimestamp} (timestamp=${value.timestamp})`);
+    console.debug(`[TimestampMigration] STORE activity ${activityId}: contentTimestamp=${value.contentTimestamp}, timestamp=${value.timestamp}, state=${value.state}, tabId=${tabId}`);
 
     await storageManager.updateMyActivity(activityId, value);
     console.debug(`[Background] âœ… Stored activity in MY_ACTIVITIES:`, {

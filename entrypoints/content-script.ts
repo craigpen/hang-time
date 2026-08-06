@@ -161,21 +161,22 @@ class GenericVideoTracker {
 
       // Request existing contentTimestamp from background's StorageManager (primary memory storage)
       // This persists across page reloads in the same tab
+      const requestTime = Date.now();
       if (port) {
         port.postMessage({
           type: 'GET_ACTIVITY_CONTENT_TIMESTAMP',
           data: { activityId: newActivityId },
         });
+        console.log(`[TimestampMigration] REQUEST stored timestamp for activity ${newActivityId} at ${requestTime}`);
       }
 
-      // Fallback: if no response in 200ms, use current time
+      // Fallback: if no response in 500ms, use current time
       setTimeout(() => {
         if (this.currentActivityContentTimestamp === undefined) {
           this.currentActivityContentTimestamp = Date.now();
-          console.log(`[TimestampMigration:ContentTimestamp] FALLBACK: using current time for activity ${newActivityId}`);
+          console.log(`[TimestampMigration] FALLBACK after 500ms for activity ${newActivityId}: using ${this.currentActivityContentTimestamp}`);
         }
-      }, 200);
-      console.log(`[TimestampMigration:ContentTimestamp] WAITING for stored timestamp for activity ${newActivityId}`);
+      }, 500);
     }
 
     const playHandler = () => this._sendPlaybackUpdate();
@@ -680,9 +681,16 @@ function establishConnection(): void {
       switch (message.type) {
         case 'ACTIVITY_CONTENT_TIMESTAMP':
           // Background returned stored contentTimestamp for this activity
-          if (message.data?.activityId === tracker?.['currentActivityId'] && message.data?.contentTimestamp) {
-            tracker['currentActivityContentTimestamp'] = message.data.contentTimestamp;
-            console.debug(`[TimestampMigration:ContentTimestamp] REUSED from StorageManager: ${message.data.contentTimestamp}`);
+          if (message.data?.activityId === tracker?.['currentActivityId']) {
+            const stored = message.data?.contentTimestamp;
+            if (stored) {
+              tracker['currentActivityContentTimestamp'] = stored;
+              console.log(`[TimestampMigration] RESPONSE for activity ${message.data.activityId}: REUSED stored=${stored}`);
+            } else {
+              console.log(`[TimestampMigration] RESPONSE for activity ${message.data.activityId}: not found in storage`);
+            }
+          } else {
+            console.log(`[TimestampMigration] RESPONSE for activity ${message.data?.activityId}: mismatch with current=${tracker?.['currentActivityId']}`);
           }
           break;
 
