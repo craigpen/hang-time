@@ -828,33 +828,26 @@ function _startCoWatcherDetectionCycle(): void {
         let hostPositionTimestamp = Date.now();
 
         if (session.host_friend_id === 'self') {
-          // Get host activity from user profile (self is host)
+          // Host is self: use my activity
           const profile = await storageManager.getUserProfile();
           const hostActivity = profile?.current_activity;
-          console.debug(`[ProgressDebug] Self is host: activity_id=${session.activity_id}, currentActivity=${hostActivity?.id}, progress=${hostActivity?.metadata?.progress}`);
-          if (hostActivity?.id === session.activity_id) {
-            if (hostActivity?.content) {
-              videoTitle = hostActivity.content;
-            }
-            if (hostActivity?.metadata?.progress !== undefined) {
+          if (hostActivity?.id === session.activity_id && hostActivity?.content) {
+            videoTitle = hostActivity.content;
+            // Use progress + contentTimestamp to extrapolate current position
+            if (hostActivity?.metadata?.progress !== undefined && hostActivity?.contentTimestamp) {
               hostPosition = hostActivity.metadata.progress;
+              hostPositionTimestamp = hostActivity.contentTimestamp;
             }
-            if (hostActivity?.timestamp) {
-              hostPositionTimestamp = hostActivity.timestamp;
-            }
-            console.debug(`[Background] Host is self: position=${hostPosition}s (timestamp=${hostPositionTimestamp})`);
           }
         } else if (hostFriend?.current_activities) {
+          // Host is friend: use friend's activity
           const hostActivity = Object.values(hostFriend.current_activities).find(a => a?.id === session.activity_id);
-          if (hostActivity) {
-            if (hostActivity.content) {
-              videoTitle = hostActivity.content;
-            }
-            if (hostActivity.metadata?.progress !== undefined) {
+          if (hostActivity && hostActivity.content) {
+            videoTitle = hostActivity.content;
+            // Use progress + contentTimestamp to extrapolate current position
+            if (hostActivity?.metadata?.progress !== undefined && hostActivity?.contentTimestamp) {
               hostPosition = hostActivity.metadata.progress;
-            }
-            if (hostActivity.timestamp) {
-              hostPositionTimestamp = hostActivity.timestamp;
+              hostPositionTimestamp = hostActivity.contentTimestamp;
             }
           }
         }
