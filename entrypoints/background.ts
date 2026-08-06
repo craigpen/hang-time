@@ -828,10 +828,10 @@ function _startCoWatcherDetectionCycle(): void {
         let hostPositionTimestamp: number | undefined;
 
         if (session.host_friend_id === 'self') {
-          // Host is self: use my activity
-          const profile = await storageManager.getUserProfile();
-          const hostActivity = profile?.current_activity;
-          if (hostActivity?.id === session.activity_id && hostActivity?.content) {
+          // Host is self: use my activity from myActivities (where content script stores it)
+          const myActivities = await storageManager.getMyActivities();
+          const hostActivity = myActivities?.[session.activity_id];
+          if (hostActivity?.content) {
             videoTitle = hostActivity.content;
             // Use progress + contentTimestamp to extrapolate current position
             if (hostActivity?.metadata?.progress !== undefined && hostActivity?.contentTimestamp) {
