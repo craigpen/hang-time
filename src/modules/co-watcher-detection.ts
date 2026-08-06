@@ -123,6 +123,16 @@ export class CoWatcherDetector {
 
       const hostEntry = coWatchers[0];
       const hostFriendId = hostEntry.friend_id === null ? 'self' : hostEntry.friend_id;
+
+      // Get host's friendly name for logging
+      let hostName = hostFriendId === 'self' ? 'You' : 'Unknown';
+      if (hostFriendId !== 'self') {
+        const hostFriend = friends.find(f => f.id === hostFriendId);
+        if (hostFriend) {
+          hostName = hostFriend.local_name;
+        }
+      }
+
       const otherCoWatchers = coWatchers.slice(1)
         .filter(cw => cw.friend_id !== null)
         .map(cw => cw.friend_id as string);
@@ -136,10 +146,10 @@ export class CoWatcherDetector {
 
       console.debug('[CoWatcher] Co-watch session detected:', {
         activity_id: session.activity_id,
-        host: hostFriendId,
+        host: hostName,
         co_watchers_count: otherCoWatchers.length,
       });
-      console.debug(`[TimestampMigration:CoWatcherHost] ✅ Host determined: ${hostFriendId} with timestamp=${hostEntry.timestamp}`);
+      console.debug(`[TimestampMigration:CoWatcherHost] ✅ Host determined: ${hostName} (${hostFriendId}) with timestamp=${hostEntry.timestamp}`);
 
       return session;
     } catch (error) {
