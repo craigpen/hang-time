@@ -19,6 +19,7 @@ export interface OverlayState {
   }>;
   host_position?: number; // seconds
   host_position_timestamp?: number; // when host position was measured (ms)
+  video_duration?: number; // total duration in seconds
   user_position?: number; // seconds
   user_position_timestamp?: number; // when user position was measured (ms)
   activity_id?: string;
@@ -544,8 +545,8 @@ export class OverlayUI {
       const elapsedSeconds = (Date.now() - this.state.host_position_timestamp) / 1000;
       const hostCurrentPosition = this.state.host_position + elapsedSeconds;
 
-      // Assume 2 hour max video for progress calculation
-      const maxDuration = 7200;
+      // Use actual video duration if available, fallback to 2 hours
+      const maxDuration = this.state.video_duration || 7200;
       const hostPercent = Math.min((hostCurrentPosition / maxDuration) * 100, 100);
       fillEl.style.width = hostPercent + '%';
     }
@@ -560,7 +561,7 @@ export class OverlayUI {
         const elapsedSeconds = (Date.now() - this.state.user_position_timestamp) / 1000;
         const userCurrentPosition = this.state.user_position + elapsedSeconds;
 
-        const maxDuration = 7200;
+        const maxDuration = this.state.video_duration || 7200;
         const userPercent = Math.min((userCurrentPosition / maxDuration) * 100, 100);
         markerEl.style.left = userPercent + '%';
         markerEl.style.display = 'block';
