@@ -710,6 +710,24 @@ function establishConnection(): void {
           if (!overlayUI) return;
           // Update overlay with co-watch data
           if (message.data) {
+            // Merge messages instead of replacing - preserve locally added messages
+            const incomingMessages = message.data.messages || [];
+            const currentMessages = overlayUI.state.messages || [];
+
+            // Deduplicate and merge: prefer content+timestamp as key
+            const merged = new Map();
+            for (const msg of currentMessages) {
+              const key = `${msg.content}_${msg.timestamp}`;
+              merged.set(key, msg);
+            }
+            for (const msg of incomingMessages) {
+              const key = `${msg.content}_${msg.timestamp}`;
+              merged.set(key, msg);
+            }
+
+            // Sort by timestamp
+            const mergedMessages = Array.from(merged.values()).sort((a, b) => a.timestamp - b.timestamp);
+
             overlayUI.setState({
               activity_id: message.data.activity_id,
               host_nickname: message.data.host_nickname,
@@ -720,12 +738,13 @@ function establishConnection(): void {
               host_duration: message.data.host_duration,
               user_progress: message.data.user_progress,
               is_user_host: message.data.is_user_host,
-              messages: message.data.messages || [],
+              messages: mergedMessages,
             });
             console.debug('[ContentScript] Updated overlay:', {
               host: message.data.host_nickname,
               watching: message.data.watching_together?.join(', '),
-              messages: message.data.messages?.length || 0,
+              messages: mergedMessages.length,
+              incomingMessages: incomingMessages.length,
             });
           }
           break;
