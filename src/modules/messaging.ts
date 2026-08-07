@@ -264,7 +264,6 @@ export class MessagingManager {
         is_outbound: true,
         timestamp: message.timestamp,
         read: true,
-        nostr_event_id: event.id,
       };
 
       // Add sync-specific fields if present
@@ -275,7 +274,19 @@ export class MessagingManager {
         localMessage.sent_at = message.sent_at;
       }
 
-      await this.storageManager.addActivityMessage(message.activity_id, localMessage);
+      try {
+        await this.storageManager.addActivityMessage(message.activity_id, localMessage);
+        console.log('[Messaging] [MESSAGE_FLOW] ✅ Stored sent message:', {
+          activity_id: message.activity_id,
+          type: message.type,
+          content: message.content?.substring(0, 20)
+        });
+      } catch (storageError) {
+        console.error('[Messaging] [MESSAGE_FLOW] ❌ Failed to store sent message:', {
+          activity_id: message.activity_id,
+          error: storageError instanceof Error ? storageError.message : String(storageError)
+        });
+      }
 
       return event.id; // Return event ID for tracking/retry
     } catch (error) {
