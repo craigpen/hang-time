@@ -1267,7 +1267,6 @@ chrome.runtime.onConnect.addListener((port) => {
             // Send to all co-watchers except self
             for (const friendId of coWatchSession.co_watchers) {
               if (friendId === userProfile?.uuid) continue; // Skip self
-
               const friend = await friendManager.getFriend(friendId);
               if (!friend) {
                 console.warn('[Background] [MESSAGE_FLOW] Friend not found for id:', friendId);
