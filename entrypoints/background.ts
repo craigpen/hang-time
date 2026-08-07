@@ -790,7 +790,6 @@ function _startCacheSyncCycle(): void {
 function _startCoWatcherDetectionCycle(): void {
   const DETECTION_INTERVAL_MS = 5000; // 5 seconds, synced with activity detection
 
-  let lastSession: any = null;
   let callCount = 0;
   setInterval(async () => {
     callCount++;
@@ -800,12 +799,6 @@ function _startCoWatcherDetectionCycle(): void {
     try {
       const detector = getCoWatcherDetector();
       const session = await detector.detectCoWatchSession();
-
-      // Only log/broadcast if session state changed
-      const sessionChanged = JSON.stringify(session) !== JSON.stringify(lastSession);
-      if (!sessionChanged) return;
-
-      lastSession = session;
 
       if (session) {
         // Store the co-watch session for overlay to use
@@ -880,10 +873,11 @@ function _startCoWatcherDetectionCycle(): void {
         // Build watching_together list: host + co-watchers
         const watchingTogether: string[] = [hostName];
         const friendManager = getFriendManager();
+        const profile = await storageManager.getUserProfile();
+        const selfUuid = profile?.uuid;
         for (const coWatcherId of session.co_watchers) {
           let coWatcherName: string;
-          if (coWatcherId === 'self') {
-            const profile = await storageManager.getUserProfile();
+          if (coWatcherId === selfUuid) {
             coWatcherName = profile?.nickname || profile?.uuid || 'You';
           } else {
             const coWatcherFriend = await friendManager.getFriend(coWatcherId);
@@ -901,13 +895,14 @@ function _startCoWatcherDetectionCycle(): void {
           timestamp: number;
         }> = [];
 
-        let profile: any = null;
         try {
-          profile = await storageManager.getUserProfile();
 
           // Query ALL messages for this activity (activity-centric storage)
           const activityMessages = await storageManager.getActivityMessages(session.activity_id);
-          console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query activity: activity=' + session.activity_id + ' found=' + (activityMessages?.length || 0));
+          console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query: session.activity_id=' + session.activity_id + ' found=' + (activityMessages?.length || 0));
+          if (activityMessages && activityMessages.length > 0) {
+            console.log('[Background] [MESSAGE_FLOW]   Messages found:', activityMessages.map(m => ({ sender: m.sender_identifier, content: m.content?.substring(0, 20) })));
+          }
 
           if (activityMessages && activityMessages.length > 0) {
             // Build a map of friend UUIDs to names for quick lookup
@@ -917,7 +912,7 @@ function _startCoWatcherDetectionCycle(): void {
             }
 
             for (const coWatcherId of session.co_watchers) {
-              if (coWatcherId === 'self') continue;
+              if (coWatcherId === profile?.uuid) continue;
               const friend = await friendManager.getFriend(coWatcherId);
               if (friend) {
                 friendMap.set(friend.uuid, friend.local_name);
@@ -975,10 +970,25 @@ function _startCoWatcherDetectionCycle(): void {
               broadcastNicknameMap[profile.uuid] = profile.nickname || 'You';
             }
             for (const coWatcherId of session.co_watchers) {
-              if (coWatcherId === 'self') continue;
+              if (coWatcherId === profile?.uuid) continue;
               const coWatcherFriend = await friendManager.getFriend(coWatcherId);
               if (coWatcherFriend) {
                 broadcastNicknameMap[coWatcherId] = coWatcherFriend.local_name;
+                console.debug(`[Background] [MESSAGE_FLOW] Added co-watcher to nicknameMap: ${coWatcherId} => ${coWatcherFriend.local_name}`);
+              } else {
+                console.warn(`[Background] [MESSAGE_FLOW] Friend lookup failed for co-watcher: ${coWatcherId}`);
+              }
+            }
+            // Also add all message senders to the nicknameMap
+            for (const msg of recentMessages) {
+              if (msg.sender_id && !broadcastNicknameMap[msg.sender_id]) {
+                const messageSenderFriend = await friendManager.getFriend(msg.sender_id);
+                if (messageSenderFriend) {
+                  broadcastNicknameMap[msg.sender_id] = messageSenderFriend.local_name;
+                  console.debug(`[Background] [MESSAGE_FLOW] Added message sender to nicknameMap: ${msg.sender_id} => ${messageSenderFriend.local_name}`);
+                } else {
+                  console.warn(`[Background] [MESSAGE_FLOW] Friend lookup failed for message sender: ${msg.sender_id}`);
+                }
               }
             }
 
@@ -1186,8 +1196,10 @@ chrome.runtime.onConnect.addListener((port) => {
               const recentMessages: any[] = [];
               const profile = await storageManager.getUserProfile();
 
+              console.log('[Background] [MESSAGE_FLOW] GET_ACTIVITY_MESSAGES_FOR_OVERLAY: activityId=' + activityId);
               // Query ALL messages for this activity (activity-centric storage)
               const activityMessages = await storageManager.getActivityMessages(activityId);
+              console.log('[Background] [MESSAGE_FLOW]   Found ' + (activityMessages?.length || 0) + ' messages');
               if (activityMessages && activityMessages.length > 0) {
                 // Build a map of UUIDs to display names
                 const nameMap = new Map<string, string>();
@@ -1246,16 +1258,21 @@ chrome.runtime.onConnect.addListener((port) => {
               return;
             }
 
+            console.log('[Background] [MESSAGE_FLOW] Co-watch session found. Activity:', coWatchSession.activity_id, 'Co-watchers:', coWatchSession.co_watchers);
+
             const friendManager = getFriendManager();
             const messagingManager = getMessagingManager();
             const userProfile = await storageManager.getUserProfile();
 
             // Send to all co-watchers except self
             for (const friendId of coWatchSession.co_watchers) {
-              if (friendId === 'self') continue; // Skip self
+              if (friendId === userProfile?.uuid) continue; // Skip self
 
               const friend = await friendManager.getFriend(friendId);
-              if (!friend) continue;
+              if (!friend) {
+                console.warn('[Background] [MESSAGE_FLOW] Friend not found for id:', friendId);
+                continue;
+              }
 
               // Create a minimal activity object for messaging
               const activity: any = {
@@ -1264,8 +1281,9 @@ chrome.runtime.onConnect.addListener((port) => {
                 content: 'Co-watch message',
               };
 
+              console.log('[Background] [MESSAGE_FLOW] Sending message to friend:', friend.local_name, '(', friend.uuid, ')');
               await messagingManager.sendChatMessage(activity, friend, message.data?.content);
-              console.debug(`[Background] [MESSAGE_FLOW] Message sent to ${friend.local_name}`);
+              console.log('[Background] [MESSAGE_FLOW] ✅ Message queued for', friend.local_name);
             }
 
             // Store message locally for sender's own record

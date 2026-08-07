@@ -9,7 +9,7 @@ import { FriendManager } from './friends';
 export interface CoWatchSession {
   activity_id: string;
   host_friend_uuid: string;
-  co_watchers: string[]; // Friend UUIDs of other co-watchers (excluding host), or 'self' if user is co-watcher
+  co_watchers: string[]; // All participant UUIDs (friends + self) except host
   detected_at: number;
 }
 
@@ -30,6 +30,14 @@ export class CoWatcherDetector {
     // Log every call for debugging
     console.debug(`[CoWatcher] detectCoWatchSession call #${this.detectCallCount}`);
     try {
+      // Get user profile to get self UUID
+      const userProfile = await this.storage.getUserProfile();
+      if (!userProfile?.uuid) {
+        console.debug('[CoWatcher] User profile or UUID not found');
+        return null;
+      }
+      const selfUuid = userProfile.uuid;
+
       // Get all user activities (not just current)
       const myActivities = await this.storage.getMyActivities();
       if (!myActivities || Object.keys(myActivities).length === 0) {
@@ -41,6 +49,17 @@ export class CoWatcherDetector {
       if (!friends || friends.length === 0) {
         console.debug('[CoWatcher] No friends to check');
         return null;
+      }
+
+      console.log(`[CoWatcher] [MESSAGE_FLOW] Detecting: ${Object.keys(myActivities).length} user activities, ${friends.length} friends`);
+      for (const friend of friends) {
+        const actCount = friend.current_activities ? Object.keys(friend.current_activities).length : 0;
+        console.log(`[CoWatcher] [MESSAGE_FLOW]   Friend ${friend.local_name} (${friend.uuid}): ${actCount} activities`);
+        if (friend.current_activities) {
+          for (const act of Object.values(friend.current_activities)) {
+            console.log(`[CoWatcher] [MESSAGE_FLOW]     - ${act?.service} (${act?.id})`);
+          }
+        }
       }
 
       // Find matching activity ID across all user and friend activities
@@ -55,7 +74,7 @@ export class CoWatcherDetector {
 
           for (const friendActivity of Object.values(friend.current_activities)) {
             if (friendActivity?.id === userActivity.id) {
-              console.debug(`[CoWatcher] ✅ Match found: ${userActivity.service} (${userActivity.id})`);
+              console.log(`[CoWatcher] [MESSAGE_FLOW] ✅ Match found: ${userActivity.service} (${userActivity.id}) with ${friend.local_name}`);
               matchedActivityId = userActivity.id;
               matchedActivityTimestamp = userActivity.timestamp || Date.now();
               break;
@@ -92,7 +111,10 @@ export class CoWatcherDetector {
       ];
 
       for (const friend of friends) {
-        if (!friend.current_activities) continue;
+        if (!friend.current_activities) {
+          console.log(`[CoWatcher] [MESSAGE_FLOW] Friend ${friend.local_name} (${friend.uuid}) has no current_activities`);
+          continue;
+        }
 
         for (const activity of Object.values(friend.current_activities)) {
           if (activity?.id === matchedActivityId) {
@@ -101,8 +123,9 @@ export class CoWatcherDetector {
                 friend_uuid: friend.uuid,
                 timestamp: activity.contentTimestamp,
               });
+              console.log(`[CoWatcher] [MESSAGE_FLOW] ✅ Found co-watcher: ${friend.local_name} (${friend.uuid}) watching activity=${matchedActivityId}`);
             } else {
-              console.warn(`[TimestampMigration] MISSING contentTimestamp for friend=${friend.uuid}, activity=${activity.id}`);
+              console.log(`[CoWatcher] [MESSAGE_FLOW] ❌ MISSING contentTimestamp for ${friend.local_name}, activity=${activity.id}`);
             }
             break; // Only count each friend once per matched activity
           }
@@ -155,7 +178,7 @@ export class CoWatcherDetector {
       }
 
       const otherCoWatchers = coWatchers.slice(1)
-        .map(cw => cw.friend_uuid === null ? 'self' : cw.friend_uuid);
+        .map(cw => cw.friend_uuid === null ? selfUuid : cw.friend_uuid);
 
       const session: CoWatchSession = {
         activity_id: matchedActivityId,
