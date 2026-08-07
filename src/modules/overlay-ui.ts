@@ -598,6 +598,9 @@ export class OverlayUI {
     const content = input.value.trim();
     if (!content) return;
 
+    // Immediately add message to overlay for sender
+    this.addMessage(this._state.user_nickname || 'You', this.userId, content);
+
     // Send message via postMessage
     window.postMessage({
       type: 'HANG_TIME_SEND_MESSAGE',

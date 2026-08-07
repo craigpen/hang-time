@@ -915,23 +915,9 @@ function _startCoWatcherDetectionCycle(): void {
             }
           }
 
-          // Also get messages from user's own activity if they sent any
-          const profile = await storageManager.getUserProfile();
-          const userId = profile?.id || 'self';
-          const myActivityMessages = await storageManager.getActivityMessages(userId, session.activity_id);
-          if (myActivityMessages && myActivityMessages.length > 0) {
-            const recentMyMessages = myActivityMessages.slice(-10);
-            for (const msg of recentMyMessages) {
-              const senderName = profile?.nickname || profile?.memorable_identifier || 'You';
-              recentMessages.push({
-                id: msg.id,
-                sender: senderName,
-                sender_id: msg.sender_id,
-                content: msg.content,
-                timestamp: msg.timestamp,
-              });
-            }
-          }
+          // Note: User's own messages are stored by friend_id when sending to co-watchers
+          // They appear in the co-watcher's activity messages, not in a separate "user" store
+          // So we don't need a separate query here - messages from all senders (including self via friends) are included above
 
           // Sort by timestamp
           recentMessages.sort((a, b) => a.timestamp - b.timestamp);
