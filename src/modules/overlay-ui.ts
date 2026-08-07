@@ -615,7 +615,11 @@ export class OverlayUI {
   /**
    * Get color for user (deterministic based on sender_id)
    */
-  private getUserColor(senderId: string): string {
+  private getUserColor(senderId: string | undefined): string {
+    if (!senderId) {
+      return '#888888'; // Gray fallback for unknown sender
+    }
+
     if (this.userColorMap.has(senderId)) {
       return this.userColorMap.get(senderId)!;
     }
@@ -866,13 +870,15 @@ export class OverlayUI {
     }
 
     container.innerHTML = this._state.messages
+      .filter(msg => msg && msg.content) // Filter out invalid messages
       .map(msg => {
         const isUser = msg.sender_id === this.userId;
         const userColor = this.getUserColor(msg.sender_id);
+        const sender = msg.sender || 'Unknown';
         return `
           <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}">
             <div>
-              <div class="message-sender" style="color: ${userColor}">${msg.sender}</div>
+              <div class="message-sender" style="color: ${userColor}">${this.escapeHtml(sender)}</div>
               <div class="message-content" style="${isUser ? `background: rgba(74, 222, 128, 0.3); color: white;` : `background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.9);`}">${this.escapeHtml(msg.content)}</div>
             </div>
           </div>
