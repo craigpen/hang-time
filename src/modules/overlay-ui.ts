@@ -354,9 +354,10 @@ export class OverlayUI {
 
         .chat-message {
           display: flex;
-          gap: 6px;
+          gap: 4px;
           font-size: 13px;
-          line-height: 1.3;
+          line-height: 1.4;
+          align-items: baseline;
         }
 
         .message-user {
@@ -364,31 +365,28 @@ export class OverlayUI {
         }
 
         .message-content {
-          max-width: 70%;
-          padding: 6px 8px;
-          border-radius: 4px;
+          max-width: 80%;
+          padding: 4px 8px;
+          border-radius: 3px;
           word-wrap: break-word;
+          flex: 0 1 auto;
         }
 
         .message-friend .message-content {
-          background: rgba(255, 255, 255, 0.1);
-          color: white;
+          background: rgba(255, 255, 255, 0.08);
+          color: rgba(255, 255, 255, 0.9);
         }
 
         .message-user .message-content {
-          background: rgba(45, 166, 255, 0.8);
+          background: rgba(96, 165, 250, 0.3);
           color: white;
-          text-align: right;
         }
 
         .message-sender {
-          font-size: 11px;
-          color: rgba(255, 255, 255, 0.5);
-          margin-bottom: 2px;
-        }
-
-        .message-user .message-sender {
-          text-align: right;
+          font-size: 12px;
+          font-weight: 600;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .message-input-container {
@@ -644,13 +642,17 @@ export class OverlayUI {
       return '#888888'; // Gray fallback for unknown sender
     }
 
+    // Always blue for current user
+    if (senderId === this.userId) {
+      return '#60a5fa'; // blue
+    }
+
     if (this.userColorMap.has(senderId)) {
       return this.userColorMap.get(senderId)!;
     }
 
-    // Generate deterministic color from senderId hash
-    const colors = [
-      '#60a5fa', // blue
+    // Generate deterministic color from senderId hash (exclude blue for friends)
+    const friendColors = [
       '#34d399', // green
       '#fbbf24', // amber
       '#f87171', // red
@@ -666,7 +668,7 @@ export class OverlayUI {
       hash = hash & hash; // Convert to 32-bit integer
     }
 
-    const color = colors[Math.abs(hash) % colors.length];
+    const color = friendColors[Math.abs(hash) % friendColors.length];
     this.userColorMap.set(senderId, color);
     return color;
   }
@@ -922,10 +924,8 @@ export class OverlayUI {
         const sender = msg.sender || 'Unknown';
         return `
           <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}">
-            <div>
-              <div class="message-sender" style="color: ${userColor}">${this.escapeHtml(sender)}</div>
-              <div class="message-content" style="${isUser ? `background: rgba(74, 222, 128, 0.3); color: white;` : `background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.9);`}">${this.escapeHtml(msg.content)}</div>
-            </div>
+            <div class="message-sender" style="color: ${userColor}">${this.escapeHtml(sender)}:</div>
+            <div class="message-content" style="${isUser ? `background: rgba(96, 165, 250, 0.3);` : `background: rgba(255, 255, 255, 0.08);`} color: white;">${this.escapeHtml(msg.content)}</div>
           </div>
         `;
       })
