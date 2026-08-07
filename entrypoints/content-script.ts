@@ -718,11 +718,6 @@ function establishConnection(): void {
             const incomingMessages = message.data.messages || [];
             const currentMessages = overlayUI.state.messages || [];
 
-            console.debug('[ContentScript] CO_WATCH_UPDATE - incoming messages:', incomingMessages.length, 'current:', currentMessages.length);
-            if (incomingMessages.length > 0) {
-              console.debug('[ContentScript] First incoming message:', incomingMessages[0]);
-            }
-
             // Deduplicate and merge: prefer content+timestamp as key
             const merged = new Map();
             for (const msg of currentMessages) {
@@ -737,7 +732,8 @@ function establishConnection(): void {
             // Sort by timestamp
             const mergedMessages = Array.from(merged.values()).sort((a, b) => a.timestamp - b.timestamp);
 
-            overlayUI.setState({
+            // Only update messages if we received them from backend or have no current messages
+            const stateUpdate: Partial<OverlayState> = {
               activity_id: message.data.activity_id,
               host_nickname: message.data.host_nickname,
               watching_together: message.data.watching_together || [],
@@ -747,14 +743,14 @@ function establishConnection(): void {
               host_duration: message.data.host_duration,
               user_progress: message.data.user_progress,
               is_user_host: message.data.is_user_host,
-              messages: mergedMessages,
-            });
-            console.debug('[ContentScript] Updated overlay:', {
-              host: message.data.host_nickname,
-              watching: message.data.watching_together?.join(', '),
-              messages: mergedMessages.length,
-              incomingMessages: incomingMessages.length,
-            });
+            };
+
+            // Only update messages if backend sent new messages or we're starting fresh
+            if (incomingMessages.length > 0 || currentMessages.length === 0) {
+              stateUpdate.messages = mergedMessages;
+            }
+
+            overlayUI.setState(stateUpdate);
           }
           break;
 
