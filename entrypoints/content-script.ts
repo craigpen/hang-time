@@ -718,17 +718,17 @@ function establishConnection(): void {
             const incomingMessages = message.data.messages || [];
             const currentMessages = overlayUI.state.messages || [];
 
-            // Deduplicate and merge: use message ID as primary key (should be unique)
+            // Deduplicate and merge: use content+sender_id as key
+            // (same message from same person, regardless of display name or timestamp variation)
             const merged = new Map();
             for (const msg of currentMessages) {
-              const key = msg.id || `${msg.content}_${msg.timestamp}`;
+              const key = `${msg.content}_${msg.sender_id}`;
               merged.set(key, msg);
             }
             for (const msg of incomingMessages) {
-              const key = msg.id || `${msg.content}_${msg.timestamp}`;
-              if (!merged.has(key)) {
-                merged.set(key, msg);
-              }
+              const key = `${msg.content}_${msg.sender_id}`;
+              // Prefer backend version (has proper metadata)
+              merged.set(key, msg);
             }
 
             // Sort by timestamp
