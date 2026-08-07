@@ -702,6 +702,10 @@ function establishConnection(): void {
             overlayUI.destroy();
             overlayUI = new OverlayUI(userId);
             overlayUI.init();
+            // Re-attach port after recreation
+            if (port) {
+              overlayUI.setPort(port);
+            }
           }
           console.debug('[ContentScript] Received user ID:', userId);
           break;

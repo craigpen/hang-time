@@ -611,15 +611,21 @@ export class OverlayUI {
    * Send message
    */
   private onSendMessage(input: HTMLTextAreaElement | null): void {
-    if (!input || !this.port) return;
+    console.debug('[OverlayUI] onSendMessage: input=', !!input, 'port=', !!this.port);
+    if (!input || !this.port) {
+      console.warn('[OverlayUI] Cannot send message: input=', !!input, 'port=', !!this.port);
+      return;
+    }
 
     const content = input.value.trim();
+    console.debug('[OverlayUI] Message content:', content.substring(0, 50));
     if (!content) return;
 
     // Immediately add message to overlay for sender
     this.addMessage(this._state.user_nickname || 'You', this.userId, content);
 
     // Send message via port
+    console.debug('[OverlayUI] Posting to port');
     this.port.postMessage({
       type: 'SEND_MESSAGE',
       data: {
@@ -631,6 +637,7 @@ export class OverlayUI {
     // Clear input and reset height
     input.value = '';
     input.style.height = '20px';
+    console.debug('[OverlayUI] Message sent, input cleared');
   }
 
   /**
