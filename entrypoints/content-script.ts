@@ -751,7 +751,10 @@ function establishConnection(): void {
 
             // Only update messages if backend sent new messages or we're starting fresh
             if (incomingMessages.length > 0 || currentMessages.length === 0) {
+              console.debug('[ContentScript] CO_WATCH_UPDATE: updating messages. incoming=', incomingMessages.length, 'current=', currentMessages.length, 'merged=', mergedMessages.length);
               stateUpdate.messages = mergedMessages;
+            } else {
+              console.debug('[ContentScript] CO_WATCH_UPDATE: NOT updating messages. incoming=', incomingMessages.length, 'current=', currentMessages.length);
             }
 
             overlayUI.setState(stateUpdate);
