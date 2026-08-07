@@ -343,7 +343,7 @@ export class OverlayUI {
           opacity: 0.8;
         }
 
-        .chat-container {
+        .hang-time-chat-container {
           flex: 1;
           overflow-y: auto;
           padding: 8px;
@@ -466,7 +466,7 @@ export class OverlayUI {
       </div>
 
 
-      <div class="chat-container" id="chat-container">
+      <div class="hang-time-chat-container" id="hang-time-chat-container">
         <div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>
       </div>
 
@@ -885,7 +885,7 @@ export class OverlayUI {
    * Render chat messages
    */
   private renderMessages(): void {
-    const container = document.getElementById('chat-container');
+    const container = document.getElementById('hang-time-chat-container');
     if (!container) {
       console.warn('[OverlayUI] Chat container not found');
       return;
