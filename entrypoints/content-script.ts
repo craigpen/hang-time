@@ -927,7 +927,11 @@ function initializeOverlay(): void {
     return;
   }
 
-  console.debug('[ContentScript] Video page detected, initializing overlay UI');
+  console.debug('[ContentScript] Video page detected, initializing overlay UI', {
+    instanceId: INSTANCE_ID,
+    isActiveInstance: (window as any).hangTimeScriptActive === INSTANCE_ID,
+    userId
+  });
   // Initialize overlay with temporary user ID (will be updated when background sends it)
   overlayUI = new OverlayUI(userId || 'unknown');
   overlayUI.init();

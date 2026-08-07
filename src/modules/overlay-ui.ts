@@ -65,6 +65,9 @@ export class OverlayUI {
    * Initialize overlay on page
    */
   init(): void {
+    const existingCount = document.querySelectorAll('#hang-time-overlay').length;
+    console.debug(`[OverlayUI] init() - userId=${this.userId}, existing overlays=${existingCount}`);
+
     this.createOverlayContainer();
     this.setupEventListeners();
     this.startProgressAnimation();
@@ -76,13 +79,6 @@ export class OverlayUI {
    */
   private createOverlayContainer(): void {
     if (this.container) return;
-
-    // Remove any existing orphaned overlays (from previous instances)
-    const existing = document.getElementById('hang-time-overlay');
-    if (existing && existing !== this.container) {
-      console.debug('[OverlayUI] Removing orphaned overlay instance');
-      existing.remove();
-    }
 
     this.container = document.createElement('div');
     this.container.id = 'hang-time-overlay';
