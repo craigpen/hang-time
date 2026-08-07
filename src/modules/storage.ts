@@ -267,7 +267,7 @@ export class StorageManager {
 
   async removeFriend(friendId: string): Promise<void> {
     const friends = await this.getFriends();
-    const filtered = friends.filter((f) => f.id !== friendId);
+    const filtered = friends.filter((f) => f.uuid !== friendId);
     await this.setFriends(filtered);
 
     // Clean up associated data: messages and activity history
@@ -279,15 +279,15 @@ export class StorageManager {
 
   async getFriend(friendId: string): Promise<Friend | undefined> {
     const friends = await this.getFriends();
-    return friends.find((f) => f.id === friendId);
+    return friends.find((f) => f.uuid === friendId);
   }
 
   async updateFriend(friendId: string, updates: Partial<Friend>): Promise<void> {
     const friends = await this.getFriends();
     console.debug(`[Storage] updateFriend called for ID: ${friendId}, have ${friends.length} friends`);
-    const friend = friends.find((f) => f.id === friendId);
+    const friend = friends.find((f) => f.uuid === friendId);
     if (!friend) {
-      console.error(`[Storage] Friend not found! Looking for: ${friendId}, available IDs: ${friends.map(f => f.id).join(', ')}`);
+      console.error(`[Storage] Friend not found! Looking for: ${friendId}, available UUIDs: ${friends.map(f => f.uuid).join(', ')}`);
       throw new StorageError('Friend not found', { friendId });
     }
     console.debug(`[Storage] Found friend: ${friend.local_name}, applying updates`);
@@ -419,67 +419,53 @@ export class StorageManager {
   }
 
   /**
-   * Get messages for a specific activity with a friend
-   * Returns messages filtered by activity_id, sorted by timestamp (newest last)
+   * Get all messages for a specific activity (from all senders, including self)
+   * Returns messages sorted by timestamp (oldest to newest)
    */
-  async getActivityMessages(friendId: string, activityId: string): Promise<Message[]> {
-    const allMessages = await this.getMessages(friendId);
-    return allMessages
-      .filter((msg) => msg.activity_id === activityId)
-      .sort((a, b) => a.timestamp - b.timestamp);
+  async getActivityMessages(activityId: string): Promise<Message[]> {
+    const key = `activity_messages_${activityId}`;
+    const messages = await this.get<Message[]>(key);
+    return messages ? messages.sort((a, b) => a.timestamp - b.timestamp) : [];
   }
 
   /**
-   * Add message with activity ID and enforce per-activity message limit
-   * Keeps only 15 most recent messages per activity
+   * Add message to an activity (single activity-centric storage)
+   * Keeps only 50 most recent messages per activity
    */
-  async addActivityMessage(friendId: string, activityId: string, message: Message): Promise<void> {
-    const allMessages = await this.getMessages(friendId);
+  async addActivityMessage(activityId: string, message: Message): Promise<void> {
+    const key = `activity_messages_${activityId}`;
+    const messages = await this.get<Message[]>(key) || [];
 
     // Add new message
-    allMessages.push(message);
+    messages.push(message);
 
-    // Enforce per-activity limit: keep only 15 most recent per activity
-    const byActivity = new Map<string, Message[]>();
-    for (const msg of allMessages) {
-      if (!byActivity.has(msg.activity_id)) {
-        byActivity.set(msg.activity_id, []);
-      }
-      byActivity.get(msg.activity_id)!.push(msg);
+    // Enforce limit: keep only 50 most recent messages per activity
+    const limit = 50;
+    if (messages.length > limit) {
+      messages.splice(0, messages.length - limit);
     }
 
-    // Trim each activity to 15 messages
-    const limit = 15;
-    const trimmed: Message[] = [];
-    for (const [_actId, messages] of byActivity) {
-      const sorted = messages.sort((a, b) => a.timestamp - b.timestamp);
-      if (sorted.length > limit) {
-        trimmed.push(...sorted.slice(sorted.length - limit));
-      } else {
-        trimmed.push(...sorted);
-      }
-    }
-
-    await this.set(STORAGE_KEYS.MESSAGES(friendId), trimmed);
+    await this.set(key, messages);
   }
 
   /**
-   * Mark message as read
+   * Mark message as read in an activity
    */
-  async markMessageAsRead(friendId: string, messageId: string): Promise<void> {
-    const messages = await this.getMessages(friendId);
+  async markMessageAsRead(activityId: string, messageId: string): Promise<void> {
+    const key = `activity_messages_${activityId}`;
+    const messages = await this.get<Message[]>(key) || [];
     const message = messages.find((m) => m.id === messageId);
     if (message) {
       message.read = true;
-      await this.set(STORAGE_KEYS.MESSAGES(friendId), messages);
+      await this.set(key, messages);
     }
   }
 
   /**
-   * Check if there are unread messages for an activity with a friend
+   * Check if there are unread messages for an activity from any sender
    */
-  async hasUnreadMessages(friendId: string, activityId: string): Promise<boolean> {
-    const messages = await this.getActivityMessages(friendId, activityId);
+  async hasUnreadMessages(activityId: string): Promise<boolean> {
+    const messages = await this.getActivityMessages(activityId);
     return messages.some((m) => !m.read && !m.is_outbound);
   }
 

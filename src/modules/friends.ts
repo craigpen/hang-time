@@ -29,7 +29,7 @@ export class FriendManager {
    */
   async getFriendByIdentifier(identifier: string): Promise<Friend | undefined> {
     const friends = await this.getAllFriends();
-    return friends.find((f) => f.identifier === identifier);
+    return friends.find((f) => f.uuid === identifier);
   }
 
   /**
@@ -59,8 +59,7 @@ export class FriendManager {
     const pubkey = this._derivePubkeyFromIdentifier(identifier);
 
     const friend: Friend = {
-      id: this._generateId(),
-      identifier,
+      uuid: identifier,
       pubkey,
       local_name: localName,
       added_at: Date.now(),
@@ -198,10 +197,6 @@ export class FriendManager {
       // Show any friend with any activity
       return Object.keys(friend.current_activities || {}).length > 0;
     });
-  }
-
-  private _generateId(): string {
-    return generateSecureRandom(16);
   }
 
   private _derivePubkeyFromIdentifier(identifier: string): string {

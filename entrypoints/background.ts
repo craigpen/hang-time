@@ -419,7 +419,7 @@ async function initializeExtension(): Promise<void> {
     // Initialize file logger for debugging (captures console logs to storage)
     try {
       const userProfile = await storageManager.getUserProfile();
-      const profileId = userProfile?.memorable_identifier || 'unknown';
+      const profileId = userProfile?.uuid || 'unknown';
       initializeFileLogger(profileId, storageManager);
       const logger = getFileLogger();
       _hookConsoleToFileLogger(logger);
@@ -638,16 +638,16 @@ async function initializeExtension(): Promise<void> {
     console.log(`[Background] ðŸ“§ Subscribing to ${friends.length} friends`);
     for (const friend of friends) {
       try {
-        await _subscribeToFriend(friend.identifier);
+        await _subscribeToFriend(friend.uuid);
       } catch (error) {
-        console.warn(`[Background] Failed to subscribe to friend ${friend.identifier}:`, error);
+        console.warn(`[Background] Failed to subscribe to friend ${friend.uuid}:`, error);
       }
     }
     console.log('[Background] ðŸ“§ Done subscribing to friends');
 
     // Subscribe to friends' game libraries for discovery
     try {
-      const friendPubkeys = friends.map((f) => friendManager.derivePubkeyFromIdentifier(f.identifier));
+      const friendPubkeys = friends.map((f) => friendManager.derivePubkeyFromIdentifier(f.uuid));
       if (friendPubkeys.length > 0) {
         await gameLibraryManager.subscribeToFriendGames(friendPubkeys);
         console.debug(`[Background] Subscribed to ${friendPubkeys.length} friends' game libraries`);
@@ -814,8 +814,8 @@ function _startCoWatcherDetectionCycle(): void {
 
         if (session.host_friend_id === 'self') {
           const profile = await storageManager.getUserProfile();
-          // Use nickname if set, else memorable_identifier
-          hostName = profile?.nickname || profile?.memorable_identifier || 'You';
+          // Use nickname if set, else uuid
+          hostName = profile?.nickname || profile?.uuid || 'You';
         } else {
           hostFriend = await getFriendManager().getFriend(session.host_friend_id);
           // Use local_name (the nickname the user gave this friend)
@@ -874,7 +874,7 @@ function _startCoWatcherDetectionCycle(): void {
           let coWatcherName: string;
           if (coWatcherId === 'self') {
             const profile = await storageManager.getUserProfile();
-            coWatcherName = profile?.nickname || profile?.memorable_identifier || 'You';
+            coWatcherName = profile?.nickname || profile?.uuid || 'You';
           } else {
             const coWatcherFriend = await friendManager.getFriend(coWatcherId);
             coWatcherName = coWatcherFriend?.local_name || coWatcherId;
@@ -897,15 +897,15 @@ function _startCoWatcherDetectionCycle(): void {
           // Get messages from sender's own store (marked with friend_id='self')
           if (profile) {
             const myMessages = await storageManager.getActivityMessages('self', session.activity_id);
-            console.debug('[Background] CO_WATCH_UPDATE query own messages: activity=', session.activity_id, 'found=', myMessages?.length || 0);
+            console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query own messages: activity=' + session.activity_id + ' found=' + (myMessages?.length || 0));
             if (myMessages && myMessages.length > 0) {
               const recentMyMessages = myMessages.slice(-10);
               for (const msg of recentMyMessages) {
-                const senderName = profile.nickname || profile.memorable_identifier || 'You';
+                const senderName = profile.nickname || profile.uuid || 'You';
                 recentMessages.push({
                   id: msg.id,
                   sender: senderName,
-                  sender_id: msg.sender_id || profile.memorable_identifier,
+                  sender_id: msg.sender_id || profile.uuid,
                   content: msg.content,
                   timestamp: msg.timestamp,
                 });
@@ -914,6 +914,7 @@ function _startCoWatcherDetectionCycle(): void {
           }
 
           // Get messages from all co-watchers for this activity
+          console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE co_watchers: ' + JSON.stringify(session.co_watchers));
           for (const coWatcherId of session.co_watchers) {
             if (coWatcherId === 'self') continue; // Skip self
 
@@ -922,12 +923,13 @@ function _startCoWatcherDetectionCycle(): void {
 
             const activityMessages = await storageManager.getActivityMessages(coWatcherId, session.activity_id);
             if (activityMessages && activityMessages.length > 0) {
+              console.log(`[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query friend messages: ${friend.local_name} found=${activityMessages.length}`);
               // Get last 10 messages, but only those actually sent by this friend (sender_id matches)
               const recentActivityMessages = activityMessages.slice(-10);
               for (const msg of recentActivityMessages) {
                 // Only include messages where the sender matches this co-watcher
                 // (avoid including messages they received from others)
-                if (msg.sender_id === friend.identifier) {
+                if (msg.sender_id === friend.uuid) {
                   recentMessages.push({
                     id: msg.id,
                     sender: friend.local_name,
@@ -954,6 +956,7 @@ function _startCoWatcherDetectionCycle(): void {
 
           // DEBUG: Log what messages are being broadcast
           if (recentMessages.length > 0) {
+            console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE total messages to broadcast: ' + recentMessages.length);
             console.debug('[Background] CO_WATCH_UPDATE messages:', recentMessages.map(m => ({
               sender: m.sender,
               sender_id: m.sender_id,
@@ -984,7 +987,7 @@ function _startCoWatcherDetectionCycle(): void {
                 messages: recentMessages,
               },
             });
-            console.debug(`[Background] ✅ Sent CO_WATCH_UPDATE: activity=${session.activity_id}, host=${hostName}, watching=${watchingTogether.join(', ')}, messages=${recentMessages.length}`);
+            console.log(`[Background] [MESSAGE_FLOW] ✅ Sent CO_WATCH_UPDATE with ${recentMessages.length} messages`);
           } catch (e) {
             console.debug(`[Background] Failed to send CO_WATCH_UPDATE to tab ${tabId}:`, e);
           }
@@ -1116,7 +1119,7 @@ chrome.runtime.onConnect.addListener((port) => {
           // Content script requesting user ID for overlay
           try {
             const profile = await storageManager.getUserProfile();
-            port.postMessage({ type: 'USER_ID', data: profile?.memorable_identifier || 'unknown' });
+            port.postMessage({ type: 'USER_ID', data: profile?.uuid || 'unknown' });
           } catch (e) {
             console.debug(`[Background] Failed to send USER_ID:`, e);
           }
@@ -1181,7 +1184,7 @@ chrome.runtime.onConnect.addListener((port) => {
                     recentMessages.push({
                       id: msg.id,
                       sender: 'You',
-                      sender_id: msg.sender_id || profile.memorable_identifier,
+                      sender_id: msg.sender_id || profile.uuid,
                       content: msg.content,
                       timestamp: msg.timestamp,
                     });
@@ -1193,11 +1196,11 @@ chrome.runtime.onConnect.addListener((port) => {
               const friendManager = getFriendManager();
               const friends = await storageManager.getFriends();
               for (const friend of friends) {
-                const activityMessages = await storageManager.getActivityMessages(friend.id, activityId);
+                const activityMessages = await storageManager.getActivityMessages(activityId);
                 if (activityMessages && activityMessages.length > 0) {
                   const recentActivityMessages = activityMessages.slice(-10);
                   for (const msg of recentActivityMessages) {
-                    if (msg.sender_id === friend.identifier) {
+                    if (msg.sender_id === friend.uuid) {
                       recentMessages.push({
                         id: msg.id,
                         sender: friend.local_name,
@@ -1224,6 +1227,7 @@ chrome.runtime.onConnect.addListener((port) => {
           }
         } else if (message.type === 'SEND_MESSAGE') {
           // Message sent from overlay, send to co-watchers
+          console.log('[Background] [MESSAGE_FLOW] ✅ SEND_MESSAGE RECEIVED:', message.data?.content?.substring(0, 30));
           console.debug('[Background] Received SEND_MESSAGE from content-script:', message.data);
           try {
             const detector = getCoWatcherDetector();
@@ -1253,16 +1257,16 @@ chrome.runtime.onConnect.addListener((port) => {
               };
 
               await messagingManager.sendChatMessage(activity, friend, message.data?.content);
-              console.debug(`[Background] Message sent to ${friend.local_name}`);
+              console.debug(`[Background] [MESSAGE_FLOW] Message sent to ${friend.local_name}`);
             }
 
             // Store message locally for sender's own record
             if (userProfile) {
-              const senderName = userProfile.nickname || userProfile.memorable_identifier || 'You';
+              const senderName = userProfile.nickname || userProfile.uuid || 'You';
               const storedMessage: any = {
                 id: `${Date.now()}_${Math.random()}`,
                 friend_id: 'self',
-                sender_id: userProfile.memorable_identifier,
+                sender_id: userProfile.uuid,
                 activity_id: coWatchSession.activity_id,
                 type: 'chat',
                 content: message.data?.content,
@@ -1272,8 +1276,8 @@ chrome.runtime.onConnect.addListener((port) => {
               };
 
               // Store in activity messages
-              await storageManager.addActivityMessage('self', coWatchSession.activity_id, storedMessage);
-              console.debug('[Background] Message stored locally for sender');
+              await storageManager.addActivityMessage(coWatchSession.activity_id, storedMessage);
+              console.log('[Background] [MESSAGE_FLOW] ✅ Stored locally:', { activity_id: coWatchSession.activity_id, content: message.data?.content?.substring(0, 20) });
             }
           } catch (e) {
             console.error('[Background] Failed to send message:', e);
@@ -1453,7 +1457,7 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
       return _getMessages(message.data?.friendId);
 
     case 'GET_ACTIVITY_MESSAGES':
-      return _getActivityMessages(message.data?.friendId, message.data?.activityId);
+      return _getActivityMessages(message.data?.activityId);
 
     case 'ADD_FRIEND':
       return _addFriend(message.data?.identifier, message.data?.localName);
@@ -1629,8 +1633,8 @@ async function _getAllActivities(): Promise<ExtensionResponse> {
 
     // Build unified response: { myActivities: {...}, friends: [{id, identifier, local_name, current_activities, state, initiated_by_me}, ...] }
     const friendsData = friends.map((friend) => ({
-      id: friend.id,
-      identifier: friend.identifier,
+      id: friend.uuid,
+      identifier: friend.uuid,
       local_name: friend.local_name,
       current_activities: friend.current_activities || {},
       state: friend.state,
@@ -1767,13 +1771,13 @@ async function _getNetflixDebugCaptures(): Promise<ExtensionResponse> {
   }
 }
 
-async function _getActivityMessages(friendId?: string, activityId?: string): Promise<ExtensionResponse> {
-  if (!friendId || !activityId) {
-    return { success: false, error: 'friendId and activityId required' };
+async function _getActivityMessages(activityId?: string): Promise<ExtensionResponse> {
+  if (!activityId) {
+    return { success: false, error: 'activityId required' };
   }
 
   try {
-    const messages = await storageManager.getActivityMessages(friendId, activityId);
+    const messages = await storageManager.getActivityMessages(activityId);
     return { success: true, data: messages };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to get activity messages' };
@@ -1797,17 +1801,17 @@ async function _addFriend(identifier?: string, localName?: string): Promise<Exte
       console.log(`[Background] Sending friend request message to ${localName} (${friend.pubkey.substring(0, 8)}...)`);
       const messagingManager = getMessagingManager();
       const userProfile = await storageManager.getUserProfile();
-      const senderDisplayName = userProfile?.nickname || userProfile?.memorable_identifier || 'Friend';
+      const senderDisplayName = userProfile?.nickname || userProfile?.uuid || 'Friend';
       const eventId = await messagingManager.sendFriendRequestMessage(friend.pubkey, senderDisplayName);
       const friendRequestActivityId = `friend_request_${Date.now()}`;
-      await trackPendingMessage(eventId, 'friend_request', friend.id, friendRequestActivityId);
-      await markMessagePublished(`friend_request_${friend.id}_${friendRequestActivityId}`);
+      await trackPendingMessage(eventId, 'friend_request', friend.uuid, friendRequestActivityId);
+      await markMessagePublished(`friend_request_${friend.uuid}_${friendRequestActivityId}`);
       console.log(`[Background] ðŸ“¤ Friend request message sent to ${localName}`);
     } catch (error) {
       console.error('[Background] Failed to send friend request message:', error);
       // Track failed publish for retry
       const friendRequestActivityId = `friend_request_${Date.now()}`;
-      await markMessagePublishFailed(`friend_request_${friend.id}_${friendRequestActivityId}`, error instanceof Error ? error.message : 'Failed to send friend request message');
+      await markMessagePublishFailed(`friend_request_${friend.uuid}_${friendRequestActivityId}`, error instanceof Error ? error.message : 'Failed to send friend request message');
       // Don't fail the add operation if message publish fails
     }
 
@@ -1876,7 +1880,7 @@ async function _acceptFriendRequest(friendId?: string): Promise<ExtensionRespons
     await friendManager.acceptFriendRequest(friendId);
 
     // Subscribe to friend's events (so we receive their game library, activities, etc.)
-    await _subscribeToFriend(friend.identifier);
+    await _subscribeToFriend(friend.uuid);
 
     // Send acceptance notification back to the friend
     const messagingManager = getMessagingManager();
@@ -1892,12 +1896,12 @@ async function _acceptFriendRequest(friendId?: string): Promise<ExtensionRespons
 
     try {
       const eventId = await messagingManager.sendJoinAccepted(dummyActivity, friend);
-      const messageId = `join_accepted_${friend.id}_${dummyActivity.id}`;
-      await trackPendingMessage(eventId, 'join_accepted', friend.id, dummyActivity.id);
+      const messageId = `join_accepted_${friend.uuid}_${dummyActivity.id}`;
+      await trackPendingMessage(eventId, 'join_accepted', friend.uuid, dummyActivity.id);
       await markMessagePublished(messageId);
     } catch (error) {
       console.error('[Background] Failed to send acceptance notification:', error);
-      const messageId = `join_accepted_${friend.id}_${dummyActivity.id}`;
+      const messageId = `join_accepted_${friend.uuid}_${dummyActivity.id}`;
       await markMessagePublishFailed(messageId, error instanceof Error ? error.message : 'Failed to send acceptance');
     }
 
@@ -2260,7 +2264,7 @@ async function _subscribeToIncomingMessages(): Promise<void> {
         return;
       }
 
-      console.debug(`[Message] Received kind-1059 message from ${event.pubkey.substring(0, 8)}...`);
+      console.log(`[Background] [MESSAGE_FLOW] 📨 Received kind-1059 from relay`);
 
       try {
         // Atomically check and mark to prevent race condition with multiple relay deliveries
@@ -2362,14 +2366,14 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
         // Mark as notified immediately to prevent race condition with multiple relays
         await markInviteNotified(event.id);
         const notificationManager = getNotificationManager();
-        await notificationManager.notifyFriendRequest(newFriend.id, senderDisplayName);
+        await notificationManager.notifyFriendRequest(newFriend.uuid, senderDisplayName);
       }
 
       // Notify popup
       try {
         await chrome.runtime.sendMessage({
           type: 'FRIEND_REQUEST_RECEIVED',
-          data: { friendId: newFriend.id, senderDisplayName },
+          data: { friendId: newFriend.uuid, senderDisplayName },
         }).catch(() => {
           // Popup not open
         });
@@ -2494,7 +2498,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
 
 
   const friends = await storageManager.getFriends();
-  const friend = friends.find((f) => f.identifier === friendIdentifier);
+  const friend = friends.find((f) => f.uuid === friendIdentifier);
 
   if (!friend) {
     console.debug(`[Background] Friend ${friendIdentifier} not found in local list, ignoring event`);
@@ -2531,7 +2535,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       // Only show notification if friend is pending (not if already active)
       if (friend.state === 'pending') {
         const notificationManager = getNotificationManager();
-        await notificationManager.notifyFriendRequest(friend.id, senderDisplayName);
+        await notificationManager.notifyFriendRequest(friend.uuid, senderDisplayName);
         console.log(`[Background] âœ… Showing friend request notification for ${senderDisplayName}`);
       } else if (friend.state === 'active') {
         // Already friends - just log it
@@ -2542,7 +2546,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       try {
         await chrome.runtime.sendMessage({
           type: 'FRIEND_REQUEST_RECEIVED',
-          data: { friendId: friend.id, senderDisplayName },
+          data: { friendId: friend.uuid, senderDisplayName },
         }).catch((error) => {
           console.debug('[Background] Popup not open for friend request notification');
         });
@@ -2600,7 +2604,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       
       console.log(`[Background] ðŸ”” Invite: Firing notification for ${friend.local_name}`);
       await notificationManager.notifyInvite(
-        friend.id,
+        friend.uuid,
         friend.local_name,
         activityName,
         verb,
@@ -2610,9 +2614,9 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
 
       // Store received invite in persistent storage with timestamp
       if (activityId) {
-        console.debug(`[Background] ðŸ”” Invite: Storing received invite - activityId: ${activityId}, friendId: ${friend.id}`);
+        console.debug(`[Background] ðŸ”” Invite: Storing received invite - activityId: ${activityId}, friendId: ${friend.uuid}`);
         await storageManager.upsertReceivedInvite(activityId, {
-          friendId: friend.id,
+          friendId: friend.uuid,
           sentAt: Date.now(),
         });
 
@@ -2620,7 +2624,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         try {
           await chrome.runtime.sendMessage({
             type: 'INVITE_RECEIVED',
-            data: { activityId, friendId: friend.id },
+            data: { activityId, friendId: friend.uuid },
           }).catch((error) => {
             // Popup not open, that's fine - it will load from storage
             console.debug('[Background] Popup not open, stored invite in storage:', error?.message);
@@ -2675,7 +2679,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
           event.tags.find(t => t[0] === 'relay')?.[1] || 'unknown',
           event.id,
           event.tags,
-          friend.identifier
+          friend.uuid
         );
       }
       const wasActive = Object.keys(friend.current_activities || {}).length > 0;
@@ -2739,7 +2743,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       }
 
       console.debug(`[Background] 📦 Storing activities for ${friend.local_name}: ${Object.keys(newCurrentActivities).join(', ')}`);
-      await storageManager.updateFriend(friend.id, {
+      await storageManager.updateFriend(friend.uuid, {
         current_activities: newCurrentActivities,
         last_seen: Date.now(),
       });
@@ -2757,12 +2761,12 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       }
 
       // Clean up orphaned invites: if friend no longer has an activity, remove the invite for it
-      await cleanupOrphanedInvites(friend.id, newCurrentActivities);
+      await cleanupOrphanedInvites(friend.uuid, newCurrentActivities);
 
       // Add changed activities to history
       for (const activity of activities) {
         if (changedServices.has(activity.service)) {
-          await storageManager.addActivityToHistory(friend.id, activity);
+          await storageManager.addActivityToHistory(friend.uuid, activity);
         }
       }
 
@@ -2770,7 +2774,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       if (!wasActive && activities.length > 0) {
         try {
           const notificationManager = getNotificationManager();
-          await notificationManager.notifyFriendOnline(friend.id, friend.local_name, activities[0].content);
+          await notificationManager.notifyFriendOnline(friend.uuid, friend.local_name, activities[0].content);
         } catch (error) {
           console.error('[Background] Failed to send online notification:', error);
         }
@@ -2781,7 +2785,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         try {
           await chrome.runtime.sendMessage({
             type: 'FRIEND_ACTIVITY_CHANGED',
-            data: { friendId: friend.id, changedServices: Array.from(changedServices) },
+            data: { friendId: friend.uuid, changedServices: Array.from(changedServices) },
           });
         } catch (error) {
           // Popup not open
@@ -2811,7 +2815,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
 async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {
   try {
     const friends = await storageManager.getFriends();
-    const friend = friends.find((f) => f.identifier === friendIdentifier);
+    const friend = friends.find((f) => f.uuid === friendIdentifier);
 
     if (!friend) {
       console.warn('[Message] Friend not found for message:', friendIdentifier);
@@ -2849,7 +2853,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
     if (message?.type === 'sync_request') {
       // Host receives sync request from guest
       const syncHandler = getSyncHandler();
-      await syncHandler.handleSyncRequest(friend.id, message.activity_id);
+      await syncHandler.handleSyncRequest(friend.uuid, message.activity_id);
       return;
     }
 
@@ -2857,7 +2861,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
       // Guest receives sync response from host
       const syncHandler = getSyncHandler();
       if (message.position !== undefined && message.sent_at !== undefined) {
-        await syncHandler.handleSyncResponse(friend.id, message.activity_id, message.position, message.sent_at);
+        await syncHandler.handleSyncResponse(friend.uuid, message.activity_id, message.position, message.sent_at);
       } else {
         console.warn('[Message] Sync response missing position or sent_at:', message);
       }
@@ -2880,12 +2884,12 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
       // Store chat messages
       if (message.type === 'chat' && message.activity_id) {
         try {
-          console.debug(`[Message] 💬 Chat: Storing message from ${friend.local_name} for activity ${message.activity_id.substring(0, 8)}`);
+          console.log(`[Background] [MESSAGE_FLOW] Received chat message from ${friend.local_name} for activity ${message.activity_id.substring(0, 8)}`);
 
           const storedMessage: any = {
             id: `${Date.now()}_${Math.random()}`,
-            friend_id: friend.id,
-            sender_id: friend.identifier,
+            friend_id: friend.uuid,
+            sender_id: friend.uuid,
             activity_id: message.activity_id,
             type: 'chat',
             content: message.content,
@@ -2894,10 +2898,10 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
             read: false,
           };
 
-          await storageManager.addActivityMessage(friend.id, message.activity_id, storedMessage);
-          console.debug('[Message] Chat message stored successfully');
+          await storageManager.addActivityMessage(message.activity_id, storedMessage);
+          console.log('[Background] [MESSAGE_FLOW] ✅ Chat message stored from ' + friend.local_name);
         } catch (error) {
-          console.error('[Message] Failed to store chat message:', error);
+          console.error('[Background] [MESSAGE_FLOW] Failed to store chat message:', error);
         }
       }
 
@@ -2913,7 +2917,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
           // Mark as notified to track rate limit
           await markInviteNotified(message.activity_id);
 
-          console.debug(`[Message] 💌 Invite: Storing pending invite - activityId: ${message.activity_id}, service: ${message.service}, friendId: ${friend.id}`);
+          console.debug(`[Message] 💌 Invite: Storing pending invite - activityId: ${message.activity_id}, service: ${message.service}, friendId: ${friend.uuid}`);
 
           // Find the friend's activity that matches this invite
           // Activities are stored by SERVICE in friend.current_activities, so search by activity_id
@@ -2935,7 +2939,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
           console.log(`[STORAGE_DEBUG_START] About to upsert invite ${message.activity_id.substring(0, 8)}`);
 
           await storageManager.upsertReceivedInvite(message.activity_id, {
-            friendId: friend.id,
+            friendId: friend.uuid,
             activity: activity || {
               id: message.activity_id,
               service: message.service || 'unknown',
@@ -2985,7 +2989,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
 
           console.log(`[Message] 🔔 Invite: Firing notification for ${friend.local_name}`);
           await notificationManager.notifyInvite(
-            friend.id,
+            friend.uuid,
             friend.local_name,
             activityName,
             verb,
@@ -2997,7 +3001,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
           try {
             await chrome.runtime.sendMessage({
               type: 'INVITE_RECEIVED',
-              data: { activityId: message.activity_id, friendId: friend.id },
+              data: { activityId: message.activity_id, friendId: friend.uuid },
             }).catch((error) => {
               console.debug('[Message] Popup not open, stored invite in storage:', error instanceof Error ? error.message : error);
             });
@@ -3013,7 +3017,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
       try {
         await chrome.runtime.sendMessage({
           type: 'NEW_MESSAGE',
-          data: { message, friendId: friend.id, activityId: message.activity_id },
+          data: { message, friendId: friend.uuid, activityId: message.activity_id },
         });
       } catch (error) {
         // Popup not open
@@ -3033,7 +3037,7 @@ async function _handleFriendRequestAccepted(friend: Friend, event: NostrEvent, m
 
     // Friend accepted the request - transition from pending to active (if not already)
     if (friend.state === 'pending') {
-      await friendManager.acceptFriendRequest(friend.id);
+      await friendManager.acceptFriendRequest(friend.uuid);
     }
     console.log(`[FriendRequest] ✅ ${friend.local_name} accepted your friend request`);
 
@@ -3076,7 +3080,7 @@ async function _handleActivityAccepted(friend: Friend, event: NostrEvent, messag
       // Record that we've notified about this activity
       await storageManager.recordActivityAcceptance({
         activityId: message.activity_id,
-        firstAcceptorId: friend.id,
+        firstAcceptorId: friend.uuid,
         acceptedAt: Date.now(),
         notifiedAt: Date.now(),
       });
@@ -3104,10 +3108,10 @@ async function _handleActivityDeclined(friend: Friend, event: NostrEvent, messag
     console.log(`[Activity] 👋 ${friend.local_name} declined your activity invitation for ${message.activity_id.substring(0, 8)}...`);
 
     // Track that friend declined this activity (for envelope state)
-    const declinedKey = `activity_declined_${message.activity_id}_${friend.id}`;
+    const declinedKey = `activity_declined_${message.activity_id}_${friend.uuid}`;
     await storageManager.setStorage(declinedKey, {
       activityId: message.activity_id,
-      friendId: friend.id,
+      friendId: friend.uuid,
       declinedAt: Date.now(),
     });
 
@@ -3115,7 +3119,7 @@ async function _handleActivityDeclined(friend: Friend, event: NostrEvent, messag
     try {
       await chrome.runtime.sendMessage({
         type: 'ACTIVITY_DECLINED',
-        data: { activityId: message.activity_id, friendId: friend.id },
+        data: { activityId: message.activity_id, friendId: friend.uuid },
       }).catch(() => {
         // Popup not open, that's fine
       });
@@ -3286,9 +3290,9 @@ async function _getFriend(friendId?: string): Promise<ExtensionResponse> {
   }
 }
 
-async function _sendInvite(activity?: any, friendId?: string): Promise<ExtensionResponse> {
-  if (!activity || !friendId) {
-    return { success: false, error: 'Activity and friendId required' };
+async function _sendInvite(activity?: any, friendUuid?: string): Promise<ExtensionResponse> {
+  if (!activity || !friendUuid) {
+    return { success: false, error: 'Activity and friendUuid required' };
   }
 
   if (!activity.service) {
@@ -3298,9 +3302,9 @@ async function _sendInvite(activity?: any, friendId?: string): Promise<Extension
 
   try {
     const friendManager = getFriendManager();
-    const friend = await friendManager.getFriend(friendId);
+    const friend = await friendManager.getFriend(friendUuid);
     if (!friend) {
-      return { success: false, error: `Friend not found: ${friendId}` };
+      return { success: false, error: `Friend not found: ${friendUuid}` };
     }
 
     const messagingManager = getMessagingManager();
@@ -3309,7 +3313,7 @@ async function _sendInvite(activity?: any, friendId?: string): Promise<Extension
     const eventId = await messagingManager.sendInvite(activity, friend);
 
     // Track pending invite for retry on failure
-    await trackPendingInvite(eventId, activity, friendId);
+    await trackPendingInvite(eventId, activity, friend.uuid);
 
     // Mark as published successfully
     await markInvitePublished(activity.id);
@@ -3418,12 +3422,12 @@ async function _sendJoinNotification(activity?: any, friendId?: string, accepted
         ? await messagingManager.sendJoinAccepted(activity, friend)
         : await messagingManager.sendJoinDeclined(activity, friend);
 
-      const messageId = `${messageType}_${friend.id}_${activity.id}`;
-      await trackPendingMessage(eventId, messageType as 'join_accepted' | 'join_declined', friend.id, activity.id);
+      const messageId = `${messageType}_${friend.uuid}_${activity.id}`;
+      await trackPendingMessage(eventId, messageType as 'join_accepted' | 'join_declined', friend.uuid, activity.id);
       await markMessagePublished(messageId);
     } catch (error) {
       console.error('[Background] Error sending join notification:', error);
-      const messageId = `${messageType}_${friend.id}_${activity.id}`;
+      const messageId = `${messageType}_${friend.uuid}_${activity.id}`;
       await markMessagePublishFailed(messageId, error instanceof Error ? error.message : 'Failed to send notification');
       return { success: false, error: error instanceof Error ? error.message : 'Failed to send notification' };
     }
@@ -3553,12 +3557,12 @@ async function markMessageProcessed(eventId: string): Promise<void> {
 /**
  * Track a pending invite for retry on failure
  */
-async function trackPendingInvite(eventId: string, activity: Activity, friendId: string): Promise<void> {
+async function trackPendingInvite(eventId: string, activity: Activity, friendUuid: string): Promise<void> {
   const activityId = activity.id;
   await storageManager.upsertPendingInvite(activityId, {
     eventId,
     activity,
-    friendId,
+    friendUuid,
     state: 'pending',
     sentAt: Date.now(),
     retryCount: 0,
@@ -3658,12 +3662,12 @@ async function retryPendingInvites(): Promise<void> {
 /**
  * Track a pending kind-1059 message (chat, accept, decline, friend_request)
  */
-async function trackPendingMessage(eventId: string, messageType: 'join_accepted' | 'join_declined' | 'friend_request' | 'chat', friendId: string, activityId: string, content?: string): Promise<void> {
-  const messageId = `${messageType}_${friendId}_${activityId}`;
+async function trackPendingMessage(eventId: string, messageType: 'join_accepted' | 'join_declined' | 'friend_request' | 'chat', friendUuid: string, activityId: string, content?: string): Promise<void> {
+  const messageId = `${messageType}_${friendUuid}_${activityId}`;
   await storageManager.upsertPendingMessage(messageId, {
     eventId,
     messageType,
-    friendId,
+    friendUuid,
     activityId,
     content,
     state: 'pending',
@@ -3799,7 +3803,7 @@ async function _showDiscordCoordinationPrompt(friend: Friend): Promise<void> {
 
     // Determine which Discord to use: friend's first, then user's
     const discordInfo = selectDiscordServer(friendDiscordInfo, [
-      { identifier: profile.memorable_identifier, discord_info: profile.discord_info },
+      { identifier: profile.uuid, discord_info: profile.discord_info },
     ]);
 
     if (!discordInfo) return;

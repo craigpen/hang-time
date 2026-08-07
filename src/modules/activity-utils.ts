@@ -147,6 +147,6 @@ export function selectDiscordServer(
   }
 
   // Sort by identifier and find first with discord_info
-  const sorted = [...inviteeDiscords].sort((a, b) => a.identifier.localeCompare(b.identifier));
+  const sorted = [...inviteeDiscords].sort((a, b) => a.uuid.localeCompare(b.uuid));
   return sorted.find((invitee) => invitee.discord_info)?.discord_info;
 }
