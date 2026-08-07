@@ -888,14 +888,26 @@ export class OverlayUI {
       return;
     }
 
+    console.log('[OverlayUI] renderMessages:', {
+      totalInState: this._state.messages.length,
+      messages: this._state.messages.map(m => ({
+        content: m.content?.substring(0, 20),
+        sender: m.sender,
+        hasContent: !!m.content
+      }))
+    });
+
     if (this._state.messages.length === 0) {
+      console.log('[OverlayUI] No messages in state');
       container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>';
       return;
     }
 
     const validMessages = this._state.messages.filter(msg => msg && msg.content);
+    console.log('[OverlayUI] Valid messages after filter:', validMessages.length);
 
     if (validMessages.length === 0) {
+      console.log('[OverlayUI] All messages filtered out');
       container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>';
       return;
     }
@@ -917,9 +929,14 @@ export class OverlayUI {
       .join('');
 
     container.innerHTML = html;
+    console.log('[OverlayUI] Set container.innerHTML, length:', html.length);
+    console.log('[OverlayUI] First 100 chars of HTML:', html.substring(0, 100));
+    console.log('[OverlayUI] Container children after set:', container.children.length);
 
     // Auto-scroll to bottom
-    container.scrollTop = container.scrollHeight;
+    if (container.scrollHeight > 0) {
+      container.scrollTop = container.scrollHeight;
+    }
   }
 
   /**
@@ -935,6 +952,7 @@ export class OverlayUI {
    * Add message to chat
    */
   addMessage(sender: string, senderId: string, content: string): void {
+    console.log('[OverlayUI] addMessage:', { sender, senderId, content: content?.substring(0, 30) });
     this._state.messages.push({
       id: Date.now().toString(),
       sender,
@@ -948,6 +966,7 @@ export class OverlayUI {
       this._state.messages = this._state.messages.slice(-50);
     }
 
+    console.log('[OverlayUI] Messages in state after add:', this._state.messages.length);
     this.renderMessages();
   }
 
