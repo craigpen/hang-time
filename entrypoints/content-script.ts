@@ -912,6 +912,7 @@ setTimeout(() => {
  * Initialize overlay UI on video pages
  */
 function initializeOverlay(): void {
+  console.debug('[ContentScript] initializeOverlay called');
   if (overlayUI) return; // Already initialized
 
   // Detect if this is a video page (YouTube, Netflix, Twitch)
@@ -921,13 +922,19 @@ function initializeOverlay(): void {
     return;
   }
 
+  console.debug('[ContentScript] Video page detected, initializing overlay UI');
   // Initialize overlay with temporary user ID (will be updated when background sends it)
   overlayUI = new OverlayUI(userId || 'unknown');
   overlayUI.init();
 
   // Listen for overlay interactions
+  console.debug('[ContentScript] Setting up window message listener');
   window.addEventListener('message', (event) => {
-    if (event.source !== window) return;
+    console.debug('[ContentScript] Window message event received:', event.data?.type);
+    if (event.source !== window) {
+      console.debug('[ContentScript] Ignoring message from different source');
+      return;
+    }
 
     if (event.data.type === 'HANG_TIME_SYNC_REQUEST') {
       // Sync button was clicked - calculate and seek locally
