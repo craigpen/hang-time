@@ -567,6 +567,8 @@ export class OverlayUI {
     const messageInput = document.getElementById('message-input') as HTMLTextAreaElement;
     const sendButton = document.getElementById('send-button');
 
+    console.debug('[OverlayUI] Setup message handlers - input:', !!messageInput, 'button:', !!sendButton);
+
     if (messageInput) {
       // Auto-expand textarea as user types
       messageInput.addEventListener('input', (e) => {
@@ -579,13 +581,21 @@ export class OverlayUI {
       messageInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
+          console.debug('[OverlayUI] Enter pressed, sending message');
           this.onSendMessage(messageInput);
         }
       });
+    } else {
+      console.warn('[OverlayUI] Message input not found');
     }
 
     if (sendButton) {
-      sendButton.addEventListener('click', () => this.onSendMessage(messageInput));
+      sendButton.addEventListener('click', () => {
+        console.debug('[OverlayUI] Send button clicked');
+        this.onSendMessage(messageInput);
+      });
+    } else {
+      console.warn('[OverlayUI] Send button not found');
     }
   }
 
@@ -593,15 +603,19 @@ export class OverlayUI {
    * Send message
    */
   private onSendMessage(input: HTMLTextAreaElement | null): void {
+    console.debug('[OverlayUI] onSendMessage called', { hasInput: !!input });
     if (!input) return;
 
     const content = input.value.trim();
+    console.debug('[OverlayUI] Message content:', { length: content.length, preview: content.substring(0, 50) });
     if (!content) return;
 
     // Immediately add message to overlay for sender
+    console.debug('[OverlayUI] Adding message to overlay:', { sender: this._state.user_nickname || 'You' });
     this.addMessage(this._state.user_nickname || 'You', this.userId, content);
 
     // Send message via postMessage
+    console.debug('[OverlayUI] Posting HANG_TIME_SEND_MESSAGE to window');
     window.postMessage({
       type: 'HANG_TIME_SEND_MESSAGE',
       data: {
@@ -613,6 +627,7 @@ export class OverlayUI {
     // Clear input and reset height
     input.value = '';
     input.style.height = '20px';
+    console.debug('[OverlayUI] Message sent and input cleared');
   }
 
   /**
