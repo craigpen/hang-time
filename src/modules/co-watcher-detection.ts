@@ -8,8 +8,8 @@ import { FriendManager } from './friends';
 
 export interface CoWatchSession {
   activity_id: string;
-  host_friend_id: string;
-  co_watchers: string[]; // Friend IDs of other co-watchers (excluding host), or 'self' if user is co-watcher
+  host_friend_uuid: string;
+  co_watchers: string[]; // Friend UUIDs of other co-watchers (excluding host), or 'self' if user is co-watcher
   detected_at: number;
 }
 
@@ -82,11 +82,11 @@ export class CoWatcherDetector {
 
       // Build co-watcher list for the matched activity
       const coWatchers: Array<{
-        friend_id: string | null; // null for user
+        friend_uuid: string | null; // null for user
         timestamp: number; // contentTimestamp - immutable start time
       }> = [
         {
-          friend_id: null,
+          friend_uuid: null,
           timestamp: userActivity?.contentTimestamp
         } // Include user
       ];
@@ -98,11 +98,11 @@ export class CoWatcherDetector {
           if (activity?.id === matchedActivityId) {
             if (activity.contentTimestamp) {
               coWatchers.push({
-                friend_id: friend.id,
+                friend_uuid: friend.uuid,
                 timestamp: activity.contentTimestamp,
               });
             } else {
-              console.warn(`[TimestampMigration] MISSING contentTimestamp for friend=${friend.id}, activity=${activity.id}`);
+              console.warn(`[TimestampMigration] MISSING contentTimestamp for friend=${friend.uuid}, activity=${activity.id}`);
             }
             break; // Only count each friend once per matched activity
           }
@@ -117,14 +117,14 @@ export class CoWatcherDetector {
 
       // Log what's actually in coWatchers before sort
       console.debug(`[TimestampMigration] coWatchers before sort:`, coWatchers.map(cw => ({
-        friend_id: cw.friend_id,
+        friend_uuid: cw.friend_uuid,
         timestamp: cw.timestamp,
-        userContentTs: cw.friend_id === null ? userActivity?.contentTimestamp : undefined,
-        userActualTs: cw.friend_id === null ? userActivity?.timestamp : undefined,
+        userContentTs: cw.friend_uuid === null ? userActivity?.contentTimestamp : undefined,
+        userActualTs: cw.friend_uuid === null ? userActivity?.timestamp : undefined,
       })));
 
       // Sort by contentTimestamp (or fallback to timestamp) to find host (earliest = host)
-      // Tiebreaker: if timestamps within 1 second, sort by friend_id for deterministic results
+      // Tiebreaker: if timestamps within 1 second, sort by friend_uuid for deterministic results
       coWatchers.sort((a, b) => {
         const diff = a.timestamp - b.timestamp;
         const TIMESTAMP_THRESHOLD = 1000; // 1 second
@@ -132,34 +132,34 @@ export class CoWatcherDetector {
         if (Math.abs(diff) > TIMESTAMP_THRESHOLD) {
           // Timestamps far enough apart - use timestamp alone
           const result = diff < 0 ? -1 : 1;
-          console.debug(`[TimestampMigration] SORT activity=${matchedActivityId}: a(${a.friend_id}/${a.timestamp}ms) vs b(${b.friend_id}/${b.timestamp}ms), diff=${diff}ms => winner=${result < 0 ? 'a' : 'b'}`);
+          console.debug(`[TimestampMigration] SORT activity=${matchedActivityId}: a(${a.friend_uuid}/${a.timestamp}ms) vs b(${b.friend_uuid}/${b.timestamp}ms), diff=${diff}ms => winner=${result < 0 ? 'a' : 'b'}`);
           return diff;
         } else {
-          // Timestamps within threshold - use friend_id as tiebreaker for stability
-          const tiebreakerDiff = (a.friend_id || '').localeCompare(b.friend_id || '');
-          console.debug(`[TimestampMigration] SORT (TIEBREAK) activity=${matchedActivityId}: within ${Math.abs(diff)}ms threshold, a(${a.friend_id}) vs b(${b.friend_id}) => winner=${tiebreakerDiff < 0 ? 'a' : tiebreakerDiff > 0 ? 'b' : 'equal'}`);
+          // Timestamps within threshold - use friend_uuid as tiebreaker for stability
+          const tiebreakerDiff = (a.friend_uuid || '').localeCompare(b.friend_uuid || '');
+          console.debug(`[TimestampMigration] SORT (TIEBREAK) activity=${matchedActivityId}: within ${Math.abs(diff)}ms threshold, a(${a.friend_uuid}) vs b(${b.friend_uuid}) => winner=${tiebreakerDiff < 0 ? 'a' : tiebreakerDiff > 0 ? 'b' : 'equal'}`);
           return tiebreakerDiff;
         }
       });
 
       const hostEntry = coWatchers[0];
-      const hostFriendId = hostEntry.friend_id === null ? 'self' : hostEntry.friend_id;
+      const hostFriendUuid = hostEntry.friend_uuid === null ? 'self' : hostEntry.friend_uuid;
 
       // Get host's friendly name for logging
-      let hostName = hostFriendId === 'self' ? 'You' : 'Unknown';
-      if (hostFriendId !== 'self') {
-        const hostFriend = friends.find(f => f.id === hostFriendId);
+      let hostName = hostFriendUuid === 'self' ? 'You' : 'Unknown';
+      if (hostFriendUuid !== 'self') {
+        const hostFriend = friends.find(f => f.uuid === hostFriendUuid);
         if (hostFriend) {
           hostName = hostFriend.local_name;
         }
       }
 
       const otherCoWatchers = coWatchers.slice(1)
-        .map(cw => cw.friend_id === null ? 'self' : cw.friend_id);
+        .map(cw => cw.friend_uuid === null ? 'self' : cw.friend_uuid);
 
       const session: CoWatchSession = {
         activity_id: matchedActivityId,
-        host_friend_id: hostFriendId,
+        host_friend_uuid: hostFriendUuid,
         co_watchers: otherCoWatchers,
         detected_at: Date.now(),
       };
@@ -169,7 +169,7 @@ export class CoWatcherDetector {
         host: hostName,
         co_watchers_count: otherCoWatchers.length,
       });
-      console.debug(`[TimestampMigration:CoWatcherHost] ✅ Host determined: ${hostName} (${hostFriendId}) with timestamp=${hostEntry.timestamp}`);
+      console.debug(`[TimestampMigration:CoWatcherHost] ✅ Host determined: ${hostName} (${hostFriendUuid}) with timestamp=${hostEntry.timestamp}`);
 
       return session;
     } catch (error) {
@@ -222,11 +222,11 @@ export class CoWatcherDetector {
       const session = await this.getCurrentCoWatchSession();
       if (!session) return null;
 
-      const host = await this.storage.getFriend(session.host_friend_id);
+      const host = await this.storage.getFriend(session.host_friend_uuid);
       if (!host) return null;
 
       return {
-        id: host.id,
+        id: host.uuid,
         local_name: host.local_name,
       };
     } catch (error) {

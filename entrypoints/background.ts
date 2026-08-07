@@ -812,12 +812,12 @@ function _startCoWatcherDetectionCycle(): void {
         let hostName = '?';
         let hostFriend: any = null;
 
-        if (session.host_friend_id === 'self') {
+        if (session.host_friend_uuid === 'self') {
           const profile = await storageManager.getUserProfile();
           // Use nickname if set, else uuid
           hostName = profile?.nickname || profile?.uuid || 'You';
         } else {
-          hostFriend = await getFriendManager().getFriend(session.host_friend_id);
+          hostFriend = await getFriendManager().getFriend(session.host_friend_uuid);
           // Use local_name (the nickname the user gave this friend)
           hostName = hostFriend?.local_name || '?';
         }
@@ -832,7 +832,7 @@ function _startCoWatcherDetectionCycle(): void {
         let userPosition: number | undefined;
         const myActivities = await storageManager.getMyActivities();
 
-        if (session.host_friend_id === 'self') {
+        if (session.host_friend_uuid === 'self') {
           // Host is self: use my activity from myActivities (where content script stores it)
           const hostActivity = myActivities?.[session.activity_id];
           if (hostActivity?.content) {
@@ -905,7 +905,7 @@ function _startCoWatcherDetectionCycle(): void {
                 recentMessages.push({
                   id: msg.id,
                   sender: senderName,
-                  sender_id: msg.sender_id || profile.uuid,
+                  sender_id: msg.sender_identifier || profile.uuid,
                   content: msg.content,
                   timestamp: msg.timestamp,
                 });
@@ -921,19 +921,19 @@ function _startCoWatcherDetectionCycle(): void {
             const friend = await friendManager.getFriend(coWatcherId);
             if (!friend) continue;
 
-            const activityMessages = await storageManager.getActivityMessages(coWatcherId, session.activity_id);
+            const activityMessages = await storageManager.getActivityMessages(session.activity_id);
             if (activityMessages && activityMessages.length > 0) {
               console.log(`[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query friend messages: ${friend.local_name} found=${activityMessages.length}`);
-              // Get last 10 messages, but only those actually sent by this friend (sender_id matches)
+              // Get last 10 messages, but only those actually sent by this friend (sender_identifier matches)
               const recentActivityMessages = activityMessages.slice(-10);
               for (const msg of recentActivityMessages) {
                 // Only include messages where the sender matches this co-watcher
                 // (avoid including messages they received from others)
-                if (msg.sender_id === friend.uuid) {
+                if (msg.sender_identifier === friend.uuid) {
                   recentMessages.push({
                     id: msg.id,
                     sender: friend.local_name,
-                    sender_id: msg.sender_id,
+                    sender_id: msg.sender_identifier,
                     content: msg.content,
                     timestamp: msg.timestamp,
                   });
@@ -983,7 +983,7 @@ function _startCoWatcherDetectionCycle(): void {
                 host_state: hostState,
                 host_duration: videoDuration,
                 user_progress: userPosition,
-                is_user_host: session.host_friend_id === 'self',
+                is_user_host: session.host_friend_uuid === 'self',
                 messages: recentMessages,
               },
             });
@@ -1132,7 +1132,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
             if (coWatchSession) {
               console.debug('[Background] Sending sync request for activity:', coWatchSession.activity_id);
-              await syncHandler.sendSyncRequest(coWatchSession.host_friend_id, coWatchSession.activity_id);
+              await syncHandler.sendSyncRequest(coWatchSession.host_friend_uuid, coWatchSession.activity_id);
             } else {
               console.debug('[Background] No co-watch session active for sync request');
             }
@@ -1177,14 +1177,14 @@ chrome.runtime.onConnect.addListener((port) => {
 
               // Get own messages (always label as "You")
               if (profile) {
-                const myMessages = await storageManager.getActivityMessages('self', activityId);
+                const myMessages = await storageManager.getActivityMessages(activityId);
                 if (myMessages && myMessages.length > 0) {
                   const recentMyMessages = myMessages.slice(-10);
                   for (const msg of recentMyMessages) {
                     recentMessages.push({
                       id: msg.id,
                       sender: 'You',
-                      sender_id: msg.sender_id || profile.uuid,
+                      sender_id: msg.sender_identifier || profile.uuid,
                       content: msg.content,
                       timestamp: msg.timestamp,
                     });
@@ -1200,11 +1200,11 @@ chrome.runtime.onConnect.addListener((port) => {
                 if (activityMessages && activityMessages.length > 0) {
                   const recentActivityMessages = activityMessages.slice(-10);
                   for (const msg of recentActivityMessages) {
-                    if (msg.sender_id === friend.uuid) {
+                    if (msg.sender_identifier === friend.uuid) {
                       recentMessages.push({
                         id: msg.id,
                         sender: friend.local_name,
-                        sender_id: msg.sender_id,
+                        sender_id: msg.sender_identifier,
                         content: msg.content,
                         timestamp: msg.timestamp,
                       });
@@ -1265,8 +1265,9 @@ chrome.runtime.onConnect.addListener((port) => {
               const senderName = userProfile.nickname || userProfile.uuid || 'You';
               const storedMessage: any = {
                 id: `${Date.now()}_${Math.random()}`,
-                friend_id: 'self',
-                sender_id: userProfile.uuid,
+                friend_uuid: 'self',
+                friend_identifier: 'self',
+                sender_identifier: userProfile.uuid,
                 activity_id: coWatchSession.activity_id,
                 type: 'chat',
                 content: message.data?.content,
@@ -2888,8 +2889,9 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
 
           const storedMessage: any = {
             id: `${Date.now()}_${Math.random()}`,
-            friend_id: friend.uuid,
-            sender_id: friend.uuid,
+            friend_uuid: friend.uuid,
+            friend_identifier: friend.uuid,
+            sender_identifier: friend.uuid,
             activity_id: message.activity_id,
             type: 'chat',
             content: message.content,

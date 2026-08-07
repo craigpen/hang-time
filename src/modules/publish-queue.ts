@@ -238,7 +238,7 @@ export class PublishQueue {
       else if (this.userActionQueue.length > 0) {
         const pending = this.userActionQueue[0];
         eventToPublish = pending.event;
-        console.log(`[PublishQueue] Publishing priority 1: ${pending.type}`);
+        console.log(`[PublishQueue] [MESSAGE_FLOW] Publishing priority 1: ${pending.type}`);
         this.lastEventReplacedActivity = false;
       }
       // Priority 2: Profile updates (if pending AND not replacing consecutively)
@@ -265,7 +265,9 @@ export class PublishQueue {
         // Refresh created_at to current time for replaceable/parameterized replaceable events
         const eventToPublishWithFreshTimestamp = await this._refreshEventTimestamp(eventToPublish);
         try {
+          console.log(`[PublishQueue] [MESSAGE_FLOW] Publishing to relays (kind=${eventToPublishWithFreshTimestamp.kind})`);
           const results = await this.relayPool.publish(eventToPublishWithFreshTimestamp);
+          console.log(`[PublishQueue] [MESSAGE_FLOW] ✅ Published to relays: success=${results.overall_success}`);
 
           // Handle immediate queue (sync requests/responses)
           if (this.immediateQueue.length > 0) {

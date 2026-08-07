@@ -711,6 +711,7 @@ function establishConnection(): void {
           break;
 
         case 'CO_WATCH_UPDATE':
+          console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE received with ' + (message.data?.messages?.length || 0) + ' messages');
           if (!overlayUI) return;
           // Update overlay with co-watch data
           if (message.data) {
@@ -736,6 +737,18 @@ function establishConnection(): void {
             // Sort by timestamp
             const mergedMessages = Array.from(merged.values()).sort((a, b) => a.timestamp - b.timestamp);
 
+            // Build nicknameMap from messages (extract sender_id -> sender pairs)
+            const nicknameMapObj: Record<string, string> = {};
+            for (const msg of mergedMessages) {
+              if (msg.sender_id && msg.sender) {
+                nicknameMapObj[msg.sender_id] = msg.sender;
+              }
+            }
+            // Set the nickname map on overlay
+            if (Object.keys(nicknameMapObj).length > 0) {
+              overlayUI.setNicknameMap(nicknameMapObj);
+            }
+
             // Only update messages if we received them from backend or have no current messages
             const stateUpdate: Partial<OverlayState> = {
               activity_id: message.data.activity_id,
@@ -751,16 +764,16 @@ function establishConnection(): void {
 
             // Only update messages if backend sent new messages or we're starting fresh
             if (incomingMessages.length > 0 || currentMessages.length === 0) {
-              console.debug('[ContentScript] CO_WATCH_UPDATE: updating messages. incoming=', incomingMessages.length, 'current=', currentMessages.length, 'merged=', mergedMessages.length);
+              console.debug('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE: updating messages. incoming=', incomingMessages.length, 'current=', currentMessages.length, 'merged=', mergedMessages.length);
               stateUpdate.messages = mergedMessages;
             } else {
-              console.debug('[ContentScript] CO_WATCH_UPDATE: NOT updating messages. incoming=', incomingMessages.length, 'current=', currentMessages.length);
+              console.debug('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE: NOT updating messages. incoming=', incomingMessages.length, 'current=', currentMessages.length);
             }
 
             // DEBUG: Log raw storage state
-            console.log('[ContentScript] CO_WATCH_UPDATE INCOMING:', incomingMessages.length, incomingMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
-            console.log('[ContentScript] CO_WATCH_UPDATE CURRENT UI:', currentMessages.length, currentMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
-            console.log('[ContentScript] CO_WATCH_UPDATE MERGED:', mergedMessages.length, mergedMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
+            console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE INCOMING:', incomingMessages.length, incomingMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
+            console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE CURRENT UI:', currentMessages.length, currentMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
+            console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE MERGED:', mergedMessages.length, mergedMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
 
             overlayUI.setState(stateUpdate);
           }

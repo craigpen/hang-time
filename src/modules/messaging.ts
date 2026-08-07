@@ -156,8 +156,8 @@ export class MessagingManager {
         type: 'friend_request',
         activity_id: `friend_request_${Date.now()}`,
         content: JSON.stringify({
-          sender_identifier: userProfile.memorable_identifier,
-          sender_display_name: userProfile.nickname || userProfile.memorable_identifier,
+          sender_identifier: userProfile.uuid,
+          sender_display_name: userProfile.nickname || userProfile.uuid,
           sender_pubkey: pubkey,
         }),
         timestamp: Date.now(),
@@ -242,7 +242,7 @@ export class MessagingManager {
       }, hexToBytes(secretKey)) as NostrEvent;
 
       // Queue or publish the event
-      console.log(`[Messaging] 📤 Queuing kind-1059 ${message.type} to ${recipientFriend.local_name} (${recipientFriend.pubkey.substring(0, 8)}...)`);
+      console.log(`[Messaging] [MESSAGE_FLOW] 📤 Queuing kind-1059 ${message.type} to ${recipientFriend.local_name}`);
       if (this.publishQueue) {
         await this.publishQueue.enqueueUserAction(event, 'message');
       } else {
@@ -254,9 +254,9 @@ export class MessagingManager {
       // Store in local message history as outbound
       const localMessage: any = {
         id: event.id,
-        friend_id: recipientFriend.id,
-        friend_identifier: recipientFriend.identifier,
-        sender_identifier: userProfile.memorable_identifier,
+        friend_id: recipientFriend.uuid,
+        friend_identifier: recipientFriend.uuid,
+        sender_identifier: userProfile.uuid,
         activity_id: message.activity_id,
         service: message.service,
         type: message.type as 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response',
@@ -275,7 +275,7 @@ export class MessagingManager {
         localMessage.sent_at = message.sent_at;
       }
 
-      await this.storageManager.addActivityMessage(recipientFriend.id, message.activity_id, localMessage);
+      await this.storageManager.addActivityMessage(message.activity_id, localMessage);
 
       return event.id; // Return event ID for tracking/retry
     } catch (error) {
@@ -331,10 +331,10 @@ export class MessagingManager {
 
       // Create message record
       const storedMessage: any = {
-        id: `${friend.id}_${timestamp}`,
-        friend_id: friend.id,
-        friend_identifier: friend.identifier,
-        sender_identifier: friend.identifier,
+        id: `${friend.uuid}_${timestamp}`,
+        friend_id: friend.uuid,
+        friend_identifier: friend.uuid,
+        sender_identifier: friend.uuid,
         activity_id: message.activity_id,
         service: message.service,
         type: message.type as 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response',
@@ -353,9 +353,9 @@ export class MessagingManager {
       }
 
       // Store in IndexedDB
-      await this.storageManager.addActivityMessage(friend.id, message.activity_id, storedMessage);
+      await this.storageManager.addActivityMessage(message.activity_id, storedMessage);
 
-      console.debug('[Messaging] Received message from:', friend.identifier, 'type:', message.type);
+      console.debug('[Messaging] Received message from:', friend.uuid, 'type:', message.type);
       return storedMessage;
     } catch (error) {
       console.error('[Messaging] Failed to receive/decrypt message:', error);

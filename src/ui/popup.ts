@@ -251,23 +251,23 @@ export class PopupController {
 
       // Update existing friends and add new ones
       for (const friend of sortedFriends) {
-        const isExpanded = this.expandedFriendsState.get(friend.id) ?? true;
+        const isExpanded = this.expandedFriendsState.get(friend.uuid) ?? true;
 
         // Check if this is a pending friend
         if (friend.state === 'pending') {
           // Create pending friend element with accept/decline buttons if they initiated
-          let friendElement = existingElements.get(friend.id);
+          let friendElement = existingElements.get(friend.uuid);
           if (!friendElement) {
-            friendElement = this._createPendingFriendItem(friend.id, friend.local_name, friend.initiated_by_me !== false);
-            friendElement.setAttribute('data-friend-id', friend.id);
+            friendElement = this._createPendingFriendItem(friend.uuid, friend.local_name, friend.initiated_by_me !== false);
+            friendElement.setAttribute('data-friend-id', friend.uuid);
             this.friendsList!.appendChild(friendElement);
           } else {
             // Element exists but state may have changed - if it's currently marked as active, remove it to recreate as pending
             if (!friendElement.classList.contains('pending')) {
               friendElement.remove();
-              existingElements.delete(friend.id);
-              friendElement = this._createPendingFriendItem(friend.id, friend.local_name, friend.initiated_by_me !== false);
-              friendElement.setAttribute('data-friend-id', friend.id);
+              existingElements.delete(friend.uuid);
+              friendElement = this._createPendingFriendItem(friend.uuid, friend.local_name, friend.initiated_by_me !== false);
+              friendElement.setAttribute('data-friend-id', friend.uuid);
               this.friendsList!.appendChild(friendElement);
             }
           }
@@ -276,23 +276,23 @@ export class PopupController {
           // Active friend: show activities
           const activities = this._sortActivitiesByType(Object.values(friend.current_activities || {}));
 
-          let friendElement = existingElements.get(friend.id);
+          let friendElement = existingElements.get(friend.uuid);
           if (!friendElement) {
             // Create new friend element
-            friendElement = this._createFriendItem(friend.id, friend.local_name, activities, isExpanded, friend);
-            friendElement.setAttribute('data-friend-id', friend.id);
+            friendElement = this._createFriendItem(friend.uuid, friend.local_name, activities, isExpanded, friend);
+            friendElement.setAttribute('data-friend-id', friend.uuid);
             this.friendsList!.appendChild(friendElement);
           } else {
             // If element was pending and is now active, recreate it
             if (friendElement.classList.contains('pending')) {
               friendElement.remove();
-              existingElements.delete(friend.id);
-              friendElement = this._createFriendItem(friend.id, friend.local_name, activities, isExpanded, friend);
-              friendElement.setAttribute('data-friend-id', friend.id);
+              existingElements.delete(friend.uuid);
+              friendElement = this._createFriendItem(friend.uuid, friend.local_name, activities, isExpanded, friend);
+              friendElement.setAttribute('data-friend-id', friend.uuid);
               this.friendsList!.appendChild(friendElement);
             } else {
               // Update existing friend element in place
-              this._updateFriendItem(friendElement, friend.id, friend.local_name, activities, isExpanded, friend);
+              this._updateFriendItem(friendElement, friend.uuid, friend.local_name, activities, isExpanded, friend);
             }
           }
 
@@ -305,7 +305,7 @@ export class PopupController {
 
       // Remove friends that are no longer displayed
       existingElements.forEach((element, friendId) => {
-        if (friendId !== 'self' && !friends.find((f) => f.id === friendId)) {
+        if (friendId !== 'self' && !friends.find((f) => f.uuid === friendId)) {
           element.remove();
         }
       });
@@ -948,7 +948,7 @@ export class PopupController {
       }
 
       actionsDiv.style.display = 'flex';
-      this.expandedFriendId = friend.id;
+      this.expandedFriendId = friend.uuid;
 
       // Attach action handlers
       const joinBtn = actionsDiv.querySelector('.btn-join') as HTMLButtonElement | null;
@@ -989,7 +989,7 @@ export class PopupController {
     try {
       const response = await chrome.runtime.sendMessage({
         type: 'JOIN_ACTIVITY',
-        data: { friendId: friend.id, activity },
+        data: { friendId: friend.uuid, activity },
       });
 
       if (response.success) {
@@ -1008,7 +1008,7 @@ export class PopupController {
       // Get messages from background
       const response = await chrome.runtime.sendMessage({
         type: 'GET_MESSAGES',
-        data: { friendId: friend.id },
+        data: { friendId: friend.uuid },
       });
 
       if (!response.success) {
@@ -1032,7 +1032,7 @@ export class PopupController {
     try {
       const response = await chrome.runtime.sendMessage({
         type: 'REMOVE_FRIEND',
-        data: { friendId: friend.id },
+        data: { friendId: friend.uuid },
       });
 
       if (response.success) {
@@ -1182,7 +1182,7 @@ export class PopupController {
     try {
       const response = await chrome.runtime.sendMessage({
         type: 'SEND_MESSAGE',
-        data: { friendId: friend.id, content },
+        data: { friendId: friend.uuid, content },
       });
 
       if (response.success) {
@@ -1192,7 +1192,7 @@ export class PopupController {
         // Reload messages
         const messagesResponse = await chrome.runtime.sendMessage({
           type: 'GET_MESSAGES',
-          data: { friendId: friend.id },
+          data: { friendId: friend.uuid },
         });
 
         if (messagesResponse.success) {
@@ -1947,7 +1947,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       // Load identifier
       const idDisplay = document.getElementById('user-identifier-popup');
       if (idDisplay) {
-        idDisplay.textContent = profile.memorable_identifier;
+        idDisplay.textContent = profile.uuid;
       }
 
       // Load nickname

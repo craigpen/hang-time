@@ -375,7 +375,7 @@ export class StorageManager {
   async addActivityToHistory(friendId: string, activity: Activity): Promise<void> {
     const key = STORAGE_KEYS.ACTIVITY_HISTORY(friendId);
     const history = await this.get<ActivityHistory>(key, {
-      friend_id: friendId,
+      friend_uuid: friendId,
       activities: [],
       updated_at: Date.now(),
     });
@@ -393,13 +393,26 @@ export class StorageManager {
   }
 
   // ============================================================================
-  // MESSAGES
+  // MESSAGES (Legacy friend-centric approach - consider migrating to activity-centric)
   // ============================================================================
+  // NOTE: These methods store messages per friend, but the modern approach is
+  // activity-centric (getActivityMessages, addActivityMessage). For new code,
+  // prefer activity-centric storage as it better supports multi-party messaging.
+  // These methods remain for backward compatibility and UI handlers that still
+  // request messages by friend ID (e.g., older popup implementations).
 
+  /**
+   * @deprecated - Use getActivityMessages() for new code. Returns messages stored per-friend.
+   * Legacy method kept for backward compatibility with message handlers.
+   */
   async getMessages(friendId: string): Promise<Message[]> {
     return this.get<Message[]>(STORAGE_KEYS.MESSAGES(friendId), []);
   }
 
+  /**
+   * @deprecated - Use addActivityMessage() for new code. Stores message per-friend.
+   * Legacy method kept for backward compatibility with message handlers.
+   */
   async addMessage(friendId: string, message: Message): Promise<void> {
     const messages = await this.getMessages(friendId);
     messages.push(message);
@@ -414,6 +427,10 @@ export class StorageManager {
     await this.set(STORAGE_KEYS.MESSAGES(friendId), messages);
   }
 
+  /**
+   * @deprecated - Use activity-centric cleanup instead. Clears all messages for a friend.
+   * Legacy method kept for friend removal cleanup.
+   */
   async clearMessages(friendId: string): Promise<void> {
     await this.delete(STORAGE_KEYS.MESSAGES(friendId));
   }

@@ -67,12 +67,12 @@ export async function showInviteModal(
 
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
-    checkbox.value = friend.id;
+    checkbox.value = friend.uuid;
     checkbox.addEventListener('change', (e) => {
       if ((e.target as HTMLInputElement).checked) {
-        selectedFriends.add(friend.id);
+        selectedFriends.add(friend.uuid);
       } else {
-        selectedFriends.delete(friend.id);
+        selectedFriends.delete(friend.uuid);
       }
       // Enable invite button when at least one friend is selected
       inviteBtn.disabled = selectedFriends.size === 0;

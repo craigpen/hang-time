@@ -55,8 +55,8 @@ describe('StorageManager - New Methods', () => {
     it('stores and retrieves pending invites with timestamps', async () => {
       const now = Date.now();
       const invites = {
-        'activity-1': { friendId: 'friend-1', sentAt: now },
-        'activity-2': { friendId: 'friend-2', sentAt: now - 1000 },
+        'activity-1': { friendUuid: 'friend-1', sentAt: now },
+        'activity-2': { friendUuid: 'friend-2', sentAt: now - 1000 },
       };
 
       await storage.setPendingInvites(invites);
@@ -68,24 +68,24 @@ describe('StorageManager - New Methods', () => {
 
     it('preserves existing invites when updating', async () => {
       const now = Date.now();
-      await storage.setPendingInvites({ 'activity-1': { friendId: 'friend-1', sentAt: now } });
+      await storage.setPendingInvites({ 'activity-1': { friendUuid: 'friend-1', sentAt: now } });
       const current = await storage.getPendingInvites();
-      current['activity-2'] = { friendId: 'friend-2', sentAt: now };
+      current['activity-2'] = { friendUuid: 'friend-2', sentAt: now };
       await storage.setPendingInvites(current);
 
       const final = await storage.getPendingInvites();
       expect(Object.keys(final).length).toBe(2);
-      expect(final['activity-1'].friendId).toBe('friend-1');
-      expect(final['activity-2'].friendId).toBe('friend-2');
+      expect(final['activity-1'].friendUuid).toBe('friend-1');
+      expect(final['activity-2'].friendUuid).toBe('friend-2');
     });
 
     it('removes expired invites (2+ hours old)', async () => {
       const now = Date.now();
       const twoHoursMs = 2 * 60 * 60 * 1000;
       const invites = {
-        'activity-1': { friendId: 'friend-1', sentAt: now }, // recent
-        'activity-2': { friendId: 'friend-2', sentAt: now - twoHoursMs - 1000 }, // expired
-        'activity-3': { friendId: 'friend-3', sentAt: now - twoHoursMs + 1000 }, // not quite expired
+        'activity-1': { friendUuid: 'friend-1', sentAt: now }, // recent
+        'activity-2': { friendUuid: 'friend-2', sentAt: now - twoHoursMs - 1000 }, // expired
+        'activity-3': { friendUuid: 'friend-3', sentAt: now - twoHoursMs + 1000 }, // not quite expired
       };
 
       await storage.setPendingInvites(invites);

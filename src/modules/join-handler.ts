@@ -138,7 +138,7 @@ export class JoinHandler {
 
       // Determine which Discord to use: friend's first, then user's, or other friends in alpha order
       const discordInfo = selectDiscordServer(friendDiscordInfo, [
-        { identifier: profile.memorable_identifier, discord_info: profile.discord_info },
+        { identifier: profile.uuid, discord_info: profile.discord_info },
       ]);
 
       if (!discordInfo) {

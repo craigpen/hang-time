@@ -13,14 +13,14 @@ const mockStorageManager = {
   getPendingInvites: async () => {
     return mockStorage.get('pending_invites') || {};
   },
-  setPendingInvites: async (invites: Record<string, { friendId: string; sentAt: number }>) => {
+  setPendingInvites: async (invites: Record<string, { friendUuid: string; sentAt: number }>) => {
     mockStorage.set('pending_invites', invites);
   },
 };
 
 // Replicate cleanup logic for testing
 async function cleanupOrphanedInvites(
-  friendId: string,
+  friendUuid: string,
   currentActivities: Partial<Record<ServiceName, Activity>>
 ): Promise<number> {
   const pendingInvites = await mockStorageManager.getPendingInvites();
@@ -28,7 +28,7 @@ async function cleanupOrphanedInvites(
 
   for (const [activityId, inviteData] of Object.entries(pendingInvites)) {
     // Only check invites for this friend
-    if (inviteData.friendId !== friendId) {
+    if (inviteData.friendUuid !== friendUuid) {
       continue;
     }
 
@@ -69,11 +69,11 @@ describe('Invite Cleanup - Orphaned Invites', () => {
   describe('cleanupOrphanedInvites', () => {
     it('removes invites when friend stops activity', async () => {
       // Setup: friend has 2 invites
-      const friendId = 'friend-1';
+      const friendUuid = 'friend-1';
       const inviteData = {
-        'activity-1': { friendId, sentAt: Date.now() },
-        'activity-2': { friendId, sentAt: Date.now() },
-        'activity-3': { friendId: 'friend-2', sentAt: Date.now() }, // Different friend
+        'activity-1': { friendUuid, sentAt: Date.now() },
+        'activity-2': { friendUuid, sentAt: Date.now() },
+        'activity-3': { friendUuid: 'friend-2', sentAt: Date.now() }, // Different friend
       };
       await mockStorageManager.setPendingInvites(inviteData);
 
@@ -83,7 +83,7 @@ describe('Invite Cleanup - Orphaned Invites', () => {
       };
 
       // Cleanup
-      const removed = await cleanupOrphanedInvites(friendId, currentActivities);
+      const removed = await cleanupOrphanedInvites(friendUuid, currentActivities);
 
       // Verify
       expect(removed).toBe(1);
@@ -95,8 +95,8 @@ describe('Invite Cleanup - Orphaned Invites', () => {
 
     it('preserves invites from other friends', async () => {
       const inviteData = {
-        'activity-1': { friendId: 'friend-1', sentAt: Date.now() },
-        'activity-2': { friendId: 'friend-2', sentAt: Date.now() },
+        'activity-1': { friendUuid: 'friend-1', sentAt: Date.now() },
+        'activity-2': { friendUuid: 'friend-2', sentAt: Date.now() },
       };
       await mockStorageManager.setPendingInvites(inviteData);
 
@@ -114,8 +114,8 @@ describe('Invite Cleanup - Orphaned Invites', () => {
 
     it('handles no matching activities', async () => {
       const inviteData = {
-        'activity-1': { friendId: 'friend-1', sentAt: Date.now() },
-        'activity-2': { friendId: 'friend-1', sentAt: Date.now() },
+        'activity-1': { friendUuid: 'friend-1', sentAt: Date.now() },
+        'activity-2': { friendUuid: 'friend-1', sentAt: Date.now() },
       };
       await mockStorageManager.setPendingInvites(inviteData);
 
@@ -130,11 +130,11 @@ describe('Invite Cleanup - Orphaned Invites', () => {
     });
 
     it('handles multiple services', async () => {
-      const friendId = 'friend-1';
+      const friendUuid = 'friend-1';
       const inviteData = {
-        'youtube-1': { friendId, sentAt: Date.now() },
-        'spotify-1': { friendId, sentAt: Date.now() },
-        'twitch-1': { friendId, sentAt: Date.now() },
+        'youtube-1': { friendUuid, sentAt: Date.now() },
+        'spotify-1': { friendUuid, sentAt: Date.now() },
+        'twitch-1': { friendUuid, sentAt: Date.now() },
       };
       await mockStorageManager.setPendingInvites(inviteData);
 
@@ -144,7 +144,7 @@ describe('Invite Cleanup - Orphaned Invites', () => {
         spotify: createActivity('spotify-1', 'spotify', 'Song'),
       };
 
-      const removed = await cleanupOrphanedInvites(friendId, currentActivities);
+      const removed = await cleanupOrphanedInvites(friendUuid, currentActivities);
 
       expect(removed).toBe(1);
       const remaining = await mockStorageManager.getPendingInvites();

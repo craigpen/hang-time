@@ -35,7 +35,8 @@ export class OverlayUI {
   private dragStartY = 0;
   private dragStartLeft = 0;
   private dragStartTop = 0;
-  private userColorMap: Map<string, string> = new Map(); // sender_id -> color
+  private userColorMap: Map<string, string> = new Map(); // sender_uuid -> color
+  private nicknameMap: Map<string, string> = new Map(); // sender_uuid -> display name
   private _state: OverlayState = {
     visible: false,
     pinned: false,
@@ -46,6 +47,17 @@ export class OverlayUI {
   private port: chrome.runtime.Port | null = null;
 
   constructor(private userId: string) {}
+
+  /**
+   * Set up nickname map for display name lookups
+   * Call this after overlay init to map uuids to display names
+   */
+  setNicknameMap(map: Record<string, string>): void {
+    this.nicknameMap.clear();
+    for (const [uuid, nickname] of Object.entries(map)) {
+      this.nicknameMap.set(uuid, nickname);
+    }
+  }
 
   /**
    * Set the port for sending messages to background
@@ -893,17 +905,10 @@ export class OverlayUI {
       return;
     }
 
-    console.log('[OverlayUI] renderMessages:', {
-      totalInState: this._state.messages.length,
-      messages: this._state.messages.map(m => ({
-        content: m.content?.substring(0, 20),
-        sender: m.sender,
-        hasContent: !!m.content
-      }))
-    });
+    console.log('[OverlayUI] [MESSAGE_FLOW] 🎨 Rendering ' + this._state.messages.length + ' messages in overlay');
 
     if (this._state.messages.length === 0) {
-      console.log('[OverlayUI] No messages in state');
+      console.log('[OverlayUI] [MESSAGE_FLOW] No messages in state');
       container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>';
       return;
     }
@@ -921,10 +926,11 @@ export class OverlayUI {
       .map(msg => {
         const isUser = msg.sender_id === this.userId;
         const userColor = this.getUserColor(msg.sender_id);
-        const sender = msg.sender || 'Unknown';
+        // Look up display name from nicknameMap, fallback to sender_id if not found
+        const displayName = this.nicknameMap.get(msg.sender_id) || msg.sender || 'Unknown';
         return `
           <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}">
-            <div class="message-sender" style="color: ${userColor}">${this.escapeHtml(sender)}</div>
+            <div class="message-sender" style="color: ${userColor}">${this.escapeHtml(displayName)}</div>
             <div class="message-content" style="${isUser ? `background: rgba(96, 165, 250, 0.3);` : `background: rgba(255, 255, 255, 0.08);`} color: white;">${this.escapeHtml(msg.content)}</div>
           </div>
         `;

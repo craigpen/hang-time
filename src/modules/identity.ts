@@ -28,8 +28,8 @@ export class IdentityManager {
 
     // Try to load from storage
     const profile = await this.storage.getUserProfile();
-    if (profile?.memorable_identifier) {
-      this.identifierCache = profile.memorable_identifier;
+    if (profile?.uuid) {
+      this.identifierCache = profile.uuid;
 
       // Migration: Enable join_suggestion for existing users (was disabled by default before)
       if (profile.notification_preferences?.join_suggestion === false) {
@@ -45,7 +45,7 @@ export class IdentityManager {
         await this.storage.setUserProfile(profile);
       }
 
-      return profile.memorable_identifier;
+      return profile.uuid;
     }
 
     // Generate new if not found
@@ -87,9 +87,9 @@ export class IdentityManager {
   async generateIdentifier(): Promise<string> {
     // Check if one already exists - never overwrite
     const existing = await this.storage.getUserProfile();
-    if (existing?.memorable_identifier) {
-      this.identifierCache = existing.memorable_identifier;
-      return existing.memorable_identifier;
+    if (existing?.uuid) {
+      this.identifierCache = existing.uuid;
+      return existing.uuid;
     }
 
     const identifier = this._createMemorableId();
@@ -98,7 +98,7 @@ export class IdentityManager {
 
     // Create new profile only if none exists
     const profile: UserProfile = {
-      memorable_identifier: identifier,
+      uuid: identifier,
       pubkey,
       secret_key: secretKey,
       created_at: now,
@@ -689,7 +689,7 @@ export class IdentityManager {
   async clearIdentifier(): Promise<void> {
     const profile = await this.storage.getUserProfile();
     if (profile) {
-      const newProfile = { ...profile, memorable_identifier: '' };
+      const newProfile = { ...profile, uuid: '' };
       await this.storage.setUserProfile(newProfile);
       this.identifierCache = null;
     }

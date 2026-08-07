@@ -59,10 +59,12 @@ describe('Integration Tests', () => {
 
       // Step 2: Update friend activity
       const activity: Activity = {
+        id: 'spotify-track-123',
         service: 'spotify-api',
         content: 'Song Title',
         url: 'https://spotify.com/track/123',
         timestamp: now,
+        freshness_timestamp: now,
         metadata: { artist: 'Artist Name', duration: 180 },
       };
 
@@ -70,13 +72,13 @@ describe('Integration Tests', () => {
       mockStorage.getFriend.mockResolvedValueOnce(addedFriend);
 
       // Simulate receiving an activity update (via Nostr)
-      await mockStorage.updateFriend(addedFriend.id, {
+      await mockStorage.updateFriend(addedFriend.uuid, {
         current_activities: {
           [activity.service]: activity,
         },
         last_seen: Date.now(),
       });
-      await mockStorage.addActivityToHistory(addedFriend.id, activity);
+      await mockStorage.addActivityToHistory(addedFriend.uuid, activity);
 
       // Verify activity was updated and stored in history
       expect(mockStorage.updateFriend).toHaveBeenCalled();
@@ -174,13 +176,14 @@ describe('Integration Tests', () => {
 
       // Step 1: Create friend
       const friend: Friend = {
-        id: 'friend1',
-        identifier: 'FriendId123',
+        uuid: 'friend1',
+        pubkey: 'test-pubkey-friend1',
         local_name: 'Alice',
         added_at: now,
         last_seen: now,
         muted: false,
         hidden_services: [],
+        current_activities: {},
       };
 
       mockStorage.getFriend.mockResolvedValueOnce(friend);
@@ -238,13 +241,14 @@ describe('Integration Tests', () => {
       const now = Date.now();
 
       const friend: Friend = {
-        id: '1',
-        identifier: 'Friend123',
+        uuid: 'friend-test-1',
+        pubkey: 'test-pubkey-1',
         local_name: 'Alice',
         added_at: now,
         last_seen: now,
         muted: false,
         hidden_services: [],
+        current_activities: {},
       };
 
       mockStorage.getFriend.mockResolvedValueOnce(friend);
@@ -286,28 +290,33 @@ describe('Integration Tests', () => {
       const now = Date.now();
 
       const friend: Friend = {
-        id: 'friend1',
-        identifier: 'FriendId123',
+        uuid: 'friend1',
+        pubkey: 'test-pubkey-friend1',
         local_name: 'Alice',
         added_at: now,
         last_seen: now,
         muted: false,
         hidden_services: [],
+        current_activities: {},
       };
 
       mockStorage.getFriend.mockResolvedValue(friend);
 
       const activity1: Activity = {
+        id: 'spotify-song-1',
         service: 'spotify-api',
         content: 'Song 1',
         timestamp: now,
+        freshness_timestamp: now,
         metadata: {},
       };
 
       const activity2: Activity = {
+        id: 'youtube-video-1',
         service: 'youtube-tab',
         content: 'Video 1',
         timestamp: now + 5000,
+        freshness_timestamp: now + 5000,
         metadata: {},
       };
 

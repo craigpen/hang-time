@@ -27,7 +27,7 @@ export type {
 // ============================================================================
 
 export interface UserProfile {
-  memorable_identifier: string;
+  uuid: string; // Memorable identifier (e.g., "blazing-desert-panther-anchor")
   pubkey: string; // Hex public key for Nostr (64 chars)
   secret_key: string; // Hex secret key for signing events (128 chars)
   created_at: number;
@@ -87,7 +87,7 @@ export interface UserProfile {
   current_activity?: Activity;
   current_co_watch_session?: {
     activity_id: string;
-    host_friend_id: string;
+    host_friend_uuid: string;
     co_watchers: string[];
     detected_at: number;
   } | null;
@@ -119,8 +119,7 @@ export interface OAuthTokens {
 // ============================================================================
 
 export interface Friend {
-  id: string;
-  identifier: string;
+  uuid: string; // Memorable identifier (e.g., "swift-river-mountain-tiger")
   pubkey: string; // Nostr public key (64-char hex)
   local_name: string;
   added_at: number;
@@ -164,7 +163,7 @@ export interface Activity {
 }
 
 export interface ActivityHistory {
-  friend_id: string;
+  friend_uuid: string;
   activities: Activity[];
   updated_at: number;
 }
@@ -175,7 +174,7 @@ export interface ActivityHistory {
 
 export interface Message {
   id: string;
-  friend_id: string;
+  friend_uuid: string;
   friend_identifier: string;
   sender_identifier: string;
   activity_id: string; // Activity this message is about
@@ -188,14 +187,14 @@ export interface Message {
 }
 
 export interface MessageThread {
-  friend_id: string;
+  friend_uuid: string;
   messages: Message[];
 }
 
 export interface PendingInvite {
   eventId: string; // Nostr event ID for deduplication
   activity: Activity; // The activity being invited to
-  friendId: string; // Who we're inviting
+  friendUuid: string; // Who we're inviting
   state: 'pending' | 'relay_accepted' | 'failed'; // unified state: pending (not yet confirmed by relay), relay_accepted (relay confirmed, awaiting friend response), failed (after max retries)
   sentAt: number; // When we first attempted to send
   relay_accepted_at?: number; // When relay confirmed receipt
@@ -208,7 +207,7 @@ export interface PendingInvite {
 export interface PendingMessage {
   eventId: string; // Nostr event ID for deduplication
   messageType: 'join_accepted' | 'join_declined' | 'friend_request' | 'chat'; // Type of message
-  friendId: string; // Recipient friend ID
+  friendUuid: string; // Recipient friend UUID
   activityId: string; // Associated activity ID
   content?: string; // Message content (for chat and friend_request)
   state: 'pending' | 'relay_accepted' | 'failed'; // unified state: pending (not yet confirmed by relay), relay_accepted (relay confirmed; completion depends on type), failed (after max retries)
@@ -222,7 +221,7 @@ export interface PendingMessage {
 
 export interface ActivityAcceptance {
   activityId: string; // Which activity got accepted
-  firstAcceptorId: string; // Friend ID of first person to accept
+  firstAcceptorUuid: string; // Friend UUID of first person to accept
   acceptedAt: number; // When first acceptance was received
   notifiedAt: number; // When we showed the notification
 }
@@ -400,6 +399,8 @@ export const STORAGE_KEYS = {
   GAME_METADATA_CACHE: 'hang_time_game_metadata_cache',
   FRIEND_PROFILES: 'hang_time_friend_profiles',
   ACTIVITY_ACCEPTANCES: 'hang_time_activity_acceptances',
+  // NOTE: MESSAGES uses legacy friend-centric storage. New code should use activity-centric
+  // storage (activity_messages_${activityId}). See StorageManager.getActivityMessages()
   MESSAGES: (friendId: string) => `hang_time_messages_${friendId}`,
   ACTIVITY_HISTORY: (friendId: string) => `hang_time_activity_history_${friendId}`,
 } as const;
