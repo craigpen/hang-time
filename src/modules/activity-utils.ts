@@ -91,9 +91,20 @@ function extractStableId(service: string, url?: string): string {
 export function generateActivityId(service: string, url?: string): string {
   const stableId = extractStableId(service, url);
   if (!stableId) {
-    // Fallback: use full URL if we couldn't extract a stable ID
-    const fallback = `${service}:${url || 'unknown'}`;
-    return fnv1aHash(fallback);
+    // Fallback: use hostname + pathname (ignore query params and fragments)
+    // This prevents URL session params (like &t=120) from changing the activity ID
+    if (url) {
+      try {
+        const urlObj = new URL(url);
+        const fallback = `${urlObj.hostname}${urlObj.pathname}`;
+        const input = `${service.toLowerCase()}:${fallback}`;
+        return fnv1aHash(input);
+      } catch (error) {
+        console.debug('[ActivityUtils] Failed to parse fallback URL:', url);
+      }
+    }
+    // Last resort: use just the service name
+    return fnv1aHash(service.toLowerCase());
   }
 
   // Hash the service + stable ID to get the activity ID

@@ -81,7 +81,7 @@ export class MessagingManager {
     };
 
     const eventId = await this._sendActivityMessage(recipientFriend, message);
-    console.log('[Messaging] Sent invite for activity:', activity.service, 'to friend:', recipientFriend.local_name);
+    console.log('[Messaging] [MESSAGE_FLOW] Sent invite for activity:', activity.service, 'to friend:', recipientFriend.local_name);
     return eventId;
   }
 
@@ -184,7 +184,7 @@ export class MessagingManager {
       }, hexToBytes(secretKey)) as NostrEvent;
 
       // Queue or publish the event
-      console.log(`[Messaging] 📤 Queuing kind-1059 friend request to ${recipientPubkey.substring(0, 8)}...`);
+      console.log(`[Messaging] [MESSAGE_FLOW] 📤 Queuing kind-1059 friend request to ${recipientPubkey.substring(0, 8)}...`);
       if (this.publishQueue) {
         await this.publishQueue.enqueueUserAction(event, 'message');
       } else {

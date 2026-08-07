@@ -992,6 +992,13 @@ function _startCoWatcherDetectionCycle(): void {
               }
             }
 
+            console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE data:', {
+              host_progress: hostPosition,
+              host_progress_timestamp: hostPositionTimestamp,
+              user_progress: userPosition,
+              host_duration: videoDuration,
+              is_user_host: session.host_friend_uuid === 'self',
+            });
             port.postMessage({
               type: 'CO_WATCH_UPDATE',
               data: {

@@ -940,8 +940,8 @@ export class OverlayUI {
       .map(msg => {
         const isUser = msg.sender_id === this.userId;
         const userColor = this.getUserColor(msg.sender_id);
-        // Look up display name from nicknameMap, fallback to sender_id if not found
-        const displayName = this.nicknameMap.get(msg.sender_id) || msg.sender || 'Unknown';
+        // Use "You" for user's own messages, otherwise lookup display name from nicknameMap
+        const displayName = isUser ? 'You' : (this.nicknameMap.get(msg.sender_id) || msg.sender || 'Unknown');
         return `
           <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}">
             <div class="message-sender" style="color: ${userColor}">${this.escapeHtml(displayName)}</div>

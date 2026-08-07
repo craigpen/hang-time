@@ -404,12 +404,6 @@ export class StorageManager {
     // Add new message
     messages.push(message);
 
-    // Enforce limit: keep only 50 most recent messages per activity
-    const limit = 50;
-    if (messages.length > limit) {
-      messages.splice(0, messages.length - limit);
-    }
-
     await this.set(key, messages);
   }
 

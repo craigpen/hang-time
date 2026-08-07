@@ -74,7 +74,7 @@ export class PublishQueue {
     };
 
     this.userActionQueue.push(pendingPublish);
-    console.log(`[PublishQueue] Enqueued ${type} (queue size: ${this.userActionQueue.length})`);
+    console.log(`[PublishQueue] [MESSAGE_FLOW] Enqueued ${type} (queue size: ${this.userActionQueue.length})`);
 
     // Persist to storage
     await this._persistQueue();
@@ -94,7 +94,7 @@ export class PublishQueue {
     };
 
     this.immediateQueue.push(pendingPublish);
-    console.log(`[PublishQueue] Enqueued ${type} (immediate, queue size: ${this.immediateQueue.length})`);
+    console.log(`[PublishQueue] [MESSAGE_FLOW] Enqueued ${type} (immediate, queue size: ${this.immediateQueue.length})`);
 
     // Persist to storage
     await this._persistQueue();
@@ -335,7 +335,7 @@ export class PublishQueue {
                 ? ` (accepted by ${pending.acceptedByRelays.length} relay/relays)`
                 : '';
               console.warn(
-                `[PublishQueue] ❌ Removed ${pending.type} after ${this.MAX_RETRIES} failed retries${acceptedInfo} (event: ${pending.event.id.substring(0, 16)}..., created: ${new Date(pending.createdAt).toISOString()})`
+                `[PublishQueue] [MESSAGE_FLOW] ❌ Removed ${pending.type} after ${this.MAX_RETRIES} failed retries${acceptedInfo} (event: ${pending.event.id.substring(0, 16)}..., created: ${new Date(pending.createdAt).toISOString()})`
               );
             } else {
               // For handshakes, if no relay has accepted yet, keep retrying
@@ -343,7 +343,7 @@ export class PublishQueue {
               const backoffMs = this.RETRY_BACKOFF_MS[pending.retryCount - 1] || 60000;
               pending.lastRetryAt = Date.now() + backoffMs;
               console.log(
-                `[PublishQueue] Scheduled retry for ${pending.type} in ${backoffMs}ms (attempt ${pending.retryCount}/${this.MAX_RETRIES}) after error: ${error instanceof Error ? error.message : String(error)}`
+                `[PublishQueue] [MESSAGE_FLOW] Scheduled retry for ${pending.type} in ${backoffMs}ms (attempt ${pending.retryCount}/${this.MAX_RETRIES}) after error: ${error instanceof Error ? error.message : String(error)}`
               );
             }
 
