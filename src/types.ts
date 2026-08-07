@@ -173,7 +173,7 @@ export interface ActivityHistory {
 // ============================================================================
 
 export interface Message {
-  id: string;
+  id: string; // Nostr event ID
   friend_uuid: string;
   friend_identifier: string;
   sender_identifier: string;
@@ -183,7 +183,6 @@ export interface Message {
   is_outbound: boolean;
   timestamp: number;
   read: boolean;
-  nostr_event_id?: string;
 }
 
 export interface MessageThread {
