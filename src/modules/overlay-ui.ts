@@ -81,7 +81,6 @@ export class OverlayUI {
     console.debug(`[OverlayUI] init() - userId=${this.userId}, existing overlays=${existingCount}`);
 
     this.createOverlayContainer();
-    this.setupEventListeners();
     this.startProgressAnimation();
     console.debug('[OverlayUI] Initialized');
   }
@@ -493,6 +492,7 @@ export class OverlayUI {
         if (document.body && this.container && !this.container.parentElement) {
           document.body.appendChild(this.container);
           this.setupOpacitySlider();
+          this.setupEventListeners();
           clearInterval(checkBody);
         }
       }, 50);
@@ -501,6 +501,7 @@ export class OverlayUI {
 
     document.body.appendChild(this.container);
     this.setupOpacitySlider();
+    this.setupEventListeners();
   }
 
   /**
