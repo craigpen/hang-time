@@ -892,6 +892,26 @@ function _startCoWatcherDetectionCycle(): void {
         }> = [];
 
         try {
+          const profile = await storageManager.getUserProfile();
+
+          // Get messages from sender's own store (marked with friend_id='self')
+          if (profile) {
+            const myMessages = await storageManager.getActivityMessages('self', session.activity_id);
+            if (myMessages && myMessages.length > 0) {
+              const recentMyMessages = myMessages.slice(-10);
+              for (const msg of recentMyMessages) {
+                const senderName = profile.nickname || profile.memorable_identifier || 'You';
+                recentMessages.push({
+                  id: msg.id,
+                  sender: senderName,
+                  sender_id: msg.sender_id || profile.memorable_identifier,
+                  content: msg.content,
+                  timestamp: msg.timestamp,
+                });
+              }
+            }
+          }
+
           // Get messages from all co-watchers for this activity
           for (const coWatcherId of session.co_watchers) {
             if (coWatcherId === 'self') continue; // Skip self
@@ -915,11 +935,16 @@ function _startCoWatcherDetectionCycle(): void {
             }
           }
 
-          // Note: User's own messages are stored by friend_id when sending to co-watchers
-          // They appear in the co-watcher's activity messages, not in a separate "user" store
-          // So we don't need a separate query here - messages from all senders (including self via friends) are included above
-
-          // Sort by timestamp
+          // Sort by timestamp and deduplicate
+          const deduped = new Map<string, any>();
+          recentMessages.forEach(msg => {
+            const key = `${msg.content}_${msg.timestamp}`; // Rough dedup
+            if (!deduped.has(key)) {
+              deduped.set(key, msg);
+            }
+          });
+          recentMessages.length = 0;
+          recentMessages.push(...Array.from(deduped.values()));
           recentMessages.sort((a, b) => a.timestamp - b.timestamp);
         } catch (e) {
           console.debug('[Background] Failed to get messages for overlay:', e);
@@ -1137,6 +1162,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
             const friendManager = getFriendManager();
             const messagingManager = getMessagingManager();
+            const userProfile = await storageManager.getUserProfile();
 
             // Send to all co-watchers except self
             for (const friendId of coWatchSession.co_watchers) {
@@ -1154,6 +1180,26 @@ chrome.runtime.onConnect.addListener((port) => {
 
               await messagingManager.sendChatMessage(activity, friend, message.data?.content);
               console.debug(`[Background] Message sent to ${friend.local_name}`);
+            }
+
+            // Store message locally for sender's own record
+            if (userProfile) {
+              const senderName = userProfile.nickname || userProfile.memorable_identifier || 'You';
+              const storedMessage: any = {
+                id: `${Date.now()}_${Math.random()}`,
+                friend_id: 'self',
+                sender_identifier: userProfile.memorable_identifier,
+                activity_id: coWatchSession.activity_id,
+                type: 'chat',
+                content: message.data?.content,
+                is_outbound: true,
+                timestamp: Date.now(),
+                read: true,
+              };
+
+              // Store in activity messages
+              await storageManager.addActivityMessage('self', coWatchSession.activity_id, storedMessage);
+              console.debug('[Background] Message stored locally for sender');
             }
           } catch (e) {
             console.error('[Background] Failed to send message:', e);
