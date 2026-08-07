@@ -901,8 +901,9 @@ function _startCoWatcherDetectionCycle(): void {
           timestamp: number;
         }> = [];
 
+        let profile: any = null;
         try {
-          const profile = await storageManager.getUserProfile();
+          profile = await storageManager.getUserProfile();
 
           // Query ALL messages for this activity (activity-centric storage)
           const activityMessages = await storageManager.getActivityMessages(session.activity_id);
