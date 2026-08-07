@@ -989,7 +989,9 @@ export class OverlayUI {
    * Destroy overlay
    */
   destroy(): void {
+    console.debug('[OverlayUI] destroy() called for userId:', this.userId);
     if (this.container) {
+      console.debug('[OverlayUI] Removing container from DOM');
       this.container.remove();
       this.container = null;
     }
@@ -999,5 +1001,6 @@ export class OverlayUI {
     if (this.progressUpdateInterval) {
       clearInterval(this.progressUpdateInterval);
     }
+    console.debug('[OverlayUI] Destroy complete');
   }
 }
