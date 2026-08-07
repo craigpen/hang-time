@@ -2881,30 +2881,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
         console.error('[Message] Failed to send message notification:', error);
       }
 
-      // Store chat messages
-      if (message.type === 'chat' && message.activity_id) {
-        try {
-          console.log(`[Background] [MESSAGE_FLOW] Received chat message from ${friend.local_name} for activity ${message.activity_id.substring(0, 8)}`);
-
-          const storedMessage: any = {
-            id: `${Date.now()}_${Math.random()}`,
-            friend_uuid: friend.uuid,
-            friend_identifier: friend.uuid,
-            sender_identifier: friend.uuid,
-            activity_id: message.activity_id,
-            type: 'chat',
-            content: message.content,
-            is_outbound: false,
-            timestamp: Date.now(),
-            read: false,
-          };
-
-          await storageManager.addActivityMessage(message.activity_id, storedMessage);
-          console.log('[Background] [MESSAGE_FLOW] ✅ Chat message stored from ' + friend.local_name);
-        } catch (error) {
-          console.error('[Background] [MESSAGE_FLOW] Failed to store chat message:', error);
-        }
-      }
+      // Chat messages are already stored by messaging.ts receiveMessage(), no need to store again
 
       // Store pending invite and notify popup
       if (message.type === 'invite' && message.activity_id) {
