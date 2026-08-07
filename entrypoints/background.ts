@@ -3196,10 +3196,18 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
     if (key.startsWith('content_script_activity_')) {
       console.debug(`[Background] ðŸ”„ Triggering activity detection from content script update`);
       try {
-        await activityDetector.detectAndPublish();
-        // Verify current_activity was set
-        const profile = await storageManager.getUserProfile();
-        console.debug(`[Background] ✅ detectAndPublish complete. Current activity now:`, profile?.current_activity?.id);
+        // Ensure extension is initialized before accessing activityDetector
+        if (!initialized) {
+          await initializeExtension();
+        }
+        if (activityDetector) {
+          await activityDetector.detectAndPublish();
+          // Verify current_activity was set
+          const profile = await storageManager.getUserProfile();
+          console.debug(`[Background] ✅ detectAndPublish complete. Current activity now:`, profile?.current_activity?.id);
+        } else {
+          console.warn('[Background] activityDetector not available after initialization');
+        }
       } catch (error) {
         console.error('[Background] Error in detectAndPublish:', error);
       }
