@@ -758,14 +758,11 @@ function establishConnection(): void {
             }
 
             // DEBUG: Log raw storage state
-            if (message.data?.activity_id) {
-              const rawStorageStr = JSON.stringify({
-                incomingMessages: incomingMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })),
-                currentUIMessages: currentMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })),
-                mergedMessages: mergedMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })),
-              });
-              console.debug('[ContentScript] STORAGE STATE:', rawStorageStr);
-            }
+            console.log('[ContentScript] === STORAGE STATE ===');
+            console.log('[ContentScript] INCOMING:', incomingMessages.length, incomingMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
+            console.log('[ContentScript] CURRENT UI:', currentMessages.length, currentMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
+            console.log('[ContentScript] MERGED:', mergedMessages.length, mergedMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
+            console.log('[ContentScript] === END STATE ===');
 
             overlayUI.setState(stateUpdate);
           }
