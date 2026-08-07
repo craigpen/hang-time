@@ -1171,16 +1171,15 @@ chrome.runtime.onConnect.addListener((port) => {
               const recentMessages: any[] = [];
               const profile = await storageManager.getUserProfile();
 
-              // Get own messages
+              // Get own messages (always label as "You")
               if (profile) {
                 const myMessages = await storageManager.getActivityMessages('self', activityId);
                 if (myMessages && myMessages.length > 0) {
                   const recentMyMessages = myMessages.slice(-10);
                   for (const msg of recentMyMessages) {
-                    const senderName = profile.nickname || profile.memorable_identifier || 'You';
                     recentMessages.push({
                       id: msg.id,
-                      sender: senderName,
+                      sender: 'You',
                       sender_id: msg.sender_id || profile.memorable_identifier,
                       content: msg.content,
                       timestamp: msg.timestamp,
