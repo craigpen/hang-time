@@ -897,6 +897,7 @@ function _startCoWatcherDetectionCycle(): void {
           // Get messages from sender's own store (marked with friend_id='self')
           if (profile) {
             const myMessages = await storageManager.getActivityMessages('self', session.activity_id);
+            console.debug('[Background] CO_WATCH_UPDATE query own messages: activity=', session.activity_id, 'found=', myMessages?.length || 0);
             if (myMessages && myMessages.length > 0) {
               const recentMyMessages = myMessages.slice(-10);
               for (const msg of recentMyMessages) {
