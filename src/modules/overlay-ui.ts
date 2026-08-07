@@ -924,7 +924,7 @@ export class OverlayUI {
         const sender = msg.sender || 'Unknown';
         return `
           <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}">
-            <div class="message-sender" style="color: ${userColor}">${this.escapeHtml(sender)}:</div>
+            <div class="message-sender" style="color: ${userColor}">${this.escapeHtml(sender)}</div>
             <div class="message-content" style="${isUser ? `background: rgba(96, 165, 250, 0.3);` : `background: rgba(255, 255, 255, 0.08);`} color: white;">${this.escapeHtml(msg.content)}</div>
           </div>
         `;
