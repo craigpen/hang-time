@@ -757,6 +757,16 @@ function establishConnection(): void {
               console.debug('[ContentScript] CO_WATCH_UPDATE: NOT updating messages. incoming=', incomingMessages.length, 'current=', currentMessages.length);
             }
 
+            // DEBUG: Log raw storage state
+            if (message.data?.activity_id) {
+              const rawStorageStr = JSON.stringify({
+                incomingMessages: incomingMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })),
+                currentUIMessages: currentMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })),
+                mergedMessages: mergedMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })),
+              });
+              console.debug('[ContentScript] STORAGE STATE:', rawStorageStr);
+            }
+
             overlayUI.setState(stateUpdate);
           }
           break;
