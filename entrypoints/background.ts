@@ -901,7 +901,11 @@ function _startCoWatcherDetectionCycle(): void {
           const activityMessages = await storageManager.getActivityMessages(session.activity_id);
           console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query: session.activity_id=' + session.activity_id + ' found=' + (activityMessages?.length || 0));
           if (activityMessages && activityMessages.length > 0) {
-            console.log('[Background] [MESSAGE_FLOW]   Messages found:', activityMessages.map(m => ({ sender: m.sender_identifier, content: m.content?.substring(0, 20) })));
+            console.log('[Background] [MESSAGE_FLOW]   Messages found:', activityMessages.map(m => ({
+              sender: m.sender_identifier,
+              is_outbound: m.is_outbound,
+              content: m.content?.substring(0, 20)
+            })));
           }
 
           if (activityMessages && activityMessages.length > 0) {
@@ -1271,6 +1275,13 @@ chrome.runtime.onConnect.addListener((port) => {
             const messagingManager = getMessagingManager();
             const userProfile = await storageManager.getUserProfile();
 
+            console.log('[Background] [MESSAGE_FLOW] SEND_MESSAGE details:', {
+              activity_id: coWatchSession.activity_id,
+              co_watchers: coWatchSession.co_watchers,
+              self_uuid: userProfile?.uuid,
+              is_user_host: coWatchSession.host_friend_uuid === 'self'
+            });
+
             // Send to all co-watchers except self
             for (const friendId of coWatchSession.co_watchers) {
               if (friendId === userProfile?.uuid) continue; // Skip self
@@ -1292,25 +1303,8 @@ chrome.runtime.onConnect.addListener((port) => {
               console.log('[Background] [MESSAGE_FLOW] ✅ Message queued for', friend.local_name);
             }
 
-            // Store message locally for sender's own record
-            if (userProfile) {
-              const storedMessage: any = {
-                id: `${Date.now()}_${Math.random()}`,
-                friend_uuid: userProfile.uuid,
-                friend_identifier: userProfile.uuid,
-                sender_identifier: userProfile.uuid,
-                activity_id: coWatchSession.activity_id,
-                type: 'chat',
-                content: message.data?.content,
-                is_outbound: true,
-                timestamp: Date.now(),
-                read: true,
-              };
-
-              // Store in activity messages
-              await storageManager.addActivityMessage(coWatchSession.activity_id, storedMessage);
-              console.log('[Background] [MESSAGE_FLOW] ✅ Stored locally:', { activity_id: coWatchSession.activity_id, content: message.data?.content?.substring(0, 20) });
-            }
+            // Message is already stored by sendChatMessage in messaging.ts
+            // No need to store again here
           } catch (e) {
             console.error('[Background] Failed to send message:', e);
           }
