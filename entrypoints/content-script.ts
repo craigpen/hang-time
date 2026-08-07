@@ -718,6 +718,11 @@ function establishConnection(): void {
             const incomingMessages = message.data.messages || [];
             const currentMessages = overlayUI.state.messages || [];
 
+            console.debug('[ContentScript] CO_WATCH_UPDATE - incoming messages:', incomingMessages.length, 'current:', currentMessages.length);
+            if (incomingMessages.length > 0) {
+              console.debug('[ContentScript] First incoming message:', incomingMessages[0]);
+            }
+
             // Deduplicate and merge: prefer content+timestamp as key
             const merged = new Map();
             for (const msg of currentMessages) {

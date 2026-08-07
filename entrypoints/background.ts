@@ -1189,7 +1189,7 @@ chrome.runtime.onConnect.addListener((port) => {
               const storedMessage: any = {
                 id: `${Date.now()}_${Math.random()}`,
                 friend_id: 'self',
-                sender_identifier: userProfile.memorable_identifier,
+                sender_id: userProfile.memorable_identifier,
                 activity_id: coWatchSession.activity_id,
                 type: 'chat',
                 content: message.data?.content,
