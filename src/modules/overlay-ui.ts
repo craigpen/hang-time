@@ -955,7 +955,7 @@ export class OverlayUI {
    * Add message to chat
    */
   addMessage(sender: string, senderId: string, content: string): void {
-    console.log('[OverlayUI] addMessage:', { sender, senderId, content: content?.substring(0, 30) });
+    console.log('[OverlayUI] addMessage:', { sender, senderId, content: content?.substring(0, 30), userId: this.userId, containerId: this.container?.id });
     this._state.messages.push({
       id: Date.now().toString(),
       sender,
@@ -969,7 +969,7 @@ export class OverlayUI {
       this._state.messages = this._state.messages.slice(-50);
     }
 
-    console.log('[OverlayUI] Messages in state after add:', this._state.messages.length);
+    console.log('[OverlayUI] Messages in state after add:', this._state.messages.length, 'container:', !!this.container);
     this.renderMessages();
   }
 
