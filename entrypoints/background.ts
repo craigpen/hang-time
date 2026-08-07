@@ -950,6 +950,16 @@ function _startCoWatcherDetectionCycle(): void {
           recentMessages.length = 0;
           recentMessages.push(...Array.from(deduped.values()));
           recentMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+          // DEBUG: Log what messages are being broadcast
+          if (recentMessages.length > 0) {
+            console.debug('[Background] CO_WATCH_UPDATE messages:', recentMessages.map(m => ({
+              sender: m.sender,
+              sender_id: m.sender_id,
+              content: m.content?.substring(0, 30),
+              timestamp: m.timestamp
+            })));
+          }
         } catch (e) {
           console.debug('[Background] Failed to get messages for overlay:', e);
         }
