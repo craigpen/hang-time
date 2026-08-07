@@ -2826,7 +2826,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
     const messagingManager = getMessagingManager();
     const timestamp = event.created_at * 1000;
 
-    const message = await messagingManager.receiveMessage(friend, event.content, timestamp);
+    const message = await messagingManager.receiveMessage(friend, event.content, timestamp, event.id);
 
     // Route based on the actual message type, not just the event tag
     if (message?.type === 'friend_request') {
@@ -3141,7 +3141,7 @@ async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): 
     const timestamp = event.created_at * 1000;
 
     // Decrypt the message to get the response type
-    const message = await messagingManager.receiveMessage(friend, event.content, timestamp);
+    const message = await messagingManager.receiveMessage(friend, event.content, timestamp, event.id);
 
     if (!message) {
       console.warn('[FriendRequest] Failed to decrypt friend request response from', friend.local_name);

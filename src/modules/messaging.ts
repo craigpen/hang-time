@@ -285,10 +285,10 @@ export class MessagingManager {
   }
 
   /**
-   * Receive and decrypt an incoming kind-4 message
+   * Receive and decrypt an incoming kind-1059 message
    * Returns the parsed and stored message, or null if parsing fails
    */
-  async receiveMessage(friend: Friend, encryptedContent: string, timestamp: number): Promise<any | null> {
+  async receiveMessage(friend: Friend, encryptedContent: string, timestamp: number, eventId?: string): Promise<any | null> {
     try {
       const userProfile = await this.storageManager.getUserProfile();
       if (!userProfile) {
@@ -331,7 +331,7 @@ export class MessagingManager {
 
       // Create message record
       const storedMessage: any = {
-        id: `${friend.uuid}_${timestamp}`,
+        id: eventId || `${friend.uuid}_${timestamp}`,
         friend_id: friend.uuid,
         friend_identifier: friend.uuid,
         sender_identifier: friend.uuid,
