@@ -883,15 +883,24 @@ export class OverlayUI {
    */
   private renderMessages(): void {
     const container = document.getElementById('chat-container');
-    if (!container) return;
+    if (!container) {
+      console.warn('[OverlayUI] Chat container not found');
+      return;
+    }
 
     if (this._state.messages.length === 0) {
       container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>';
       return;
     }
 
-    container.innerHTML = this._state.messages
-      .filter(msg => msg && msg.content) // Filter out invalid messages
+    const validMessages = this._state.messages.filter(msg => msg && msg.content);
+
+    if (validMessages.length === 0) {
+      container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>';
+      return;
+    }
+
+    const html = validMessages
       .map(msg => {
         const isUser = msg.sender_id === this.userId;
         const userColor = this.getUserColor(msg.sender_id);
@@ -906,6 +915,8 @@ export class OverlayUI {
         `;
       })
       .join('');
+
+    container.innerHTML = html;
 
     // Auto-scroll to bottom
     container.scrollTop = container.scrollHeight;
