@@ -3,6 +3,8 @@
  * Fetches and caches game metadata from Steam API
  */
 
+/// <reference types="node" />
+
 import { GameMetadata, STORAGE_KEYS } from '../types';
 import { StorageManager } from './storage';
 
@@ -55,7 +57,6 @@ class RateLimiter {
  */
 export class MetadataFetcher {
   private static instance: MetadataFetcher;
-  private backgroundRefreshQueue: number[] = [];
   private rateLimiter: RateLimiter;
   private fetchQueue: number[] = [];
   private failedAppIds: Map<number, number> = new Map();
@@ -153,14 +154,11 @@ export class MetadataFetcher {
     try {
       console.debug(`[Metadata] Scheduling ${appIds.length} games for background refresh`);
 
-      // Add to fetch queue for background processing (Phase 5 queue)
+      // Add to fetch queue for background processing
       this.fetchQueue.push(...appIds);
 
-      // Also keep in legacy queue for compatibility
-      this.backgroundRefreshQueue.push(...appIds);
-
       console.debug(
-        `[Metadata] Fetch queue now has ${this.fetchQueue.length} items, background queue has ${this.backgroundRefreshQueue.length} items`
+        `[Metadata] Fetch queue now has ${this.fetchQueue.length} items`
       );
     } catch (error) {
       console.error('[Metadata] Failed to schedule background refresh:', error);
@@ -573,20 +571,6 @@ export class MetadataFetcher {
       console.error(`[Metadata] Error writing cache for appId ${appId}:`, error);
       throw error;
     }
-  }
-
-  /**
-   * Clear the background refresh queue (for testing)
-   */
-  clearBackgroundRefreshQueue(): void {
-    this.backgroundRefreshQueue = [];
-  }
-
-  /**
-   * Get current background refresh queue (for testing)
-   */
-  getBackgroundRefreshQueue(): number[] {
-    return [...this.backgroundRefreshQueue];
   }
 
   /**

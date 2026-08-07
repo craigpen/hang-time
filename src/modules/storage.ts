@@ -239,19 +239,7 @@ export class StorageManager {
 
   async getFriends(): Promise<FriendList> {
     const friends = await this.get<Friend[]>(STORAGE_KEYS.FRIENDS_LIST, []);
-    // Ensure all activities have required properties (backward compatibility)
-    return friends.map(friend => ({
-      ...friend,
-      current_activities: Object.fromEntries(
-        Object.entries(friend.current_activities || {}).map(([service, activity]) => [
-          service,
-          activity ? {
-            state: activity.state || 'paused',
-            ...activity,
-          } : null,
-        ]).filter(([, a]) => a)
-      ) as Partial<Record<any, any>>,
-    }));
+    return friends;
   }
 
   async setFriends(friends: Friend[]): Promise<void> {
@@ -270,8 +258,7 @@ export class StorageManager {
     const filtered = friends.filter((f) => f.uuid !== friendId);
     await this.setFriends(filtered);
 
-    // Clean up associated data: messages and activity history
-    await this.delete(STORAGE_KEYS.MESSAGES(friendId));
+    // Clean up associated data: activity history
     await this.delete(STORAGE_KEYS.ACTIVITY_HISTORY(friendId));
 
     console.debug('[Storage] Removed friend:', friendId);
@@ -393,47 +380,8 @@ export class StorageManager {
   }
 
   // ============================================================================
-  // MESSAGES (Legacy friend-centric approach - consider migrating to activity-centric)
+  // MESSAGES (Activity-centric approach)
   // ============================================================================
-  // NOTE: These methods store messages per friend, but the modern approach is
-  // activity-centric (getActivityMessages, addActivityMessage). For new code,
-  // prefer activity-centric storage as it better supports multi-party messaging.
-  // These methods remain for backward compatibility and UI handlers that still
-  // request messages by friend ID (e.g., older popup implementations).
-
-  /**
-   * @deprecated - Use getActivityMessages() for new code. Returns messages stored per-friend.
-   * Legacy method kept for backward compatibility with message handlers.
-   */
-  async getMessages(friendId: string): Promise<Message[]> {
-    return this.get<Message[]>(STORAGE_KEYS.MESSAGES(friendId), []);
-  }
-
-  /**
-   * @deprecated - Use addActivityMessage() for new code. Stores message per-friend.
-   * Legacy method kept for backward compatibility with message handlers.
-   */
-  async addMessage(friendId: string, message: Message): Promise<void> {
-    const messages = await this.getMessages(friendId);
-    messages.push(message);
-
-    // Keep only last N messages (configurable via settings)
-    const settings = await this.getSettings();
-    const limit = settings?.message_history_limit ?? 100;
-    if (messages.length > limit) {
-      messages.splice(0, messages.length - limit);
-    }
-
-    await this.set(STORAGE_KEYS.MESSAGES(friendId), messages);
-  }
-
-  /**
-   * @deprecated - Use activity-centric cleanup instead. Clears all messages for a friend.
-   * Legacy method kept for friend removal cleanup.
-   */
-  async clearMessages(friendId: string): Promise<void> {
-    await this.delete(STORAGE_KEYS.MESSAGES(friendId));
-  }
 
   /**
    * Get all messages for a specific activity (from all senders, including self)

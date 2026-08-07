@@ -712,7 +712,15 @@ function establishConnection(): void {
 
         case 'CO_WATCH_UPDATE':
           console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE received with ' + (message.data?.messages?.length || 0) + ' messages');
-          if (!overlayUI) return;
+          // Initialize overlay on-demand if it doesn't exist yet
+          if (!overlayUI) {
+            console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE triggered lazy overlay initialization');
+            overlayUI = new OverlayUI(userId || 'unknown');
+            overlayUI.init();
+            if (port) {
+              overlayUI.setPort(port);
+            }
+          }
           // Update overlay with co-watch data
           if (message.data) {
             // Merge messages instead of replacing - preserve locally added messages
@@ -737,11 +745,14 @@ function establishConnection(): void {
             // Sort by timestamp
             const mergedMessages = Array.from(merged.values()).sort((a, b) => a.timestamp - b.timestamp);
 
-            // Build nicknameMap from messages (extract sender_id -> sender pairs)
-            const nicknameMapObj: Record<string, string> = {};
-            for (const msg of mergedMessages) {
-              if (msg.sender_id && msg.sender) {
-                nicknameMapObj[msg.sender_id] = msg.sender;
+            // Use nicknameMap from background (has complete participant info), fallback to extracting from messages
+            let nicknameMapObj: Record<string, string> = message.data.nicknameMap || {};
+            if (Object.keys(nicknameMapObj).length === 0) {
+              // Fallback: build from messages (less complete, but works if map not sent)
+              for (const msg of mergedMessages) {
+                if (msg.sender_id && msg.sender) {
+                  nicknameMapObj[msg.sender_id] = msg.sender;
+                }
               }
             }
             // Set the nickname map on overlay
@@ -955,19 +966,16 @@ function initializeOverlay(): void {
   console.debug('[ContentScript] initializeOverlay called');
   if (overlayUI) return; // Already initialized
 
-  // Detect if this is a video page (YouTube, Netflix, Twitch)
-  const isVideoPage = document.querySelector('video') !== null;
-  if (!isVideoPage) {
-    console.debug('[ContentScript] Not a video page, skipping overlay');
-    return;
-  }
-
-  console.debug('[ContentScript] Video page detected, initializing overlay UI', {
+  console.debug('[ContentScript] Initializing overlay UI (may be hidden until video loads)', {
     instanceId: INSTANCE_ID,
     isActiveInstance: (window as any).hangTimeScriptActive === INSTANCE_ID,
-    userId
+    userId,
+    hasVideoElement: document.querySelector('video') !== null
   });
-  // Initialize overlay with temporary user ID (will be updated when background sends it)
+
+  // Initialize overlay regardless of whether video is present
+  // This ensures CO_WATCH_UPDATE messages can show it immediately when needed
+  // If no video, overlay just stays hidden until one appears
   overlayUI = new OverlayUI(userId || 'unknown');
   overlayUI.init();
 

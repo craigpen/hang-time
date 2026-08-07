@@ -247,7 +247,6 @@ export const NOSTR_KINDS = {
   EPHEMERAL_MIN: 20000, // Ephemeral events not stored on relays
   EPHEMERAL_MAX: 29999,
   // Reserved for future use: chat, reactions, etc.
-  EPHEMERAL_CHAT: 20001, // Video overlay chat (Phase 4 placeholder)
 } as const;
 
 export function isEphemeralKind(kind: number): boolean {
@@ -399,9 +398,6 @@ export const STORAGE_KEYS = {
   GAME_METADATA_CACHE: 'hang_time_game_metadata_cache',
   FRIEND_PROFILES: 'hang_time_friend_profiles',
   ACTIVITY_ACCEPTANCES: 'hang_time_activity_acceptances',
-  // NOTE: MESSAGES uses legacy friend-centric storage. New code should use activity-centric
-  // storage (activity_messages_${activityId}). See StorageManager.getActivityMessages()
-  MESSAGES: (friendId: string) => `hang_time_messages_${friendId}`,
   ACTIVITY_HISTORY: (friendId: string) => `hang_time_activity_history_${friendId}`,
 } as const;
 
@@ -417,7 +413,6 @@ export type ExtensionMessageType =
   | 'GET_ALL_FRIENDS'
   | 'GET_FRIEND_ACTIVITY_HISTORY'
   | 'GET_USER_IDENTIFIER'
-  | 'GET_MESSAGES'
   | 'GET_OAUTH_STATUS'
   | 'ADD_FRIEND'
   | 'REMOVE_FRIEND'
@@ -433,7 +428,6 @@ export type ExtensionMessageType =
   | 'HANDLE_OAUTH_CALLBACK'
   | 'JOIN_ACTIVITY'
   | 'PUBLISH_VIDEO_SYNC'
-  | 'CHECK_VIDEO_SYNC'
   | 'ACTIVITY_CHANGED'
   | 'FRIEND_ACTIVITY_UPDATED'
   | 'NEW_MESSAGE'

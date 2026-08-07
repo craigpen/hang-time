@@ -559,50 +559,6 @@ describe('MetadataFetcher', () => {
   });
 
   // ============================================================================
-  // BACKGROUND REFRESH QUEUE TESTS
-  // ============================================================================
-
-  describe('scheduleBackgroundRefresh', () => {
-    it('should queue app IDs for background refresh', async () => {
-      const appIds = [100, 200, 300];
-
-      await metadataFetcher.scheduleBackgroundRefresh(appIds);
-
-      const queue = metadataFetcher.getBackgroundRefreshQueue();
-      expect(queue).toContain(100);
-      expect(queue).toContain(200);
-      expect(queue).toContain(300);
-    });
-
-    it('should accumulate items in refresh queue', async () => {
-      await metadataFetcher.scheduleBackgroundRefresh([100]);
-      await metadataFetcher.scheduleBackgroundRefresh([200, 300]);
-
-      const queue = metadataFetcher.getBackgroundRefreshQueue();
-      expect(queue.length).toBe(3);
-      expect(queue).toContain(100);
-      expect(queue).toContain(200);
-      expect(queue).toContain(300);
-    });
-
-    it('should handle empty refresh queue', async () => {
-      await metadataFetcher.scheduleBackgroundRefresh([]);
-
-      const queue = metadataFetcher.getBackgroundRefreshQueue();
-      expect(queue.length).toBe(0);
-    });
-
-    it('should allow clearing refresh queue', async () => {
-      await metadataFetcher.scheduleBackgroundRefresh([100, 200]);
-
-      metadataFetcher.clearBackgroundRefreshQueue();
-
-      const queue = metadataFetcher.getBackgroundRefreshQueue();
-      expect(queue.length).toBe(0);
-    });
-  });
-
-  // ============================================================================
   // GETMETADATA SHORTCUT TESTS
   // ============================================================================
 

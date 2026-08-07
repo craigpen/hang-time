@@ -103,7 +103,10 @@ chrome.runtime.onInstalled.addListener(async (details) => {
  * Re-inject content scripts to reconnect existing tabs
  */
 chrome.runtime.onStartup?.addListener(async () => {
-  console.log('[Background] Extension startup detected, re-injecting content scripts');
+  console.log('[Background] Extension startup detected');
+  // Re-initialize services on startup (service worker was terminated, globals are reset)
+  await initializeExtension();
+  console.log('[Background] Extension re-initialized after startup');
   await _reinjectionContentScripts();
 });
 
@@ -835,6 +838,13 @@ function _startCoWatcherDetectionCycle(): void {
         if (session.host_friend_uuid === 'self') {
           // Host is self: use my activity from myActivities (where content script stores it)
           const hostActivity = myActivities?.[session.activity_id];
+
+          // Skip disconnected activities (no overlay should persist after tab closes)
+          if (hostActivity?.state === 'disconnected') {
+            console.debug(`[Background] Skipping disconnected activity: ${session.activity_id}`);
+            return;
+          }
+
           if (hostActivity?.content) {
             videoTitle = hostActivity.content;
             videoDuration = hostActivity.metadata?.duration;
@@ -894,52 +904,38 @@ function _startCoWatcherDetectionCycle(): void {
         try {
           const profile = await storageManager.getUserProfile();
 
-          // Get messages from sender's own store (marked with friend_id='self')
-          if (profile) {
-            const myMessages = await storageManager.getActivityMessages('self', session.activity_id);
-            console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query own messages: activity=' + session.activity_id + ' found=' + (myMessages?.length || 0));
-            if (myMessages && myMessages.length > 0) {
-              const recentMyMessages = myMessages.slice(-10);
-              for (const msg of recentMyMessages) {
-                const senderName = profile.nickname || profile.uuid || 'You';
-                recentMessages.push({
-                  id: msg.id,
-                  sender: senderName,
-                  sender_id: msg.sender_identifier || profile.uuid,
-                  content: msg.content,
-                  timestamp: msg.timestamp,
-                });
+          // Query ALL messages for this activity (activity-centric storage)
+          const activityMessages = await storageManager.getActivityMessages(session.activity_id);
+          console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query activity: activity=' + session.activity_id + ' found=' + (activityMessages?.length || 0));
+
+          if (activityMessages && activityMessages.length > 0) {
+            // Build a map of friend UUIDs to names for quick lookup
+            const friendMap = new Map<string, string>();
+            if (profile) {
+              friendMap.set(profile.uuid, profile.nickname || 'You');
+            }
+
+            for (const coWatcherId of session.co_watchers) {
+              if (coWatcherId === 'self') continue;
+              const friend = await friendManager.getFriend(coWatcherId);
+              if (friend) {
+                friendMap.set(friend.uuid, friend.local_name);
               }
             }
-          }
 
-          // Get messages from all co-watchers for this activity
-          console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE co_watchers: ' + JSON.stringify(session.co_watchers));
-          for (const coWatcherId of session.co_watchers) {
-            if (coWatcherId === 'self') continue; // Skip self
-
-            const friend = await friendManager.getFriend(coWatcherId);
-            if (!friend) continue;
-
-            const activityMessages = await storageManager.getActivityMessages(session.activity_id);
-            if (activityMessages && activityMessages.length > 0) {
-              console.log(`[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query friend messages: ${friend.local_name} found=${activityMessages.length}`);
-              // Get last 10 messages, but only those actually sent by this friend (sender_identifier matches)
-              const recentActivityMessages = activityMessages.slice(-10);
-              for (const msg of recentActivityMessages) {
-                // Only include messages where the sender matches this co-watcher
-                // (avoid including messages they received from others)
-                if (msg.sender_identifier === friend.uuid) {
-                  recentMessages.push({
-                    id: msg.id,
-                    sender: friend.local_name,
-                    sender_id: msg.sender_identifier,
-                    content: msg.content,
-                    timestamp: msg.timestamp,
-                  });
-                }
-              }
+            // Filter messages and map to display format
+            const recentActivityMessages = activityMessages.slice(-10);
+            for (const msg of recentActivityMessages) {
+              const senderName = friendMap.get(msg.sender_identifier) || msg.sender_identifier || 'Unknown';
+              recentMessages.push({
+                id: msg.id,
+                sender: senderName,
+                sender_id: msg.sender_identifier,
+                content: msg.content,
+                timestamp: msg.timestamp,
+              });
             }
+            console.log(`[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE total messages: ${recentMessages.length}`);
           }
 
           // Sort by timestamp and deduplicate
@@ -972,6 +968,19 @@ function _startCoWatcherDetectionCycle(): void {
         console.debug(`[Background] Broadcasting CO_WATCH_UPDATE to ${activeContentScriptPorts.size} content scripts`);
         for (const [tabId, port] of activeContentScriptPorts.entries()) {
           try {
+            // Build nicknameMap to send to content-script (so it has complete participant info)
+            const broadcastNicknameMap: Record<string, string> = {};
+            if (profile) {
+              broadcastNicknameMap[profile.uuid] = profile.nickname || 'You';
+            }
+            for (const coWatcherId of session.co_watchers) {
+              if (coWatcherId === 'self') continue;
+              const coWatcherFriend = await friendManager.getFriend(coWatcherId);
+              if (coWatcherFriend) {
+                broadcastNicknameMap[coWatcherId] = coWatcherFriend.local_name;
+              }
+            }
+
             port.postMessage({
               type: 'CO_WATCH_UPDATE',
               data: {
@@ -985,6 +994,7 @@ function _startCoWatcherDetectionCycle(): void {
                 user_progress: userPosition,
                 is_user_host: session.host_friend_uuid === 'self',
                 messages: recentMessages,
+                nicknameMap: broadcastNicknameMap,
               },
             });
             console.log(`[Background] [MESSAGE_FLOW] ✅ Sent CO_WATCH_UPDATE with ${recentMessages.length} messages`);
@@ -1175,41 +1185,38 @@ chrome.runtime.onConnect.addListener((port) => {
               const recentMessages: any[] = [];
               const profile = await storageManager.getUserProfile();
 
-              // Get own messages (always label as "You")
-              if (profile) {
-                const myMessages = await storageManager.getActivityMessages(activityId);
-                if (myMessages && myMessages.length > 0) {
-                  const recentMyMessages = myMessages.slice(-10);
-                  for (const msg of recentMyMessages) {
-                    recentMessages.push({
-                      id: msg.id,
-                      sender: 'You',
-                      sender_id: msg.sender_identifier || profile.uuid,
-                      content: msg.content,
-                      timestamp: msg.timestamp,
-                    });
-                  }
+              // Query ALL messages for this activity (activity-centric storage)
+              const activityMessages = await storageManager.getActivityMessages(activityId);
+              if (activityMessages && activityMessages.length > 0) {
+                // Build a map of UUIDs to display names
+                const nameMap = new Map<string, string>();
+                if (profile) {
+                  nameMap.set(profile.uuid, profile.nickname || 'You');
                 }
-              }
 
-              // Get messages from co-watchers
-              const friendManager = getFriendManager();
-              const friends = await storageManager.getFriends();
-              for (const friend of friends) {
-                const activityMessages = await storageManager.getActivityMessages(activityId);
-                if (activityMessages && activityMessages.length > 0) {
-                  const recentActivityMessages = activityMessages.slice(-10);
-                  for (const msg of recentActivityMessages) {
-                    if (msg.sender_identifier === friend.uuid) {
-                      recentMessages.push({
-                        id: msg.id,
-                        sender: friend.local_name,
-                        sender_id: msg.sender_identifier,
-                        content: msg.content,
-                        timestamp: msg.timestamp,
-                      });
+                // Only fetch friends who are actually in messages for this activity (more efficient)
+                const senderIds = new Set(activityMessages.map(msg => msg.sender_identifier));
+                const friendManager = getFriendManager();
+                for (const senderId of senderIds) {
+                  if (senderId !== profile?.uuid) { // Skip self (already in map)
+                    const friend = await friendManager.getFriend(senderId);
+                    if (friend) {
+                      nameMap.set(friend.uuid, friend.local_name);
                     }
                   }
+                }
+
+                // Map messages to display format
+                const recentActivityMessages = activityMessages.slice(-10);
+                for (const msg of recentActivityMessages) {
+                  const senderName = nameMap.get(msg.sender_identifier) || msg.sender_identifier || 'Unknown';
+                  recentMessages.push({
+                    id: msg.id,
+                    sender: senderName,
+                    sender_id: msg.sender_identifier,
+                    content: msg.content,
+                    timestamp: msg.timestamp,
+                  });
                 }
               }
 
@@ -1262,11 +1269,10 @@ chrome.runtime.onConnect.addListener((port) => {
 
             // Store message locally for sender's own record
             if (userProfile) {
-              const senderName = userProfile.nickname || userProfile.uuid || 'You';
               const storedMessage: any = {
                 id: `${Date.now()}_${Math.random()}`,
-                friend_uuid: 'self',
-                friend_identifier: 'self',
+                friend_uuid: userProfile.uuid,
+                friend_identifier: userProfile.uuid,
                 sender_identifier: userProfile.uuid,
                 activity_id: coWatchSession.activity_id,
                 type: 'chat',
@@ -1454,9 +1460,6 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'GET_USER_IDENTIFIER':
       return _getUserIdentifier();
 
-    case 'GET_MESSAGES':
-      return _getMessages(message.data?.friendId);
-
     case 'GET_ACTIVITY_MESSAGES':
       return _getActivityMessages(message.data?.activityId);
 
@@ -1513,9 +1516,6 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
 
     case 'JOIN_ACTIVITY':
       return _joinActivity(message.data?.friendId, message.data?.activity);
-
-    case 'CHECK_VIDEO_SYNC':
-      return _checkVideoSync(message.data);
 
     case 'SEND_INVITE':
       return _sendInvite(message.data?.activity, message.data?.friendId);
@@ -1632,10 +1632,9 @@ async function _getAllActivities(): Promise<ExtensionResponse> {
     const friendManager = getFriendManager();
     const friends = await friendManager.getAllFriends();
 
-    // Build unified response: { myActivities: {...}, friends: [{id, identifier, local_name, current_activities, state, initiated_by_me}, ...] }
+    // Build unified response: { myActivities: {...}, friends: [{uuid, local_name, current_activities, state, initiated_by_me}, ...] }
     const friendsData = friends.map((friend) => ({
-      id: friend.uuid,
-      identifier: friend.uuid,
+      uuid: friend.uuid,
       local_name: friend.local_name,
       current_activities: friend.current_activities || {},
       state: friend.state,
@@ -1736,19 +1735,6 @@ async function _getDiagnostics(): Promise<ExtensionResponse> {
     return { success: true, data: JSON.parse(exported) };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to export diagnostics' };
-  }
-}
-
-async function _getMessages(friendId?: string): Promise<ExtensionResponse> {
-  if (!friendId) {
-    return { success: false, error: 'friendId required' };
-  }
-
-  try {
-    const messages = await storageManager.getMessages(friendId);
-    return { success: true, data: messages };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to get messages' };
   }
 }
 
@@ -2216,12 +2202,6 @@ async function _joinActivity(friendId?: string, activity?: any): Promise<Extensi
   }
 }
 
-async function _checkVideoSync(data?: any): Promise<ExtensionResponse> {
-  // Note: Video position is now included in activity state (metadata.progress)
-  // Content script has friend activities from Nostr and can extract position directly
-  // This endpoint is kept for compatibility but sync is handled via activity state
-  return { success: true, data: { recommendedPosition: undefined } };
-}
 
 // ============================================================================
 // NOSTR INTEGRATION
@@ -2288,7 +2268,7 @@ async function _subscribeToIncomingMessages(): Promise<void> {
 
         if (sender) {
           // Known friend - handle normally
-          await _handleMessageEvent(sender.identifier, event);
+          await _handleMessageEvent(sender.uuid, event);
         } else if (messageType === 'friend_request') {
           // Friend request from unknown sender - create as pending friend
           console.log(`[Message] ðŸ”” Friend Request: Received from ${event.pubkey.substring(0, 8)}...`);

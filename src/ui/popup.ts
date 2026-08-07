@@ -1082,10 +1082,6 @@ export class PopupController {
   }
 
   private _handleAcceptFriendRequest(friendId: string, friendName: string): void {
-    if (!confirm(`Accept ${friendName} as a friend?`)) {
-      return;
-    }
-
     chrome.runtime.sendMessage({
       type: 'ACCEPT_FRIEND_REQUEST',
       data: { friendId },
@@ -1101,10 +1097,6 @@ export class PopupController {
   }
 
   private _handleDeclineFriendRequest(friendId: string, friendName: string): void {
-    if (!confirm(`Decline friend request from ${friendName}? They will be removed from your list.`)) {
-      return;
-    }
-
     chrome.runtime.sendMessage({
       type: 'DECLINE_FRIEND_REQUEST',
       data: { friendId },
