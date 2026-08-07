@@ -43,8 +43,16 @@ export class OverlayUI {
     watching_together: [],
     messages: [],
   };
+  private port: chrome.runtime.Port | null = null;
 
   constructor(private userId: string) {}
+
+  /**
+   * Set the port for sending messages to background
+   */
+  setPort(port: chrome.runtime.Port): void {
+    this.port = port;
+  }
 
   /**
    * Get current overlay state (read-only access)
@@ -603,31 +611,26 @@ export class OverlayUI {
    * Send message
    */
   private onSendMessage(input: HTMLTextAreaElement | null): void {
-    console.debug('[OverlayUI] onSendMessage called', { hasInput: !!input });
-    if (!input) return;
+    if (!input || !this.port) return;
 
     const content = input.value.trim();
-    console.debug('[OverlayUI] Message content:', { length: content.length, preview: content.substring(0, 50) });
     if (!content) return;
 
     // Immediately add message to overlay for sender
-    console.debug('[OverlayUI] Adding message to overlay:', { sender: this._state.user_nickname || 'You' });
     this.addMessage(this._state.user_nickname || 'You', this.userId, content);
 
-    // Send message via postMessage
-    console.debug('[OverlayUI] Posting HANG_TIME_SEND_MESSAGE to window');
-    window.postMessage({
-      type: 'HANG_TIME_SEND_MESSAGE',
+    // Send message via port
+    this.port.postMessage({
+      type: 'SEND_MESSAGE',
       data: {
         content,
         activity_id: this._state.activity_id,
       }
-    }, '*');
+    });
 
     // Clear input and reset height
     input.value = '';
     input.style.height = '20px';
-    console.debug('[OverlayUI] Message sent and input cleared');
   }
 
   /**

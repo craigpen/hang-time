@@ -927,6 +927,11 @@ function initializeOverlay(): void {
   overlayUI = new OverlayUI(userId || 'unknown');
   overlayUI.init();
 
+  // Pass port to overlay for direct messaging
+  if (port) {
+    overlayUI.setPort(port);
+  }
+
   // Listen for overlay interactions
   console.debug('[ContentScript] Setting up window message listener');
   window.addEventListener('message', (event) => {
