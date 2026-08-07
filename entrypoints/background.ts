@@ -2804,6 +2804,30 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
         console.error('[Message] Failed to send message notification:', error);
       }
 
+      // Store chat messages
+      if (message.type === 'chat' && message.activity_id) {
+        try {
+          console.debug(`[Message] 💬 Chat: Storing message from ${friend.local_name} for activity ${message.activity_id.substring(0, 8)}`);
+
+          const storedMessage: any = {
+            id: `${Date.now()}_${Math.random()}`,
+            friend_id: friend.id,
+            sender_id: friend.identifier,
+            activity_id: message.activity_id,
+            type: 'chat',
+            content: message.content,
+            is_outbound: false,
+            timestamp: Date.now(),
+            read: false,
+          };
+
+          await storageManager.addActivityMessage(friend.id, message.activity_id, storedMessage);
+          console.debug('[Message] Chat message stored successfully');
+        } catch (error) {
+          console.error('[Message] Failed to store chat message:', error);
+        }
+      }
+
       // Store pending invite and notify popup
       if (message.type === 'invite' && message.activity_id) {
         try {
