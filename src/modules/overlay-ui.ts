@@ -486,6 +486,19 @@ export class OverlayUI {
       </div>
     `;
 
+    // Wait for document.body if it's not ready yet
+    if (!document.body) {
+      console.warn('[OverlayUI] document.body not ready, deferring appendChild');
+      const checkBody = setInterval(() => {
+        if (document.body && this.container && !this.container.parentElement) {
+          document.body.appendChild(this.container);
+          this.setupOpacitySlider();
+          clearInterval(checkBody);
+        }
+      }, 50);
+      return;
+    }
+
     document.body.appendChild(this.container);
     this.setupOpacitySlider();
   }
