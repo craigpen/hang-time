@@ -957,6 +957,10 @@ function initializeOverlay(): void {
     } else if (event.data.type === 'HANG_TIME_SEND_MESSAGE') {
       // Message was sent from overlay, forward to background
       if (port) {
+        console.debug('[ContentScript] Forwarding HANG_TIME_SEND_MESSAGE to background', {
+          content: event.data.data?.content,
+          activity_id: event.data.data?.activity_id,
+        });
         port.postMessage({
           type: 'SEND_MESSAGE',
           data: {
@@ -964,6 +968,9 @@ function initializeOverlay(): void {
             activity_id: event.data.data?.activity_id,
           },
         });
+        console.debug('[ContentScript] SEND_MESSAGE posted to port');
+      } else {
+        console.warn('[ContentScript] No port available to send message');
       }
     } else if (event.data.type === 'HANG_TIME_OPEN_DISCORD') {
       // Discord button was clicked, send to background

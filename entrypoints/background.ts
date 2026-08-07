@@ -1151,6 +1151,7 @@ chrome.runtime.onConnect.addListener((port) => {
           }
         } else if (message.type === 'SEND_MESSAGE') {
           // Message sent from overlay, send to co-watchers
+          console.debug('[Background] Received SEND_MESSAGE from content-script:', message.data);
           try {
             const detector = getCoWatcherDetector();
             const coWatchSession = await detector.getCurrentCoWatchSession();
