@@ -727,8 +727,10 @@ function establishConnection(): void {
             }
             for (const msg of incomingMessages) {
               const key = `${msg.content}_${msg.sender_id}`;
-              // Prefer backend version (has proper metadata)
-              merged.set(key, msg);
+              // Only add from backend if not already present (prefer local "You" over display name)
+              if (!merged.has(key)) {
+                merged.set(key, msg);
+              }
             }
 
             // Sort by timestamp
