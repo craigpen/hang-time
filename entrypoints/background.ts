@@ -921,16 +921,20 @@ function _startCoWatcherDetectionCycle(): void {
 
             const activityMessages = await storageManager.getActivityMessages(coWatcherId, session.activity_id);
             if (activityMessages && activityMessages.length > 0) {
-              // Get last 10 messages
+              // Get last 10 messages, but only those actually sent by this friend (sender_id matches)
               const recentActivityMessages = activityMessages.slice(-10);
               for (const msg of recentActivityMessages) {
-                recentMessages.push({
-                  id: msg.id,
-                  sender: friend.local_name,
-                  sender_id: msg.sender_id,
-                  content: msg.content,
-                  timestamp: msg.timestamp,
-                });
+                // Only include messages where the sender matches this co-watcher
+                // (avoid including messages they received from others)
+                if (msg.sender_id === friend.identifier) {
+                  recentMessages.push({
+                    id: msg.id,
+                    sender: friend.local_name,
+                    sender_id: msg.sender_id,
+                    content: msg.content,
+                    timestamp: msg.timestamp,
+                  });
+                }
               }
             }
           }
