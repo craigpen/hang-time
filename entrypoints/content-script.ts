@@ -770,6 +770,16 @@ function establishConnection(): void {
           }
           break;
 
+        case 'ACTIVITY_MESSAGES':
+          if (!overlayUI) return;
+          // Load initial messages for this activity (on page reload)
+          const initialMessages = message.data?.messages || [];
+          if (initialMessages.length > 0) {
+            console.debug('[ContentScript] Loaded', initialMessages.length, 'initial messages for activity');
+            overlayUI.setState({ messages: initialMessages });
+          }
+          break;
+
         case 'CHAT_MESSAGE':
           if (!overlayUI) return;
           // Add message to overlay chat
@@ -943,6 +953,13 @@ function initializeOverlay(): void {
   // Pass port to overlay for direct messaging
   if (port) {
     overlayUI.setPort(port);
+    // Request initial messages for this activity (to restore chat on page reload)
+    if (tracker && (tracker as any).currentActivityId) {
+      port.postMessage({
+        type: 'GET_ACTIVITY_MESSAGES_FOR_OVERLAY',
+        data: { activityId: (tracker as any).currentActivityId },
+      });
+    }
   }
 
   // Listen for overlay interactions

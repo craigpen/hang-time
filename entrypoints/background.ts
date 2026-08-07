@@ -1163,6 +1163,65 @@ chrome.runtime.onConnect.addListener((port) => {
               },
             });
           }
+        } else if (message.type === 'GET_ACTIVITY_MESSAGES_FOR_OVERLAY') {
+          // Content script requesting initial messages for activity (on page reload)
+          const activityId = message.data?.activityId;
+          if (activityId && port) {
+            try {
+              const recentMessages: any[] = [];
+              const profile = await storageManager.getUserProfile();
+
+              // Get own messages
+              if (profile) {
+                const myMessages = await storageManager.getActivityMessages('self', activityId);
+                if (myMessages && myMessages.length > 0) {
+                  const recentMyMessages = myMessages.slice(-10);
+                  for (const msg of recentMyMessages) {
+                    const senderName = profile.nickname || profile.memorable_identifier || 'You';
+                    recentMessages.push({
+                      id: msg.id,
+                      sender: senderName,
+                      sender_id: msg.sender_id || profile.memorable_identifier,
+                      content: msg.content,
+                      timestamp: msg.timestamp,
+                    });
+                  }
+                }
+              }
+
+              // Get messages from co-watchers
+              const friendManager = getFriendManager();
+              const friends = await storageManager.getFriends();
+              for (const friend of friends) {
+                const activityMessages = await storageManager.getActivityMessages(friend.id, activityId);
+                if (activityMessages && activityMessages.length > 0) {
+                  const recentActivityMessages = activityMessages.slice(-10);
+                  for (const msg of recentActivityMessages) {
+                    if (msg.sender_id === friend.identifier) {
+                      recentMessages.push({
+                        id: msg.id,
+                        sender: friend.local_name,
+                        sender_id: msg.sender_id,
+                        content: msg.content,
+                        timestamp: msg.timestamp,
+                      });
+                    }
+                  }
+                }
+              }
+
+              // Sort by timestamp
+              recentMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+              console.debug('[Background] Sending', recentMessages.length, 'initial messages for activity', activityId);
+              port.postMessage({
+                type: 'ACTIVITY_MESSAGES',
+                data: { messages: recentMessages },
+              });
+            } catch (e) {
+              console.error('[Background] Error loading initial messages:', e);
+            }
+          }
         } else if (message.type === 'SEND_MESSAGE') {
           // Message sent from overlay, send to co-watchers
           console.debug('[Background] Received SEND_MESSAGE from content-script:', message.data);
