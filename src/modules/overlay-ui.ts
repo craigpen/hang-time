@@ -360,11 +360,7 @@ export class OverlayUI {
         }
 
         .message-user {
-          justify-content: flex-start;
-        }
-
-        .message-friend {
-          justify-content: flex-end;
+          flex-direction: row-reverse;
         }
 
         .message-content {
@@ -382,7 +378,7 @@ export class OverlayUI {
         .message-user .message-content {
           background: rgba(45, 166, 255, 0.8);
           color: white;
-          text-align: left;
+          text-align: right;
         }
 
         .message-sender {
@@ -392,10 +388,6 @@ export class OverlayUI {
         }
 
         .message-user .message-sender {
-          text-align: left;
-        }
-
-        .message-friend .message-sender {
           text-align: right;
         }
 
