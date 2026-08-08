@@ -8,7 +8,7 @@ export interface OverlayState {
   pinned: boolean;
   opacity: number; // 0-100
   host_nickname?: string;
-  watching_together: string[]; // list of nicknames watching together
+  watching_together: string[]; // list of UUIDs watching together (display names looked up via nicknameMap)
   messages: Array<{
     id: string;
     sender: string;
@@ -21,6 +21,8 @@ export interface OverlayState {
   host_state?: string; // playing or paused
   host_duration?: number; // total duration in seconds
   user_progress?: number; // user's own progress in seconds
+  guest_progress?: Record<string, number>; // UUID -> progress in seconds for each guest
+  guest_progress_timestamp?: number; // when guest progress was last updated
   activity_id?: string;
   is_user_host?: boolean; // true if the user is the host
   user_nickname?: string; // current user's nickname for sending messages
@@ -151,7 +153,7 @@ export class OverlayUI {
           display: flex;
           gap: 8px;
           align-items: center;
-          margin-top: 8px;
+          flex: 1;
         }
 
         .progress-bar-container {
@@ -184,7 +186,7 @@ export class OverlayUI {
 
         .progress-bar-fill {
           height: 100%;
-          background: linear-gradient(90deg, #4ade80, #22c55e);
+          background: linear-gradient(90deg, #10b981, #059669);
           width: 0%;
           transition: width 0.1s linear;
         }
@@ -196,7 +198,7 @@ export class OverlayUI {
           left: 0%;
           width: 16px;
           height: 20px;
-          background: #ff6b6b;
+          background: #ef4444;
           transition: left 0.1s linear;
           user-select: none;
           pointer-events: none;
@@ -216,29 +218,94 @@ export class OverlayUI {
           transform: translateY(-50%);
           width: 3px;
           height: 20px;
-          background: #ff6b6b;
+          background: #3b82f6;
           left: 0%;
           transition: left 0.1s linear;
-          box-shadow: 0 0 4px rgba(255, 107, 107, 0.8);
+          box-shadow: 0 0 4px rgba(59, 130, 246, 0.8);
           pointer-events: none;
         }
 
-        .attendees-header {
-          padding: 8px 0;
+        .attendees-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
           font-size: 12px;
-          color: rgba(255, 255, 255, 0.7);
-          margin-bottom: 4px;
+          margin-bottom: 8px;
         }
 
-        .attendee-host {
-          color: #4ade80;
+        .attendees-label {
+          color: rgba(255, 255, 255, 0.6);
+          font-size: 11px;
+          min-width: 38px;
           font-weight: 600;
         }
 
-        .attendee-host-label {
-          color: rgba(255, 255, 255, 0.5);
-          font-size: 10px;
-          margin-left: 2px;
+        #guest-chips-container {
+          display: flex;
+          gap: 6px;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+
+        .attendee-chip {
+          display: inline-flex;
+          align-items: center;
+          padding: 2px 6px;
+          border-radius: 3px;
+          font-size: 12px;
+          color: white;
+          font-weight: 500;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+        }
+
+        .progress-bar-controls {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .guest-markers-container {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+        }
+
+        .guest-marker {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 2px;
+          height: 16px;
+          left: 0%;
+          transition: left 0.1s linear;
+        }
+
+        .user-position-marker {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 2px;
+          height: 16px;
+          background: #ef4444;
+          left: 0%;
+          transition: left 0.1s linear;
+          pointer-events: none;
+          z-index: 10;
+        }
+
+        .gap-indicator {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          height: 2px;
+          background: #ef4444;
+          left: 0%;
+          transition: left 0.1s linear, width 0.1s linear;
+          pointer-events: none;
+          z-index: 5;
         }
 
         .host-state-indicator {
@@ -460,17 +527,29 @@ export class OverlayUI {
             <button class="icon-button" id="pin-button" title="Pin overlay">📌</button>
           </div>
         </div>
-        <div class="attendees-header" id="attendees-header">
-          Watching together: Loading...
-        </div>
-        <div class="progress-bar-wrapper">
-          <div class="host-state-indicator" id="host-state-indicator">-</div>
-          <div class="progress-bar-container">
-            <div class="progress-bar-fill" id="progress-bar-fill"></div>
-            <div class="progress-bar-host-marker" id="progress-bar-host-marker"></div>
-            <div class="progress-bar-marker" id="progress-bar-marker"></div>
+        <!-- Host row: chip + progress bar + controls -->
+        <div class="attendees-row" id="host-row">
+          <div class="attendees-label">Host:</div>
+          <div id="host-chip-container"></div>
+          <div class="progress-bar-wrapper">
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" id="progress-bar-fill"></div>
+              <div class="guest-markers-container" id="guest-markers-container"></div>
+              <div class="gap-indicator" id="gap-indicator" style="display: none;"></div>
+              <div class="user-position-marker" id="user-position-marker" style="display: none;"></div>
+              <div class="progress-bar-marker" id="progress-bar-marker"></div>
+            </div>
+            <div class="progress-bar-controls">
+              <div class="host-state-indicator" id="host-state-indicator">-</div>
+              <button id="progress-sync-button" title="Sync to host position">↻</button>
+            </div>
           </div>
-          <button id="progress-sync-button" title="Sync to host position">↻</button>
+        </div>
+
+        <!-- Guest row: guest chips -->
+        <div class="attendees-row" id="guest-row">
+          <div class="attendees-label">Guest:</div>
+          <div id="guest-chips-container"></div>
         </div>
       </div>
 
@@ -661,41 +740,70 @@ export class OverlayUI {
   }
 
   /**
-   * Get color for user (deterministic based on sender_id)
+   * Find the host's UUID by matching their nickname in the nicknameMap
    */
-  private getUserColor(senderId: string | undefined): string {
-    if (!senderId) {
-      return '#888888'; // Gray fallback for unknown sender
+  private getHostUuid(): string | undefined {
+    if (this._state.is_user_host) {
+      return this.userId;
     }
 
-    // Always blue for current user
-    if (senderId === this.userId) {
-      return '#60a5fa'; // blue
+    // Find the UUID in watching_together that has the host_nickname
+    for (const uuid of this._state.watching_together || []) {
+      if (this.nicknameMap.get(uuid) === this._state.host_nickname) {
+        return uuid;
+      }
     }
 
-    if (this.userColorMap.has(senderId)) {
-      return this.userColorMap.get(senderId)!;
+    return undefined;
+  }
+
+  /**
+   * Get participant color based on their role:
+   * - Host: always green
+   * - Non-host self: always red
+   * - Others: fixed mapped color
+   */
+  private getParticipantColor(uuid: string | undefined): string {
+    if (!uuid) {
+      return '#6b7280'; // Gray fallback
     }
 
-    // Generate deterministic color from senderId hash (exclude blue for friends)
-    const friendColors = [
-      '#34d399', // green
-      '#fbbf24', // amber
-      '#f87171', // red
-      '#a78bfa', // purple
-      '#fb7185', // rose
+    const hostUuid = this.getHostUuid();
+
+    // Rule 1: Host is always green
+    if (uuid === hostUuid) {
+      return '#10b981';
+    }
+
+    // Rule 2: Current user (not host) is always red
+    if (uuid === this.userId) {
+      return '#ef4444';
+    }
+
+    // Rule 3: Other guests get fixed mapped color
+    if (this.userColorMap.has(uuid)) {
+      return this.userColorMap.get(uuid)!;
+    }
+
+    // Deterministic color palette for other guests
+    const guestColors = [
+      '#f59e0b', // amber
       '#06b6d4', // cyan
+      '#8b5cf6', // violet
       '#ec4899', // pink
+      '#6366f1', // indigo
+      '#14b8a6', // teal
+      '#f97316', // orange
     ];
 
     let hash = 0;
-    for (let i = 0; i < senderId.length; i++) {
-      hash = ((hash << 5) - hash) + senderId.charCodeAt(i);
-      hash = hash & hash; // Convert to 32-bit integer
+    for (let i = 0; i < uuid.length; i++) {
+      hash = ((hash << 5) - hash) + uuid.charCodeAt(i);
+      hash = hash & hash;
     }
 
-    const color = friendColors[Math.abs(hash) % friendColors.length];
-    this.userColorMap.set(senderId, color);
+    const color = guestColors[Math.abs(hash) % guestColors.length];
+    this.userColorMap.set(uuid, color);
     return color;
   }
 
@@ -785,7 +893,8 @@ export class OverlayUI {
    */
   private render(): void {
     this.renderHeader();
-    this.renderAttendees();
+    this.renderHostRow();
+    this.renderGuestRow();
     this.renderMessages();
   }
 
@@ -887,6 +996,39 @@ export class OverlayUI {
       }
     }
 
+    // Show host position marker (blue vertical line at right edge of progress bar) for guests
+    const hostPositionMarkerEl = document.getElementById('user-position-marker') as HTMLElement;
+    const gapIndicatorEl = document.getElementById('gap-indicator') as HTMLElement;
+
+    if (hostPositionMarkerEl || gapIndicatorEl) {
+      if (!this._state.is_user_host && this._state.host_progress !== undefined && this._state.user_progress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
+        const hostPercent = Math.min((this._state.host_progress / this._state.host_duration) * 100, 100);
+        const userPercent = Math.min((this._state.user_progress / this._state.host_duration) * 100, 100);
+
+        // Show host position marker
+        if (hostPositionMarkerEl) {
+          hostPositionMarkerEl.style.left = hostPercent + '%';
+          hostPositionMarkerEl.style.display = 'block';
+        }
+
+        // Show gap indicator line between user and host positions
+        if (gapIndicatorEl) {
+          const startPercent = Math.min(userPercent, hostPercent);
+          const endPercent = Math.max(userPercent, hostPercent);
+          const gapWidth = endPercent - startPercent;
+          gapIndicatorEl.style.left = startPercent + '%';
+          gapIndicatorEl.style.width = gapWidth + '%';
+          gapIndicatorEl.style.display = 'block';
+        }
+
+        console.debug('[OverlayUI] Host position marker shown at', hostPercent + '%, gap from', userPercent + '%');
+      } else {
+        if (hostPositionMarkerEl) hostPositionMarkerEl.style.display = 'none';
+        if (gapIndicatorEl) gapIndicatorEl.style.display = 'none';
+        console.debug('[OverlayUI] Host position marker hidden - is_user_host:', this._state.is_user_host);
+      }
+    }
+
     // Show sync button only for non-hosts
     if (syncBtn) {
       if (!this._state.is_user_host) {
@@ -895,34 +1037,149 @@ export class OverlayUI {
         syncBtn.style.display = 'none';
       }
     }
+
+    // Update guest marker positions each animation cycle (1s/1s interpolation)
+    if (this._state.is_user_host) {
+      this.updateGuestMarkers();
+    }
   }
 
   /**
-   * Render attendees list with host highlighted
+   * Render host row with chip and progress bar
    */
-  private renderAttendees(): void {
-    const header = document.getElementById('attendees-header');
-    if (!header) return;
+  private renderHostRow(): void {
+    const hostContainer = document.getElementById('host-chip-container');
+    if (!hostContainer || !this._state.host_nickname) return;
 
-    if (!this._state.watching_together || this._state.watching_together.length === 0) {
-      header.innerHTML = 'Watching together: Loading...';
+    // Show "You" if user is the host, otherwise show host's nickname
+    const hostName = this._state.is_user_host ? 'You' : this.escapeHtml(this._state.host_nickname);
+
+    // Get host UUID and color
+    const hostUuid = this.getHostUuid();
+    const hostColor = this.getParticipantColor(hostUuid);
+
+    const hostChip = `<div class="attendee-chip" style="background: ${hostColor};">
+      <span>${hostName}</span>
+    </div>`;
+    hostContainer.innerHTML = hostChip;
+
+    // Render guest markers on progress bar if user is host
+    if (this._state.is_user_host) {
+      this.renderGuestMarkers();
+    }
+  }
+
+  /**
+   * Render colored markers for each guest on the progress bar (host view only)
+   */
+  private renderGuestMarkers(): void {
+    const container = document.getElementById('guest-markers-container');
+    if (!container || !this._state.watching_together) {
       return;
     }
 
-    // First person (host) is highlighted in blue, others are plain
-    const parts: string[] = [];
-    for (let i = 0; i < this._state.watching_together.length; i++) {
-      const name = this.escapeHtml(this._state.watching_together[i]);
-      if (i === 0) {
-        // Host
-        parts.push(`<span class="attendee-host">${name}<span class="attendee-host-label">(host)</span></span>`);
-      } else {
-        // Co-watchers
-        parts.push(name);
-      }
+    // Clear existing markers
+    container.innerHTML = '';
+
+    // Create a marker for each guest (skip self/host)
+    for (const uuid of this._state.watching_together) {
+      if (uuid === this.userId) continue; // Skip self
+
+      // Find guest progress from nicknameMap or state
+      const nickname = this.nicknameMap.get(uuid) || `Guest (${uuid.slice(0, 8)})`;
+
+      // We need to find this guest's progress... but we don't have it in state
+      // For now, just create markers for all guests (we'll update progress in updateGuestMarkers)
+      const color = this.getParticipantColor(uuid);
+      const marker = document.createElement('div');
+      marker.className = 'guest-marker';
+      marker.style.background = color;
+      marker.id = `guest-marker-${uuid}`;
+      container.appendChild(marker);
     }
 
-    header.innerHTML = `Watching together: ${parts.join(', ')}`;
+    // Update positions
+    this.updateGuestMarkers();
+  }
+
+  /**
+   * Update positions of guest markers based on their progress (called from CO_WATCH_UPDATE handler)
+   */
+  private updateGuestMarkers(): void {
+    if (!this._state.guest_progress || !this._state.watching_together || !this._state.host_duration || this._state.host_duration <= 0) {
+      return;
+    }
+
+    const hostUuid = this.getHostUuid();
+
+    for (const uuid of this._state.watching_together) {
+      // Skip self and host
+      if (uuid === this.userId || uuid === hostUuid) continue;
+
+      const baseProgress = this._state.guest_progress[uuid];
+      if (baseProgress === undefined) continue;
+
+      const marker = document.getElementById(`guest-marker-${uuid}`) as HTMLElement;
+      if (!marker) continue;
+
+      // Calculate guest's current position with interpolation
+      // Only extrapolate if host is playing (guests move with host's playback state)
+      const elapsedMs = this._state.guest_progress_timestamp ? Date.now() - this._state.guest_progress_timestamp : 0;
+      const guestCurrentPosition = this._state.host_state === 'playing'
+        ? baseProgress + (elapsedMs / 1000)
+        : baseProgress;
+
+      // Calculate position percentage
+      const guestPercent = Math.min((guestCurrentPosition / this._state.host_duration) * 100, 100);
+      marker.style.left = guestPercent + '%';
+    }
+  }
+
+  /**
+   * Render guest row with all guest chips (excluding host)
+   */
+  private renderGuestRow(): void {
+    const guestContainer = document.getElementById('guest-chips-container');
+    if (!guestContainer || !this._state.watching_together) {
+      return;
+    }
+
+    const chips: string[] = [];
+
+    // If not host, render self first in red
+    if (!this._state.is_user_host) {
+      const selfChip = `<div class="attendee-chip" style="background: #ef4444;">
+        <span>You</span>
+      </div>`;
+      chips.push(selfChip);
+    }
+
+    const hostUuid = this.getHostUuid();
+    console.debug('[OverlayUI] renderGuestRow: watching_together=', this._state.watching_together, 'hostUuid=', hostUuid, 'userId=', this.userId);
+
+    // Render other guests (skip self and host)
+    // Host should never appear in guest row
+    for (const uuid of this._state.watching_together) {
+      if (uuid === this.userId) {
+        continue; // Skip self
+      }
+
+      // Skip host - always exclude the host UUID
+      if (uuid === hostUuid) {
+        continue;
+      }
+
+      const nickname = this.nicknameMap.get(uuid) || uuid.slice(0, 8);
+      const displayName = uuid === this.userId ? 'You' : this.escapeHtml(nickname);
+      const color = this.getParticipantColor(uuid);
+      console.debug('[OverlayUI]   Adding chip for:', displayName);
+      const chip = `<div class="attendee-chip" style="background: ${color};">
+        <span>${displayName}</span>
+      </div>`;
+      chips.push(chip);
+    }
+
+    guestContainer.innerHTML = chips.join('');
   }
 
   /**
@@ -955,12 +1212,13 @@ export class OverlayUI {
     const html = validMessages
       .map(msg => {
         const isUser = msg.sender_id === this.userId;
-        const userColor = this.getUserColor(msg.sender_id);
-        // Use "You" for user's own messages, otherwise lookup display name from nicknameMap
-        const displayName = isUser ? 'You' : (this.nicknameMap.get(msg.sender_id) || msg.sender || 'Unknown');
+        // Get color using participant color rules - same as chips
+        const userColor = this.getParticipantColor(msg.sender_id);
+        // Use "You" for user's own messages, otherwise lookup display name from state nicknameMap
+        const displayName = isUser ? 'You' : (this._state.nicknameMap?.[msg.sender_id] || msg.sender || 'Unknown');
         return `
           <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}">
-            <div class="message-sender" style="color: ${userColor}">${this.escapeHtml(displayName)}</div>
+            <div class="attendee-chip" style="background: ${userColor}; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);">${this.escapeHtml(displayName)}</div>
             <div class="message-content" style="${isUser ? `background: rgba(96, 165, 250, 0.3);` : `background: rgba(255, 255, 255, 0.08);`} color: white;">${this.escapeHtml(msg.content)}</div>
           </div>
         `;

@@ -770,6 +770,8 @@ function establishConnection(): void {
               host_state: message.data.host_state,
               host_duration: message.data.host_duration,
               user_progress: message.data.user_progress,
+              guest_progress: message.data.guest_progress,
+              guest_progress_timestamp: Date.now(),
               is_user_host: message.data.is_user_host,
             };
 

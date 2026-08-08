@@ -877,21 +877,33 @@ function _startCoWatcherDetectionCycle(): void {
           }
         }
 
-        // Build watching_together list: all co_watchers, with host marked
+        // Build watching_together list: all co_watchers as UUIDs (for color mapping consistency)
         const watchingTogether: string[] = [];
         const friendManager = getFriendManager();
         const profile = await storageManager.getUserProfile();
         const selfUuid = profile?.uuid;
-        for (const coWatcherId of session.co_watchers) {
-          let coWatcherName: string;
-          if (coWatcherId === selfUuid) {
-            coWatcherName = profile?.nickname || profile?.uuid || 'You';
-          } else {
-            const coWatcherFriend = await friendManager.getFriend(coWatcherId);
-            coWatcherName = coWatcherFriend?.local_name || coWatcherId;
-          }
+        const guestProgress: Record<string, number> = {}; // UUID -> progress in seconds
 
-          watchingTogether.push(coWatcherName);
+        for (const coWatcherId of session.co_watchers) {
+          // Push UUID directly (display names are looked up via nicknameMap in overlay)
+          watchingTogether.push(coWatcherId);
+
+          // Collect guest progress for marker updates
+          if (coWatcherId === selfUuid) {
+            // User's progress
+            if (userActivity?.metadata?.progress !== undefined) {
+              guestProgress[coWatcherId] = userActivity.metadata.progress;
+            }
+          } else {
+            // Guest progress from friend's current activity
+            const friend = await friendManager.getFriend(coWatcherId);
+            if (friend?.current_activities) {
+              const guestActivity = Object.values(friend.current_activities).find(a => a?.id === session.activity_id);
+              if (guestActivity?.metadata?.progress !== undefined) {
+                guestProgress[coWatcherId] = guestActivity.metadata.progress;
+              }
+            }
+          }
         }
 
         // Get recent messages for this activity
@@ -1023,6 +1035,7 @@ function _startCoWatcherDetectionCycle(): void {
                 host_state: hostState,
                 host_duration: videoDuration,
                 user_progress: userPosition,
+                guest_progress: guestProgress,
                 is_user_host: session.host_friend_uuid === 'self',
                 messages: recentMessages,
                 nicknameMap: broadcastNicknameMap,
