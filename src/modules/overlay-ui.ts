@@ -39,8 +39,6 @@ export class OverlayUI {
   private dragStartTop = 0;
   private userColorMap: Map<string, string> = new Map(); // sender_uuid -> color
   private nicknameMap: Map<string, string> = new Map(); // sender_uuid -> display name
-  private hasBeenShownByUser = false; // Track if user has interacted with overlay (for initial discovery)
-  private fadeTimeoutId: number | null = null; // Track the inner fade timeout separately
   private _state: OverlayState = {
     visible: false,
     pinned: false,
@@ -616,18 +614,15 @@ export class OverlayUI {
   private setupEventListeners(): void {
     // Initially show on any mouse movement to help user discover the overlay
     const initialMouseMoveListener = (e: MouseEvent) => {
-      if (!this.hasBeenShownByUser) {
-        this.show();
-        this.hasBeenShownByUser = true;
-        // Remove initial listener after first interaction
-        document.removeEventListener('mousemove', initialMouseMoveListener);
-      }
+      this.show();
     };
     document.addEventListener('mousemove', initialMouseMoveListener);
 
-    // After first show, respond only to hover over the overlay itself
+    // After user discovers overlay, only respond to hover over the overlay itself
     if (this.container) {
       this.container.addEventListener('mouseenter', () => {
+        // Remove discovery listener once user has found the overlay
+        document.removeEventListener('mousemove', initialMouseMoveListener);
         this.show();
       });
 
@@ -839,10 +834,7 @@ export class OverlayUI {
       return;
     }
 
-    // Mark that overlay has been shown to user
-    this.hasBeenShownByUser = true;
-
-    // Cancel any pending fade-out (both wait and fade timeouts)
+    // Cancel any pending fade-out
     if (this.hideTimer) clearTimeout(this.hideTimer);
     if (this.fadeTimeoutId) clearTimeout(this.fadeTimeoutId);
     this.hideTimer = null;
