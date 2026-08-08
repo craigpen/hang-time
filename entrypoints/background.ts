@@ -891,12 +891,6 @@ function _startCoWatcherDetectionCycle(): void {
             coWatcherName = coWatcherFriend?.local_name || coWatcherId;
           }
 
-          // Mark host with label
-          if ((session.host_friend_uuid === 'self' && coWatcherId === selfUuid) ||
-              (session.host_friend_uuid !== 'self' && coWatcherId === session.host_friend_uuid)) {
-            coWatcherName = coWatcherName + ' (host)';
-          }
-
           watchingTogether.push(coWatcherName);
         }
 

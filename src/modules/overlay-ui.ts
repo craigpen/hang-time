@@ -840,15 +840,15 @@ export class OverlayUI {
 
       if (!this._state.is_user_host && this._state.user_progress !== undefined && this._state.host_progress !== undefined && this._state.host_progress_timestamp !== undefined && this._state.host_duration && this._state.host_duration > 0) {
         // Calculate where host actually is now (not just when we last measured)
-        // Note: progress values are in milliseconds, elapsed is in ms
+        // Note: progress values are in seconds, elapsed is in ms. Convert ms to seconds for addition.
         // Only extrapolate forward if host is playing, not if paused
         const elapsedSinceHostMeasureMs = Date.now() - this._state.host_progress_timestamp;
         const hostCurrentPosition = this._state.host_state === 'playing'
-          ? this._state.host_progress + elapsedSinceHostMeasureMs
+          ? this._state.host_progress + (elapsedSinceHostMeasureMs / 1000)
           : this._state.host_progress;
 
         const gap = Math.abs(this._state.user_progress - hostCurrentPosition);
-        const SYNC_THRESHOLD = 5000; // 5 seconds in milliseconds
+        const SYNC_THRESHOLD = 5; // 5 seconds (gap is in seconds)
 
         console.debug('[OverlayUI] Arrow gap calculation:', {
           user_progress: this._state.user_progress,
