@@ -854,11 +854,11 @@ export class OverlayUI {
           const userPercent = Math.min((this._state.user_progress / this._state.host_duration) * 100, 100);
           markerEl.style.left = userPercent + '%';
 
-          // Arrow points toward host
+          // Arrow points toward host (use current position, not old measurement)
           markerEl.classList.remove('arrow-left', 'arrow-right');
-          if (this._state.user_progress < this._state.host_progress) {
+          if (this._state.user_progress < hostCurrentPosition) {
             markerEl.classList.add('arrow-right'); // User behind, arrow points right (toward host ahead)
-          } else if (this._state.user_progress > this._state.host_progress) {
+          } else if (this._state.user_progress > hostCurrentPosition) {
             markerEl.classList.add('arrow-left'); // User ahead, arrow points left (toward host behind)
           }
 
