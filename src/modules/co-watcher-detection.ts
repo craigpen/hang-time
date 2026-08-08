@@ -9,7 +9,7 @@ import { FriendManager } from './friends';
 export interface CoWatchSession {
   activity_id: string;
   host_friend_uuid: string;
-  co_watchers: string[]; // Friend UUIDs watching this activity (excludes self, includes host if applicable)
+  co_watchers: string[]; // All UUIDs watching this activity (including self) - needed for host determination. Filter self when sending messages.
   detected_at: number;
 }
 
@@ -177,21 +177,24 @@ export class CoWatcherDetector {
         }
       }
 
-      const otherCoWatchers = coWatchers
-        .filter(cw => cw.friend_uuid !== null)
-        .map(cw => cw.friend_uuid);
+      // Store ALL co-watchers (including self) for host determination
+      // We need everyone's data to compute the host (earliest timestamp)
+      // When sending messages, SEND_MESSAGE handler filters self out
+      const allCoWatchers = coWatchers
+        .map(cw => cw.friend_uuid === null ? selfUuid : cw.friend_uuid)
+        .filter(uuid => uuid !== undefined);
 
       const session: CoWatchSession = {
         activity_id: matchedActivityId,
         host_friend_uuid: hostFriendUuid,
-        co_watchers: otherCoWatchers,
+        co_watchers: allCoWatchers,
         detected_at: Date.now(),
       };
 
       console.debug('[CoWatcher] Co-watch session detected:', {
         activity_id: session.activity_id,
         host: hostName,
-        co_watchers_count: otherCoWatchers.length,
+        co_watchers_count: allCoWatchers.length,
       });
       console.debug(`[TimestampMigration:CoWatcherHost] ✅ Host determined: ${hostName} (${hostFriendUuid}) with timestamp=${hostEntry.timestamp}`);
 

@@ -31,6 +31,67 @@ export class StorageManager {
   private syncTimer: NodeJS.Timeout | null = null;
   private syncScheduled = false;
   private isInitialized = false;
+  private sessionId: string = '';
+  private sessionIdReady: Promise<void>;
+  private resolveSessionId!: () => void;
+
+  constructor() {
+    // Generate a unique instance ID on every load (not persisted)
+    // This ensures different extension instances (same ID in different profiles) have isolated storage
+    const randomId = crypto.getRandomValues(new Uint8Array(4));
+    const hexId = Array.from(randomId).map(b => b.toString(16).padStart(2, '0')).join('');
+    this.sessionId = hexId.substring(0, 8);
+    console.debug(`[Storage] Generated instance ID: ${this.sessionId}`);
+
+    // Create a promise that resolves when sessionId is ready
+    this.sessionIdReady = new Promise(resolve => {
+      this.resolveSessionId = resolve;
+    });
+  }
+
+  /**
+   * Wait for session ID to be ready before proceeding
+   */
+  async waitForSessionId(): Promise<void> {
+    return this.sessionIdReady;
+  }
+
+  /**
+   * Set the session ID (derived from user UUID) for storage isolation.
+   * Must be called before storage operations to ensure instance isolation.
+   * @param uuid - User's UUID (e.g., from IdentityManager)
+   */
+  async setSessionId(uuid: string): Promise<void> {
+    this.sessionId = uuid.substring(0, 8); // Use first 8 chars of UUID
+    // Store in unnamespaced bootstrap key for future reloads
+    try {
+      await chrome.storage.local.set({ 'hang_time_session_id': this.sessionId });
+      console.debug(`[Storage] Session ID set to: ${this.sessionId} (persisted)`);
+    } catch (error) {
+      console.error('[Storage] Failed to persist session ID:', error);
+      // Continue anyway - sessionId is set in memory
+    }
+    // Signal that sessionId is ready
+    this.resolveSessionId();
+  }
+
+  /**
+   * Prefix a storage key with the session ID for instance isolation.
+   * Shared keys (like logs) are NOT namespaced so all instances can write to them.
+   * If no session ID is set, uses unnamespaced key (during initialization).
+   */
+  private prefixKey(key: string): string {
+    // Shared keys that should NOT be namespaced
+    if (key.startsWith('hang_time_file_logs_')) {
+      return key; // Logs are shared across all instances
+    }
+
+    if (!this.sessionId) {
+      // During initialization, before sessionId is set
+      return key;
+    }
+    return `${this.sessionId}:${key}`;
+  }
 
   /**
    * Initialize cache from storage (call on extension startup)
@@ -40,6 +101,17 @@ export class StorageManager {
     if (this.isInitialized) return;
 
     try {
+      // Load stored session ID (unnamespaced bootstrap key for instance isolation)
+      const bootstrapData = await chrome.storage.local.get(['hang_time_session_id']);
+      if (bootstrapData['hang_time_session_id']) {
+        this.sessionId = bootstrapData['hang_time_session_id'];
+        console.debug('[Storage] Session ID loaded from bootstrap key:', this.sessionId);
+        // Signal that sessionId is ready (from previous session)
+        this.resolveSessionId();
+      } else {
+        console.debug('[Storage] No session ID found - will be set after IdentityManager initializes');
+      }
+
       // Only load static string keys (not functions like MESSAGES, ACTIVITY_HISTORY)
       const staticKeys = [
         STORAGE_KEYS.USER_PROFILE,
@@ -69,16 +141,86 @@ export class StorageManager {
         STORAGE_KEYS.ACTIVITY_ACCEPTANCES,
       ];
 
-      const data = await chrome.storage.local.get(staticKeys);
+      // Try to load with session ID prefix; fall back to unnamespaced for migration
+      const prefixedKeys = staticKeys.map(key => this.prefixKey(key));
+      const prefixedData = await chrome.storage.local.get(prefixedKeys);
 
-      for (const key of staticKeys) {
-        if (data.hasOwnProperty(key)) {
-          this.cache.set(key, data[key]);
+      let hasAnyPrefixedData = false;
+      for (const prefixedKey of Object.keys(prefixedData)) {
+        if (prefixedData[prefixedKey] !== undefined) {
+          hasAnyPrefixedData = true;
+          break;
         }
       }
 
+      let dataToLoad: Record<string, any>;
+      let needsMigration = false;
+      if (hasAnyPrefixedData) {
+        // Use prefixed keys - we're on a subsequent run after migration
+        dataToLoad = prefixedData;
+      } else {
+        // No prefixed keys found - try unnamespaced keys for migration
+        console.debug('[Storage] No namespaced data found, attempting migration from unnamespaced storage');
+        dataToLoad = await chrome.storage.local.get(staticKeys);
+        needsMigration = true;
+      }
+
+      // Load data into cache
+      for (let i = 0; i < staticKeys.length; i++) {
+        const originalKey = staticKeys[i];
+        const prefixedKey = prefixedKeys[i];
+
+        // Check prefixed key first, then unnamespaced as fallback
+        if (dataToLoad.hasOwnProperty(prefixedKey) && dataToLoad[prefixedKey] !== undefined) {
+          this.cache.set(originalKey, dataToLoad[prefixedKey]);
+        } else if (dataToLoad.hasOwnProperty(originalKey) && dataToLoad[originalKey] !== undefined) {
+          this.cache.set(originalKey, dataToLoad[originalKey]);
+        }
+      }
+
+      // Load dynamic keys: activity_messages_* and hang_time_activity_history_*
+      try {
+        const allStorageKeys = await chrome.storage.local.get(null);
+        const dynamicPatterns = ['activity_messages_', 'hang_time_activity_history_'];
+
+        for (const [storedKey, storedValue] of Object.entries(allStorageKeys)) {
+          // Check if this key matches any dynamic pattern
+          const matchesPattern = dynamicPatterns.some(pattern => storedKey.includes(pattern));
+          if (!matchesPattern) continue;
+
+          // Determine the original key (without session ID prefix if present)
+          let originalKey = storedKey;
+          if (this.sessionId && storedKey.startsWith(`${this.sessionId}:`)) {
+            originalKey = storedKey.substring(this.sessionId.length + 1);
+          }
+
+          // Load into cache with original key name (cache uses unnamespaced keys)
+          if (storedValue !== undefined) {
+            this.cache.set(originalKey, storedValue);
+          }
+        }
+
+        console.debug('[Storage] Loaded dynamic keys (activity_messages_*, hang_time_activity_history_*)');
+      } catch (error) {
+        console.error('[Storage] Failed to load dynamic keys:', error);
+        // Continue anyway - dynamic keys are important but not critical for startup
+      }
+
+      // If we migrated from unnamespaced keys, delete them to avoid stale data
+      if (needsMigration) {
+        console.debug('[Storage] Scheduling cleanup of old unnamespaced keys');
+        setTimeout(async () => {
+          try {
+            await chrome.storage.local.remove(staticKeys);
+            console.debug('[Storage] Cleaned up old unnamespaced keys');
+          } catch (error) {
+            console.error('[Storage] Failed to clean up old keys:', error);
+          }
+        }, 1000); // Delay to avoid conflicts with ongoing syncs
+      }
+
       this.isInitialized = true;
-      console.debug('[Storage] Cache initialized from storage with', this.cache.size, 'keys');
+      console.debug('[Storage] Cache initialized from storage with', this.cache.size, 'keys, session ID:', this.sessionId || '(not set yet)');
     } catch (error) {
       console.error('[Storage] Failed to initialize cache:', error);
       // FAIL HARD - don't mark as initialized if loading fails
@@ -106,6 +248,7 @@ export class StorageManager {
 
   /**
    * Flush all cache changes to storage (called by scheduler and on exit)
+   * Prefixes keys with session ID for instance isolation
    */
   async syncToStorage(): Promise<void> {
     if (this.cache.size === 0) return;
@@ -114,13 +257,14 @@ export class StorageManager {
       const updates: Record<string, any> = {};
       for (const [key, value] of this.cache.entries()) {
         if (value !== undefined) {
-          updates[key] = value;
+          const prefixedKey = this.prefixKey(key);
+          updates[prefixedKey] = value;
         }
       }
 
       if (Object.keys(updates).length > 0) {
         await chrome.storage.local.set(updates);
-        console.debug(`[Storage] Synced ${Object.keys(updates).length} keys to storage`);
+        console.debug(`[Storage] Synced ${Object.keys(updates).length} keys to storage with session ID: ${this.sessionId}`);
       }
     } catch (error) {
       console.error('[Storage] Failed to sync cache to storage:', error);
@@ -554,12 +698,16 @@ export class StorageManager {
   /**
    * Refresh specific keys from storage into cache (used when storage changes externally)
    * This keeps the cache in sync when other components update storage
+   * Prefixes keys with session ID for instance isolation
    */
   async refreshKeysFromStorage(keys: string[]): Promise<void> {
-    const data = await chrome.storage.local.get(keys);
-    for (const key of keys) {
-      if (data.hasOwnProperty(key)) {
-        this.cache.set(key, data[key]);
+    const prefixedKeys = keys.map(key => this.prefixKey(key));
+    const data = await chrome.storage.local.get(prefixedKeys);
+    for (let i = 0; i < keys.length; i++) {
+      const originalKey = keys[i];
+      const prefixedKey = prefixedKeys[i];
+      if (data.hasOwnProperty(prefixedKey)) {
+        this.cache.set(originalKey, data[prefixedKey]);
       }
     }
   }

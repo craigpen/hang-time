@@ -410,62 +410,73 @@ async function initializeExtension(): Promise<void> {
     try {
       console.log('[Background] Initializing extension...');
 
-    try {
-      console.debug('[Background] Initializing storage...');
-      await storageManager.initialize();
-      console.debug('[Background] Storage initialized');
-    } catch (error) {
-      console.error('[Background] Storage initialization failed:', error);
-      throw error;
-    }
+      // ========================================================================
+      // PHASE 1: Bootstrap session ID (MUST happen before any namespaced storage)
+      // ========================================================================
+      try {
+        console.debug('[Background] [BOOTSTRAP] Initializing storage...');
+        await storageManager.initialize();
+        console.debug('[Background] [BOOTSTRAP] Storage initialized');
+      } catch (error) {
+        console.error('[Background] Storage initialization failed:', error);
+        throw error;
+      }
 
-    // Initialize file logger for debugging (captures console logs to storage)
-    try {
-      const userProfile = await storageManager.getUserProfile();
-      const profileId = userProfile?.uuid || 'unknown';
-      initializeFileLogger(profileId, storageManager);
-      const logger = getFileLogger();
-      _hookConsoleToFileLogger(logger);
-    } catch (error) {
-      console.error('[Background] File logger initialization failed:', error);
-      // Don't fail extension startup if logger fails
-    }
+      try {
+        console.debug('[Background] [BOOTSTRAP] Initializing identity manager...');
+        initializeIdentityManager(storageManager);
+        console.debug('[Background] [BOOTSTRAP] Identity manager initialized');
 
-    // Re-inject content scripts if we detect orphaned scripts from before restart
-    // Check if there's activity data in storage (indicates scripts were running before restart)
-    // Register content scripts persistently on startup
-    // This ensures scripts are available for all current and future tabs
-    try {
-      await _registerContentScripts();
-    } catch (error) {
-      console.error('[Background] Failed to register content scripts on startup:', error);
-    }
+        // Generate or load user identifier (which is the UUID)
+        const identifier = await getIdentityManager().getIdentifier();
+        console.debug(`[Background] [BOOTSTRAP] User identifier: ${identifier}`);
 
-    // Check after 3 seconds if fresh content script connected
-    // If not, mark existing video-tab activity as disconnected (means it's from orphaned script)
-    console.log('[Background] Scheduling orphaned activity check in 3 seconds...');
-    setTimeout(async () => {
-      console.log('[Background] 3-second timeout fired, checking for orphaned activity');
-      await _checkForOrphanedActivity();
-    }, 3000);
+        // Set session ID for storage isolation - this MUST complete before other managers access storage
+        await storageManager.setSessionId(identifier);
+        console.debug('[Background] [BOOTSTRAP] ✅ Session ID ready - other managers can now access namespaced storage');
+      } catch (error) {
+        console.error('[Background] Identity initialization failed:', error);
+        throw error;
+      }
 
+      // ========================================================================
+      // PHASE 2: Initialize managers that depend on namespaced storage
+      // ========================================================================
+      console.debug('[Background] [PHASE 2] Starting manager initialization...');
 
-    try {
-      console.debug('[Background] Initializing identity manager...');
-      initializeIdentityManager(storageManager);
-      console.debug('[Background] Identity manager initialized');
+      // Initialize file logger for debugging (captures console logs to storage)
+      try {
+        const userProfile = await storageManager.getUserProfile();
+        const profileId = userProfile?.uuid || 'unknown';
+        initializeFileLogger(profileId, storageManager);
+        const logger = getFileLogger();
+        _hookConsoleToFileLogger(logger);
+      } catch (error) {
+        console.error('[Background] File logger initialization failed:', error);
+        // Don't fail extension startup if logger fails
+      }
 
-      // Generate or load user identifier
-      const identifier = await getIdentityManager().getIdentifier();
-      console.debug(`[Background] User identifier: ${identifier}`);
-    } catch (error) {
-      console.error('[Background] Identity initialization failed:', error);
-      throw error;
-    }
+      // Re-inject content scripts if we detect orphaned scripts from before restart
+      // Check if there's activity data in storage (indicates scripts were running before restart)
+      // Register content scripts persistently on startup
+      // This ensures scripts are available for all current and future tabs
+      try {
+        await _registerContentScripts();
+      } catch (error) {
+        console.error('[Background] Failed to register content scripts on startup:', error);
+      }
 
-    // Initialize friend manager
+      // Check after 3 seconds if fresh content script connected
+      // If not, mark existing video-tab activity as disconnected (means it's from orphaned script)
+      console.log('[Background] Scheduling orphaned activity check in 3 seconds...');
+      setTimeout(async () => {
+        console.log('[Background] 3-second timeout fired, checking for orphaned activity');
+        await _checkForOrphanedActivity();
+      }, 3000);
+
+    // Initialize friend manager (depends on namespaced storage)
     initializeFriendManager(storageManager);
-    console.debug('[Background] Friend manager initialized');
+    console.debug('[Background] [PHASE 2] Friend manager initialized');
 
     // Initialize Nostr relay pool (required for messaging and activity sync)
     try {
@@ -870,8 +881,8 @@ function _startCoWatcherDetectionCycle(): void {
           }
         }
 
-        // Build watching_together list: host + co-watchers
-        const watchingTogether: string[] = [hostName];
+        // Build watching_together list: all co_watchers, with host marked
+        const watchingTogether: string[] = [];
         const friendManager = getFriendManager();
         const profile = await storageManager.getUserProfile();
         const selfUuid = profile?.uuid;
@@ -883,6 +894,13 @@ function _startCoWatcherDetectionCycle(): void {
             const coWatcherFriend = await friendManager.getFriend(coWatcherId);
             coWatcherName = coWatcherFriend?.local_name || coWatcherId;
           }
+
+          // Mark host with label
+          if ((session.host_friend_uuid === 'self' && coWatcherId === selfUuid) ||
+              (session.host_friend_uuid !== 'self' && coWatcherId === session.host_friend_uuid)) {
+            coWatcherName = coWatcherName + ' (host)';
+          }
+
           watchingTogether.push(coWatcherName);
         }
 
@@ -1003,6 +1021,7 @@ function _startCoWatcherDetectionCycle(): void {
               host_duration: videoDuration,
               is_user_host: session.host_friend_uuid === 'self',
             });
+            console.log(`[Background] [MESSAGE_FLOW] watching_together: [${watchingTogether.join(', ')}], co_watchers: [${session.co_watchers.join(', ')}]`);
             port.postMessage({
               type: 'CO_WATCH_UPDATE',
               data: {
@@ -1283,8 +1302,9 @@ chrome.runtime.onConnect.addListener((port) => {
             });
 
             // Send to all co-watchers except self
-            for (const friendId of coWatchSession.co_watchers) {
-              if (friendId === userProfile?.uuid) continue; // Skip self
+            const recipientIds = coWatchSession.co_watchers.filter(id => id !== userProfile?.uuid);
+
+            for (const friendId of recipientIds) {
               const friend = await friendManager.getFriend(friendId);
               if (!friend) {
                 console.warn('[Background] [MESSAGE_FLOW] Friend not found for id:', friendId);
