@@ -1254,9 +1254,8 @@ chrome.runtime.onConnect.addListener((port) => {
                   }
                 }
 
-                // Map messages to display format
-                const recentActivityMessages = activityMessages.slice(-10);
-                for (const msg of recentActivityMessages) {
+                // Map messages to display format (load all messages)
+                for (const msg of activityMessages) {
                   const senderName = nameMap.get(msg.sender_identifier) || msg.sender_identifier || 'Unknown';
                   recentMessages.push({
                     id: msg.id,
