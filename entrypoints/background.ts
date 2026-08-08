@@ -539,10 +539,6 @@ async function initializeExtension(): Promise<void> {
     initializeNotificationManager(storageManager);
     console.debug('[Background] Notification manager initialized');
 
-    // Initialize notification deduplication (restores state from storage)
-    await initializeNotificationDedup();
-    console.debug('[Background] Notification deduplication initialized');
-
     // Initialize event deduplicator (restores from storage to prevent duplicates after reload)
     await initializeEventDeduplicator();
     console.debug('[Background] Event deduplicator initialized');
@@ -2381,13 +2377,9 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
       // Subscribe to new friend
       await _subscribeToFriend(senderIdentifier);
 
-      // Show notification (with deduplication to avoid duplicate notifications from multiple relays)
-      if (shouldNotifyForInvite(event.id)) {
-        // Mark as notified immediately to prevent race condition with multiple relays
-        await markInviteNotified(event.id);
-        const notificationManager = getNotificationManager();
-        await notificationManager.notifyFriendRequest(newFriend.uuid, senderDisplayName);
-      }
+      // Show notification (EventDeduplicator prevents duplicates from multiple relays)
+      const notificationManager = getNotificationManager();
+      await notificationManager.notifyFriendRequest(newFriend.uuid, senderDisplayName);
 
       // Notify popup
       try {
@@ -2584,15 +2576,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         return;
       }
 
-      // Second: rate limit notifications (don't spam user)
-      if (!shouldNotifyForInvite(event.id)) {
-        console.debug(`[Background] Invite ${event.id.substring(0, 8)}... rate limited (< 20s since last notify), skipping notification`);
-        return;
-      }
-
-      // Mark as notified to track rate limit
-      await markInviteNotified(event.id);
-
+      // EventDeduplicator prevents duplicate processing from multiple relays
       const service = event.tags.find((t) => t[0] === 'service')?.[1] || 'an activity';
       const activityName = event.tags.find((t) => t[0] === 'activity_name')?.[1] || service;
       const activityId = event.tags.find((t) => t[0] === 'activity_id')?.[1];
@@ -2906,15 +2890,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
       // Store pending invite and notify popup
       if (message.type === 'invite' && message.activity_id) {
         try {
-          // Rate limit notifications (don't spam user) - use message.activity_id as dedup key
-          if (!shouldNotifyForInvite(message.activity_id)) {
-            console.debug(`[Message] Invite ${message.activity_id.substring(0, 8)}... rate limited (< 20s since last notify), skipping notification`);
-            return;
-          }
-
-          // Mark as notified to track rate limit
-          await markInviteNotified(message.activity_id);
-
+          // EventDeduplicator prevents duplicate processing from multiple relays
           console.debug(`[Message] 💌 Invite: Storing pending invite - activityId: ${message.activity_id}, service: ${message.service}, friendId: ${friend.uuid}`);
 
           // Find the friend's activity that matches this invite
@@ -3039,20 +3015,12 @@ async function _handleFriendRequestAccepted(friend: Friend, event: NostrEvent, m
     }
     console.log(`[FriendRequest] ✅ ${friend.local_name} accepted your friend request`);
 
-    // Notify the user (with deduplication to avoid multiple notifications from multiple relays)
-    console.debug(`[FriendRequest] Checking dedup for event: ${event.id.substring(0, 16)}...`);
-    if (shouldNotifyForInvite(event.id)) {
-      console.log(`[FriendRequest] Will notify - dedup check passed`);
-      // Mark as notified immediately to prevent race condition with multiple relays
-      await markInviteNotified(event.id);
-      const notificationManager = getNotificationManager();
-      await notificationManager.notify(
-        `${friend.local_name} accepted your friend request`,
-        'You are now friends!'
-      );
-    } else {
-      console.log(`[FriendRequest] Suppressed duplicate notification for ${event.id.substring(0, 16)}...`);
-    }
+    // Notify the user (EventDeduplicator prevents duplicates from multiple relays)
+    const notificationManager = getNotificationManager();
+    await notificationManager.notify(
+      `${friend.local_name} accepted your friend request`,
+      'You are now friends!'
+    );
   } catch (error) {
     console.error('[FriendRequest] Failed to handle friend request acceptance:', error);
   }
@@ -3446,32 +3414,8 @@ async function _sendJoinNotification(activity?: any, friendId?: string, accepted
 }
 
 // ============================================================================
-// NOTIFICATION DEDUPLICATION & INVITE TRACKING
+// EVENT DEDUPLICATION (Nostr events from relays)
 // ============================================================================
-
-const notifiedInviteIds = new Map<string, number>(); // eventId -> timestamp
-
-async function initializeNotificationDedup(): Promise<void> {
-  const stored = await storageManager.getNotifiedInviteIds();
-  const now = Date.now();
-  const oneWeekAgo = now - (7 * 24 * 60 * 60 * 1000);
-
-  console.debug(`[Dedup] Restoring notification dedup state: found ${stored.size} stored event IDs`);
-
-  for (const [eventId, timestamp] of stored) {
-    // Only keep recent entries (last 7 days)
-    if (timestamp > oneWeekAgo) {
-      notifiedInviteIds.set(eventId, timestamp);
-      console.debug(`[Dedup]   - Restored: ${eventId.substring(0, 16)}... (${Math.round((now - timestamp) / 1000)}s ago)`);
-    }
-  }
-
-  if (notifiedInviteIds.size > 0) {
-    console.log(`[Dedup] ✅ Loaded ${notifiedInviteIds.size} cached notification IDs`);
-  } else {
-    console.log(`[Dedup] No cached notification IDs`);
-  }
-}
 
 /**
  * Initialize EventDeduplicator from storage (survives extension reload)
@@ -3502,53 +3446,6 @@ async function persistEventDeduplicatorState(): Promise<void> {
     await storageManager.setProcessedEventIds(processed);
     console.debug(`[Dedup] Persisted ${processed.size} processed event IDs to storage`);
   }
-}
-
-/**
- * Rate limit: only re-notify if 20+ seconds have passed since last notification
- * Prevents duplicate notifications if same invite is received multiple times
- */
-const INVITE_NOTIFICATION_RATE_LIMIT_MS = 20 * 1000; // 20 seconds
-
-function hasNotifiedForInvite(eventId: string): boolean {
-  return notifiedInviteIds.has(eventId);
-}
-
-function shouldNotifyForInvite(eventId: string): boolean {
-  // If never notified, return true
-  if (!notifiedInviteIds.has(eventId)) {
-    console.debug(`[Notification] New event, will notify: ${eventId.substring(0, 16)}...`);
-    return true;
-  }
-
-  // Check if enough time has passed since last notification
-  const lastNotifiedAt = notifiedInviteIds.get(eventId)!;
-  const timeSinceLastNotification = Date.now() - lastNotifiedAt;
-  const shouldNotify = timeSinceLastNotification >= INVITE_NOTIFICATION_RATE_LIMIT_MS;
-
-  if (!shouldNotify) {
-    const remainingMs = INVITE_NOTIFICATION_RATE_LIMIT_MS - timeSinceLastNotification;
-    console.warn(`[Notification] ⏱️  Suppressing duplicate notification for ${eventId.substring(0, 16)}... (rate limit: ${Math.round(remainingMs / 1000)}s remaining)`);
-  }
-
-  return shouldNotify;
-}
-
-async function markInviteNotified(eventId: string): Promise<void> {
-  const now = Date.now();
-  notifiedInviteIds.set(eventId, now);
-
-  // Persist to storage immediately (critical for dedup across reloads)
-  await storageManager.setNotifiedInviteIds(notifiedInviteIds);
-  // Force immediate sync instead of batched (notification state must survive reload)
-  await storageManager.forceSyncNow();
-}
-
-/**
- * Check if a message has already been processed
- */
-function isMessageAlreadyProcessed(eventId: string): boolean {
-  return notifiedInviteIds.has(eventId);
 }
 
 /**
@@ -4003,7 +3900,6 @@ function _registerMessageHandlers(): void {
 
 (async () => {
   try {
-    await initializeNotificationDedup();
     await initializeExtension();
     await retryPendingInvites();
     await retryPendingMessages();

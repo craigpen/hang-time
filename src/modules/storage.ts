@@ -178,14 +178,16 @@ export class StorageManager {
         }
       }
 
-      // Load dynamic keys: activity_messages_* and hang_time_activity_history_*
+      // Load dynamic keys: activity_messages_*, hang_time_activity_history_*, processed_event_ids
       try {
         const allStorageKeys = await chrome.storage.local.get(null);
         const dynamicPatterns = ['activity_messages_', 'hang_time_activity_history_'];
+        const hardcodedDynamicKeys = ['processed_event_ids']; // Keys not in STORAGE_KEYS but should be pre-loaded
 
         for (const [storedKey, storedValue] of Object.entries(allStorageKeys)) {
-          // Check if this key matches any dynamic pattern
-          const matchesPattern = dynamicPatterns.some(pattern => storedKey.includes(pattern));
+          // Check if this key matches any dynamic pattern or hardcoded dynamic key
+          const matchesPattern = dynamicPatterns.some(pattern => storedKey.includes(pattern)) ||
+                               hardcodedDynamicKeys.some(key => storedKey.endsWith(key));
           if (!matchesPattern) continue;
 
           // Determine the original key (without session ID prefix if present)
@@ -200,7 +202,7 @@ export class StorageManager {
           }
         }
 
-        console.debug('[Storage] Loaded dynamic keys (activity_messages_*, hang_time_activity_history_*)');
+        console.debug('[Storage] Loaded dynamic keys (activity_messages_*, hang_time_activity_history_*, processed_event_ids)');
       } catch (error) {
         console.error('[Storage] Failed to load dynamic keys:', error);
         // Continue anyway - dynamic keys are important but not critical for startup
