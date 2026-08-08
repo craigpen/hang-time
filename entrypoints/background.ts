@@ -833,6 +833,7 @@ function _startCoWatcherDetectionCycle(): void {
         let videoDuration: number | undefined;
 
         let userPosition: number | undefined;
+        let userActivity: any = undefined;
         const myActivities = await storageManager.getMyActivities();
 
         if (session.host_friend_uuid === 'self') {
@@ -856,6 +857,7 @@ function _startCoWatcherDetectionCycle(): void {
             }
             // User position is same as host position when user is host
             userPosition = hostActivity.metadata?.progress;
+            userActivity = hostActivity;
           }
         } else if (hostFriend?.current_activities) {
           // Host is friend: use friend's activity
@@ -871,7 +873,7 @@ function _startCoWatcherDetectionCycle(): void {
             }
           }
           // Get user's position for this same activity from myActivities
-          const userActivity = myActivities?.[session.activity_id];
+          userActivity = myActivities?.[session.activity_id];
           if (userActivity?.metadata?.progress !== undefined) {
             userPosition = userActivity.metadata.progress;
           }
