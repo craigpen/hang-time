@@ -1219,7 +1219,7 @@ export class OverlayUI {
         return `
           <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}">
             <div class="attendee-chip" style="background: ${userColor}; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);">${this.escapeHtml(displayName)}</div>
-            <div class="message-content" style="${isUser ? `background: rgba(96, 165, 250, 0.3);` : `background: rgba(255, 255, 255, 0.08);`} color: white;">${this.escapeHtml(msg.content)}</div>
+            <div class="message-content" style="background: rgba(255, 255, 255, 0.08); color: white;">${this.escapeHtml(msg.content)}</div>
           </div>
         `;
       })
