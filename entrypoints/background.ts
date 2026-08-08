@@ -808,6 +808,21 @@ function _startCoWatcherDetectionCycle(): void {
       const session = await detector.detectCoWatchSession();
 
       if (session) {
+        // Check if friend data is fresh enough before showing overlay
+        // This prevents showing wrong host during reload when friend's contentTimestamp is stale
+        const FRIEND_FRESHNESS_THRESHOLD_MS = 5000; // 5 seconds
+        if (session.host_friend_uuid !== 'self') {
+          const hostFriend = await getFriendManager().getFriend(session.host_friend_uuid);
+          const hostActivity = hostFriend?.current_activities?.[session.activity_id];
+          if (hostActivity) {
+            const activityAge = Date.now() - (hostActivity.freshness_timestamp || 0);
+            if (activityAge > FRIEND_FRESHNESS_THRESHOLD_MS) {
+              console.debug(`[Background] [CoWatch] Friend activity too stale (${activityAge}ms > ${FRIEND_FRESHNESS_THRESHOLD_MS}ms), waiting for fresh update...`);
+              return; // Skip sending CO_WATCH_UPDATE until friend data refreshes
+            }
+          }
+        }
+
         // Store the co-watch session for overlay to use
         await detector.setCurrentCoWatchSession(session);
 
