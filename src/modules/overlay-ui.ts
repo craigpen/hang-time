@@ -945,8 +945,9 @@ export class OverlayUI {
   setState(newState: Partial<OverlayState>): void {
     this._state = { ...this._state, ...newState };
     this.render();
-    // Show overlay if we have an active co-watch session
-    if (this._state.watching_together.length > 0) {
+    // Show overlay only if hidden and we have an active co-watch session
+    // Don't interrupt a fade-out that's already in progress
+    if (!this._state.visible && this._state.watching_together.length > 0) {
       this.show();
     }
   }
