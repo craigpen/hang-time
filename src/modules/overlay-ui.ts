@@ -844,9 +844,9 @@ export class OverlayUI {
     // Cancel any pending fade-out
     if (this.hideTimer) clearTimeout(this.hideTimer);
 
-    // Reset opacity and show
+    // Show with opacity limited by slider
     this.container.style.transition = '';
-    this.container.style.opacity = '1';
+    this.container.style.opacity = (this._state.opacity / 100).toString();
     this.container.classList.remove('hidden');
     this._state.visible = true;
   }
@@ -857,27 +857,34 @@ export class OverlayUI {
   hide(): void {
     if (!this.container) return;
     this.container.classList.add('hidden');
-    this.container.style.opacity = '1'; // Reset opacity for next show
+    this.container.style.opacity = (this._state.opacity / 100).toString(); // Reset to slider value for next show
     this._state.visible = false;
   }
 
   /**
-   * Fade out overlay over 3 seconds then hide
+   * Fade out overlay: wait 3 seconds then fade over 3 seconds then hide
    */
   private startFadeOut(): void {
     if (!this.container || this._state.pinned) return;
 
     if (this.hideTimer) clearTimeout(this.hideTimer);
 
-    // Set up CSS transition for smooth fade
-    this.container.style.transition = 'opacity 3s ease-out';
-    this.container.style.opacity = '0';
-
-    // Hide after fade completes
+    // Wait 3 seconds before starting fade
     this.hideTimer = setTimeout(() => {
-      this.hide();
-      // Reset transition for next show
-      this.container!.style.transition = '';
+      if (!this.container) return;
+
+      // Set up CSS transition for smooth fade (3 second fade)
+      this.container.style.transition = 'opacity 3s ease-out';
+      this.container.style.opacity = '0';
+
+      // Hide after fade completes
+      this.hideTimer = setTimeout(() => {
+        this.hide();
+        // Reset transition for next show
+        if (this.container) {
+          this.container.style.transition = '';
+        }
+      }, 3000);
     }, 3000);
   }
 
