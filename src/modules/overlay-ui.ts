@@ -40,6 +40,7 @@ export class OverlayUI {
   private userColorMap: Map<string, string> = new Map(); // sender_uuid -> color
   private nicknameMap: Map<string, string> = new Map(); // sender_uuid -> display name
   private hasBeenShownByUser = false; // Track if user has interacted with overlay (for initial discovery)
+  private fadeTimeoutId: number | null = null; // Track the inner fade timeout separately
   private _state: OverlayState = {
     visible: false,
     pinned: false,
@@ -841,8 +842,11 @@ export class OverlayUI {
     // Mark that overlay has been shown to user
     this.hasBeenShownByUser = true;
 
-    // Cancel any pending fade-out
+    // Cancel any pending fade-out (both wait and fade timeouts)
     if (this.hideTimer) clearTimeout(this.hideTimer);
+    if (this.fadeTimeoutId) clearTimeout(this.fadeTimeoutId);
+    this.hideTimer = null;
+    this.fadeTimeoutId = null;
 
     // Show with opacity limited by slider
     this.container.style.transition = '';
@@ -867,10 +871,12 @@ export class OverlayUI {
   private startFadeOut(): void {
     if (!this.container || this._state.pinned) return;
 
+    // Cancel any existing timers
     if (this.hideTimer) clearTimeout(this.hideTimer);
+    if (this.fadeTimeoutId) clearTimeout(this.fadeTimeoutId);
 
     // Wait 3 seconds before starting fade
-    this.hideTimer = setTimeout(() => {
+    this.hideTimer = window.setTimeout(() => {
       if (!this.container) return;
 
       // Set up CSS transition for smooth fade (3 second fade)
@@ -878,12 +884,14 @@ export class OverlayUI {
       this.container.style.opacity = '0';
 
       // Hide after fade completes
-      this.hideTimer = setTimeout(() => {
+      this.fadeTimeoutId = window.setTimeout(() => {
         this.hide();
-        // Reset transition for next show
+        // Reset transition and timeouts
         if (this.container) {
           this.container.style.transition = '';
         }
+        this.fadeTimeoutId = null;
+        this.hideTimer = null;
       }, 3000);
     }, 3000);
   }
@@ -1346,6 +1354,9 @@ export class OverlayUI {
     }
     if (this.hideTimer) {
       clearTimeout(this.hideTimer);
+    }
+    if (this.fadeTimeoutId) {
+      clearTimeout(this.fadeTimeoutId);
     }
     if (this.progressUpdateInterval) {
       clearInterval(this.progressUpdateInterval);
