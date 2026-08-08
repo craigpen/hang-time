@@ -612,25 +612,30 @@ export class OverlayUI {
    * Setup global event listeners
    */
   private setupEventListeners(): void {
-    // Show overlay on mouse move
-    document.addEventListener('mousemove', (e) => {
-      this.show();
-      // Handle dragging
-      if (this.isDragging && this.container) {
-        const deltaX = e.clientX - this.dragStartX;
-        const deltaY = e.clientY - this.dragStartY;
-        this.container.style.left = (this.dragStartLeft + deltaX) + 'px';
-        this.container.style.top = (this.dragStartTop + deltaY) + 'px';
-        this.container.style.right = 'auto';
-      }
-    });
+    // Show overlay only on hover over the overlay itself
+    if (this.container) {
+      this.container.addEventListener('mouseenter', () => {
+        this.show();
+      });
 
-    // Hide overlay after inactivity (unless pinned)
-    document.addEventListener('mousemove', () => {
-      if (!this._state.pinned && !this.isDragging) {
-        this.resetHideTimer();
-      }
-    });
+      // Hide with fade when mouse leaves overlay
+      this.container.addEventListener('mouseleave', () => {
+        if (!this._state.pinned) {
+          this.startFadeOut();
+        }
+      });
+
+      // Handle dragging within the overlay
+      document.addEventListener('mousemove', (e) => {
+        if (this.isDragging && this.container) {
+          const deltaX = e.clientX - this.dragStartX;
+          const deltaY = e.clientY - this.dragStartY;
+          this.container.style.left = (this.dragStartLeft + deltaX) + 'px';
+          this.container.style.top = (this.dragStartTop + deltaY) + 'px';
+          this.container.style.right = 'auto';
+        }
+      });
+    }
 
     // Stop dragging on mouse up
     document.addEventListener('mouseup', () => {
@@ -821,11 +826,14 @@ export class OverlayUI {
       return;
     }
 
+    // Cancel any pending fade-out
+    if (this.hideTimer) clearTimeout(this.hideTimer);
+
+    // Reset opacity and show
+    this.container.style.transition = '';
+    this.container.style.opacity = '1';
     this.container.classList.remove('hidden');
     this._state.visible = true;
-    if (!this._state.pinned) {
-      this.resetHideTimer();
-    }
   }
 
   /**
@@ -834,7 +842,28 @@ export class OverlayUI {
   hide(): void {
     if (!this.container) return;
     this.container.classList.add('hidden');
+    this.container.style.opacity = '1'; // Reset opacity for next show
     this._state.visible = false;
+  }
+
+  /**
+   * Fade out overlay over 3 seconds then hide
+   */
+  private startFadeOut(): void {
+    if (!this.container || this._state.pinned) return;
+
+    if (this.hideTimer) clearTimeout(this.hideTimer);
+
+    // Set up CSS transition for smooth fade
+    this.container.style.transition = 'opacity 3s ease-out';
+    this.container.style.opacity = '0';
+
+    // Hide after fade completes
+    this.hideTimer = setTimeout(() => {
+      this.hide();
+      // Reset transition for next show
+      this.container!.style.transition = '';
+    }, 3000);
   }
 
   /**
