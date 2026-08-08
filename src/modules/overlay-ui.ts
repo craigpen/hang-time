@@ -850,6 +850,17 @@ export class OverlayUI {
         const gap = Math.abs(this._state.user_progress - hostCurrentPosition);
         const SYNC_THRESHOLD = 5000; // 5 seconds in milliseconds
 
+        console.debug('[OverlayUI] Arrow gap calculation:', {
+          user_progress: this._state.user_progress,
+          host_progress: this._state.host_progress,
+          hostCurrentPosition,
+          elapsedSinceHostMeasureMs: Date.now() - this._state.host_progress_timestamp,
+          gap,
+          SYNC_THRESHOLD,
+          host_state: this._state.host_state,
+          showArrow: gap > SYNC_THRESHOLD,
+        });
+
         if (gap > SYNC_THRESHOLD) {
           const userPercent = Math.min((this._state.user_progress / this._state.host_duration) * 100, 100);
           markerEl.style.left = userPercent + '%';
@@ -858,16 +869,21 @@ export class OverlayUI {
           markerEl.classList.remove('arrow-left', 'arrow-right');
           if (this._state.user_progress < hostCurrentPosition) {
             markerEl.classList.add('arrow-right'); // User behind, arrow points right (toward host ahead)
+            console.debug('[OverlayUI] Arrow RIGHT: user behind', { user: this._state.user_progress, host: hostCurrentPosition });
           } else if (this._state.user_progress > hostCurrentPosition) {
             markerEl.classList.add('arrow-left'); // User ahead, arrow points left (toward host behind)
+            console.debug('[OverlayUI] Arrow LEFT: user ahead', { user: this._state.user_progress, host: hostCurrentPosition });
           }
 
           markerEl.style.display = 'block';
+          console.debug('[OverlayUI] Arrow SHOWN at', userPercent + '%');
         } else {
           markerEl.style.display = 'none';
+          console.debug('[OverlayUI] Arrow hidden: gap too small');
         }
       } else {
         markerEl.style.display = 'none';
+        console.debug('[OverlayUI] Arrow hidden: condition not met');
       }
     }
 
