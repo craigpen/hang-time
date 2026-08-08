@@ -915,6 +915,10 @@ export class OverlayUI {
   setState(newState: Partial<OverlayState>): void {
     this._state = { ...this._state, ...newState };
     this.render();
+    // Show overlay if we have an active co-watch session
+    if (this._state.watching_together.length > 0) {
+      this.show();
+    }
   }
 
   /**
