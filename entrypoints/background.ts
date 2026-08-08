@@ -808,22 +808,6 @@ function _startCoWatcherDetectionCycle(): void {
       const session = await detector.detectCoWatchSession();
 
       if (session) {
-        // Check if friend data is fresh enough before showing overlay
-        // This prevents showing wrong host during reload when friend's contentTimestamp is stale
-        // Wait for at least one Nostr update cycle (12s minimum) plus buffer
-        const FRIEND_FRESHNESS_THRESHOLD_MS = 13000; // 13 seconds (12s cycle + 1s buffer)
-        if (session.host_friend_uuid !== 'self') {
-          const hostFriend = await getFriendManager().getFriend(session.host_friend_uuid);
-          const hostActivity = hostFriend?.current_activities?.[session.activity_id];
-          if (hostActivity) {
-            const activityAge = Date.now() - (hostActivity.freshness_timestamp || 0);
-            if (activityAge > FRIEND_FRESHNESS_THRESHOLD_MS) {
-              console.debug(`[Background] [CoWatch] Friend activity too stale (${activityAge}ms > ${FRIEND_FRESHNESS_THRESHOLD_MS}ms), waiting for fresh Nostr update...`);
-              return; // Skip sending CO_WATCH_UPDATE until friend data refreshes
-            }
-          }
-        }
-
         // Store the co-watch session for overlay to use
         await detector.setCurrentCoWatchSession(session);
 
@@ -1042,6 +1026,13 @@ function _startCoWatcherDetectionCycle(): void {
               is_user_host: session.host_friend_uuid === 'self',
             });
             console.log(`[Background] [MESSAGE_FLOW] watching_together: [${watchingTogether.join(', ')}], co_watchers: [${session.co_watchers.join(', ')}]`);
+            // Get host friend's activity freshness for content-script first-show check
+            let hostActivityFreshness: number | undefined;
+            if (session.host_friend_uuid !== 'self' && hostFriend?.current_activities) {
+              const hostActivity = Object.values(hostFriend.current_activities).find(a => a?.id === session.activity_id);
+              hostActivityFreshness = hostActivity?.freshness_timestamp;
+            }
+
             port.postMessage({
               type: 'CO_WATCH_UPDATE',
               data: {
@@ -1054,6 +1045,7 @@ function _startCoWatcherDetectionCycle(): void {
                 host_duration: videoDuration,
                 user_progress: userPosition,
                 guest_progress: guestProgress,
+                host_activity_freshness_timestamp: hostActivityFreshness,
                 is_user_host: session.host_friend_uuid === 'self',
                 messages: recentMessages,
                 nicknameMap: broadcastNicknameMap,

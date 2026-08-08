@@ -45,6 +45,7 @@ let tracker: GenericVideoTracker | null = null;
 // Overlay UI state
 let overlayUI: OverlayUI | null = null;
 let userId: string = ''; // Will be set from background message
+let overlayHasBeenShown = false; // Track if overlay was shown once (to avoid hide/show flicker if Nostr updates are missed)
 
 // ============================================================================
 // GENERIC VIDEO TRACKER CLASS
@@ -723,6 +724,26 @@ function establishConnection(): void {
           }
           // Update overlay with co-watch data
           if (message.data) {
+            // On first show only: check if host friend's data is fresh enough
+            // This prevents showing incorrect host during reload when friend's contentTimestamp is stale
+            if (!overlayHasBeenShown && !message.data.is_user_host) {
+              const FRIEND_FRESHNESS_THRESHOLD_MS = 13000; // 13 seconds (allow Nostr cycle to complete)
+              const hostFreshnessTimestamp = message.data.host_activity_freshness_timestamp;
+              if (hostFreshnessTimestamp) {
+                const hostActivityAge = Date.now() - hostFreshnessTimestamp;
+                if (hostActivityAge > FRIEND_FRESHNESS_THRESHOLD_MS) {
+                  console.debug(`[ContentScript] Host friend data too stale (${hostActivityAge}ms > ${FRIEND_FRESHNESS_THRESHOLD_MS}ms), waiting for fresh Nostr update...`);
+                  return; // Don't show overlay yet
+                }
+              }
+            }
+
+            // Mark overlay as shown once we pass freshness check
+            if (!overlayHasBeenShown) {
+              overlayHasBeenShown = true;
+              console.debug('[ContentScript] Overlay will be shown for first time');
+            }
+
             // Merge messages instead of replacing - preserve locally added messages
             const incomingMessages = message.data.messages || [];
             const currentMessages = overlayUI.state.messages || [];
