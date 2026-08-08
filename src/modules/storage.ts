@@ -178,11 +178,19 @@ export class StorageManager {
         }
       }
 
-      // Load dynamic keys: activity_messages_*, hang_time_activity_history_*, processed_event_ids
+      // Load dynamic keys: activity_messages_*, hang_time_activity_history_*, processed_event_ids, pending_publishes, nostr_* subscriptions
       try {
         const allStorageKeys = await chrome.storage.local.get(null);
-        const dynamicPatterns = ['activity_messages_', 'hang_time_activity_history_'];
-        const hardcodedDynamicKeys = ['processed_event_ids']; // Keys not in STORAGE_KEYS but should be pre-loaded
+        const dynamicPatterns = [
+          'activity_messages_',
+          'hang_time_activity_history_',
+          'nostr_sub_since_',        // Nostr relay subscription timestamps
+          'nostr_dm_since_',         // Nostr DM subscription timestamps
+        ];
+        const hardcodedDynamicKeys = [
+          'processed_event_ids',     // EventDeduplicator state
+          'pending_publishes',       // PublishQueue pending items
+        ];
 
         for (const [storedKey, storedValue] of Object.entries(allStorageKeys)) {
           // Check if this key matches any dynamic pattern or hardcoded dynamic key
@@ -202,7 +210,7 @@ export class StorageManager {
           }
         }
 
-        console.debug('[Storage] Loaded dynamic keys (activity_messages_*, hang_time_activity_history_*, processed_event_ids)');
+        console.debug('[Storage] Loaded dynamic keys (activity_messages_*, hang_time_activity_history_*, nostr_*, processed_event_ids, pending_publishes)');
       } catch (error) {
         console.error('[Storage] Failed to load dynamic keys:', error);
         // Continue anyway - dynamic keys are important but not critical for startup
@@ -848,14 +856,14 @@ export class StorageManager {
    * Get OAuth configuration
    */
   async getOAuthConfig(): Promise<Record<string, unknown>> {
-    return this.get<Record<string, unknown>>('oauth_config', {});
+    return this.get<Record<string, unknown>>(STORAGE_KEYS.OAUTH_CONFIG, {});
   }
 
   /**
    * Set OAuth configuration
    */
   async setOAuthConfig(config: Record<string, unknown>): Promise<void> {
-    await this.set('oauth_config', config);
+    await this.set(STORAGE_KEYS.OAUTH_CONFIG, config);
   }
 
   // ============================================================================
@@ -867,7 +875,7 @@ export class StorageManager {
    * Returns null if title is missing or stale (>24 hours old)
    */
   async getNetflixTitle(): Promise<string | null> {
-    const data = await this.get<any>('netflix_title_data');
+    const data = await this.get<any>(STORAGE_KEYS.NETFLIX_TITLE_DATA);
     if (!data || !data.value) {
       return null;
     }
@@ -878,7 +886,7 @@ export class StorageManager {
 
     if (ageMs > MAX_AGE_MS) {
       console.warn(`[Storage] Netflix title is stale (${Math.floor(ageMs / 60000)}m old), clearing`);
-      await this.set('netflix_title_data', null);
+      await this.set(STORAGE_KEYS.NETFLIX_TITLE_DATA, null);
       return null;
     }
 
@@ -886,20 +894,10 @@ export class StorageManager {
   }
 
   /**
-   * Set Netflix title from content script (internal use only)
-   * Content script should call this directly with full metadata
-   */
-  async setNetflixTitle(title: string): Promise<void> {
-    // Backwards compatibility for direct calls without metadata
-    // Content script should use direct storage instead
-    await this.set('netflix_title', title);
-  }
-
-  /**
    * Clear Netflix title (used for cleanup/expiration)
    */
   async clearNetflixTitle(): Promise<void> {
-    await this.set('netflix_title_data', null);
+    await this.set(STORAGE_KEYS.NETFLIX_TITLE_DATA, null);
   }
 
   /**
@@ -907,7 +905,7 @@ export class StorageManager {
    * Returns count of items cleaned
    */
   async removeStaleNetflixTitle(): Promise<number> {
-    const data = await this.get<any>('netflix_title_data');
+    const data = await this.get<any>(STORAGE_KEYS.NETFLIX_TITLE_DATA);
     if (!data || !data.value) {
       return 0;
     }
@@ -939,7 +937,7 @@ export class StorageManager {
    * Get health status for all integrations
    */
   async getIntegrationHealth(): Promise<Record<string, { alive: boolean; lastPing: number; personaname?: string }>> {
-    return this.get<Record<string, { alive: boolean; lastPing: number; personaname?: string }>>('integration_health', {});
+    return this.get<Record<string, { alive: boolean; lastPing: number; personaname?: string }>>(STORAGE_KEYS.INTEGRATION_HEALTH, {});
   }
 
   /**
@@ -952,7 +950,7 @@ export class StorageManager {
       lastPing: Date.now(),
       personaname,
     };
-    await this.set('integration_health', health);
+    await this.set(STORAGE_KEYS.INTEGRATION_HEALTH, health);
   }
 
   // ============================================================================

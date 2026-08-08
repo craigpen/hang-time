@@ -3351,7 +3351,7 @@ async function _findGamesMissingMetadata(games: any[]): Promise<number[]> {
   try {
     // Get cached metadata from storage
     const metadataCache = await storageManager.get<Record<number, any>>(
-      'game_metadata_cache',
+      STORAGE_KEYS.GAME_METADATA_CACHE,
       {}
     );
 
