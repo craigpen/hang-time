@@ -284,12 +284,19 @@ export class CoWatcherDetector {
         };
         console.log('[CoWatcher] Created new user session:', { session_id: session.session_id, co_watchers: session.co_watchers.length, activity_id: session.activity_id });
       } else {
-        // Update existing session with new co-watchers and activity context (in case someone joined/left or activity changed)
-        session.co_watchers = activityCoWatch.co_watchers;
-        session.activity_id = activityCoWatch.activity_id;
-        session.host_friend_uuid = activityCoWatch.host_friend_uuid;
+        // Update existing session: preserve co-watchers (persistent session members)
+        // Only update activity context if there's a new matched activity
+        // This allows divergence: co-watchers stay in session even if watching different activities
+        if (activityCoWatch.co_watchers.length > 0) {
+          // Only update if there's an actual activity match (not just one person watching alone)
+          session.activity_id = activityCoWatch.activity_id;
+          session.host_friend_uuid = activityCoWatch.host_friend_uuid;
+          console.log('[CoWatcher] Updated existing user session activity context:', { session_id: session.session_id, activity_id: session.activity_id });
+        } else {
+          // No current match, but keep session active for divergence tracking
+          console.log('[CoWatcher] No activity match, keeping session active for divergence:', { session_id: session.session_id, current_activity: session.activity_id });
+        }
         session.is_active = true;
-        console.log('[CoWatcher] Updated existing user session:', { session_id: session.session_id, co_watchers: session.co_watchers.length, activity_id: session.activity_id });
       }
 
       console.log('[CoWatcher] DEBUG: Storing session.co_watchers:', session.co_watchers.map(cw => ({ id: cw, length: cw.length })));
