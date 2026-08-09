@@ -25,9 +25,10 @@ export interface OverlayState {
   user_progress?: number; // user's own progress in seconds
   guest_progress?: Record<string, number>; // UUID -> progress in seconds for each guest
   guest_progress_timestamp?: number; // when guest progress was last updated
-  activity_id?: string;
+  activity_id?: string; // current/host's activity_id
   is_user_host?: boolean; // true if the user is the host
   user_nickname?: string; // current user's nickname for sending messages
+  co_watcher_activities?: Record<string, {activity_id: string; content: string; favicon?: string}>; // UUID -> current activity for divergence display
 }
 
 export class OverlayUI {
@@ -881,6 +882,32 @@ export class OverlayUI {
   }
 
   /**
+   * Handle join button click for diverged guest's video
+   */
+  private handleJoinGuest(friendUuid: string): void {
+    if (!this.port) return;
+
+    const guestActivity = this._state.co_watcher_activities?.[friendUuid];
+    if (!guestActivity) {
+      console.warn('[OverlayUI] No activity found for guest:', friendUuid);
+      return;
+    }
+
+    console.log('[OverlayUI] User clicked join for guest:', friendUuid, 'activity:', guestActivity.activity_id);
+
+    // Send message to content script to navigate to guest's video
+    // Content script will handle opening the URL
+    this.port.postMessage({
+      type: 'JOIN_GUEST_ACTIVITY',
+      data: {
+        guest_uuid: friendUuid,
+        activity_id: guestActivity.activity_id,
+        url: guestActivity.content, // This might be title, not URL - backend will need to provide URL
+      }
+    });
+  }
+
+  /**
    * Find the host's UUID by matching their nickname in the nicknameMap
    */
   private getHostUuid(): string | undefined {
@@ -1353,14 +1380,54 @@ export class OverlayUI {
       const nickname = this.nicknameMap.get(uuid) || uuid.slice(0, 8);
       const displayName = uuid === this.userId ? 'You' : this.escapeHtml(nickname);
       const color = this.getParticipantColor(uuid);
-      console.debug('[OverlayUI]   Adding chip for:', displayName);
-      const chip = `<div class="attendee-chip" style="background: ${color};">
-        <span>${displayName}</span>
-      </div>`;
+
+      // Check if guest is on different activity (divergence)
+      const guestActivity = this._state.co_watcher_activities?.[uuid];
+      const isOnDifferentActivity = guestActivity && guestActivity.activity_id !== this._state.activity_id;
+
+      let chip: string;
+      if (isOnDifferentActivity && guestActivity) {
+        // Guest is on different video: show nickname | [favicon] title | [Join]
+        const faviconHtml = guestActivity.favicon ? `<img src="${guestActivity.favicon}" style="width: 16px; height: 16px; margin-right: 4px;" alt="">` : '';
+        const title = this.escapeHtml(guestActivity.content.substring(0, 30));
+        chip = `
+          <div style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: rgba(255, 255, 255, 0.08); border-radius: 6px; margin-bottom: 4px;">
+            <div class="attendee-chip" style="background: ${color}; flex-shrink: 0;">
+              <span>${displayName}</span>
+            </div>
+            <div style="display: flex; align-items: center; color: #aaa; font-size: 12px;">
+              ${faviconHtml}
+              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</span>
+            </div>
+            <button class="join-button" data-uuid="${uuid}" style="padding: 4px 8px; font-size: 11px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">Join</button>
+          </div>
+        `;
+      } else {
+        // Guest on same activity: show nickname chip only
+        chip = `<div class="attendee-chip" style="background: ${color};">
+          <span>${displayName}</span>
+        </div>`;
+      }
+
       chips.push(chip);
     }
 
-    guestContainer.innerHTML = chips.join('');
+    // If no co-watchers, show "Waiting for co-watchers"
+    if (chips.length === 0) {
+      guestContainer.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 13px; padding: 12px;">Waiting for co-watchers...</div>';
+    } else {
+      guestContainer.innerHTML = chips.join('');
+
+      // Attach click listeners to join buttons
+      for (const button of guestContainer.querySelectorAll('.join-button')) {
+        button.addEventListener('click', (e) => {
+          const uuid = (e.target as HTMLElement).getAttribute('data-uuid');
+          if (uuid) {
+            this.handleJoinGuest(uuid);
+          }
+        });
+      }
+    }
   }
 
   /**

@@ -1037,6 +1037,28 @@ function _startCoWatcherDetectionCycle(): void {
               hostActivityFreshness = hostActivity?.freshness_timestamp;
             }
 
+            // Build co-watcher activities map for divergence display
+            const coWatcherActivities: Record<string, {activity_id: string; content: string; favicon?: string}> = {};
+            for (const coWatcherId of activitySession.co_watchers) {
+              if (coWatcherId === selfUuid) continue; // Skip self
+
+              const friend = await friendManager.getFriend(coWatcherId);
+              if (friend?.current_activities) {
+                // Get the friend's current activity (they might be on a different one than host)
+                const friendActivities = Object.values(friend.current_activities);
+                if (friendActivities.length > 0) {
+                  const friendActivity = friendActivities[0]; // Most recent/only activity
+                  if (friendActivity) {
+                    coWatcherActivities[coWatcherId] = {
+                      activity_id: friendActivity.id || '',
+                      content: friendActivity.content || '',
+                      favicon: friendActivity.metadata?.favicon,
+                    };
+                  }
+                }
+              }
+            }
+
             port.postMessage({
               type: 'CO_WATCH_UPDATE',
               data: {
@@ -1053,6 +1075,7 @@ function _startCoWatcherDetectionCycle(): void {
                 is_user_host: activitySession.host_friend_uuid === 'self',
                 messages: recentMessages,
                 nicknameMap: broadcastNicknameMap,
+                co_watcher_activities: coWatcherActivities,
               },
             });
             console.log(`[Background] [MESSAGE_FLOW] ✅ Sent CO_WATCH_UPDATE with ${recentMessages.length} messages`);
@@ -1397,6 +1420,27 @@ chrome.runtime.onConnect.addListener((port) => {
               recentMessages.sort((a, b) => a.timestamp - b.timestamp);
             }
 
+            // Build co-watcher activities map for divergence display
+            const coWatcherActivities: Record<string, {activity_id: string; content: string; favicon?: string}> = {};
+            for (const coWatcherId of coWatchSession.co_watchers) {
+              if (coWatcherId === userProfile?.uuid) continue; // Skip self
+
+              const friend = await friendManager.getFriend(coWatcherId);
+              if (friend?.current_activities) {
+                const friendActivities = Object.values(friend.current_activities);
+                if (friendActivities.length > 0) {
+                  const friendActivity = friendActivities[0];
+                  if (friendActivity) {
+                    coWatcherActivities[coWatcherId] = {
+                      activity_id: friendActivity.id || '',
+                      content: friendActivity.content || '',
+                      favicon: friendActivity.metadata?.favicon,
+                    };
+                  }
+                }
+              }
+            }
+
             // Send overlay state
             port.postMessage({
               type: 'OVERLAY_STATE',
@@ -1413,6 +1457,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 is_user_host: coWatchSession.host_friend_uuid === 'self',
                 messages: recentMessages,
                 nicknameMap: nicknameMap,
+                co_watcher_activities: coWatcherActivities,
               },
             });
 
