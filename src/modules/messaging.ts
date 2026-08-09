@@ -220,6 +220,14 @@ export class MessagingManager {
       const conversationKey = nip44.getConversationKey(hexToBytes(secretKey), recipientFriend.pubkey);
       const encryptedContent = await nip44.encrypt(plaintext, conversationKey);
 
+      console.log('[Messaging] [MESSAGE_FLOW] Encrypted message:', {
+        recipient: recipientFriend.local_name,
+        recipient_pubkey: recipientFriend.pubkey.substring(0, 16) + '...',
+        message_type: message.type,
+        content_length: plaintext.length,
+        encrypted_length: encryptedContent.length
+      });
+
       // Create kind-1059 event with recipient tag and message type
       const tags: Array<[string, string]> = [['p', recipientFriend.pubkey]];
 
@@ -242,7 +250,11 @@ export class MessagingManager {
       }, hexToBytes(secretKey)) as NostrEvent;
 
       // Queue or publish the event
-      console.log(`[Messaging] [MESSAGE_FLOW] 📤 Queuing kind-1059 ${message.type} to ${recipientFriend.local_name}`);
+      console.log(`[Messaging] [MESSAGE_FLOW] 📤 Queuing kind-1059 ${message.type} to ${recipientFriend.local_name}`, {
+        event_id: event.id,
+        recipient_pubkey: recipientFriend.pubkey.substring(0, 16) + '...',
+        p_tag: tags.find(t => t[0] === 'p')?.[1].substring(0, 16) + '...'
+      });
       if (this.publishQueue) {
         await this.publishQueue.enqueueUserAction(event, 'message');
       } else {
@@ -250,6 +262,7 @@ export class MessagingManager {
         const publishConfig = userProfile.publisher_config;
         await this.relayPool.publish(event, publishConfig);
       }
+      console.log(`[Messaging] [MESSAGE_FLOW] ✅ Event queued with event_id: ${event.id.substring(0, 16)}...`);
 
       // Store in local message history as outbound
       const localMessage: any = {
