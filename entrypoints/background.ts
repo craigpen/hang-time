@@ -1093,27 +1093,10 @@ function _startCoWatcherDetectionCycle(): void {
           host: hostName,
           co_watchers_count: activitySession.co_watchers.length,
         });
-      } else {
-        // No co-watch session - clear it and tell overlays to hide
-        await detector.setCurrentCoWatchSession(null);
-        console.debug('[Background] Co-watch session ended, clearing overlays');
-
-        // Send clear message to all connected overlays to hide them
-        for (const [tabId, port] of activeContentScriptPorts) {
-          try {
-            port.postMessage({
-              type: 'CO_WATCH_UPDATE',
-              data: {
-                watching_together: [],
-                activity_id: null,
-                messages: [],
-              },
-            });
-          } catch (e) {
-            console.debug(`[Background] Failed to clear overlay on tab ${tabId}:`, e);
-          }
-        }
       }
+      // Note: We do NOT clear the persistent session when no activity match is found.
+      // The session remains active even during divergence (when co-watchers are on different activities).
+      // Only explicitly leaving (LEAVE_SESSION) clears it.
     } catch (error) {
       console.error('[Background] Co-watcher detection cycle error:', error);
     }
@@ -1500,8 +1483,10 @@ chrome.runtime.onConnect.addListener((port) => {
             const detector = getCoWatcherDetector();
             const coWatchSession = await detector.getCurrentCoWatchSession();
 
+            console.log('[Background] [MESSAGE_FLOW] getCurrentCoWatchSession() returned:', coWatchSession ? { session_id: coWatchSession.session_id, co_watchers: coWatchSession.co_watchers.length } : null);
+
             if (!coWatchSession) {
-              console.warn('[Background] No co-watch session active for message');
+              console.warn('[Background] No co-watch session active for message - cannot send');
               return;
             }
 
