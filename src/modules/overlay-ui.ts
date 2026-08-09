@@ -1385,9 +1385,14 @@ export class OverlayUI {
 
       const nickname = this.nicknameMap.get(uuid);
       if (!nickname) {
-        console.warn('[OverlayUI] No nickname found for UUID:', uuid, '- nicknameMap keys:', Array.from(this.nicknameMap.keys()));
+        console.error('[OverlayUI] CRITICAL: No nickname in map for co-watcher UUID:', uuid);
+        console.error('[OverlayUI] nicknameMap contents:', Object.fromEntries(this.nicknameMap));
+        console.error('[OverlayUI] watching_together:', this._state.watching_together);
+        // Do not fall back to truncated UUID - this is a data consistency bug
+        const displayName = `<missing-name-${uuid.slice(0, 8)}>`;
+        continue; // Skip rendering this co-watcher
       }
-      const displayName = uuid === this.userId ? 'You' : this.escapeHtml(nickname || uuid.slice(0, 8));
+      const displayName = uuid === this.userId ? 'You' : this.escapeHtml(nickname);
       const color = this.getParticipantColor(uuid);
 
       // Check if guest is on different activity (divergence)
