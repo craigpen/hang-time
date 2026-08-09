@@ -19,6 +19,8 @@ import {
   PendingInvite,
   PendingMessage,
   ActivityAcceptance,
+  CoWatchSession,
+  ServiceName,
 } from '../types';
 
 
@@ -580,6 +582,22 @@ export class StorageManager {
   async hasUnreadMessages(activityId: string): Promise<boolean> {
     const messages = await this.getActivityMessages(activityId);
     return messages.some((m) => !m.read && !m.is_outbound);
+  }
+
+  // ============================================================================
+  // CO-WATCH SESSIONS
+  // ============================================================================
+
+  async getActiveSession(): Promise<CoWatchSession | null> {
+    return this.get<CoWatchSession | null>('active_session', null);
+  }
+
+  async setActiveSession(session: CoWatchSession): Promise<void> {
+    await this.set('active_session', session);
+  }
+
+  async clearActiveSession(): Promise<void> {
+    await this.delete('active_session');
   }
 
   // ============================================================================

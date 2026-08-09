@@ -135,6 +135,17 @@ export interface Friend {
 export interface FriendList extends Array<Friend> {}
 
 // ============================================================================
+// CO-WATCH SESSIONS
+// ============================================================================
+
+export interface CoWatchSession {
+  session_id: string; // UUID v4
+  co_watchers: string[]; // Friend UUIDs (array of who's in this session)
+  created_at: number; // Unix ms
+  is_active: boolean; // Whether user is still in the session
+}
+
+// ============================================================================
 // ACTIVITY & CONTENT
 // ============================================================================
 
@@ -175,15 +186,22 @@ export interface ActivityHistory {
 
 export interface Message {
   id: string; // Nostr event ID
-  friend_uuid: string;
-  friend_identifier: string;
-  sender_identifier: string;
-  activity_id: string; // Activity this message is about
-  type: 'chat' | 'invite' | 'join_accepted' | 'join_declined'; // Message type
+
+  // New P2P session model fields
+  from?: string; // Sender UUID (new model)
+  recipients?: string[]; // Recipient UUIDs [B], [C], or [B, C] (new model)
+
+  // Legacy activity-centric fields (for backward compatibility)
+  friend_uuid?: string; // Deprecated: use from/recipients instead
+  friend_identifier?: string; // Deprecated: use from instead
+  sender_identifier?: string; // Deprecated: use from instead
+  activity_id?: string; // Deprecated: not used in session model
+
+  type?: 'chat' | 'invite' | 'join_accepted' | 'join_declined'; // Message type
   content?: string; // Optional for invite/join messages
-  is_outbound: boolean;
+  is_outbound?: boolean;
   timestamp: number;
-  read: boolean;
+  read?: boolean;
 }
 
 export interface MessageThread {
