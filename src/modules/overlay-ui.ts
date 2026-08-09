@@ -1091,7 +1091,13 @@ export class OverlayUI {
    */
   setState(newState: Partial<OverlayState>): void {
     this._state = { ...this._state, ...newState };
-    this.render();
+
+    // If co-watch session ended (no more watching_together), hide the overlay
+    if (this._state.watching_together.length === 0) {
+      this.hide();
+    } else {
+      this.render();
+    }
   }
 
   /**

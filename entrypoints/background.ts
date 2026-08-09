@@ -1094,9 +1094,25 @@ function _startCoWatcherDetectionCycle(): void {
           co_watchers_count: activitySession.co_watchers.length,
         });
       } else {
-        // No co-watch session - clear it
+        // No co-watch session - clear it and tell overlays to hide
         await detector.setCurrentCoWatchSession(null);
-        console.debug('[Background] Co-watch session ended');
+        console.debug('[Background] Co-watch session ended, clearing overlays');
+
+        // Send clear message to all connected overlays to hide them
+        for (const [tabId, port] of activeContentScriptPorts) {
+          try {
+            port.postMessage({
+              type: 'CO_WATCH_UPDATE',
+              data: {
+                watching_together: [],
+                activity_id: null,
+                messages: [],
+              },
+            });
+          } catch (e) {
+            console.debug(`[Background] Failed to clear overlay on tab ${tabId}:`, e);
+          }
+        }
       }
     } catch (error) {
       console.error('[Background] Co-watcher detection cycle error:', error);
