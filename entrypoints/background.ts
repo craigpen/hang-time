@@ -29,7 +29,7 @@ import { initializeFileLogger, getFileLogger } from '../src/modules/file-logger'
 import { PublishQueue } from '../src/modules/publish-queue';
 import { initializeCoWatcherDetector, getCoWatcherDetector } from '../src/modules/co-watcher-detection';
 import { initializeSyncHandler, getSyncHandler } from '../src/modules/sync-handler';
-import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName, DEFAULT_RELAY_URLS } from '../src/types';
+import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName, DEFAULT_RELAY_URLS, Message } from '../src/types';
 
 // ============================================================================
 // GLOBAL ERROR HANDLING
@@ -912,7 +912,7 @@ function _startCoWatcherDetectionCycle(): void {
           }
         }
 
-        // Get recent messages for this activity
+        // Get recent messages for this session (unified message model)
         const recentMessages: Array<{
           id: string;
           sender: string;
@@ -922,19 +922,16 @@ function _startCoWatcherDetectionCycle(): void {
         }> = [];
 
         try {
-
-          // Query ALL messages for this activity (activity-centric storage)
-          const activityMessages = await storageManager.getActivityMessages(activitySession.activity_id);
-          console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query: activitySession.activity_id=' + activitySession.activity_id + ' found=' + (activityMessages?.length || 0));
-          if (activityMessages && activityMessages.length > 0) {
-            console.log('[Background] [MESSAGE_FLOW]   Messages found:', activityMessages.map(m => ({
-              sender: m.sender_identifier,
-              is_outbound: m.is_outbound,
+          // Query all session messages (not activity-scoped)
+          const userUuid = profile?.uuid;
+          const sessionMessages = userUuid ? await storageManager.getVisibleMessages(userUuid, activitySession.co_watchers) : [];
+          console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query: session_id=' + coWatchSession?.session_id + ' found=' + sessionMessages.length + ' visible messages');
+          if (sessionMessages && sessionMessages.length > 0) {
+            console.log('[Background] [MESSAGE_FLOW]   Messages found:', sessionMessages.map(m => ({
+              from: m.from,
               content: m.content?.substring(0, 20)
             })));
-          }
 
-          if (activityMessages && activityMessages.length > 0) {
             // Build a map of friend UUIDs to names for quick lookup
             const friendMap = new Map<string, string>();
             if (profile) {
@@ -949,14 +946,14 @@ function _startCoWatcherDetectionCycle(): void {
               }
             }
 
-            // Filter messages and map to display format
-            const recentActivityMessages = activityMessages.slice(-10);
-            for (const msg of recentActivityMessages) {
-              const senderName = friendMap.get(msg.sender_identifier) || msg.sender_identifier || 'Unknown';
+            // Filter messages and map to display format (keep last 20 messages)
+            const recentSessionMessages = sessionMessages.slice(-20);
+            for (const msg of recentSessionMessages) {
+              const senderName = friendMap.get(msg.from) || msg.from || 'Unknown';
               recentMessages.push({
                 id: msg.id,
                 sender: senderName,
-                sender_id: msg.sender_identifier,
+                sender_id: msg.from,
                 content: msg.content,
                 timestamp: msg.timestamp,
               });
@@ -1410,16 +1407,16 @@ chrome.runtime.onConnect.addListener((port) => {
               }
             }
 
-            // Get recent messages
+            // Get recent messages (unified session model)
             const recentMessages: any[] = [];
-            const activityMessages = await storageManager.getActivityMessages(coWatchSession.activity_id);
-            if (activityMessages && activityMessages.length > 0) {
-              for (const msg of activityMessages) {
-                const senderName = nicknameMap[msg.sender_identifier] || msg.sender_identifier || 'Unknown';
+            const sessionMessages = userProfile?.uuid ? await storageManager.getVisibleMessages(userProfile.uuid, coWatchSession.co_watchers) : [];
+            if (sessionMessages && sessionMessages.length > 0) {
+              for (const msg of sessionMessages) {
+                const senderName = nicknameMap[msg.from] || msg.from || 'Unknown';
                 recentMessages.push({
                   id: msg.id,
                   sender: senderName,
-                  sender_id: msg.sender_identifier,
+                  sender_id: msg.from,
                   content: msg.content,
                   timestamp: msg.timestamp,
                 });
@@ -1506,6 +1503,18 @@ chrome.runtime.onConnect.addListener((port) => {
             const recipientIds = coWatchSession.co_watchers.filter(id => id !== userProfile?.uuid);
             console.log('[Background] [MESSAGE_FLOW] Recipient IDs for message:', recipientIds.map(id => ({ id, truncated: id.slice(0, 8) })));
 
+            // Store message in unified model (not activity-scoped)
+            const newMessage: Message = {
+              id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+              from: userProfile?.uuid || '',
+              recipients: recipientIds,
+              content: message.data?.content,
+              timestamp: Date.now(),
+            };
+
+            await storageManager.addMessage(newMessage);
+            console.log('[Background] [MESSAGE_FLOW] ✅ Message stored in unified model:', { id: newMessage.id, from: newMessage.from, recipients: recipientIds.length });
+
             for (const friendId of recipientIds) {
               const friend = await friendManager.getFriend(friendId);
               if (!friend) {
@@ -1513,7 +1522,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 continue;
               }
 
-              // Create a minimal activity object for messaging
+              // Create a minimal activity object for messaging (for Nostr encryption/relay)
               const activity: any = {
                 id: coWatchSession.activity_id,
                 service: 'co-watch',
@@ -1524,9 +1533,6 @@ chrome.runtime.onConnect.addListener((port) => {
               await messagingManager.sendChatMessage(activity, friend, message.data?.content);
               console.log('[Background] [MESSAGE_FLOW] ✅ Message queued for', friend.local_name);
             }
-
-            // Message is already stored by sendChatMessage in messaging.ts
-            // No need to store again here
           } catch (e) {
             console.error('[Background] Failed to send message:', e);
           }
