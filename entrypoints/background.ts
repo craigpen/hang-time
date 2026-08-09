@@ -1006,18 +1006,27 @@ function _startCoWatcherDetectionCycle(): void {
             if (profile) {
               broadcastNicknameMap[profile.uuid] = profile.nickname || 'You';
             }
+            const allFriends = await friendManager.getAllFriends();
+            console.log(`[Background] [MESSAGE_FLOW] Available friends in storage:`, allFriends.map(f => ({ uuid: f.uuid, local_name: f.local_name })));
             console.log(`[Background] [MESSAGE_FLOW] Building nicknameMap. self=${profile?.uuid}, co_watchers=[${coWatchSession.co_watchers.join(', ')}]`);
+
             for (const coWatcherId of coWatchSession.co_watchers) {
               if (coWatcherId === profile?.uuid) {
                 console.debug(`[Background] [MESSAGE_FLOW] Skipping self in co_watchers: ${coWatcherId}`);
                 continue;
               }
               const coWatcherFriend = await friendManager.getFriend(coWatcherId);
+              console.log(`[Background] [MESSAGE_FLOW] Lookup co-watcher ${coWatcherId.slice(0, 20)}...`, {
+                found: !!coWatcherFriend,
+                local_name: coWatcherFriend?.local_name,
+                uuid: coWatcherFriend?.uuid
+              });
+
               if (coWatcherFriend) {
                 broadcastNicknameMap[coWatcherId] = coWatcherFriend.local_name;
                 console.debug(`[Background] [MESSAGE_FLOW] Added co-watcher to nicknameMap: ${coWatcherId} => ${coWatcherFriend.local_name}`);
               } else {
-                console.warn(`[Background] [MESSAGE_FLOW] Friend lookup FAILED for co-watcher: ${coWatcherId} (will show truncated UUID in UI)`);
+                console.warn(`[Background] [MESSAGE_FLOW] Friend lookup FAILED for co-watcher: ${coWatcherId.slice(0, 20)}... - not in friends list`);
               }
             }
             // Also add all message senders to the nicknameMap
