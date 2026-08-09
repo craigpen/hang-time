@@ -850,10 +850,10 @@ function _startCoWatcherDetectionCycle(): void {
             videoTitle = hostActivity.content;
             videoDuration = hostActivity.metadata?.duration;
             hostState = hostActivity.state;
-            // Use progress measured now, timestamp when measured
+            // Preserve host's measurement time for accurate elapsed calculation
             if (hostActivity?.metadata?.progress !== undefined) {
               hostPosition = hostActivity.metadata.progress;
-              hostPositionTimestamp = Date.now(); // When we measured this position
+              hostPositionTimestamp = hostActivity.freshness_timestamp; // When HOST measured this position
             }
             // User position is same as host position when user is host
             userPosition = hostActivity.metadata?.progress;
@@ -866,10 +866,10 @@ function _startCoWatcherDetectionCycle(): void {
             videoTitle = hostActivity.content;
             videoDuration = hostActivity.metadata?.duration;
             hostState = hostActivity.state;
-            // Use progress measured now, timestamp when measured
+            // Preserve host's measurement time for accurate elapsed calculation
             if (hostActivity?.metadata?.progress !== undefined) {
               hostPosition = hostActivity.metadata.progress;
-              hostPositionTimestamp = Date.now(); // When we measured this position
+              hostPositionTimestamp = hostActivity.freshness_timestamp; // When HOST measured this position
             }
           }
           // Get user's position for this same activity from myActivities

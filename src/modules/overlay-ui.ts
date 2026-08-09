@@ -3,6 +3,8 @@
  * Renders floating overlay panel for video co-watching
  */
 
+import { storageManager } from './storage.js';
+
 export interface OverlayState {
   visible: boolean;
   pinned: boolean;
@@ -37,8 +39,20 @@ export class OverlayUI {
   private dragStartY = 0;
   private dragStartLeft = 0;
   private dragStartTop = 0;
+  private isResizing = false;
+  private resizeStartX = 0;
+  private resizeStartY = 0;
+  private resizeStartWidth = 0;
+  private resizeStartHeight = 0;
+  private readonly MIN_WIDTH = 280;
+  private readonly MAX_WIDTH = 650;
+  private readonly MIN_HEIGHT = 300;
   private userColorMap: Map<string, string> = new Map(); // sender_uuid -> color
   private nicknameMap: Map<string, string> = new Map(); // sender_uuid -> display name
+  private initialMouseMoveListener: ((e: MouseEvent) => void) | null = null; // Store listener reference for cleanup
+  private _eventListenersSetup = false; // Guard to ensure listeners only set up once
+  private hoverTimeout: NodeJS.Timeout | null = null; // Delay for hover detection
+  private initTime = Date.now(); // Track when overlay was initialized
   private _state: OverlayState = {
     visible: false,
     pinned: false,
@@ -117,7 +131,24 @@ export class OverlayUI {
         }
 
         #hang-time-overlay.hidden {
-          display: none;
+          opacity: 0;
+          pointer-events: auto;
+        }
+
+        #resize-handle {
+          position: absolute;
+          bottom: 0;
+          right: 0;
+          width: 20px;
+          height: 20px;
+          cursor: nwse-resize;
+          user-select: none;
+          background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.2) 50%);
+          border-radius: 0 0 8px 0;
+        }
+
+        #resize-handle:hover {
+          background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.4) 50%);
         }
 
         .overlay-header {
@@ -562,6 +593,8 @@ export class OverlayUI {
         <textarea id="message-input" placeholder="Send a message..." rows="1"></textarea>
         <button id="send-button" title="Send message">↑</button>
       </div>
+
+      <div id="resize-handle" title="Drag to resize"></div>
     `;
 
     // Wait for document.body if it's not ready yet
@@ -570,6 +603,7 @@ export class OverlayUI {
       const checkBody = setInterval(() => {
         if (document.body && this.container && !this.container.parentElement) {
           document.body.appendChild(this.container);
+          this.restoreSizeFromStorage();
           this.setupOpacitySlider();
           this.setupEventListeners();
           clearInterval(checkBody);
@@ -579,8 +613,22 @@ export class OverlayUI {
     }
 
     document.body.appendChild(this.container);
+    this.restoreSizeFromStorage();
     this.setupOpacitySlider();
     this.setupEventListeners();
+  }
+
+  /**
+   * Restore overlay size from storage
+   */
+  private restoreSizeFromStorage(): void {
+    if (!this.container) return;
+    const userProfile = storageManager.getUserProfile();
+    if (userProfile && userProfile.overlay_size) {
+      const { width, height } = userProfile.overlay_size;
+      this.container.style.width = width + 'px';
+      this.container.style.maxHeight = height + 'px';
+    }
   }
 
   /**
@@ -612,41 +660,107 @@ export class OverlayUI {
    * Setup global event listeners
    */
   private setupEventListeners(): void {
-    // Initially show on any mouse movement to help user discover the overlay
-    const initialMouseMoveListener = (e: MouseEvent) => {
-      this.show();
-    };
-    document.addEventListener('mousemove', initialMouseMoveListener);
+    // Guard: only set up once per overlay instance
+    if (this._eventListenersSetup) {
+      return;
+    }
+    this._eventListenersSetup = true;
 
-    // After user discovers overlay, only respond to hover over the overlay itself
-    if (this.container) {
-      this.container.addEventListener('mouseenter', () => {
-        // Remove discovery listener once user has found the overlay
-        document.removeEventListener('mousemove', initialMouseMoveListener);
-        this.show();
+    // Only enable discovery listener if there's an active co-watch session
+    // The overlay has nothing to discover before a session starts
+    if (this._state.watching_together.length > 0) {
+      if (!this.initialMouseMoveListener && this.container) {
+        this.initialMouseMoveListener = (e: MouseEvent) => {
+          if (!this.container) return;
+
+          const rect = this.container.getBoundingClientRect();
+          const isOverlay = e.clientX >= rect.left && e.clientX <= rect.right &&
+                           e.clientY >= rect.top && e.clientY <= rect.bottom;
+
+          if (isOverlay) {
+            this.show();
+          }
+        };
+        document.addEventListener('mousemove', this.initialMouseMoveListener);
+      }
+    }
+
+
+    // Delay hover listeners to avoid catching synthetic mouseenter events during initialization
+    window.setTimeout(() => {
+      if (!this.container) return;
+
+      this.container.addEventListener('mouseenter', (e) => {
+        // Disable discovery listener permanently once user discovers overlay via hover
+        // Only hover listeners (mouseenter/mouseleave) control visibility after discovery
+        if (this.initialMouseMoveListener) {
+          document.removeEventListener('mousemove', this.initialMouseMoveListener);
+          this.initialMouseMoveListener = null;
+        }
+        // Delay show by 200ms to require actual hovering, not just a quick touch
+        if (this.hoverTimeout) {
+          clearTimeout(this.hoverTimeout);
+        }
+        this.hoverTimeout = window.setTimeout(() => {
+          this.show();
+          this.hoverTimeout = null;
+        }, 200);
       });
 
       // Hide with fade when mouse leaves overlay
-      this.container.addEventListener('mouseleave', () => {
+      this.container.addEventListener('mouseleave', (e) => {
+        // Cancel pending hover-show if user leaves before 200ms
+        if (this.hoverTimeout) {
+          clearTimeout(this.hoverTimeout);
+          this.hoverTimeout = null;
+        }
         if (!this._state.pinned) {
           this.startFadeOut();
         }
       });
+    }, 150);
 
-      // Handle dragging within the overlay
-      document.addEventListener('mousemove', (e) => {
-        if (this.isDragging && this.container) {
-          const deltaX = e.clientX - this.dragStartX;
-          const deltaY = e.clientY - this.dragStartY;
-          this.container.style.left = (this.dragStartLeft + deltaX) + 'px';
-          this.container.style.top = (this.dragStartTop + deltaY) + 'px';
-          this.container.style.right = 'auto';
-        }
-      });
-    }
+    // Handle dragging and resizing
+    document.addEventListener('mousemove', (e) => {
+      if (this.isDragging && this.container) {
+        const deltaX = e.clientX - this.dragStartX;
+        const deltaY = e.clientY - this.dragStartY;
+        this.container.style.left = (this.dragStartLeft + deltaX) + 'px';
+        this.container.style.top = (this.dragStartTop + deltaY) + 'px';
+        this.container.style.right = 'auto';
+      }
 
-    // Stop dragging on mouse up
+      if (this.isResizing && this.container) {
+        const deltaX = e.clientX - this.resizeStartX;
+        const deltaY = e.clientY - this.resizeStartY;
+
+        let newWidth = this.resizeStartWidth + deltaX;
+        let newHeight = this.resizeStartHeight + deltaY;
+
+        // Apply constraints
+        newWidth = Math.max(this.MIN_WIDTH, Math.min(newWidth, this.MAX_WIDTH));
+        newHeight = Math.max(this.MIN_HEIGHT, Math.min(newHeight, window.innerHeight - 80));
+
+        this.container.style.width = newWidth + 'px';
+        this.container.style.maxHeight = newHeight + 'px';
+      }
+    });
+
+    // Stop dragging/resizing on mouse up
     document.addEventListener('mouseup', () => {
+      if (this.isResizing && this.container) {
+        this.isResizing = false;
+        // Save size to storage
+        const rect = this.container.getBoundingClientRect();
+        const profile = storageManager.getUserProfile();
+        if (profile) {
+          profile.overlay_size = {
+            width: Math.round(rect.width),
+            height: Math.round(rect.height)
+          };
+          storageManager.setUserProfile(profile);
+        }
+      }
       this.isDragging = false;
     });
 
@@ -661,6 +775,20 @@ export class OverlayUI {
           const rect = this.container!.getBoundingClientRect();
           this.dragStartLeft = rect.left;
           this.dragStartTop = rect.top;
+        });
+      }
+
+      // Start resizing on resize handle mouse down
+      const resizeHandle = this.container.querySelector('#resize-handle') as HTMLElement;
+      if (resizeHandle) {
+        resizeHandle.addEventListener('mousedown', (e: MouseEvent) => {
+          e.stopPropagation(); // Prevent triggering drag
+          this.isResizing = true;
+          this.resizeStartX = e.clientX;
+          this.resizeStartY = e.clientY;
+          const rect = this.container!.getBoundingClientRect();
+          this.resizeStartWidth = rect.width;
+          this.resizeStartHeight = rect.height;
         });
       }
     }
@@ -842,7 +970,8 @@ export class OverlayUI {
 
     // Show with opacity limited by slider
     this.container.style.transition = '';
-    this.container.style.opacity = (this._state.opacity / 100).toString();
+    const opacityValue = (this._state.opacity / 100).toString();
+    this.container.style.opacity = opacityValue;
     this.container.classList.remove('hidden');
     this._state.visible = true;
   }
@@ -853,7 +982,6 @@ export class OverlayUI {
   hide(): void {
     if (!this.container) return;
     this.container.classList.add('hidden');
-    this.container.style.opacity = (this._state.opacity / 100).toString(); // Reset to slider value for next show
     this._state.visible = false;
   }
 
@@ -937,11 +1065,6 @@ export class OverlayUI {
   setState(newState: Partial<OverlayState>): void {
     this._state = { ...this._state, ...newState };
     this.render();
-    // Show overlay only if hidden and we have an active co-watch session
-    // Don't interrupt a fade-out that's already in progress
-    if (!this._state.visible && this._state.watching_together.length > 0) {
-      this.show();
-    }
   }
 
   /**
@@ -1248,19 +1371,14 @@ export class OverlayUI {
       return;
     }
 
-    console.log('[OverlayUI] [MESSAGE_FLOW] 🎨 Rendering ' + this._state.messages.length + ' messages in overlay');
-
     if (this._state.messages.length === 0) {
-      console.log('[OverlayUI] [MESSAGE_FLOW] No messages in state');
       container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>';
       return;
     }
 
     const validMessages = this._state.messages.filter(msg => msg && msg.content);
-    console.log('[OverlayUI] Valid messages after filter:', validMessages.length);
 
     if (validMessages.length === 0) {
-      console.log('[OverlayUI] All messages filtered out');
       container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>';
       return;
     }
@@ -1275,16 +1393,13 @@ export class OverlayUI {
         return `
           <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}">
             <div class="attendee-chip" style="background: ${userColor}; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);">${this.escapeHtml(displayName)}</div>
-            <div class="message-content" style="background: rgba(255, 255, 255, 0.08); color: white;">${this.escapeHtml(msg.content)}</div>
+            <div class="message-content" style="background: rgba(255, 255, 255, 0.08); color: white;">${this.linkifyContent(msg.content)}</div>
           </div>
         `;
       })
       .join('');
 
     container.innerHTML = html;
-    console.log('[OverlayUI] Set container.innerHTML, length:', html.length);
-    console.log('[OverlayUI] First 100 chars of HTML:', html.substring(0, 100));
-    console.log('[OverlayUI] Container children after set:', container.children.length);
 
     // Auto-scroll to bottom
     if (container.scrollHeight > 0) {
@@ -1302,10 +1417,21 @@ export class OverlayUI {
   }
 
   /**
+   * Linkify URLs in text while escaping for XSS safety
+   */
+  private linkifyContent(text: string): string {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const escaped = this.escapeHtml(text);
+    return escaped.replace(urlRegex, (url) => {
+      const safeUrl = this.escapeHtml(url);
+      return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: underline;">${safeUrl}</a>`;
+    });
+  }
+
+  /**
    * Add message to chat
    */
   addMessage(sender: string, senderId: string, content: string): void {
-    console.log('[OverlayUI] addMessage:', { sender, senderId, content: content?.substring(0, 30), userId: this.userId, containerId: this.container?.id });
     this._state.messages.push({
       id: Date.now().toString(),
       sender,
@@ -1319,7 +1445,6 @@ export class OverlayUI {
       this._state.messages = this._state.messages.slice(-50);
     }
 
-    console.log('[OverlayUI] Messages in state after add:', this._state.messages.length, 'container:', !!this.container);
     this.renderMessages();
   }
 
@@ -1340,6 +1465,15 @@ export class OverlayUI {
    */
   destroy(): void {
     console.debug('[OverlayUI] destroy() called for userId:', this.userId);
+    // Clean up event listeners and timers
+    if (this.initialMouseMoveListener) {
+      document.removeEventListener('mousemove', this.initialMouseMoveListener);
+      this.initialMouseMoveListener = null;
+    }
+    if (this.hoverTimeout) {
+      clearTimeout(this.hoverTimeout);
+      this.hoverTimeout = null;
+    }
     if (this.container) {
       console.debug('[OverlayUI] Removing container from DOM');
       this.container.remove();
