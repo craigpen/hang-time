@@ -1401,7 +1401,7 @@ export class OverlayUI {
 
       let chip: string;
       if (isOnDifferentActivity && guestActivity) {
-        // Guest is on different video: show nickname | [favicon] title | [Join]
+        // Guest is on different video: show nickname | [favicon] title | [play icon]
         const faviconHtml = guestActivity.favicon ? `<img src="${guestActivity.favicon}" style="width: 16px; height: 16px; margin-right: 4px;" alt="">` : '';
         const title = this.escapeHtml(guestActivity.content.substring(0, 30));
         chip = `
@@ -1413,7 +1413,7 @@ export class OverlayUI {
               ${faviconHtml}
               <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</span>
             </div>
-            <button class="join-button" data-uuid="${uuid}" style="padding: 4px 8px; font-size: 11px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">Join</button>
+            <button class="join-button" data-uuid="${uuid}" style="padding: 6px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">▶</button>
           </div>
         `;
       } else {
