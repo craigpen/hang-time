@@ -857,6 +857,15 @@ function establishConnection(): void {
             });
           }
           break;
+
+        case 'OVERLAY_STATE':
+          // Response to GET_OVERLAY_STATE request with current co-watch state
+          if (!overlayUI) return;
+          if (message.data) {
+            console.debug('[ContentScript] Received OVERLAY_STATE with', message.data.messages?.length || 0, 'messages');
+            overlayUI.setState(message.data);
+          }
+          break;
       }
     });
 
@@ -864,8 +873,10 @@ function establishConnection(): void {
     try {
       // Request user ID from background
       port.postMessage({ type: 'GET_USER_ID' });
+      // Request current overlay state for immediate hydration
+      port.postMessage({ type: 'GET_OVERLAY_STATE' });
     } catch (e) {
-      console.warn('[ContentScript] Failed to request user ID:', e);
+      console.warn('[ContentScript] Failed to request initialization:', e);
     }
 
     // Send frequent pings to keep service worker from suspending

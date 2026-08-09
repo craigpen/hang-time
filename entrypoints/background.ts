@@ -1287,6 +1287,135 @@ chrome.runtime.onConnect.addListener((port) => {
               console.error('[Background] Error loading initial messages:', e);
             }
           }
+        } else if (message.type === 'GET_OVERLAY_STATE') {
+          // Content script requesting current overlay state for on-demand hydration
+          try {
+            const detector = getCoWatcherDetector();
+            const coWatchSession = await detector.getCurrentCoWatchSession();
+
+            if (!coWatchSession) {
+              console.debug('[Background] GET_OVERLAY_STATE: No active co-watch session');
+              port.postMessage({
+                type: 'OVERLAY_STATE',
+                data: null,
+              });
+              return;
+            }
+
+            console.log('[Background] GET_OVERLAY_STATE: Building state for activity', coWatchSession.activity_id);
+
+            // Get co-watcher data (same as CO_WATCH_UPDATE builds)
+            const friendManager = getFriendManager();
+            const userProfile = await storageManager.getUserProfile();
+
+            // Build overlay state (parallel to CO_WATCH_UPDATE logic)
+            let hostName = '';
+            let hostState = '';
+            let hostPosition = 0;
+            let hostPositionTimestamp = 0;
+            let videoDuration = 0;
+            let userPosition = 0;
+            const guestProgress: Record<string, number> = {};
+            const watchingTogether: string[] = [];
+
+            const hostFriend = coWatchSession.host_friend_uuid === 'self'
+              ? userProfile
+              : await friendManager.getFriend(coWatchSession.host_friend_uuid);
+
+            if (hostFriend) {
+              hostName = hostFriend.nickname || hostFriend.local_name || coWatchSession.host_friend_uuid;
+              const hostActivity = Object.values(hostFriend.current_activities || {}).find(
+                a => a?.id === coWatchSession.activity_id
+              );
+
+              if (hostActivity) {
+                hostState = hostActivity.state || 'unknown';
+                videoDuration = hostActivity.metadata?.duration || 0;
+                if (hostActivity?.metadata?.progress !== undefined) {
+                  hostPosition = hostActivity.metadata.progress;
+                  hostPositionTimestamp = hostActivity.freshness_timestamp || Date.now();
+                }
+              }
+
+              userPosition = hostActivity?.metadata?.progress || 0;
+
+              // Collect guest progress
+              for (const friendId of coWatchSession.co_watchers) {
+                if (friendId === userProfile?.uuid) {
+                  watchingTogether.push(friendId);
+                  continue;
+                }
+                watchingTogether.push(friendId);
+                const friend = await friendManager.getFriend(friendId);
+                if (friend) {
+                  const friendActivity = Object.values(friend.current_activities || {}).find(
+                    a => a?.id === coWatchSession.activity_id
+                  );
+                  if (friendActivity?.metadata?.progress !== undefined) {
+                    guestProgress[friendId] = friendActivity.metadata.progress;
+                  }
+                }
+              }
+            }
+
+            // Build nickname map
+            const nicknameMap: Record<string, string> = {};
+            if (userProfile) {
+              nicknameMap[userProfile.uuid] = userProfile.nickname || 'You';
+            }
+            for (const uuid of watchingTogether) {
+              if (uuid !== userProfile?.uuid) {
+                const friend = await friendManager.getFriend(uuid);
+                if (friend) {
+                  nicknameMap[uuid] = friend.local_name;
+                }
+              }
+            }
+
+            // Get recent messages
+            const recentMessages: any[] = [];
+            const activityMessages = await storageManager.getActivityMessages(coWatchSession.activity_id);
+            if (activityMessages && activityMessages.length > 0) {
+              for (const msg of activityMessages) {
+                const senderName = nicknameMap[msg.sender_identifier] || msg.sender_identifier || 'Unknown';
+                recentMessages.push({
+                  id: msg.id,
+                  sender: senderName,
+                  sender_id: msg.sender_identifier,
+                  content: msg.content,
+                  timestamp: msg.timestamp,
+                });
+              }
+              recentMessages.sort((a, b) => a.timestamp - b.timestamp);
+            }
+
+            // Send overlay state
+            port.postMessage({
+              type: 'OVERLAY_STATE',
+              data: {
+                activity_id: coWatchSession.activity_id,
+                host_nickname: hostName,
+                watching_together: watchingTogether,
+                host_progress: hostPosition,
+                host_progress_timestamp: hostPositionTimestamp,
+                host_state: hostState,
+                host_duration: videoDuration,
+                user_progress: userPosition,
+                guest_progress: guestProgress,
+                is_user_host: coWatchSession.host_friend_uuid === 'self',
+                messages: recentMessages,
+                nicknameMap: nicknameMap,
+              },
+            });
+
+            console.log('[Background] GET_OVERLAY_STATE: Sent state with', recentMessages.length, 'messages');
+          } catch (e) {
+            console.error('[Background] Error building overlay state:', e);
+            port.postMessage({
+              type: 'OVERLAY_STATE',
+              data: null,
+            });
+          }
         } else if (message.type === 'SEND_MESSAGE') {
           // Message sent from overlay, send to co-watchers
           console.log('[Background] [MESSAGE_FLOW] ✅ SEND_MESSAGE RECEIVED:', message.data?.content?.substring(0, 30));
