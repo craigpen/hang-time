@@ -364,8 +364,21 @@ export class MessagingManager {
         storedMessage.sent_at = message.sent_at;
       }
 
-      // Store in IndexedDB
+      // Store in activity-scoped storage (backward compatibility)
       await this.storageManager.addActivityMessage(message.activity_id, storedMessage);
+
+      // Also store in unified messages array (for session-based visibility)
+      if (userProfile?.uuid) {
+        const unifiedMessage: any = {
+          id: eventId,
+          from: friend.uuid,
+          recipients: [userProfile.uuid],
+          content: message.content,
+          timestamp: message.timestamp || timestamp,
+        };
+        await this.storageManager.addMessage(unifiedMessage);
+        console.debug('[Messaging] Stored unified message from:', friend.uuid);
+      }
 
       console.debug('[Messaging] Received message from:', friend.uuid, 'type:', message.type);
       return storedMessage;
