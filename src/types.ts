@@ -143,6 +143,8 @@ export interface CoWatchSession {
   co_watchers: string[]; // Friend UUIDs (array of who's in this session)
   created_at: number; // Unix ms
   is_active: boolean; // Whether user is still in the session
+  activity_id?: string; // Current activity being co-watched (needed for existing flows: sync, messages, etc)
+  host_friend_uuid?: string; // Who initiated current activity (needed for existing flows)
 }
 
 // ============================================================================

@@ -809,11 +809,11 @@ function _startCoWatcherDetectionCycle(): void {
 
       if (activitySession) {
         // Store the activity-specific session (legacy, for backward compat)
-        await detector.setCurrentCoWatchSession(activitySession as any);
+        await detector.setCurrentCoWatchSession(activitySession);
 
-        // Create/update persistent user session (new model, independent of activity)
+        // Create/update persistent user session (new model, includes activity context for existing flows)
         const userSession = await detector.createOrUpdateUserSession(activitySession);
-        console.debug('[Background] User session created/updated:', { session_id: userSession.session_id, co_watchers: userSession.co_watchers.length });
+        console.debug('[Background] User session created/updated:', { session_id: userSession.session_id, co_watchers: userSession.co_watchers.length, activity_id: userSession.activity_id });
 
         // Get host friend name and activity for overlay
         let hostName = '?';

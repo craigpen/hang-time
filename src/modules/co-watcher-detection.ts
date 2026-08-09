@@ -211,7 +211,7 @@ export class CoWatcherDetector {
   /**
    * Store current co-watch session
    */
-  async setCurrentCoWatchSession(session: CoWatchSession | null): Promise<void> {
+  async setCurrentCoWatchSession(session: ActivityCoWatchSession | null): Promise<void> {
     try {
       const profile = await this.storage.getUserProfile();
       if (!profile) return;
@@ -261,6 +261,7 @@ export class CoWatcherDetector {
   /**
    * Create or update user session when co-watching is detected
    * Takes activity-specific co-watch info and creates a persistent session
+   * Includes activity_id and host_friend_uuid for existing code flows (sync, messages, etc)
    */
   async createOrUpdateUserSession(activityCoWatch: ActivityCoWatchSession): Promise<CoWatchSession> {
     try {
@@ -268,19 +269,23 @@ export class CoWatcherDetector {
       let session = await this.storage.getActiveSession();
 
       if (!session) {
-        // Create new session
+        // Create new session with activity context
         session = {
           session_id: this.generateSessionId(),
           co_watchers: activityCoWatch.co_watchers,
           created_at: Date.now(),
           is_active: true,
+          activity_id: activityCoWatch.activity_id,
+          host_friend_uuid: activityCoWatch.host_friend_uuid,
         };
-        console.log('[CoWatcher] Created new user session:', { session_id: session.session_id, co_watchers: session.co_watchers.length });
+        console.log('[CoWatcher] Created new user session:', { session_id: session.session_id, co_watchers: session.co_watchers.length, activity_id: session.activity_id });
       } else {
-        // Update existing session with new co-watchers (in case someone joined/left)
+        // Update existing session with new co-watchers and activity context (in case someone joined/left or activity changed)
         session.co_watchers = activityCoWatch.co_watchers;
+        session.activity_id = activityCoWatch.activity_id;
+        session.host_friend_uuid = activityCoWatch.host_friend_uuid;
         session.is_active = true;
-        console.log('[CoWatcher] Updated existing user session:', { session_id: session.session_id, co_watchers: session.co_watchers.length });
+        console.log('[CoWatcher] Updated existing user session:', { session_id: session.session_id, co_watchers: session.co_watchers.length, activity_id: session.activity_id });
       }
 
       await this.storage.setActiveSession(session);
@@ -302,11 +307,11 @@ export class CoWatcherDetector {
   }
 
   /**
-   * Get host friend details for current co-watch
+   * Get host friend details for current co-watch (activity-specific session)
    */
   async getHostFriendDetails(): Promise<{ id: string; local_name: string } | null> {
     try {
-      const session = await this.getCurrentCoWatchSession();
+      const session = await this.getCurrentActivityCoWatchSession();
       if (!session) return null;
 
       const host = await this.storage.getFriend(session.host_friend_uuid);
