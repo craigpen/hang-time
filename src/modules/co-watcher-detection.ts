@@ -5,8 +5,10 @@
 
 import { StorageManager } from './storage';
 import { FriendManager } from './friends';
+import { CoWatchSession } from '../types';
 
-export interface CoWatchSession {
+// Activity-specific co-watch detection (separate from session)
+export interface ActivityCoWatchSession {
   activity_id: string;
   host_friend_uuid: string;
   co_watchers: string[]; // All UUIDs watching this activity (including self) - needed for host determination. Filter self when sending messages.
@@ -22,10 +24,11 @@ export class CoWatcherDetector {
   ) {}
 
   /**
-   * Detect current co-watch session
+   * Detect current co-watch session based on activity matching
+   * Returns activity-specific co-watch info (host, co-watchers on same activity_id)
    * Returns null if user is not watching or no friends are watching same activity
    */
-  async detectCoWatchSession(): Promise<CoWatchSession | null> {
+  async detectCoWatchSession(): Promise<ActivityCoWatchSession | null> {
     this.detectCallCount++;
     // Log every call for debugging
     console.debug(`[CoWatcher] detectCoWatchSession call #${this.detectCallCount}`);
@@ -184,7 +187,7 @@ export class CoWatcherDetector {
         .map(cw => cw.friend_uuid === null ? selfUuid : cw.friend_uuid)
         .filter(uuid => uuid !== undefined);
 
-      const session: CoWatchSession = {
+      const session: ActivityCoWatchSession = {
         activity_id: matchedActivityId,
         host_friend_uuid: hostFriendUuid,
         co_watchers: allCoWatchers,
@@ -229,16 +232,73 @@ export class CoWatcherDetector {
   }
 
   /**
-   * Get current stored co-watch session
+   * Get current stored co-watch session (activity-specific, legacy model)
+   * Used internally for host determination
    */
-  async getCurrentCoWatchSession(): Promise<CoWatchSession | null> {
+  async getCurrentActivityCoWatchSession(): Promise<ActivityCoWatchSession | null> {
     try {
       const profile = await this.storage.getUserProfile();
-      return profile?.current_co_watch_session || null;
+      return profile?.current_co_watch_session as ActivityCoWatchSession | undefined || null;
     } catch (error) {
       console.error('[CoWatcher] Failed to get session:', error);
       return null;
     }
+  }
+
+  /**
+   * Get current user session (new model, independent of activity)
+   * This session persists across activity changes
+   */
+  async getCurrentCoWatchSession(): Promise<CoWatchSession | null> {
+    try {
+      return await this.storage.getActiveSession();
+    } catch (error) {
+      console.error('[CoWatcher] Failed to get user session:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create or update user session when co-watching is detected
+   * Takes activity-specific co-watch info and creates a persistent session
+   */
+  async createOrUpdateUserSession(activityCoWatch: ActivityCoWatchSession): Promise<CoWatchSession> {
+    try {
+      // Check if session already exists
+      let session = await this.storage.getActiveSession();
+
+      if (!session) {
+        // Create new session
+        session = {
+          session_id: this.generateSessionId(),
+          co_watchers: activityCoWatch.co_watchers,
+          created_at: Date.now(),
+          is_active: true,
+        };
+        console.log('[CoWatcher] Created new user session:', { session_id: session.session_id, co_watchers: session.co_watchers.length });
+      } else {
+        // Update existing session with new co-watchers (in case someone joined/left)
+        session.co_watchers = activityCoWatch.co_watchers;
+        session.is_active = true;
+        console.log('[CoWatcher] Updated existing user session:', { session_id: session.session_id, co_watchers: session.co_watchers.length });
+      }
+
+      await this.storage.setActiveSession(session);
+      return session;
+    } catch (error) {
+      console.error('[CoWatcher] Failed to create/update user session:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a unique session ID
+   */
+  private generateSessionId(): string {
+    // Use random hex string (16 chars = 64 bits)
+    const randomBytes = new Uint8Array(8);
+    crypto.getRandomValues(randomBytes);
+    return Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
   /**
