@@ -432,12 +432,49 @@ See **PHASES.md** for detailed phase breakdown, deliverables, and success criter
 - ✅ Storage consolidation: OAuth handler now uses StorageManager for consistent API
 - ✅ Console logging: Implemented console-to-FileLogger hook for automatic capture
 
-**Current Status (Session 2026-08-04):**
+### Phase 9: Overlay State Management - Hybrid Architecture (2026-08-09) ✅ COMPLETE
+
+**Objective**: Implement hybrid overlay state management with background service worker as source of truth.
+
+**Completed (Commits c37e3f2 + 43d0f3d):**
+- ✅ GET_OVERLAY_STATE handler in background with initialization guard
+  - Ensures detector is initialized before content scripts request state
+  - Returns full co-watch session, messages, progress, timestamps
+- ✅ Content script on-demand hydration
+  - Sends GET_OVERLAY_STATE on port connect
+  - Overlay renders immediately with current state
+  - No waiting for CO_WATCH_UPDATE cycle
+- ✅ State consistency validation
+  - GET_OVERLAY_STATE and CO_WATCH_UPDATE send identical state structure
+  - Both use correct `progress_measured_at` timestamp for sync interpolation
+  - Host determination based on immutable `contentTimestamp`
+- ✅ Documentation: docs/PHASE1_STATE_OWNERSHIP.md
+  - State ownership model (background persistent, content script ephemeral)
+  - Message contracts and data flow
+  - Timestamp fields and purposes
+  - Hydration flows (on-demand vs real-time)
+
+**Architecture:**
+- **Background owns:** Co-watch sessions, activity data, messages, friend metadata
+- **Content scripts own:** Overlay visibility, pin state, opacity (ephemeral)
+- **Both paths:** Use identical state structure for consistency
+- **Timestamp accuracy:** progress_measured_at set by content script, used for sync math
+
+**Status:**
+- ✅ Sync button works (interpolation math correct)
+- ✅ Host determination stable (contentTimestamp immutable)
+- ✅ Progress markers display correctly
+- ✅ Messages route correctly end-to-end
+- ✅ No regressions introduced
+
+**Current Status (Session 2026-08-09):**
 - Phase 3-4: Core features implemented and tested ✅
+- Phase 9 (Overlay State): Hybrid architecture complete ✅
 - Game Discovery: Backend complete; UI (games.ts) pending implementation
 - Activity datastore: 6-phase implementation plan established for data integrity layer
 - Logging: Console hook pattern + file rotation (2MB limit) implemented
 - Publishing: Three-tier priority queue, deduplication, and rate limiting working
+- **Next**: Session model (Phase 2 of co-watching) - overlay independent of activity_id
 
 ### References
 
@@ -448,4 +485,5 @@ See **PHASES.md** for detailed phase breakdown, deliverables, and success criter
 - **Rate Limiting Strategy**: docs/RATE-LIMITING-PLAN.md
 - **Game Discovery Implementation**: docs/GAME_DISCOVERY_IMPLEMENTATION.md
 - **MV3 Content Script Lifecycle**: docs/MV3_CONTENT_SCRIPT_LIFECYCLE.md (extension reload recovery pattern)
+- **Phase 1 Overlay State Ownership**: docs/PHASE1_STATE_OWNERSHIP.md (hybrid architecture, message contracts, hydration flows)
 - **Archived Documentation**: docs/archived/ (historical, UI-dependent, or future features)
