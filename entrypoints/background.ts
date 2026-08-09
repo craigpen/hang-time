@@ -805,22 +805,26 @@ function _startCoWatcherDetectionCycle(): void {
     }
     try {
       const detector = getCoWatcherDetector();
-      const session = await detector.detectCoWatchSession();
+      const activitySession = await detector.detectCoWatchSession();
 
-      if (session) {
-        // Store the co-watch session for overlay to use
-        await detector.setCurrentCoWatchSession(session);
+      if (activitySession) {
+        // Store the activity-specific session (legacy, for backward compat)
+        await detector.setCurrentCoWatchSession(activitySession as any);
+
+        // Create/update persistent user session (new model, independent of activity)
+        const userSession = await detector.createOrUpdateUserSession(activitySession);
+        console.debug('[Background] User session created/updated:', { session_id: userSession.session_id, co_watchers: userSession.co_watchers.length });
 
         // Get host friend name and activity for overlay
         let hostName = '?';
         let hostFriend: any = null;
 
-        if (session.host_friend_uuid === 'self') {
+        if (activitySession.host_friend_uuid === 'self') {
           const profile = await storageManager.getUserProfile();
           // Use nickname if set, else uuid
           hostName = profile?.nickname || profile?.uuid || 'You';
         } else {
-          hostFriend = await getFriendManager().getFriend(session.host_friend_uuid);
+          hostFriend = await getFriendManager().getFriend(activitySession.host_friend_uuid);
           // Use local_name (the nickname the user gave this friend)
           hostName = hostFriend?.local_name || '?';
         }
@@ -836,13 +840,13 @@ function _startCoWatcherDetectionCycle(): void {
         let userActivity: any = undefined;
         const myActivities = await storageManager.getMyActivities();
 
-        if (session.host_friend_uuid === 'self') {
+        if (activitySession.host_friend_uuid === 'self') {
           // Host is self: use my activity from myActivities (where content script stores it)
-          const hostActivity = myActivities?.[session.activity_id];
+          const hostActivity = myActivities?.[activitySession.activity_id];
 
           // Skip disconnected activities (no overlay should persist after tab closes)
           if (hostActivity?.state === 'disconnected') {
-            console.debug(`[Background] Skipping disconnected activity: ${session.activity_id}`);
+            console.debug(`[Background] Skipping disconnected activity: ${activitySession.activity_id}`);
             return;
           }
 
@@ -861,7 +865,7 @@ function _startCoWatcherDetectionCycle(): void {
           }
         } else if (hostFriend?.current_activities) {
           // Host is friend: use friend's activity
-          const hostActivity = Object.values(hostFriend.current_activities).find(a => a?.id === session.activity_id);
+          const hostActivity = Object.values(hostFriend.current_activities).find(a => a?.id === activitySession.activity_id);
           if (hostActivity && hostActivity.content) {
             videoTitle = hostActivity.content;
             videoDuration = hostActivity.metadata?.duration;
@@ -873,7 +877,7 @@ function _startCoWatcherDetectionCycle(): void {
             }
           }
           // Get user's position for this same activity from myActivities
-          userActivity = myActivities?.[session.activity_id];
+          userActivity = myActivities?.[activitySession.activity_id];
           if (userActivity?.metadata?.progress !== undefined) {
             userPosition = userActivity.metadata.progress;
           }
@@ -886,7 +890,7 @@ function _startCoWatcherDetectionCycle(): void {
         const selfUuid = profile?.uuid;
         const guestProgress: Record<string, number> = {}; // UUID -> progress in seconds
 
-        for (const coWatcherId of session.co_watchers) {
+        for (const coWatcherId of activitySession.co_watchers) {
           // Push UUID directly (display names are looked up via nicknameMap in overlay)
           watchingTogether.push(coWatcherId);
 
@@ -900,7 +904,7 @@ function _startCoWatcherDetectionCycle(): void {
             // Guest progress from friend's current activity
             const friend = await friendManager.getFriend(coWatcherId);
             if (friend?.current_activities) {
-              const guestActivity = Object.values(friend.current_activities).find(a => a?.id === session.activity_id);
+              const guestActivity = Object.values(friend.current_activities).find(a => a?.id === activitySession.activity_id);
               if (guestActivity?.metadata?.progress !== undefined) {
                 guestProgress[coWatcherId] = guestActivity.metadata.progress;
               }
@@ -920,8 +924,8 @@ function _startCoWatcherDetectionCycle(): void {
         try {
 
           // Query ALL messages for this activity (activity-centric storage)
-          const activityMessages = await storageManager.getActivityMessages(session.activity_id);
-          console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query: session.activity_id=' + session.activity_id + ' found=' + (activityMessages?.length || 0));
+          const activityMessages = await storageManager.getActivityMessages(activitySession.activity_id);
+          console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query: activitySession.activity_id=' + activitySession.activity_id + ' found=' + (activityMessages?.length || 0));
           if (activityMessages && activityMessages.length > 0) {
             console.log('[Background] [MESSAGE_FLOW]   Messages found:', activityMessages.map(m => ({
               sender: m.sender_identifier,
@@ -937,7 +941,7 @@ function _startCoWatcherDetectionCycle(): void {
               friendMap.set(profile.uuid, profile.nickname || 'You');
             }
 
-            for (const coWatcherId of session.co_watchers) {
+            for (const coWatcherId of activitySession.co_watchers) {
               if (coWatcherId === profile?.uuid) continue;
               const friend = await friendManager.getFriend(coWatcherId);
               if (friend) {
@@ -995,7 +999,7 @@ function _startCoWatcherDetectionCycle(): void {
             if (profile) {
               broadcastNicknameMap[profile.uuid] = profile.nickname || 'You';
             }
-            for (const coWatcherId of session.co_watchers) {
+            for (const coWatcherId of activitySession.co_watchers) {
               if (coWatcherId === profile?.uuid) continue;
               const coWatcherFriend = await friendManager.getFriend(coWatcherId);
               if (coWatcherFriend) {
@@ -1023,20 +1027,20 @@ function _startCoWatcherDetectionCycle(): void {
               host_progress_timestamp: hostPositionTimestamp,
               user_progress: userPosition,
               host_duration: videoDuration,
-              is_user_host: session.host_friend_uuid === 'self',
+              is_user_host: activitySession.host_friend_uuid === 'self',
             });
-            console.log(`[Background] [MESSAGE_FLOW] watching_together: [${watchingTogether.join(', ')}], co_watchers: [${session.co_watchers.join(', ')}]`);
+            console.log(`[Background] [MESSAGE_FLOW] watching_together: [${watchingTogether.join(', ')}], co_watchers: [${activitySession.co_watchers.join(', ')}]`);
             // Get host friend's activity freshness for content-script first-show check
             let hostActivityFreshness: number | undefined;
-            if (session.host_friend_uuid !== 'self' && hostFriend?.current_activities) {
-              const hostActivity = Object.values(hostFriend.current_activities).find(a => a?.id === session.activity_id);
+            if (activitySession.host_friend_uuid !== 'self' && hostFriend?.current_activities) {
+              const hostActivity = Object.values(hostFriend.current_activities).find(a => a?.id === activitySession.activity_id);
               hostActivityFreshness = hostActivity?.freshness_timestamp;
             }
 
             port.postMessage({
               type: 'CO_WATCH_UPDATE',
               data: {
-                activity_id: session.activity_id,
+                activity_id: activitySession.activity_id,
                 host_nickname: hostName,
                 watching_together: watchingTogether,
                 host_progress: hostPosition,
@@ -1046,7 +1050,7 @@ function _startCoWatcherDetectionCycle(): void {
                 user_progress: userPosition,
                 guest_progress: guestProgress,
                 host_activity_freshness_timestamp: hostActivityFreshness,
-                is_user_host: session.host_friend_uuid === 'self',
+                is_user_host: activitySession.host_friend_uuid === 'self',
                 messages: recentMessages,
                 nicknameMap: broadcastNicknameMap,
               },
@@ -1058,9 +1062,9 @@ function _startCoWatcherDetectionCycle(): void {
         }
 
         console.debug('[Background] Co-watch session detected:', {
-          activity_id: session.activity_id,
+          activity_id: activitySession.activity_id,
           host: hostName,
-          co_watchers_count: session.co_watchers.length,
+          co_watchers_count: activitySession.co_watchers.length,
         });
       } else {
         // No co-watch session - clear it
@@ -1472,6 +1476,26 @@ chrome.runtime.onConnect.addListener((port) => {
             // No need to store again here
           } catch (e) {
             console.error('[Background] Failed to send message:', e);
+          }
+        } else if (message.type === 'LEAVE_SESSION') {
+          try {
+            // User clicked "Leave Session" button in overlay
+            const detector = getCoWatcherDetector();
+            await storageManager.clearActiveSession();
+            console.log('[Background] User left co-watch session');
+
+            // Notify all content scripts to close overlays
+            for (const [, port] of activeContentScriptPorts) {
+              try {
+                port.postMessage({
+                  type: 'SESSION_ENDED',
+                });
+              } catch (e) {
+                console.warn('[Background] Failed to notify content script of session end:', e);
+              }
+            }
+          } catch (e) {
+            console.error('[Background] Failed to leave session:', e);
           }
         } else if (message.type === 'CONTENT_SCRIPT_ACTIVITY') {
           await _handleContentScriptActivity(message.data?.key, message.data?.value, tabId);
