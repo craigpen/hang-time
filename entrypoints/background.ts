@@ -1478,6 +1478,9 @@ chrome.runtime.onConnect.addListener((port) => {
           console.log('[Background] [MESSAGE_FLOW] ✅ SEND_MESSAGE RECEIVED:', message.data?.content?.substring(0, 30));
           console.debug('[Background] Received SEND_MESSAGE from content-script:', message.data);
           try {
+            const userProfile = await storageManager.getUserProfile();
+            console.log('[Background] [MESSAGE_FLOW] SEND_MESSAGE sender UUID:', { uuid: userProfile?.uuid, nickname: userProfile?.nickname });
+
             const detector = getCoWatcherDetector();
             const coWatchSession = await detector.getCurrentCoWatchSession();
 
@@ -1490,7 +1493,6 @@ chrome.runtime.onConnect.addListener((port) => {
 
             const friendManager = getFriendManager();
             const messagingManager = getMessagingManager();
-            const userProfile = await storageManager.getUserProfile();
 
             console.log('[Background] [MESSAGE_FLOW] SEND_MESSAGE details:', {
               activity_id: coWatchSession.activity_id,
@@ -1512,8 +1514,15 @@ chrome.runtime.onConnect.addListener((port) => {
               timestamp: Date.now(),
             };
 
+            console.log('[Background] [MESSAGE_FLOW] Storing message:', {
+              id: newMessage.id,
+              from: newMessage.from,
+              from_preview: newMessage.from.slice(0, 20),
+              recipients: recipientIds.map(r => r.slice(0, 20))
+            });
+
             await storageManager.addMessage(newMessage);
-            console.log('[Background] [MESSAGE_FLOW] ✅ Message stored in unified model:', { id: newMessage.id, from: newMessage.from, recipients: recipientIds.length });
+            console.log('[Background] [MESSAGE_FLOW] ✅ Message stored in unified model:', { id: newMessage.id, recipients: recipientIds.length });
 
             for (const friendId of recipientIds) {
               const friend = await friendManager.getFriend(friendId);
