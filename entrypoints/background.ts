@@ -1290,6 +1290,10 @@ chrome.runtime.onConnect.addListener((port) => {
         } else if (message.type === 'GET_OVERLAY_STATE') {
           // Content script requesting current overlay state for on-demand hydration
           try {
+            // Ensure extension is initialized before accessing detector
+            if (!initialized) {
+              await initializeExtension();
+            }
             const detector = getCoWatcherDetector();
             const coWatchSession = await detector.getCurrentCoWatchSession();
 
