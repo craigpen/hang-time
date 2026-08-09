@@ -999,14 +999,18 @@ function _startCoWatcherDetectionCycle(): void {
             if (profile) {
               broadcastNicknameMap[profile.uuid] = profile.nickname || 'You';
             }
+            console.log(`[Background] [MESSAGE_FLOW] Building nicknameMap. self=${profile?.uuid}, co_watchers=[${activitySession.co_watchers.join(', ')}]`);
             for (const coWatcherId of activitySession.co_watchers) {
-              if (coWatcherId === profile?.uuid) continue;
+              if (coWatcherId === profile?.uuid) {
+                console.debug(`[Background] [MESSAGE_FLOW] Skipping self in co_watchers: ${coWatcherId}`);
+                continue;
+              }
               const coWatcherFriend = await friendManager.getFriend(coWatcherId);
               if (coWatcherFriend) {
                 broadcastNicknameMap[coWatcherId] = coWatcherFriend.local_name;
                 console.debug(`[Background] [MESSAGE_FLOW] Added co-watcher to nicknameMap: ${coWatcherId} => ${coWatcherFriend.local_name}`);
               } else {
-                console.warn(`[Background] [MESSAGE_FLOW] Friend lookup failed for co-watcher: ${coWatcherId}`);
+                console.warn(`[Background] [MESSAGE_FLOW] Friend lookup FAILED for co-watcher: ${coWatcherId} (will show truncated UUID in UI)`);
               }
             }
             // Also add all message senders to the nicknameMap
@@ -1059,6 +1063,9 @@ function _startCoWatcherDetectionCycle(): void {
               }
             }
 
+            console.debug('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE broadcastNicknameMap:', broadcastNicknameMap);
+            console.debug('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE watching_together:', watchingTogether);
+            console.debug('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE co_watcher_activities:', Object.keys(coWatcherActivities));
             port.postMessage({
               type: 'CO_WATCH_UPDATE',
               data: {
@@ -1497,6 +1504,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
             // Send to all co-watchers except self
             const recipientIds = coWatchSession.co_watchers.filter(id => id !== userProfile?.uuid);
+            console.log('[Background] [MESSAGE_FLOW] Recipient IDs for message:', recipientIds.map(id => ({ id, truncated: id.slice(0, 8) })));
 
             for (const friendId of recipientIds) {
               const friend = await friendManager.getFriend(friendId);

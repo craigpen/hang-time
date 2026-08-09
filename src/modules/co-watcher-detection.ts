@@ -187,12 +187,16 @@ export class CoWatcherDetector {
         .map(cw => cw.friend_uuid === null ? selfUuid : cw.friend_uuid)
         .filter(uuid => uuid !== undefined);
 
+      console.log('[CoWatcher] DEBUG: allCoWatchers:', allCoWatchers.map(cw => ({ id: cw, length: cw.length, preview: cw.slice(0, 20) })));
+
       const session: ActivityCoWatchSession = {
         activity_id: matchedActivityId,
         host_friend_uuid: hostFriendUuid,
         co_watchers: allCoWatchers,
         detected_at: Date.now(),
       };
+
+      console.log('[CoWatcher] DEBUG: session.co_watchers:', session.co_watchers.map(cw => ({ id: cw, length: cw.length })));
 
       console.debug('[CoWatcher] Co-watch session detected:', {
         activity_id: session.activity_id,
@@ -288,7 +292,15 @@ export class CoWatcherDetector {
         console.log('[CoWatcher] Updated existing user session:', { session_id: session.session_id, co_watchers: session.co_watchers.length, activity_id: session.activity_id });
       }
 
+      console.log('[CoWatcher] DEBUG: Storing session.co_watchers:', session.co_watchers.map(cw => ({ id: cw, length: cw.length })));
       await this.storage.setActiveSession(session);
+
+      // Verify what was stored
+      const verified = await this.storage.getActiveSession();
+      if (verified) {
+        console.log('[CoWatcher] DEBUG: Retrieved stored session.co_watchers:', verified.co_watchers.map(cw => ({ id: cw, length: cw.length })));
+      }
+
       return session;
     } catch (error) {
       console.error('[CoWatcher] Failed to create/update user session:', error);

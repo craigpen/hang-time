@@ -795,6 +795,7 @@ function establishConnection(): void {
               guest_progress: message.data.guest_progress,
               guest_progress_timestamp: Date.now(),
               is_user_host: message.data.is_user_host,
+              co_watcher_activities: message.data.co_watcher_activities,
             };
 
             // Only update messages if backend sent new messages or we're starting fresh

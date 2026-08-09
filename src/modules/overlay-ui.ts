@@ -1377,8 +1377,11 @@ export class OverlayUI {
         continue;
       }
 
-      const nickname = this.nicknameMap.get(uuid) || uuid.slice(0, 8);
-      const displayName = uuid === this.userId ? 'You' : this.escapeHtml(nickname);
+      const nickname = this.nicknameMap.get(uuid);
+      if (!nickname) {
+        console.warn('[OverlayUI] No nickname found for UUID:', uuid, '- nicknameMap keys:', Array.from(this.nicknameMap.keys()));
+      }
+      const displayName = uuid === this.userId ? 'You' : this.escapeHtml(nickname || uuid.slice(0, 8));
       const color = this.getParticipantColor(uuid);
 
       // Check if guest is on different activity (divergence)
