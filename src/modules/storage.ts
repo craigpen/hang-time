@@ -295,6 +295,31 @@ export class StorageManager {
   }
 
   /**
+   * Get all file logs (shared across all instances, not session-namespaced)
+   * Used for diagnostic logging export
+   */
+  async getAllFileLogs(): Promise<Record<string, string>> {
+    try {
+      // File logs are stored with shared keys (not session-namespaced) so we need direct access
+      // This is intentional for diagnostic purposes - logs should be aggregated across instances
+      const allData = await chrome.storage.local.get(null);
+      const logs: Record<string, string> = {};
+
+      for (const [key, value] of Object.entries(allData)) {
+        if (key.startsWith('hang_time_file_logs_')) {
+          const profileId = key.replace('hang_time_file_logs_', '');
+          logs[profileId] = value as string;
+        }
+      }
+
+      return logs;
+    } catch (error) {
+      console.error('[Storage] Failed to get file logs:', error);
+      throw new StorageError('Failed to get file logs', { error });
+    }
+  }
+
+  /**
    * Get value from cache (cache-first, never falls back to storage)
    * In cache-first model, if key is not in cache during runtime, it means:
    * 1. Cache wasn't initialized properly (init() failed)

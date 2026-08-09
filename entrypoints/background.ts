@@ -4067,15 +4067,8 @@ async function dumpHangTimeLogs() {
     // Force sync all pending changes to storage (FileLogger writes via StorageManager which batches every 5s)
     await storageManager.forceSyncNow();
 
-    const data = await chrome.storage.local.get(null);
-    const logs: Record<string, string> = {};
-
-    for (const [key, value] of Object.entries(data)) {
-      if (key.startsWith('hang_time_file_logs_')) {
-        const profileId = key.replace('hang_time_file_logs_', '');
-        logs[profileId] = value as string;
-      }
-    }
+    // Get all file logs via StorageManager abstraction
+    const logs = await storageManager.getAllFileLogs();
 
     console.log('[Background] Preparing logs for export...');
 
