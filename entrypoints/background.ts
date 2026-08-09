@@ -850,10 +850,10 @@ function _startCoWatcherDetectionCycle(): void {
             videoTitle = hostActivity.content;
             videoDuration = hostActivity.metadata?.duration;
             hostState = hostActivity.state;
-            // Preserve host's measurement time for accurate elapsed calculation
+            // Use host's measurement time (progress_measured_at) so guests can accurately interpolate where host is now
             if (hostActivity?.metadata?.progress !== undefined) {
               hostPosition = hostActivity.metadata.progress;
-              hostPositionTimestamp = hostActivity.freshness_timestamp; // When HOST measured this position
+              hostPositionTimestamp = hostActivity.metadata.progress_measured_at || Date.now(); // When host's content script measured their progress
             }
             // User position is same as host position when user is host
             userPosition = hostActivity.metadata?.progress;
@@ -866,10 +866,10 @@ function _startCoWatcherDetectionCycle(): void {
             videoTitle = hostActivity.content;
             videoDuration = hostActivity.metadata?.duration;
             hostState = hostActivity.state;
-            // Preserve host's measurement time for accurate elapsed calculation
+            // Use host's measurement time (progress_measured_at) so guests can accurately interpolate where host is now
             if (hostActivity?.metadata?.progress !== undefined) {
               hostPosition = hostActivity.metadata.progress;
-              hostPositionTimestamp = hostActivity.freshness_timestamp; // When HOST measured this position
+              hostPositionTimestamp = hostActivity.metadata.progress_measured_at || Date.now(); // When host's content script measured their progress
             }
           }
           // Get user's position for this same activity from myActivities
@@ -1333,7 +1333,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 videoDuration = hostActivity.metadata?.duration || 0;
                 if (hostActivity?.metadata?.progress !== undefined) {
                   hostPosition = hostActivity.metadata.progress;
-                  hostPositionTimestamp = hostActivity.freshness_timestamp || Date.now();
+                  hostPositionTimestamp = hostActivity.metadata.progress_measured_at || Date.now(); // When host's content script measured their progress
                 }
               }
 

@@ -333,10 +333,11 @@ class GenericVideoTracker {
       state: isPaused ? 'paused' : 'playing',
       timestamp: Date.now(),
       url: url,
-      contentTimestamp: this.currentActivityContentTimestamp || Date.now(),
+      contentTimestamp: this.currentActivityContentTimestamp || Date.now(), // Immutable start time for host determination
       metadata: {
         duration,
-        progress: currentTime,
+        progress: currentTime, // Current video position (seconds)
+        progress_measured_at: Date.now(), // Timestamp of progress measurement (used for sync interpolation on guest side)
         domain,
         favicon,
       },
@@ -1043,7 +1044,9 @@ function initializeOverlay(): void {
         if (hostProgress !== undefined && hostProgressTimestamp !== undefined) {
           const videoElement = document.querySelector('video') as HTMLVideoElement;
           if (videoElement) {
-            // Calculate synced position: host_progress + elapsed time since measurement
+            // Calculate synced position: host_progress + elapsed time since host's content script measured their progress
+            // hostProgressTimestamp = progress_measured_at from host's activity
+            // elapsedSeconds = time from when host measured to when we sync (now)
             const elapsedSeconds = (Date.now() - hostProgressTimestamp) / 1000;
             const syncedPosition = hostProgress + elapsedSeconds;
 

@@ -1127,7 +1127,9 @@ export class OverlayUI {
       });
 
       if (!this._state.is_user_host && this._state.user_progress !== undefined && this._state.host_progress !== undefined && this._state.host_progress_timestamp !== undefined && this._state.host_duration && this._state.host_duration > 0) {
-        // Calculate where host actually is now (not just when we last measured)
+        // Calculate where host actually is now by adding elapsed time since their progress was measured
+        // host_progress_timestamp = when host's content script measured their progress (progress_measured_at)
+        // elapsed = time from measurement to now
         // Note: progress values are in seconds, elapsed is in ms. Convert ms to seconds for addition.
         // Only extrapolate forward if host is playing, not if paused
         const elapsedSinceHostMeasureMs = Date.now() - this._state.host_progress_timestamp;

@@ -144,14 +144,15 @@ export interface Activity {
   content: string; // The title/name of what's playing (single source of truth)
   url?: string; // Direct link to the content
   state?: 'playing' | 'paused' | 'stopped' | 'disconnected'; // Activity state: playing, paused, stopped, or disconnected (content script lost connection)
-  timestamp: number; // When activity was detected
-  freshness_timestamp: number; // When data was last refreshed (for calculating age and freshness)
-  contentTimestamp?: number; // When content actually started (set by content script at first detection) - immutable for host determination
+  timestamp: number; // When activity record was detected/created (metadata timestamp)
+  freshness_timestamp: number; // When activity data was last refreshed (for staleness checks in overlay show logic)
+  contentTimestamp?: number; // When content actually started being watched (immutable, set once per activity, used for host determination)
   is_fresh?: boolean; // Whether data came from responsive content script (true) or stored/stale data (false)
   provenance?: 'LOCAL_TAB' | 'LOCAL_STEAM' | 'LOCAL_SPOTIFY' | 'LOCAL_TWITCH' | 'FRIEND' | 'TEST'; // Source of activity: user's tab, Steam/Spotify/Twitch API, friend's data, or test
   metadata: {
     lastAccessed?: number; // Browser tab's lastAccessed time (for sorting order on remote side)
-    progress?: number; // Current position in video (seconds)
+    progress?: number; // Current playback position (seconds) at time of progress_measured_at
+    progress_measured_at?: number; // Unix timestamp when progress was measured (set by content script for accurate sync interpolation)
     duration?: number; // Total length of video/content (seconds)
     artist?: string; // For music: artist name
     thumbnailUrl?: string; // Image/thumbnail URL (for display)
