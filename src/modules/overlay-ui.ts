@@ -600,7 +600,7 @@ export class OverlayUI {
 
     // Wait for document.body if it's not ready yet
     if (!document.body) {
-      console.warn('[OverlayUI] document.body not ready, deferring appendChild');
+      console.debug('[OverlayUI] document.body not ready, deferring appendChild');
       const checkBody = setInterval(() => {
         if (document.body && this.container && !this.container.parentElement) {
           document.body.appendChild(this.container);
