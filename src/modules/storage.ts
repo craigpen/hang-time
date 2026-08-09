@@ -585,6 +585,56 @@ export class StorageManager {
   }
 
   // ============================================================================
+  // MESSAGES (Unified session-centric approach - NEW MODEL)
+  // ============================================================================
+
+  /**
+   * Get all messages ever stored (unified model)
+   * Returns messages sorted by timestamp (oldest to newest)
+   */
+  async getAllMessages(): Promise<Message[]> {
+    const messages = await this.get<Message[]>('messages', []);
+    return messages.sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  /**
+   * Add message to unified messages array
+   * New model: messages have from (sender UUID) and recipients[] (recipient UUIDs)
+   */
+  async addMessage(message: Message): Promise<void> {
+    const messages = await this.get<Message[]>('messages', []);
+    messages.push(message);
+    await this.set('messages', messages);
+  }
+
+  /**
+   * Get messages visible to current user in a co-watch session
+   * Filters to show only messages where:
+   * - Current user is sender (from === myUUID) OR current user is a recipient
+   * - AND message involves someone in the co_watchers list
+   * @param myUUID - Current user's UUID
+   * @param coWatchers - Array of co-watcher UUIDs in current session
+   */
+  async getVisibleMessages(myUUID: string, coWatchers: string[]): Promise<Message[]> {
+    const allMessages = await this.getAllMessages();
+    const coWatcherSet = new Set(coWatchers);
+
+    return allMessages.filter(m => {
+      // Check if current user is involved (sender or recipient)
+      const isFromMe = m.from === myUUID;
+      const isToMe = m.recipients?.includes(myUUID) ?? false;
+      const userInvolved = isFromMe || isToMe;
+
+      // Check if message involves a co-watcher
+      const senderIsCoWatcher = coWatcherSet.has(m.from || '');
+      const anyRecipientIsCoWatcher = (m.recipients || []).some(r => coWatcherSet.has(r));
+      const messageInvolvesCowatcher = senderIsCoWatcher || anyRecipientIsCoWatcher;
+
+      return userInvolved && messageInvolvesCowatcher;
+    });
+  }
+
+  // ============================================================================
   // CO-WATCH SESSIONS
   // ============================================================================
 
