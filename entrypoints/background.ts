@@ -1420,42 +1420,48 @@ chrome.runtime.onConnect.addListener((port) => {
             const guestProgress: Record<string, number> = {};
             const watchingTogether: string[] = [];
 
-            const hostFriend = coWatchSession.host_friend_uuid === 'self'
-              ? userProfile
-              : await friendManager.getFriend(coWatchSession.host_friend_uuid);
-
-            if (hostFriend) {
-              hostName = hostFriend.nickname || hostFriend.local_name || coWatchSession.host_friend_uuid;
-              const hostActivity = Object.values(hostFriend.current_activities || {}).find(
-                a => a?.id === coWatchSession.activity_id
-              );
-
-              if (hostActivity) {
-                hostState = hostActivity.state || 'unknown';
-                videoDuration = hostActivity.metadata?.duration || 0;
-                if (hostActivity?.metadata?.progress !== undefined) {
-                  hostPosition = hostActivity.metadata.progress;
-                  hostPositionTimestamp = hostActivity.metadata.progress_measured_at || Date.now(); // When host's content script measured their progress
-                }
+            // Get host activity - different source depending on who is host
+            let hostActivity: any = undefined;
+            if (coWatchSession.host_friend_uuid === 'self') {
+              // Host is self: look in myActivities
+              const myActivities = await storageManager.getMyActivities();
+              hostActivity = myActivities?.[coWatchSession.activity_id];
+              hostName = userProfile?.nickname || 'You';
+            } else {
+              // Host is friend: look in friend's current_activities
+              const hostFriend = await friendManager.getFriend(coWatchSession.host_friend_uuid);
+              if (hostFriend) {
+                hostName = hostFriend.local_name || coWatchSession.host_friend_uuid;
+                hostActivity = Object.values(hostFriend.current_activities || {}).find(
+                  a => a?.id === coWatchSession.activity_id
+                );
               }
+            }
 
-              userPosition = hostActivity?.metadata?.progress || 0;
+            if (hostActivity) {
+              hostState = hostActivity.state || 'unknown';
+              videoDuration = hostActivity.metadata?.duration || 0;
+              if (hostActivity?.metadata?.progress !== undefined) {
+                hostPosition = hostActivity.metadata.progress;
+                hostPositionTimestamp = hostActivity.metadata.progress_measured_at || Date.now();
+              }
+              userPosition = hostActivity.metadata?.progress || 0;
+            }
 
-              // Collect guest progress
-              for (const friendId of coWatchSession.co_watchers) {
-                if (friendId === userProfile?.uuid) {
-                  watchingTogether.push(friendId);
-                  continue;
-                }
+            // Collect guest progress
+            for (const friendId of coWatchSession.co_watchers) {
+              if (friendId === userProfile?.uuid) {
                 watchingTogether.push(friendId);
-                const friend = await friendManager.getFriend(friendId);
-                if (friend) {
-                  const friendActivity = Object.values(friend.current_activities || {}).find(
-                    a => a?.id === coWatchSession.activity_id
-                  );
-                  if (friendActivity?.metadata?.progress !== undefined) {
-                    guestProgress[friendId] = friendActivity.metadata.progress;
-                  }
+                continue;
+              }
+              watchingTogether.push(friendId);
+              const friend = await friendManager.getFriend(friendId);
+              if (friend) {
+                const friendActivity = Object.values(friend.current_activities || {}).find(
+                  a => a?.id === coWatchSession.activity_id
+                );
+                if (friendActivity?.metadata?.progress !== undefined) {
+                  guestProgress[friendId] = friendActivity.metadata.progress;
                 }
               }
             }
