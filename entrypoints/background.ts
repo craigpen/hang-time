@@ -1426,7 +1426,7 @@ chrome.runtime.onConnect.addListener((port) => {
             }
             console.log('[Background] GET_OVERLAY_STATE: watchingTogether=', watchingTogether);
 
-            // Build nickname map from all co-watchers (needed for Mode B divergence display)
+            // Build nickname map from all co-watchers (needed for Guest Mode divergence display)
             const nicknameMap: Record<string, string> = {};
             if (userProfile) {
               nicknameMap[userProfile.uuid] = userProfile.nickname || 'You';

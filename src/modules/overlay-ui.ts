@@ -1296,8 +1296,8 @@ export class OverlayUI {
 
   /**
    * REFACTORED: Simple two-mode rendering
-   * Mode A: 2+ watching same video → show host + progress bar
-   * Mode B: <2 watching same video → show "Choose next:" + guest rows
+   * Host Mode: 2+ watching same video → show host + progress bar
+   * Guest Mode: <2 watching same video → show "Choose next:" + guest rows
    */
   private renderHostRow(): void {
     // Determine which mode we're in: count active members on same video (exclude offline users)
@@ -1317,7 +1317,7 @@ export class OverlayUI {
       }
     }
 
-    const modeA = activeMembersOnSameVideo >= 2;
+    const isHostMode = activeMembersOnSameVideo >= 2;
     const watchingRow = document.getElementById('watching-together-row');
     const hostContainer = document.getElementById('host-chip-container');
     const guestContainer = document.getElementById('guest-chips-container');
@@ -1325,8 +1325,8 @@ export class OverlayUI {
 
     if (!watchingRow || !hostContainer || !guestContainer || !guestRowsContainer) return;
 
-    if (modeA) {
-      // MODE A: 2+ watching same video
+    if (isHostMode) {
+      // HOST MODE: 2+ watching same video
       watchingRow.style.display = '';
       guestRowsContainer.innerHTML = ''; // Hide divergence rows
 
@@ -1341,7 +1341,7 @@ export class OverlayUI {
         this.renderGuestMarkers();
       }
     } else {
-      // MODE B: <2 watching same video (divergence)
+      // GUEST MODE: <2 watching same video (divergence)
       watchingRow.style.display = 'none';
       hostContainer.innerHTML = '';
       guestContainer.innerHTML = '';
@@ -1439,8 +1439,8 @@ export class OverlayUI {
   }
 
   private renderGuestChips(container: HTMLElement): void {
-    // Show all session members (same as Mode B)
-    // Mode A/B difference is only in the TOP section, not in who's displayed
+    // Show all session members (same as Guest Mode)
+    // Host/Guest Mode difference is only in the TOP section, not in who's displayed
     const allCoWatchers = this._state.session_members || [];
     const hostUuid = this.getHostUuid();
     const chips: string[] = [];
