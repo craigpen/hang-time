@@ -617,6 +617,10 @@ export class OverlayUI {
     this.restoreSizeFromStorage();
     this.setupOpacitySlider();
     this.setupEventListeners();
+    // Render any state that was set before the overlay was added to DOM
+    if (this._state.watching_together.length > 0) {
+      this.render();
+    }
   }
 
   /**
@@ -1104,6 +1108,11 @@ export class OverlayUI {
    * Render all UI elements
    */
   private render(): void {
+    // Guard: only render if overlay is in DOM (container has parent)
+    if (!this.container || !this.container.parentElement) {
+      console.debug('[OverlayUI] Overlay not yet in DOM, deferring render');
+      return;
+    }
     this.renderHeader();
     this.renderHostRow();
     this.renderGuestRow();
