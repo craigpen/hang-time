@@ -819,13 +819,16 @@ function _startCoWatcherDetectionCycle(): void {
           await detector.createOrUpdateUserSession(activitySession);
           // Reload persisted session to get updated co_watchers/activity info
           persistentSession = await detector.getCurrentCoWatchSession();
-          console.debug('[Background] Activity match found, updated session:', { activity_id: persistentSession?.activity_id, co_watchers: persistentSession?.co_watchers.length });
-        } else {
-          console.debug('[Background] No activity match, using persistent session for diverged state');
         }
 
         // Get the session to broadcast (use persistent session as source of truth)
         const coWatchSession = persistentSession;
+
+        if (activitySession) {
+          console.debug('[Background] Activity match found, updated session:', { activity_id: coWatchSession?.activity_id, co_watchers: coWatchSession?.co_watchers.length });
+        } else {
+          console.debug('[Background] No activity match, using persistent session for diverged state');
+        }
 
         if (!coWatchSession) {
           console.warn('[Background] Session became null after update, skipping broadcast');
