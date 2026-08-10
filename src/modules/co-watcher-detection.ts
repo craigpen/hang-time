@@ -299,7 +299,7 @@ export class CoWatcherDetector {
       // Verify what was stored
       const verified = await this.storage.getActiveSession();
       if (verified) {
-        console.log('[CoWatcher] DEBUG: Retrieved stored session.members:', verified.co_watchers.map(cw => ({ id: cw, length: cw.length })));
+        console.log('[CoWatcher] DEBUG: Retrieved stored session.members:', verified.members.map(cw => ({ id: cw, length: cw.length })));
       }
 
       return session;
