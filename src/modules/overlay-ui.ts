@@ -1337,7 +1337,10 @@ export class OverlayUI {
     // Add host's activity info
     const activity = this._state.co_watcher_activities?.[hostUuid];
     if (activity) {
-      const favicon = activity.favicon ? `<img src="${activity.favicon}" style="width: 14px; height: 14px;" alt="">` : '';
+      // Use favicon if available, fallback to YouTube icon placeholder
+      const favicon = activity.favicon
+        ? `<img src="${activity.favicon}" style="width: 14px; height: 14px; object-fit: contain;" alt="" onerror="this.style.display='none'">`
+        : '<span style="width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; background: rgba(255,255,255,0.1); border-radius: 2px;">▶</span>';
       const title = this.escapeHtml(activity.content.substring(0, 40));
       html += `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #aaa;">${favicon}<span>${title}</span></span>`;
     }
