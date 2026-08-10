@@ -559,12 +559,11 @@ export class OverlayUI {
             <button class="icon-button" id="pin-button" title="Pin overlay">📌</button>
           </div>
         </div>
-        <!-- Watching together: progress bar + host chip + guest chips + sync -->
-        <div class="watching-together-row" id="watching-together-row">
-          <div class="watching-together-label">Watching together:</div>
-          <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
-            <div id="host-chip-container"></div>
-            <div class="progress-bar-wrapper">
+        <!-- Line 1: Watching together label + progress bar + sync button -->
+        <div class="watching-together-row" id="watching-together-row" style="margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="watching-together-label" style="flex-shrink: 0;">Watching together:</div>
+            <div class="progress-bar-wrapper" style="flex: 1;">
               <div class="progress-bar-container">
                 <div class="progress-bar-fill" id="progress-bar-fill"></div>
                 <div class="guest-markers-container" id="guest-markers-container"></div>
@@ -577,11 +576,16 @@ export class OverlayUI {
                 <button id="progress-sync-button" title="Sync to host position">↻</button>
               </div>
             </div>
-            <div id="guest-chips-container" style="display: flex; gap: 4px;"></div>
           </div>
         </div>
 
-        <!-- Guest rows: for divergence display -->
+        <!-- Line 2: Host chip + (host) | favicon title -->
+        <div id="host-chip-container" style="margin-bottom: 8px;"></div>
+
+        <!-- Line 3: Guest chips -->
+        <div id="guest-chips-container" style="display: flex; gap: 4px; margin-bottom: 8px;"></div>
+
+        <!-- Divergence display: for when < 2 watching together -->
         <div id="guest-rows-container"></div>
       </div>
 
