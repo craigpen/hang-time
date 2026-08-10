@@ -388,15 +388,6 @@ See **PHASES.md** for detailed phase breakdown, deliverables, and success criter
 
 ### Post-MVP Enhancements
 
-**Infrastructure Improvements:**
-- [ ] **Unified Nostr Publishing Scheduler** (HIGH PRIORITY)
-  - Currently: All messages publish immediately to relays with no rate coordination
-  - Needed: Centralized queue/scheduler for all Nostr publishes (both periodic and handshake)
-  - Strategy: Prioritize handshake messages (friend requests, accepts) over periodic updates
-  - Benefits: Prevent relay rate-limiting, implement backoff strategies, monitor per-relay limits
-  - Trigger: Run after Nostr configuration testing phase (test-harness)
-  - Note: Current state tracking infrastructure (`PendingInvite`, `PendingMessage`) provides foundation
-
 **Future Features to Consider:**
 - [ ] Discord integration: Show Discord server/channel activity
 - [ ] Console game detection: PS5, Xbox game activity
