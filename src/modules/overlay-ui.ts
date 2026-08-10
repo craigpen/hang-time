@@ -1364,22 +1364,26 @@ export class OverlayUI {
   }
 
   /**
-   * Render guest row with all guest chips (excluding host when Host row is shown)
-   * When Host row is hidden (divergence), show all co-watchers with join buttons
+   * Render guest row with all co-watchers in the session
+   * Session persists through divergence, so all co-watchers stay visible
+   * Host row shows when 2+ are on the same activity; otherwise show all as guest rows
    */
   private renderGuestRow(): void {
     const guestContainer = document.getElementById('guest-chips-container');
-    if (!guestContainer || !this._state.watching_together) {
+    if (!guestContainer) {
       return;
     }
 
     const chips: string[] = [];
 
-    // Determine if Host row is shown
+    // Determine if Host row is shown (2+ on same activity)
     const hasCoWatchers = this._state.watching_together && this._state.watching_together.length >= 2;
     const hostUuid = this.getHostUuid();
 
-    console.debug('[OverlayUI] renderGuestRow: watching_together=', this._state.watching_together, 'hostUuid=', hostUuid, 'userId=', this.userId, 'showHostRow=', hasCoWatchers);
+    // Get all co-watchers from co_watcher_activities (session members, not activity-filtered)
+    const allCoWatchers = this._state.co_watcher_activities ? Object.keys(this._state.co_watcher_activities) : [];
+
+    console.debug('[OverlayUI] renderGuestRow: allCoWatchers=', allCoWatchers, 'watching_together=', this._state.watching_together, 'showHostRow=', hasCoWatchers);
 
     // If not host (and Host row is shown), render self first in red
     if (!this._state.is_user_host && hasCoWatchers) {
@@ -1389,8 +1393,8 @@ export class OverlayUI {
       chips.push(selfChip);
     }
 
-    // Render guests
-    for (const uuid of this._state.watching_together) {
+    // Render all co-watchers from the session (not just those on same activity)
+    for (const uuid of allCoWatchers) {
       if (uuid === this.userId) {
         continue; // Skip self
       }
