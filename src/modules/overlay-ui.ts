@@ -559,10 +559,10 @@ export class OverlayUI {
             <button class="icon-button" id="pin-button" title="Pin overlay">📌</button>
           </div>
         </div>
-        <!-- Line 1: Watching together label + progress bar + sync button -->
+        <!-- Line 1: Watching label + progress bar + sync button -->
         <div class="watching-together-row" id="watching-together-row" style="margin-bottom: 8px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <div class="watching-together-label" style="flex-shrink: 0;">Watching together:</div>
+            <div class="watching-together-label" style="flex-shrink: 0;">Watching:</div>
             <div class="progress-bar-wrapper" style="flex: 1;">
               <div class="progress-bar-container">
                 <div class="progress-bar-fill" id="progress-bar-fill"></div>
@@ -1299,13 +1299,13 @@ export class OverlayUI {
     const hostUuid = this.getHostUuid();
     const hostColor = this.getParticipantColor(hostUuid);
 
-    // Build host display: chip (host) | favicon title
-    let hostDisplay = `<div class="attendee-chip" style="background: ${hostColor};"><span>${hostName}</span></div> <span style="color: #999;">(host)</span>`;
+    // Build host display: chip + favicon title (no "(host)" label)
+    let hostDisplay = `<div class="attendee-chip" style="background: ${hostColor};"><span>${hostName}</span></div>`;
 
     // Add host's current activity (favicon + title)
     const hostActivity = this._state.co_watcher_activities?.[hostUuid || ''];
     if (hostActivity) {
-      hostDisplay += ` | `;
+      hostDisplay += ` `;
       const faviconHtml = hostActivity.favicon ? `<img src="${hostActivity.favicon}" style="width: 14px; height: 14px; margin-right: 4px;" alt="">` : '';
       const title = this.escapeHtml(hostActivity.content.substring(0, 40));
       hostDisplay += `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #aaa;">${faviconHtml}<span>${title}</span></span>`;
@@ -1406,6 +1406,7 @@ export class OverlayUI {
 
   /**
    * Render inline guest chips (when 2+ watching together)
+   * Show all co-watchers including self
    */
   private renderInlineGuestChips(allCoWatchers: string[], hostUuid: string | undefined): void {
     const guestContainer = document.getElementById('guest-chips-container');
@@ -1413,15 +1414,15 @@ export class OverlayUI {
 
     const chips: string[] = [];
 
-    // Add all co-watchers except self and host
+    // Add all co-watchers (including self, but skip host since they're shown separately)
     for (const uuid of allCoWatchers) {
-      if (uuid === this.userId || uuid === hostUuid) continue;
+      if (uuid === hostUuid) continue; // Skip host (shown on line 2)
 
       const nickname = this.nicknameMap.get(uuid);
       if (!nickname) continue; // Skip if no nickname
 
       const color = this.getParticipantColor(uuid);
-      const displayName = this.escapeHtml(nickname);
+      const displayName = uuid === this.userId ? 'You' : this.escapeHtml(nickname);
       chips.push(`<div class="attendee-chip" style="background: ${color};"><span>${displayName}</span></div>`);
     }
 
@@ -1441,13 +1442,11 @@ export class OverlayUI {
     rows.push('<div style="font-size: 12px; color: #aaa; margin-bottom: 8px;">Choose next video to watch:</div>');
 
     for (const uuid of allCoWatchers) {
-      if (uuid === this.userId) continue; // Skip self
-
       const nickname = this.nicknameMap.get(uuid);
       if (!nickname) continue; // Skip if no nickname
 
       const color = this.getParticipantColor(uuid);
-      const displayName = this.escapeHtml(nickname);
+      const displayName = uuid === this.userId ? 'You' : this.escapeHtml(nickname);
       const guestActivity = this._state.co_watcher_activities?.[uuid];
       const isWatchingVideo = guestActivity && guestActivity.activity_id;
 
