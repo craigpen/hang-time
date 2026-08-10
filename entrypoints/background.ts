@@ -1086,10 +1086,20 @@ function _startCoWatcherDetectionCycle(): void {
               hostActivityFreshness = hostActivity?.freshness_timestamp;
             }
 
-            // Build co-watcher activities map for divergence display
+            // Build co-watcher activities map for divergence display (includes self + others)
             const coWatcherActivities: Record<string, {activity_id: string; content: string; favicon?: string}> = {};
+
+            // Add self's activity (needed when user is host, so host title can be shown)
+            if (userActivity && selfUuid) {
+              coWatcherActivities[selfUuid] = {
+                activity_id: userActivity.id || '',
+                content: userActivity.content || videoTitle || '',
+                favicon: userActivity.metadata?.favicon,
+              };
+            }
+
             for (const coWatcherId of coWatchSession.co_watchers) {
-              if (coWatcherId === selfUuid) continue; // Skip self
+              if (coWatcherId === selfUuid) continue; // Skip self (already added above)
 
               const friend = await friendManager.getFriend(coWatcherId);
               if (friend?.current_activities) {
@@ -1471,10 +1481,24 @@ chrome.runtime.onConnect.addListener((port) => {
               recentMessages.sort((a, b) => a.timestamp - b.timestamp);
             }
 
-            // Build co-watcher activities map for divergence display
+            // Build co-watcher activities map for divergence display (includes self + others)
             const coWatcherActivities: Record<string, {activity_id: string; content: string; favicon?: string}> = {};
+
+            // Add self's activity (needed when user is host, so host title can be shown)
+            if (userProfile?.uuid) {
+              const myActivities = await storageManager.getMyActivities();
+              const userActivity = myActivities?.[coWatchSession.activity_id];
+              if (userActivity) {
+                coWatcherActivities[userProfile.uuid] = {
+                  activity_id: userActivity.id || '',
+                  content: userActivity.content || '',
+                  favicon: userActivity.metadata?.favicon,
+                };
+              }
+            }
+
             for (const coWatcherId of coWatchSession.co_watchers) {
-              if (coWatcherId === userProfile?.uuid) continue; // Skip self
+              if (coWatcherId === userProfile?.uuid) continue; // Skip self (already added above)
 
               const friend = await friendManager.getFriend(coWatcherId);
               if (friend?.current_activities) {
