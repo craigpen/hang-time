@@ -911,22 +911,41 @@ function _startCoWatcherDetectionCycle(): void {
         const guestProgress: Record<string, number> = {}; // UUID -> progress in seconds
 
         for (const coWatcherId of coWatchSession.co_watchers) {
-          // Push UUID directly (display names are looked up via nicknameMap in overlay)
-          watchingTogether.push(coWatcherId);
+          // Check if this co-watcher is actually on the current activity
+          let isOnCurrentActivity = false;
 
-          // Collect guest progress for marker updates
           if (coWatcherId === selfUuid) {
-            // User's progress
-            if (userActivity?.metadata?.progress !== undefined) {
-              guestProgress[coWatcherId] = userActivity.metadata.progress;
-            }
+            // User is on current activity if they have matching activity
+            isOnCurrentActivity = !!userActivity;
           } else {
-            // Guest progress from friend's current activity
+            // Friend is on current activity if they're watching coWatchSession.activity_id
             const friend = await friendManager.getFriend(coWatcherId);
             if (friend?.current_activities) {
-              const guestActivity = Object.values(friend.current_activities).find(a => a?.id === coWatchSession.activity_id);
-              if (guestActivity?.metadata?.progress !== undefined) {
-                guestProgress[coWatcherId] = guestActivity.metadata.progress;
+              const friendActivity = Object.values(friend.current_activities).find(a => a?.id === coWatchSession.activity_id);
+              isOnCurrentActivity = !!friendActivity;
+            }
+          }
+
+          // Only add to watching_together if on the same activity
+          if (isOnCurrentActivity) {
+            watchingTogether.push(coWatcherId);
+          }
+
+          // Collect guest progress for marker updates (only if on same activity)
+          if (isOnCurrentActivity) {
+            if (coWatcherId === selfUuid) {
+              // User's progress
+              if (userActivity?.metadata?.progress !== undefined) {
+                guestProgress[coWatcherId] = userActivity.metadata.progress;
+              }
+            } else {
+              // Guest progress from friend's current activity
+              const friend = await friendManager.getFriend(coWatcherId);
+              if (friend?.current_activities) {
+                const guestActivity = Object.values(friend.current_activities).find(a => a?.id === coWatchSession.activity_id);
+                if (guestActivity?.metadata?.progress !== undefined) {
+                  guestProgress[coWatcherId] = guestActivity.metadata.progress;
+                }
               }
             }
           }
