@@ -1428,17 +1428,34 @@ export class OverlayUI {
 
       let row: string;
       if (isWatching) {
-        const favicon = activity.favicon ? `<img src="${activity.favicon}" style="width: 16px; height: 16px;" alt="">` : '';
+        // Get service icon
+        const serviceMap: Record<string, string> = {
+          'youtube': 'youtube.png',
+          'youtube-tab': 'youtube.png',
+          'spotify': 'spotify.png',
+          'twitch': 'twitch.png',
+          'netflix': 'netflix.png',
+          'steam': 'steam.png',
+        };
+        let iconHtml = '';
+        if (activity.service && serviceMap[activity.service]) {
+          try {
+            const iconUrl = chrome.runtime.getURL(`public/icons/${serviceMap[activity.service]}`);
+            iconHtml = `<img src="${iconUrl}" style="width: 14px; height: 14px; object-fit: contain;" alt="">`;
+          } catch (e) {
+            // Silent fallback
+          }
+        }
+
         const title = this.escapeHtml(activity.content.substring(0, 40));
         row = `
           <div style="display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px;">
             <div class="attendee-chip" style="background: ${color}; flex-shrink: 0;"><span>${name}</span></div>
-            <span style="color: #999;">|</span>
             <div style="display: flex; align-items: center; gap: 4px; flex: 1;">
-              ${favicon}
+              ${iconHtml}
               <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #aaa;">${title}</span>
             </div>
-            <button class="join-button" data-uuid="${uuid}" style="padding: 4px 6px; background: #3b82f6; color: white; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; font-size: 12px;">▶</button>
+            <button class="join-button" data-uuid="${uuid}" style="padding: 4px 6px; background: #4ade80; color: white; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; font-size: 12px;">▶</button>
           </div>
         `;
       } else {
