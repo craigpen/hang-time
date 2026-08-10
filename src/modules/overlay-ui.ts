@@ -1260,8 +1260,22 @@ export class OverlayUI {
 
   /**
    * Render host row with chip and progress bar
+   * Only show when 2+ people are on the same activity
    */
   private renderHostRow(): void {
+    const hostRow = document.getElementById('host-row');
+    if (!hostRow) return;
+
+    // Only show Host/Guest row if 2+ people are watching the same activity
+    const hasCoWatchers = this._state.watching_together && this._state.watching_together.length >= 2;
+
+    if (!hasCoWatchers) {
+      hostRow.style.display = 'none';
+      return;
+    }
+
+    hostRow.style.display = '';
+
     const hostContainer = document.getElementById('host-chip-container');
     if (!hostContainer || !this._state.host_nickname) return;
 
@@ -1350,7 +1364,8 @@ export class OverlayUI {
   }
 
   /**
-   * Render guest row with all guest chips (excluding host)
+   * Render guest row with all guest chips (excluding host when Host row is shown)
+   * When Host row is hidden (divergence), show all co-watchers with join buttons
    */
   private renderGuestRow(): void {
     const guestContainer = document.getElementById('guest-chips-container');
@@ -1360,26 +1375,29 @@ export class OverlayUI {
 
     const chips: string[] = [];
 
-    // If not host, render self first in red
-    if (!this._state.is_user_host) {
+    // Determine if Host row is shown
+    const hasCoWatchers = this._state.watching_together && this._state.watching_together.length >= 2;
+    const hostUuid = this.getHostUuid();
+
+    console.debug('[OverlayUI] renderGuestRow: watching_together=', this._state.watching_together, 'hostUuid=', hostUuid, 'userId=', this.userId, 'showHostRow=', hasCoWatchers);
+
+    // If not host (and Host row is shown), render self first in red
+    if (!this._state.is_user_host && hasCoWatchers) {
       const selfChip = `<div class="attendee-chip" style="background: #ef4444;">
         <span>You</span>
       </div>`;
       chips.push(selfChip);
     }
 
-    const hostUuid = this.getHostUuid();
-    console.debug('[OverlayUI] renderGuestRow: watching_together=', this._state.watching_together, 'hostUuid=', hostUuid, 'userId=', this.userId);
-
-    // Render other guests (skip self and host)
-    // Host should never appear in guest row
+    // Render guests
     for (const uuid of this._state.watching_together) {
       if (uuid === this.userId) {
         continue; // Skip self
       }
 
-      // Skip host - always exclude the host UUID
-      if (uuid === hostUuid) {
+      // When Host row is shown: skip host
+      // When Host row is hidden: include host (everyone is equal in diverged state)
+      if (hasCoWatchers && uuid === hostUuid) {
         continue;
       }
 
