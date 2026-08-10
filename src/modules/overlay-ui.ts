@@ -10,7 +10,8 @@ export interface OverlayState {
   pinned: boolean;
   opacity: number; // 0-100
   host_nickname?: string;
-  watching_together: string[]; // list of UUIDs watching together (display names looked up via nicknameMap)
+  session_members: string[]; // all persistent session members (for divergence display)
+  watching_together: string[]; // people on same activity (for mode A/B detection, progress markers)
   messages: Array<{
     id: string;
     sender: string;
@@ -58,6 +59,7 @@ export class OverlayUI {
     visible: false,
     pinned: false,
     opacity: 80,
+    session_members: [],
     watching_together: [],
     messages: [],
   };
@@ -129,6 +131,8 @@ export class OverlayUI {
           flex-direction: column;
           overflow: hidden;
           transition: opacity 0.2s ease;
+          opacity: 0.8;
+          pointer-events: auto;
         }
 
         #hang-time-overlay.hidden {
@@ -622,7 +626,7 @@ export class OverlayUI {
     this.setupOpacitySlider();
     this.setupEventListeners();
     // Render any state that was set before the overlay was added to DOM
-    if (this._state.watching_together.length > 0) {
+    if (this._state.session_members.length > 0) {
       this.render();
     }
   }
@@ -661,6 +665,10 @@ export class OverlayUI {
    */
   private updateOpacity(): void {
     if (!this.container) return;
+    // Don't apply opacity if overlay is hidden - let CSS hide rule take precedence
+    if (this.container.classList.contains('hidden')) {
+      return;
+    }
     const opacity = this._state.opacity / 100;
     this.container.style.opacity = opacity.toString();
   }
@@ -675,23 +683,20 @@ export class OverlayUI {
     }
     this._eventListenersSetup = true;
 
-    // Only enable discovery listener if there's an active co-watch session
-    // The overlay has nothing to discover before a session starts
-    if (this._state.watching_together.length > 0) {
-      if (!this.initialMouseMoveListener && this.container) {
-        this.initialMouseMoveListener = (e: MouseEvent) => {
-          if (!this.container) return;
+    // Always set up discovery listener - let show() decide visibility based on watching_together
+    if (!this.initialMouseMoveListener && this.container) {
+      this.initialMouseMoveListener = (e: MouseEvent) => {
+        if (!this.container) return;
 
-          const rect = this.container.getBoundingClientRect();
-          const isOverlay = e.clientX >= rect.left && e.clientX <= rect.right &&
-                           e.clientY >= rect.top && e.clientY <= rect.bottom;
+        const rect = this.container.getBoundingClientRect();
+        const isOverlay = e.clientX >= rect.left && e.clientX <= rect.right &&
+                         e.clientY >= rect.top && e.clientY <= rect.bottom;
 
-          if (isOverlay) {
-            this.show();
-          }
-        };
-        document.addEventListener('mousemove', this.initialMouseMoveListener);
-      }
+        if (isOverlay) {
+          this.show();
+        }
+      };
+      document.addEventListener('mousemove', this.initialMouseMoveListener);
     }
 
 
@@ -990,9 +995,24 @@ export class OverlayUI {
     if (!this.container) return;
 
     // Only show if:
-    // 1. There's an active co-watch session (watching_together list)
+    // 1. 2+ session members are online (have activity < 10 min old)
     // 2. OR the overlay is pinned
-    const hasCoWatchSession = this._state.watching_together.length > 0;
+    const TEN_MIN_MS = 10 * 60 * 1000;
+    let onlineMembers = 0;
+    const sessionMembers = this._state.session_members || [];
+
+    for (const uuid of sessionMembers) {
+      const activity = this._state.co_watcher_activities?.[uuid];
+      const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
+      if (lastMeasuredAt) {
+        const timeSinceLastSeen = Date.now() - lastMeasuredAt;
+        if (timeSinceLastSeen < TEN_MIN_MS) {
+          onlineMembers++;
+        }
+      }
+    }
+
+    const hasCoWatchSession = onlineMembers >= 2;
     if (!hasCoWatchSession && !this._state.pinned) {
       return;
     }
@@ -1003,10 +1023,8 @@ export class OverlayUI {
     this.hideTimer = null;
     this.fadeTimeoutId = null;
 
-    // Show with opacity limited by slider
+    // Show overlay - CSS handles opacity via .hidden class and slider
     this.container.style.transition = '';
-    const opacityValue = (this._state.opacity / 100).toString();
-    this.container.style.opacity = opacityValue;
     this.container.classList.remove('hidden');
     this._state.visible = true;
   }
@@ -1100,11 +1118,16 @@ export class OverlayUI {
   setState(newState: Partial<OverlayState>): void {
     this._state = { ...this._state, ...newState };
 
-    // If co-watch session ended (no more watching_together), hide the overlay
-    if (this._state.watching_together.length === 0) {
+    // If co-watch session ended (no more session members), hide the overlay
+    // Use session_members (all members) not watching_together (only same activity)
+    // so overlay stays visible even in divergence mode
+    if (this._state.session_members.length === 0) {
       this.hide();
     } else {
       this.render();
+      // Auto-show overlay when there's an active co-watch session
+      // (user should see it immediately, not wait for mouse interaction)
+      this.show();
     }
   }
 
@@ -1277,8 +1300,24 @@ export class OverlayUI {
    * Mode B: <2 watching same video → show "Choose next:" + guest rows
    */
   private renderHostRow(): void {
-    // Determine which mode we're in
-    const modeA = this._state.watching_together && this._state.watching_together.length >= 2;
+    // Determine which mode we're in: count active members on same video (exclude offline users)
+    const TEN_MIN_MS = 10 * 60 * 1000;
+    let activeMembersOnSameVideo = 0;
+
+    if (this._state.watching_together) {
+      for (const uuid of this._state.watching_together) {
+        const activity = this._state.co_watcher_activities?.[uuid];
+        const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
+        if (lastMeasuredAt) {
+          const timeSinceLastSeen = Date.now() - lastMeasuredAt;
+          if (timeSinceLastSeen < TEN_MIN_MS) {
+            activeMembersOnSameVideo++;
+          }
+        }
+      }
+    }
+
+    const modeA = activeMembersOnSameVideo >= 2;
     const watchingRow = document.getElementById('watching-together-row');
     const hostContainer = document.getElementById('host-chip-container');
     const guestContainer = document.getElementById('guest-chips-container');
@@ -1373,13 +1412,44 @@ export class OverlayUI {
    * MODE A: Render guest chips (everyone except host)
    * Guests shown on separate row below host
    */
+  private getActivityFreshnessStyle(uuid: string): { shouldHide: boolean; opacity: number } {
+    const activity = this._state.co_watcher_activities?.[uuid];
+
+    // Always show self (You) at full opacity, regardless of inactivity
+    if (uuid === this.userId) {
+      return { shouldHide: false, opacity: 1 };
+    }
+
+    // For friends, check progress_measured_at (when content script last ran) for inactivity
+    const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
+    if (!lastMeasuredAt) {
+      return { shouldHide: false, opacity: 1 };
+    }
+
+    const timeSinceLastSeen = Date.now() - lastMeasuredAt;
+    const FIVE_MIN_MS = 5 * 60 * 1000;
+    const TEN_MIN_MS = 10 * 60 * 1000;
+
+    if (timeSinceLastSeen >= TEN_MIN_MS) {
+      return { shouldHide: true, opacity: 0 }; // Offline - hide
+    } else if (timeSinceLastSeen >= FIVE_MIN_MS) {
+      return { shouldHide: false, opacity: 0.5 }; // AFK - desaturate
+    }
+    return { shouldHide: false, opacity: 1 }; // Active - normal
+  }
+
   private renderGuestChips(container: HTMLElement): void {
-    const allCoWatchers = this._state.co_watcher_activities ? Object.keys(this._state.co_watcher_activities) : [];
+    // Show all session members (same as Mode B)
+    // Mode A/B difference is only in the TOP section, not in who's displayed
+    const allCoWatchers = this._state.session_members || [];
     const hostUuid = this.getHostUuid();
     const chips: string[] = [];
 
     for (const uuid of allCoWatchers) {
       if (uuid === hostUuid) continue; // Skip host (shown separately)
+
+      const { shouldHide, opacity } = this.getActivityFreshnessStyle(uuid);
+      if (shouldHide) continue; // Hide if offline (10+ min no activity)
 
       let name: string;
       if (uuid === this.userId) {
@@ -1391,7 +1461,7 @@ export class OverlayUI {
       }
 
       const color = this.getParticipantColor(uuid);
-      chips.push(`<div class="attendee-chip" style="background: ${color};"><span>${name}</span></div>`);
+      chips.push(`<div class="attendee-chip" style="background: ${color}; opacity: ${opacity};"><span>${name}</span></div>`);
     }
 
     if (chips.length > 0) {
@@ -1414,6 +1484,9 @@ export class OverlayUI {
     rows.push('<div style="font-size: 12px; color: #aaa; margin-bottom: 8px;">Choose next:</div>');
 
     for (const uuid of sessionMembers) {
+      const { shouldHide, opacity } = this.getActivityFreshnessStyle(uuid);
+      if (shouldHide) continue; // Hide if offline (10+ min no activity)
+
       let name: string;
       if (uuid === this.userId) {
         name = 'You';
@@ -1442,7 +1515,7 @@ export class OverlayUI {
         if (activity.service && serviceMap[activity.service]) {
           try {
             const iconUrl = chrome.runtime.getURL(`public/icons/${serviceMap[activity.service]}`);
-            iconHtml = `<img src="${iconUrl}" style="width: 14px; height: 14px; object-fit: contain;" alt="">`;
+            iconHtml = `<img src="${iconUrl}" style="width: 14px; height: 14px; object-fit: contain; flex-shrink: 0;" alt="">`;
           } catch (e) {
             // Silent fallback
           }
@@ -1450,17 +1523,21 @@ export class OverlayUI {
 
         const title = this.escapeHtml(activity.content.substring(0, 40));
         row = `
-          <div style="display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px;">
-            <div class="attendee-chip" style="background: ${color}; flex-shrink: 0;"><span>${name}</span></div>
-            <div style="display: flex; align-items: center; gap: 4px; flex: 1;">
+          <div style="display: grid; grid-template-columns: 60px 14px 1fr 14px; align-items: center; gap: 8px; height: 24px; font-size: 12px; opacity: ${opacity};">
+            <div class="attendee-chip" style="background: ${color};"><span>${name}</span></div>
+            <div style="display: flex; align-items: center; justify-content: center; width: 14px;">
               ${iconHtml}
-              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #aaa;">${title}</span>
             </div>
-            <button class="join-button" data-uuid="${uuid}" style="padding: 4px 6px; background: #4ade80; color: white; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; font-size: 12px;">▶</button>
+            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #aaa;">${title}</span>
+            <button class="join-button" data-uuid="${uuid}" style="background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center;">
+              <svg viewBox="0 0 24 24" fill="#4CAF50" stroke="none" style="width: 14px; height: 14px;">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+            </button>
           </div>
         `;
       } else {
-        row = `<div style="padding: 2px 0;"><div class="attendee-chip" style="background: ${color};"><span>${name}</span></div></div>`;
+        row = `<div style="padding: 2px 0; opacity: ${opacity};"><div class="attendee-chip" style="background: ${color};"><span>${name}</span></div></div>`;
       }
       rows.push(row);
     }
@@ -1492,6 +1569,10 @@ export class OverlayUI {
 
     for (const uuid of this._state.watching_together) {
       if (uuid === this.userId) continue;
+
+      // Skip offline members (10+ min no activity)
+      const { shouldHide } = this.getActivityFreshnessStyle(uuid);
+      if (shouldHide) continue;
 
       const color = this.getParticipantColor(uuid);
       const marker = document.createElement('div');

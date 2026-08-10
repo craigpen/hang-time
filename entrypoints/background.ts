@@ -926,7 +926,7 @@ function _startCoWatcherDetectionCycle(): void {
             }
           }
 
-          // Only add to watching_together if on the same activity
+          // Only add to watching_together if on the same activity (for mode A/B detection and progress markers)
           if (isOnCurrentActivity) {
             watchingTogether.push(coWatcherId);
           }
@@ -985,9 +985,12 @@ function _startCoWatcherDetectionCycle(): void {
               }
             }
 
-            // Filter messages and map to display format (keep last 20 messages)
+            // Filter messages and map to display format (keep last 20 chat messages only)
             const recentSessionMessages = sessionMessages.slice(-20);
             for (const msg of recentSessionMessages) {
+              // Only display chat messages in overlay, filter out invites/joins
+              if (msg.type && msg.type !== 'chat') continue;
+
               const senderName = friendMap.get(msg.from) || msg.from || 'Unknown';
               recentMessages.push({
                 id: msg.id,
@@ -1087,15 +1090,22 @@ function _startCoWatcherDetectionCycle(): void {
             }
 
             // Build co-watcher activities map for divergence display (includes self + others)
-            const coWatcherActivities: Record<string, {activity_id: string; content: string; service?: string}> = {};
+            const coWatcherActivities: Record<string, {activity_id: string; content: string; service?: string; freshness_timestamp?: number; timestamp?: number; metadata?: any}> = {};
 
-            // Add self's activity (needed when user is host, so host title can be shown)
-            if (userActivity && selfUuid) {
-              coWatcherActivities[selfUuid] = {
-                activity_id: userActivity.id || '',
-                content: userActivity.content || videoTitle || '',
-                service: userActivity.service || '',
-              };
+            // Add self's current activity (needed for divergence display with actual content)
+            if (selfUuid) {
+              const myActivitiesArray = Object.values(myActivities || {});
+              const userCurrentActivity = myActivitiesArray.length > 0 ? myActivitiesArray[0] : undefined;
+              if (userCurrentActivity) {
+                coWatcherActivities[selfUuid] = {
+                  activity_id: userCurrentActivity.id || '',
+                  content: userCurrentActivity.content || videoTitle || '',
+                  service: userCurrentActivity.service || '',
+                  freshness_timestamp: userCurrentActivity.freshness_timestamp || Date.now(),
+                  timestamp: userCurrentActivity.timestamp,
+                  metadata: userCurrentActivity.metadata,
+                };
+              }
             }
 
             for (const coWatcherId of coWatchSession.members) {
@@ -1112,6 +1122,9 @@ function _startCoWatcherDetectionCycle(): void {
                       activity_id: friendActivity.id || '',
                       content: friendActivity.content || '',
                       service: friendActivity.service || '',
+                      freshness_timestamp: friendActivity.freshness_timestamp || Date.now(),
+                      timestamp: friendActivity.timestamp,
+                      metadata: friendActivity.metadata,
                     };
                   }
                 }
@@ -1127,7 +1140,7 @@ function _startCoWatcherDetectionCycle(): void {
                 activity_id: coWatchSession.activity_id,
                 host_nickname: hostName,
                 watching_together: watchingTogether,
-                session_members: coWatchSession.members,
+                session_members: watchingTogether, // Use detected co-watchers for persistent session members
                 host_progress: hostPosition,
                 host_progress_timestamp: hostPositionTimestamp,
                 host_state: hostState,
@@ -1320,62 +1333,6 @@ chrome.runtime.onConnect.addListener((port) => {
               },
             });
           }
-        } else if (message.type === 'GET_ACTIVITY_MESSAGES_FOR_OVERLAY') {
-          // Content script requesting initial messages for activity (on page reload)
-          const activityId = message.data?.activityId;
-          if (activityId && port) {
-            try {
-              const recentMessages: any[] = [];
-              const profile = await storageManager.getUserProfile();
-
-              console.log('[Background] [MESSAGE_FLOW] GET_ACTIVITY_MESSAGES_FOR_OVERLAY: activityId=' + activityId);
-              // Query ALL messages for this activity (activity-centric storage)
-              const activityMessages = await storageManager.getActivityMessages(activityId);
-              console.log('[Background] [MESSAGE_FLOW]   Found ' + (activityMessages?.length || 0) + ' messages');
-              if (activityMessages && activityMessages.length > 0) {
-                // Build a map of UUIDs to display names
-                const nameMap = new Map<string, string>();
-                if (profile) {
-                  nameMap.set(profile.uuid, profile.nickname || 'You');
-                }
-
-                // Only fetch friends who are actually in messages for this activity (more efficient)
-                const senderIds = new Set(activityMessages.map(msg => msg.sender_identifier));
-                const friendManager = getFriendManager();
-                for (const senderId of senderIds) {
-                  if (senderId !== profile?.uuid) { // Skip self (already in map)
-                    const friend = await friendManager.getFriend(senderId);
-                    if (friend) {
-                      nameMap.set(friend.uuid, friend.local_name);
-                    }
-                  }
-                }
-
-                // Map messages to display format (load all messages)
-                for (const msg of activityMessages) {
-                  const senderName = nameMap.get(msg.sender_identifier) || msg.sender_identifier || 'Unknown';
-                  recentMessages.push({
-                    id: msg.id,
-                    sender: senderName,
-                    sender_id: msg.sender_identifier,
-                    content: msg.content,
-                    timestamp: msg.timestamp,
-                  });
-                }
-              }
-
-              // Sort by timestamp
-              recentMessages.sort((a, b) => a.timestamp - b.timestamp);
-
-              console.debug('[Background] Sending', recentMessages.length, 'initial messages for activity', activityId);
-              port.postMessage({
-                type: 'ACTIVITY_MESSAGES',
-                data: { messages: recentMessages },
-              });
-            } catch (e) {
-              console.error('[Background] Error loading initial messages:', e);
-            }
-          }
         } else if (message.type === 'GET_OVERLAY_STATE') {
           // Content script requesting current overlay state for on-demand hydration
           try {
@@ -1385,10 +1342,11 @@ chrome.runtime.onConnect.addListener((port) => {
             }
             const detector = getCoWatcherDetector();
 
-            // Try to get stored session first, then try detecting if not found
+            // Try to read stored session. If none exists, bootstrap by detecting current co-watchers
             let coWatchSession = await detector.getCurrentCoWatchSession();
+
             if (!coWatchSession) {
-              // No stored session, try to detect now
+              // Bootstrap: detect co-watchers now and create session if found
               const activitySession = await detector.detectCoWatchSession();
               if (activitySession) {
                 await detector.createOrUpdateUserSession(activitySession);
@@ -1396,7 +1354,7 @@ chrome.runtime.onConnect.addListener((port) => {
               }
             }
 
-            if (!coWatchSession) {
+            if (!coWatchSession || coWatchSession.members.length === 0) {
               console.debug('[Background] GET_OVERLAY_STATE: No active co-watch session');
               port.postMessage({
                 type: 'OVERLAY_STATE',
@@ -1405,7 +1363,7 @@ chrome.runtime.onConnect.addListener((port) => {
               return;
             }
 
-            console.log('[Background] GET_OVERLAY_STATE: Building state for activity', coWatchSession.activity_id);
+            console.log('[Background] GET_OVERLAY_STATE: Found session with members:', coWatchSession.members.length, 'activity_id:', coWatchSession.activity_id);
 
             // Get co-watcher data (same as CO_WATCH_UPDATE builds)
             const friendManager = getFriendManager();
@@ -1466,6 +1424,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 }
               }
             }
+            console.log('[Background] GET_OVERLAY_STATE: watchingTogether=', watchingTogether);
 
             // Build nickname map from all co-watchers (needed for Mode B divergence display)
             const nicknameMap: Record<string, string> = {};
@@ -1483,11 +1442,14 @@ chrome.runtime.onConnect.addListener((port) => {
               }
             }
 
-            // Get recent messages (unified session model)
+            // Get recent messages (unified session model, chat-only)
             const recentMessages: any[] = [];
             const sessionMessages = userProfile?.uuid ? await storageManager.getVisibleMessages(userProfile.uuid, coWatchSession.members) : [];
             if (sessionMessages && sessionMessages.length > 0) {
               for (const msg of sessionMessages) {
+                // Only display chat messages in overlay, filter out invites/joins
+                if (msg.type && msg.type !== 'chat') continue;
+
                 const senderName = nicknameMap[msg.from] || msg.from || 'Unknown';
                 recentMessages.push({
                   id: msg.id,
@@ -1501,17 +1463,21 @@ chrome.runtime.onConnect.addListener((port) => {
             }
 
             // Build co-watcher activities map for divergence display (includes self + others)
-            const coWatcherActivities: Record<string, {activity_id: string; content: string; service?: string}> = {};
+            const coWatcherActivities: Record<string, {activity_id: string; content: string; service?: string; freshness_timestamp?: number; timestamp?: number; metadata?: any}> = {};
 
             // Add self's activity (needed when user is host, so host title can be shown)
             if (userProfile?.uuid) {
               const myActivities = await storageManager.getMyActivities();
-              const userActivity = myActivities?.[coWatchSession.activity_id];
+              const userActivitiesArray = Object.values(myActivities || {});
+              const userActivity = userActivitiesArray.length > 0 ? userActivitiesArray[0] : undefined;
               if (userActivity) {
                 coWatcherActivities[userProfile.uuid] = {
                   activity_id: userActivity.id || '',
                   content: userActivity.content || '',
                   service: userActivity.service || '',
+                  freshness_timestamp: userActivity.freshness_timestamp || Date.now(),
+                  timestamp: userActivity.timestamp,
+                  metadata: userActivity.metadata,
                 };
               }
             }
@@ -1529,13 +1495,16 @@ chrome.runtime.onConnect.addListener((port) => {
                       activity_id: friendActivity.id || '',
                       content: friendActivity.content || '',
                       service: friendActivity.service || '',
+                      freshness_timestamp: friendActivity.freshness_timestamp || Date.now(),
+                      timestamp: friendActivity.timestamp,
+                      metadata: friendActivity.metadata,
                     };
                   }
                 }
               }
             }
 
-            // Send overlay state
+            // Send overlay state (read from stored session)
             port.postMessage({
               type: 'OVERLAY_STATE',
               data: {
@@ -1603,6 +1572,7 @@ chrome.runtime.onConnect.addListener((port) => {
               id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
               from: userProfile?.uuid || '',
               recipients: recipientIds,
+              type: 'chat',
               content: message.data?.content,
               timestamp: Date.now(),
             };
@@ -1828,9 +1798,6 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
 
     case 'GET_USER_IDENTIFIER':
       return _getUserIdentifier();
-
-    case 'GET_ACTIVITY_MESSAGES':
-      return _getActivityMessages(message.data?.activityId);
 
     case 'ADD_FRIEND':
       return _addFriend(message.data?.identifier, message.data?.localName);
@@ -2124,19 +2091,6 @@ async function _getNetflixDebugCaptures(): Promise<ExtensionResponse> {
     return { success: true, data: captures };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to get captures' };
-  }
-}
-
-async function _getActivityMessages(activityId?: string): Promise<ExtensionResponse> {
-  if (!activityId) {
-    return { success: false, error: 'activityId required' };
-  }
-
-  try {
-    const messages = await storageManager.getActivityMessages(activityId);
-    return { success: true, data: messages };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to get activity messages' };
   }
 }
 
@@ -3347,6 +3301,18 @@ async function _handleFriendRequestAccepted(friend: Friend, event: NostrEvent, m
     if (friend.state === 'pending') {
       await friendManager.acceptFriendRequest(friend.uuid);
     }
+
+    // Clear the original pending friend_request message we sent to this friend
+    // Find the first pending friend_request for this friend (there should only be one active)
+    const pendingMessages = await storageManager.getPendingMessages();
+    for (const [messageId, msg] of Object.entries(pendingMessages)) {
+      if (msg.messageType === 'friend_request' && msg.friendUuid === friend.uuid) {
+        await storageManager.removePendingMessage(messageId);
+        console.log(`[FriendRequest] ✅ Cleared pending friend_request message: ${messageId}`);
+        break;
+      }
+    }
+
     console.log(`[FriendRequest] ✅ ${friend.local_name} accepted your friend request`);
 
     // Notify the user (EventDeduplicator prevents duplicates from multiple relays)
@@ -3384,6 +3350,10 @@ async function _handleActivityAccepted(friend: Friend, event: NostrEvent, messag
         acceptedAt: Date.now(),
         notifiedAt: Date.now(),
       });
+
+      // Clear the corresponding pending join_accepted message we sent
+      const messageId = `join_accepted_${friend.uuid}_${message.activity_id}`;
+      await storageManager.removePendingMessage(messageId);
 
       console.log(`[Activity] 🎉 ${friend.local_name} accepted your activity invitation`);
     } else {
@@ -3915,16 +3885,23 @@ async function trackPendingMessage(eventId: string, messageType: 'join_accepted'
 
 /**
  * Mark message relay acceptance (relay confirmed receipt)
- * For handshake messages (friend_request, accept/decline), awaiting friend response for completion
- * For response messages (join_accepted/declined), relay acceptance marks completion
+ * For handshake messages (friend_request, invite), awaiting friend response for completion
+ * For response messages (join_accepted/declined), relay acceptance marks completion and clears
  */
 async function markMessagePublished(messageId: string): Promise<void> {
   const messages = await storageManager.getPendingMessages();
   const message = messages[messageId];
   if (message) {
-    message.state = 'relay_accepted';
-    message.relay_accepted_at = Date.now();
-    await storageManager.upsertPendingMessage(messageId, message);
+    // Response messages (join_accepted/declined) are fire-and-forget: clear once relayed
+    if (message.messageType === 'join_accepted' || message.messageType === 'join_declined') {
+      await storageManager.removePendingMessage(messageId);
+      console.log(`[Messaging] Response message relayed and cleared: ${messageId}`);
+    } else {
+      // Handshake messages (friend_request, invite) track state until friend responds
+      message.state = 'relay_accepted';
+      message.relay_accepted_at = Date.now();
+      await storageManager.upsertPendingMessage(messageId, message);
+    }
   }
 }
 
