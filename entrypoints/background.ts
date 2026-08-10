@@ -1460,12 +1460,14 @@ chrome.runtime.onConnect.addListener((port) => {
               }
             }
 
-            // Build nickname map
+            // Build nickname map from all co-watchers (needed for Mode B divergence display)
             const nicknameMap: Record<string, string> = {};
             if (userProfile) {
               nicknameMap[userProfile.uuid] = userProfile.nickname || 'You';
             }
-            for (const uuid of watchingTogether) {
+            // Include all co-watchers, not just watching_together
+            // (in divergence, some co-watchers won't be in watching_together)
+            for (const uuid of coWatchSession.co_watchers) {
               if (uuid !== userProfile?.uuid) {
                 const friend = await friendManager.getFriend(uuid);
                 if (friend) {
