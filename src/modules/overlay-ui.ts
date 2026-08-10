@@ -1268,7 +1268,7 @@ export class OverlayUI {
   }
 
   /**
-   * Render watching-together row with progress bar and chips
+   * Render watching-together row with progress bar and host info
    * Only show when 2+ people are on the same activity
    */
   private renderHostRow(): void {
@@ -1295,10 +1295,17 @@ export class OverlayUI {
     const hostUuid = this.getHostUuid();
     const hostColor = this.getParticipantColor(hostUuid);
 
-    const hostChip = `<div class="attendee-chip" style="background: ${hostColor};">
-      <span>${hostName}</span>
-    </div>`;
-    hostContainer.innerHTML = hostChip;
+    // Build host display: chip (host) | favicon title
+    let hostDisplay = `<div class="attendee-chip" style="background: ${hostColor};"><span>${hostName}</span></div> <span style="color: #999;">(host)</span>`;
+
+    // Add host's current activity if available
+    if (this._state.activity_id) {
+      // For host, show the session's activity (they're on the "primary" activity)
+      hostDisplay += ` | `;
+      // Note: we don't have the host's favicon/title easily available here, would need to pass it from backend
+    }
+
+    hostContainer.innerHTML = hostDisplay;
 
     // Render guest markers on progress bar if user is host
     if (this._state.is_user_host) {
