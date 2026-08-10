@@ -825,7 +825,7 @@ function _startCoWatcherDetectionCycle(): void {
         const coWatchSession = persistentSession;
 
         if (activitySession) {
-          console.debug('[Background] Activity match found, updated session:', { activity_id: coWatchSession?.activity_id, co_watchers: coWatchSession?.co_watchers.length });
+          console.debug('[Background] Activity match found, updated session:', { activity_id: coWatchSession?.activity_id, members: coWatchSession?.members?.length });
         } else {
           console.debug('[Background] No activity match, using persistent session for diverged state');
         }
