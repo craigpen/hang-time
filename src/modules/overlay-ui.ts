@@ -995,9 +995,9 @@ export class OverlayUI {
     if (!this.container) return;
 
     // Only show if:
-    // 1. 2+ session members are online (have activity < 10 min old)
+    // 1. 2+ session members are online (have activity < 1 hour old)
     // 2. OR the overlay is pinned
-    const TEN_MIN_MS = 10 * 60 * 1000;
+    const ONE_HOUR_MS = 60 * 60 * 1000;
     let onlineMembers = 0;
     const sessionMembers = this._state.session_members || [];
 
@@ -1006,7 +1006,7 @@ export class OverlayUI {
       const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
       if (lastMeasuredAt) {
         const timeSinceLastSeen = Date.now() - lastMeasuredAt;
-        if (timeSinceLastSeen < TEN_MIN_MS) {
+        if (timeSinceLastSeen < ONE_HOUR_MS) {
           onlineMembers++;
         }
       }
@@ -1301,7 +1301,7 @@ export class OverlayUI {
    */
   private renderHostRow(): void {
     // Determine which mode we're in: count active members on same video (exclude offline users)
-    const TEN_MIN_MS = 10 * 60 * 1000;
+    const ONE_HOUR_MS = 60 * 60 * 1000;
     let activeMembersOnSameVideo = 0;
 
     if (this._state.watching_together) {
@@ -1310,7 +1310,7 @@ export class OverlayUI {
         const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
         if (lastMeasuredAt) {
           const timeSinceLastSeen = Date.now() - lastMeasuredAt;
-          if (timeSinceLastSeen < TEN_MIN_MS) {
+          if (timeSinceLastSeen < ONE_HOUR_MS) {
             activeMembersOnSameVideo++;
           }
         }
@@ -1427,12 +1427,12 @@ export class OverlayUI {
     }
 
     const timeSinceLastSeen = Date.now() - lastMeasuredAt;
-    const FIVE_MIN_MS = 5 * 60 * 1000;
-    const TEN_MIN_MS = 10 * 60 * 1000;
+    const FIFTEEN_MIN_MS = 15 * 60 * 1000;
+    const ONE_HOUR_MS = 60 * 60 * 1000;
 
-    if (timeSinceLastSeen >= TEN_MIN_MS) {
+    if (timeSinceLastSeen >= ONE_HOUR_MS) {
       return { shouldHide: true, opacity: 0 }; // Offline - hide
-    } else if (timeSinceLastSeen >= FIVE_MIN_MS) {
+    } else if (timeSinceLastSeen >= FIFTEEN_MIN_MS) {
       return { shouldHide: false, opacity: 0.5 }; // AFK - desaturate
     }
     return { shouldHide: false, opacity: 1 }; // Active - normal
