@@ -1093,9 +1093,13 @@ function _startCoWatcherDetectionCycle(): void {
             const coWatcherActivities: Record<string, {activity_id: string; content: string; service?: string; freshness_timestamp?: number; timestamp?: number; metadata?: any}> = {};
 
             // Add self's current activity (needed for divergence display with actual content)
+            console.log('[Background] [GET_OVERLAY_STATE] selfUuid:', selfUuid);
+            console.log('[Background] [GET_OVERLAY_STATE] myActivities keys:', Object.keys(myActivities || {}));
             if (selfUuid) {
               const myActivitiesArray = Object.values(myActivities || {});
+              console.log('[Background] [GET_OVERLAY_STATE] myActivitiesArray.length:', myActivitiesArray.length);
               const userCurrentActivity = myActivitiesArray.length > 0 ? myActivitiesArray[0] : undefined;
+              console.log('[Background] [GET_OVERLAY_STATE] userCurrentActivity found:', !!userCurrentActivity, userCurrentActivity ? {id: userCurrentActivity.id, service: userCurrentActivity.service} : 'N/A');
               if (userCurrentActivity) {
                 coWatcherActivities[selfUuid] = {
                   activity_id: userCurrentActivity.id || '',
@@ -1105,18 +1109,35 @@ function _startCoWatcherDetectionCycle(): void {
                   timestamp: userCurrentActivity.timestamp,
                   metadata: userCurrentActivity.metadata,
                 };
+                console.log('[Background] [GET_OVERLAY_STATE] Added self to coWatcherActivities:', selfUuid);
+              } else {
+                console.log('[Background] [GET_OVERLAY_STATE] NOT adding self - userCurrentActivity is undefined');
               }
+            } else {
+              console.log('[Background] [GET_OVERLAY_STATE] NOT adding self - selfUuid is undefined');
             }
+            console.log('[Background] [GET_OVERLAY_STATE] coWatcherActivities after self:', Object.keys(coWatcherActivities));
+            console.log('[Background] [GET_OVERLAY_STATE] coWatchSession.members to loop:', coWatchSession.members);
+            console.log('[Background] [GET_OVERLAY_STATE] About to start friend loop, coWatchSession.members.length:', coWatchSession.members.length);
 
             for (const coWatcherId of coWatchSession.members) {
-              if (coWatcherId === selfUuid) continue; // Skip self (already added above)
+              console.log('[Background] [GET_OVERLAY_STATE] Processing co-watcher:', coWatcherId, 'selfUuid:', selfUuid);
+              console.log('[Background] [GET_OVERLAY_STATE] Comparison: coWatcherId===selfUuid?', coWatcherId === selfUuid);
+              if (coWatcherId === selfUuid) {
+                console.log('[Background] [GET_OVERLAY_STATE] Skipping self');
+                continue; // Skip self (already added above)
+              }
 
+              console.log('[Background] [GET_OVERLAY_STATE] Before friendManager.getFriend, coWatcherId:', coWatcherId);
               const friend = await friendManager.getFriend(coWatcherId);
+              console.log('[Background] [GET_OVERLAY_STATE] After friendManager.getFriend, friend:', !!friend);
               if (friend?.current_activities) {
                 // Get the friend's current activity (they might be on a different one than host)
                 const friendActivities = Object.values(friend.current_activities);
+                console.log('[Background] [GET_OVERLAY_STATE] Friend activities count:', friendActivities.length);
                 if (friendActivities.length > 0) {
                   const friendActivity = friendActivities[0]; // Most recent/only activity
+                  console.log('[Background] [GET_OVERLAY_STATE] Friend activity found:', !!friendActivity);
                   if (friendActivity) {
                     coWatcherActivities[coWatcherId] = {
                       activity_id: friendActivity.id || '',
@@ -1126,11 +1147,16 @@ function _startCoWatcherDetectionCycle(): void {
                       timestamp: friendActivity.timestamp,
                       metadata: friendActivity.metadata,
                     };
+                    console.log('[Background] [GET_OVERLAY_STATE] Added friend to coWatcherActivities:', coWatcherId);
                   }
                 }
+              } else {
+                console.log('[Background] [GET_OVERLAY_STATE] Friend not found or no current_activities:', coWatcherId);
               }
             }
 
+            console.log('[Background] [GET_OVERLAY_STATE] Final coWatcherActivities keys:', Object.keys(coWatcherActivities));
+            console.log('[Background] [GET_OVERLAY_STATE] Final coWatcherActivities:', coWatcherActivities);
             console.debug('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE broadcastNicknameMap:', broadcastNicknameMap);
             console.debug('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE watching_together:', watchingTogether);
             console.debug('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE co_watcher_activities:', Object.keys(coWatcherActivities));
@@ -1140,7 +1166,7 @@ function _startCoWatcherDetectionCycle(): void {
                 activity_id: coWatchSession.activity_id,
                 host_nickname: hostName,
                 watching_together: watchingTogether,
-                session_members: watchingTogether, // Use detected co-watchers for persistent session members
+                session_members: coWatchSession.members, // Persistent session members
                 host_progress: hostPosition,
                 host_progress_timestamp: hostPositionTimestamp,
                 host_state: hostState,
