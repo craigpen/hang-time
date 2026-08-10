@@ -1383,7 +1383,17 @@ chrome.runtime.onConnect.addListener((port) => {
               await initializeExtension();
             }
             const detector = getCoWatcherDetector();
-            const coWatchSession = await detector.getCurrentCoWatchSession();
+
+            // Try to get stored session first, then try detecting if not found
+            let coWatchSession = await detector.getCurrentCoWatchSession();
+            if (!coWatchSession) {
+              // No stored session, try to detect now
+              const activitySession = await detector.detectCoWatchSession();
+              if (activitySession) {
+                await detector.createOrUpdateUserSession(activitySession);
+                coWatchSession = await detector.getCurrentCoWatchSession();
+              }
+            }
 
             if (!coWatchSession) {
               console.debug('[Background] GET_OVERLAY_STATE: No active co-watch session');
