@@ -141,6 +141,7 @@ export class StorageManager {
         STORAGE_KEYS.GAME_METADATA_CACHE,
         STORAGE_KEYS.FRIEND_PROFILES,
         STORAGE_KEYS.ACTIVITY_ACCEPTANCES,
+        STORAGE_KEYS.ACTIVE_SESSION,
       ];
 
       // Try to load with session ID prefix; fall back to unnamespaced for migration
@@ -664,15 +665,15 @@ export class StorageManager {
   // ============================================================================
 
   async getActiveSession(): Promise<CoWatchSession | null> {
-    return this.get<CoWatchSession | null>('active_session', null);
+    return this.get<CoWatchSession | null>(STORAGE_KEYS.ACTIVE_SESSION, null);
   }
 
   async setActiveSession(session: CoWatchSession): Promise<void> {
-    await this.set('active_session', session);
+    await this.set(STORAGE_KEYS.ACTIVE_SESSION, session);
   }
 
   async clearActiveSession(): Promise<void> {
-    await this.delete('active_session');
+    await this.delete(STORAGE_KEYS.ACTIVE_SESSION);
   }
 
   // ============================================================================

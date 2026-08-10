@@ -418,6 +418,7 @@ export const STORAGE_KEYS = {
   GAME_METADATA_CACHE: 'hang_time_game_metadata_cache',
   FRIEND_PROFILES: 'hang_time_friend_profiles',
   ACTIVITY_ACCEPTANCES: 'hang_time_activity_acceptances',
+  ACTIVE_SESSION: 'hang_time_active_session',
   ACTIVITY_HISTORY: (friendId: string) => `hang_time_activity_history_${friendId}`,
 } as const;
 
