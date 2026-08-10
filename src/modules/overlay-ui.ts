@@ -1422,7 +1422,14 @@ export class OverlayUI {
     const hostUuid = this.getHostUuid();
     const chips: string[] = [];
 
-    for (const uuid of allCoWatchers) {
+    // Sort with self first
+    const sorted = [...allCoWatchers].sort((a, b) => {
+      if (a === this.userId) return -1;
+      if (b === this.userId) return 1;
+      return 0;
+    });
+
+    for (const uuid of sorted) {
       if (uuid === hostUuid) continue; // Skip host (shown separately)
 
       const { shouldHide, opacity } = this.getActivityFreshnessStyle(uuid);
@@ -1460,7 +1467,14 @@ export class OverlayUI {
     // Add label
     rows.push('<div style="font-size: 12px; color: #aaa; margin-bottom: 8px;">Choose next:</div>');
 
-    for (const uuid of sessionMembers) {
+    // Sort with self first
+    const sorted = [...sessionMembers].sort((a, b) => {
+      if (a === this.userId) return -1;
+      if (b === this.userId) return 1;
+      return 0;
+    });
+
+    for (const uuid of sorted) {
       const { shouldHide, opacity } = this.getActivityFreshnessStyle(uuid);
       if (shouldHide) continue; // Hide if offline (10+ min no activity)
 
