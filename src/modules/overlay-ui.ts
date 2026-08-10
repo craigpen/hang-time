@@ -1406,13 +1406,14 @@ export class OverlayUI {
    * MODE B: Render "Choose next:" section with guest rows
    */
   private renderChooseNextRows(container: HTMLElement): void {
-    const allCoWatchers = this._state.co_watcher_activities ? Object.keys(this._state.co_watcher_activities) : [];
+    // Use persistent session members, not ephemeral co_watcher_activities keys
+    const sessionMembers = this._state.session_members || [];
     const rows: string[] = [];
 
     // Add label
     rows.push('<div style="font-size: 12px; color: #aaa; margin-bottom: 8px;">Choose next:</div>');
 
-    for (const uuid of allCoWatchers) {
+    for (const uuid of sessionMembers) {
       let name: string;
       if (uuid === this.userId) {
         name = 'You';

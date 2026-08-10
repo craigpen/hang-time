@@ -140,7 +140,7 @@ export interface FriendList extends Array<Friend> {}
 
 export interface CoWatchSession {
   session_id: string; // UUID v4
-  co_watchers: string[]; // Friend UUIDs (array of who's in this session)
+  members: string[]; // Persistent session members (UUIDs). Only append/remove, never reflects temporary co-watches
   created_at: number; // Unix ms
   is_active: boolean; // Whether user is still in the session
   activity_id?: string; // Current activity being co-watched (needed for existing flows: sync, messages, etc)

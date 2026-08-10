@@ -185,7 +185,7 @@ export class CoWatcherDetector {
         detected_at: Date.now(),
       };
 
-      console.log('[CoWatcher] DEBUG: session.co_watchers:', session.co_watchers.map(cw => ({ id: cw, length: cw.length })));
+      console.log('[CoWatcher] DEBUG: session.members:', session.members.map(cw => ({ id: cw, length: cw.length })));
 
       console.debug('[CoWatcher] Co-watch session detected:', {
         activity_id: session.activity_id,
@@ -262,39 +262,44 @@ export class CoWatcherDetector {
       let session = await this.storage.getActiveSession();
 
       if (!session) {
-        // Create new session with activity context
+        // Create new session with initial members (bootstrap from activity match)
         session = {
           session_id: this.generateSessionId(),
-          co_watchers: activityCoWatch.co_watchers,
+          members: activityCoWatch.co_watchers,
           created_at: Date.now(),
           is_active: true,
           activity_id: activityCoWatch.activity_id,
           host_friend_uuid: activityCoWatch.host_friend_uuid,
         };
-        console.log('[CoWatcher] Created new user session:', { session_id: session.session_id, co_watchers: session.co_watchers.length, activity_id: session.activity_id });
+        console.log('[CoWatcher] Created new user session:', { session_id: session.session_id, members: session.members.length, activity_id: session.activity_id });
       } else {
-        // Update existing session: preserve co-watchers (persistent session members)
-        // Only update activity context if there's a new matched activity
-        // This allows divergence: co-watchers stay in session even if watching different activities
+        // Update existing session: append any new co-watchers to persistent members
+        // Only add people not already in the session
+        const newCoWatchers = activityCoWatch.co_watchers.filter(uuid => !session.members.includes(uuid));
+        if (newCoWatchers.length > 0) {
+          session.members.push(...newCoWatchers);
+          console.log('[CoWatcher] Appended new members to session:', { session_id: session.session_id, new_members: newCoWatchers.length, total_members: session.members.length });
+        }
+
+        // Update activity context if there's a new matched activity
         if (activityCoWatch.co_watchers.length > 0) {
-          // Only update if there's an actual activity match (not just one person watching alone)
           session.activity_id = activityCoWatch.activity_id;
           session.host_friend_uuid = activityCoWatch.host_friend_uuid;
-          console.log('[CoWatcher] Updated existing user session activity context:', { session_id: session.session_id, activity_id: session.activity_id });
+          console.log('[CoWatcher] Updated session activity context:', { session_id: session.session_id, activity_id: session.activity_id });
         } else {
           // No current match, but keep session active for divergence tracking
-          console.log('[CoWatcher] No activity match, keeping session active for divergence:', { session_id: session.session_id, current_activity: session.activity_id });
+          console.log('[CoWatcher] No activity match, keeping session active:', { session_id: session.session_id, current_activity: session.activity_id });
         }
         session.is_active = true;
       }
 
-      console.log('[CoWatcher] DEBUG: Storing session.co_watchers:', session.co_watchers.map(cw => ({ id: cw, length: cw.length })));
+      console.log('[CoWatcher] DEBUG: Storing session.members:', session.members.map(cw => ({ id: cw, length: cw.length })));
       await this.storage.setActiveSession(session);
 
       // Verify what was stored
       const verified = await this.storage.getActiveSession();
       if (verified) {
-        console.log('[CoWatcher] DEBUG: Retrieved stored session.co_watchers:', verified.co_watchers.map(cw => ({ id: cw, length: cw.length })));
+        console.log('[CoWatcher] DEBUG: Retrieved stored session.members:', verified.co_watchers.map(cw => ({ id: cw, length: cw.length })));
       }
 
       return session;

@@ -910,7 +910,7 @@ function _startCoWatcherDetectionCycle(): void {
         const selfUuid = profile?.uuid;
         const guestProgress: Record<string, number> = {}; // UUID -> progress in seconds
 
-        for (const coWatcherId of coWatchSession.co_watchers) {
+        for (const coWatcherId of coWatchSession.members) {
           // Check if this co-watcher is actually on the current activity
           let isOnCurrentActivity = false;
 
@@ -963,7 +963,7 @@ function _startCoWatcherDetectionCycle(): void {
         try {
           // Query all session messages (not activity-scoped)
           const userUuid = profile?.uuid;
-          const sessionMessages = userUuid ? await storageManager.getVisibleMessages(userUuid, coWatchSession.co_watchers) : [];
+          const sessionMessages = userUuid ? await storageManager.getVisibleMessages(userUuid, coWatchSession.members) : [];
           console.log('[Background] [MESSAGE_FLOW] CO_WATCH_UPDATE query: session_id=' + coWatchSession?.session_id + ' found=' + sessionMessages.length + ' visible messages');
           if (sessionMessages && sessionMessages.length > 0) {
             console.log('[Background] [MESSAGE_FLOW]   Messages found:', sessionMessages.map(m => ({
@@ -977,7 +977,7 @@ function _startCoWatcherDetectionCycle(): void {
               friendMap.set(profile.uuid, profile.nickname || 'You');
             }
 
-            for (const coWatcherId of coWatchSession.co_watchers) {
+            for (const coWatcherId of coWatchSession.members) {
               if (coWatcherId === profile?.uuid) continue;
               const friend = await friendManager.getFriend(coWatcherId);
               if (friend) {
@@ -1037,9 +1037,9 @@ function _startCoWatcherDetectionCycle(): void {
             }
             const allFriends = await friendManager.getAllFriends();
             console.log(`[Background] [MESSAGE_FLOW] Available friends in storage:`, allFriends.map(f => ({ uuid: f.uuid, local_name: f.local_name })));
-            console.log(`[Background] [MESSAGE_FLOW] Building nicknameMap. self=${profile?.uuid}, co_watchers=[${coWatchSession.co_watchers.join(', ')}]`);
+            console.log(`[Background] [MESSAGE_FLOW] Building nicknameMap. self=${profile?.uuid}, co_watchers=[${coWatchSession.members.join(', ')}]`);
 
-            for (const coWatcherId of coWatchSession.co_watchers) {
+            for (const coWatcherId of coWatchSession.members) {
               if (coWatcherId === profile?.uuid) {
                 console.debug(`[Background] [MESSAGE_FLOW] Skipping self in co_watchers: ${coWatcherId}`);
                 continue;
@@ -1078,7 +1078,7 @@ function _startCoWatcherDetectionCycle(): void {
               host_duration: videoDuration,
               is_user_host: coWatchSession.host_friend_uuid === 'self',
             });
-            console.log(`[Background] [MESSAGE_FLOW] watching_together: [${watchingTogether.join(', ')}], co_watchers: [${coWatchSession.co_watchers.join(', ')}]`);
+            console.log(`[Background] [MESSAGE_FLOW] watching_together: [${watchingTogether.join(', ')}], co_watchers: [${coWatchSession.members.join(', ')}]`);
             // Get host friend's activity freshness for content-script first-show check
             let hostActivityFreshness: number | undefined;
             if (coWatchSession.host_friend_uuid !== 'self' && hostFriend?.current_activities) {
@@ -1098,7 +1098,7 @@ function _startCoWatcherDetectionCycle(): void {
               };
             }
 
-            for (const coWatcherId of coWatchSession.co_watchers) {
+            for (const coWatcherId of coWatchSession.members) {
               if (coWatcherId === selfUuid) continue; // Skip self (already added above)
 
               const friend = await friendManager.getFriend(coWatcherId);
@@ -1127,6 +1127,7 @@ function _startCoWatcherDetectionCycle(): void {
                 activity_id: coWatchSession.activity_id,
                 host_nickname: hostName,
                 watching_together: watchingTogether,
+                session_members: coWatchSession.members,
                 host_progress: hostPosition,
                 host_progress_timestamp: hostPositionTimestamp,
                 host_state: hostState,
@@ -1149,7 +1150,7 @@ function _startCoWatcherDetectionCycle(): void {
         console.debug('[Background] Co-watch session detected:', {
           activity_id: coWatchSession.activity_id,
           host: hostName,
-          co_watchers_count: coWatchSession.co_watchers.length,
+          co_watchers_count: coWatchSession.members.length,
         });
       }
       // Note: We do NOT clear the persistent session when no activity match is found.
@@ -1449,7 +1450,7 @@ chrome.runtime.onConnect.addListener((port) => {
             }
 
             // Collect guest progress
-            for (const friendId of coWatchSession.co_watchers) {
+            for (const friendId of coWatchSession.members) {
               if (friendId === userProfile?.uuid) {
                 watchingTogether.push(friendId);
                 continue;
@@ -1473,7 +1474,7 @@ chrome.runtime.onConnect.addListener((port) => {
             }
             // Include all co-watchers, not just watching_together
             // (in divergence, some co-watchers won't be in watching_together)
-            for (const uuid of coWatchSession.co_watchers) {
+            for (const uuid of coWatchSession.members) {
               if (uuid !== userProfile?.uuid) {
                 const friend = await friendManager.getFriend(uuid);
                 if (friend) {
@@ -1484,7 +1485,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
             // Get recent messages (unified session model)
             const recentMessages: any[] = [];
-            const sessionMessages = userProfile?.uuid ? await storageManager.getVisibleMessages(userProfile.uuid, coWatchSession.co_watchers) : [];
+            const sessionMessages = userProfile?.uuid ? await storageManager.getVisibleMessages(userProfile.uuid, coWatchSession.members) : [];
             if (sessionMessages && sessionMessages.length > 0) {
               for (const msg of sessionMessages) {
                 const senderName = nicknameMap[msg.from] || msg.from || 'Unknown';
@@ -1515,7 +1516,7 @@ chrome.runtime.onConnect.addListener((port) => {
               }
             }
 
-            for (const coWatcherId of coWatchSession.co_watchers) {
+            for (const coWatcherId of coWatchSession.members) {
               if (coWatcherId === userProfile?.uuid) continue; // Skip self (already added above)
 
               const friend = await friendManager.getFriend(coWatcherId);
@@ -1541,6 +1542,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 activity_id: coWatchSession.activity_id,
                 host_nickname: hostName,
                 watching_together: watchingTogether,
+                session_members: coWatchSession.members,
                 host_progress: hostPosition,
                 host_progress_timestamp: hostPositionTimestamp,
                 host_state: hostState,
@@ -1573,27 +1575,27 @@ chrome.runtime.onConnect.addListener((port) => {
             const detector = getCoWatcherDetector();
             const coWatchSession = await detector.getCurrentCoWatchSession();
 
-            console.log('[Background] [MESSAGE_FLOW] getCurrentCoWatchSession() returned:', coWatchSession ? { session_id: coWatchSession.session_id, co_watchers: coWatchSession.co_watchers.length } : null);
+            console.log('[Background] [MESSAGE_FLOW] getCurrentCoWatchSession() returned:', coWatchSession ? { session_id: coWatchSession.session_id, co_watchers: coWatchSession.members.length } : null);
 
             if (!coWatchSession) {
               console.warn('[Background] No co-watch session active for message - cannot send');
               return;
             }
 
-            console.log('[Background] [MESSAGE_FLOW] Co-watch session found. Activity:', coWatchSession.activity_id, 'Co-watchers:', coWatchSession.co_watchers);
+            console.log('[Background] [MESSAGE_FLOW] Co-watch session found. Activity:', coWatchSession.activity_id, 'Co-watchers:', coWatchSession.members);
 
             const friendManager = getFriendManager();
             const messagingManager = getMessagingManager();
 
             console.log('[Background] [MESSAGE_FLOW] SEND_MESSAGE details:', {
               activity_id: coWatchSession.activity_id,
-              co_watchers: coWatchSession.co_watchers,
+              co_watchers: coWatchSession.members,
               self_uuid: userProfile?.uuid,
               is_user_host: coWatchSession.host_friend_uuid === 'self'
             });
 
             // Send to all co-watchers except self
-            const recipientIds = coWatchSession.co_watchers.filter(id => id !== userProfile?.uuid);
+            const recipientIds = coWatchSession.members.filter(id => id !== userProfile?.uuid);
             console.log('[Background] [MESSAGE_FLOW] Recipient IDs for message:', recipientIds.map(id => ({ id, truncated: id.slice(0, 8) })));
 
             // Store message in unified model (not activity-scoped)
