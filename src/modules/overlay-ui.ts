@@ -1298,11 +1298,13 @@ export class OverlayUI {
     // Build host display: chip (host) | favicon title
     let hostDisplay = `<div class="attendee-chip" style="background: ${hostColor};"><span>${hostName}</span></div> <span style="color: #999;">(host)</span>`;
 
-    // Add host's current activity if available
-    if (this._state.activity_id) {
-      // For host, show the session's activity (they're on the "primary" activity)
+    // Add host's current activity (favicon + title)
+    const hostActivity = this._state.co_watcher_activities?.[hostUuid || ''];
+    if (hostActivity) {
       hostDisplay += ` | `;
-      // Note: we don't have the host's favicon/title easily available here, would need to pass it from backend
+      const faviconHtml = hostActivity.favicon ? `<img src="${hostActivity.favicon}" style="width: 14px; height: 14px; margin-right: 4px;" alt="">` : '';
+      const title = this.escapeHtml(hostActivity.content.substring(0, 40));
+      hostDisplay += `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #aaa;">${faviconHtml}<span>${title}</span></span>`;
     }
 
     hostContainer.innerHTML = hostDisplay;
@@ -1431,6 +1433,9 @@ export class OverlayUI {
 
     const rows: string[] = [];
 
+    // Add "Choose next video to watch:" label
+    rows.push('<div style="font-size: 12px; color: #aaa; margin-bottom: 8px;">Choose next video to watch:</div>');
+
     for (const uuid of allCoWatchers) {
       if (uuid === this.userId) continue; // Skip self
 
@@ -1466,7 +1471,8 @@ export class OverlayUI {
       rows.push(row);
     }
 
-    if (rows.length === 0) {
+    if (rows.length === 1) {
+      // Only the label, no guests
       guestRowsContainer.innerHTML = '';
     } else {
       guestRowsContainer.innerHTML = rows.join('');
