@@ -1330,19 +1330,40 @@ export class OverlayUI {
 
     const hostColor = this.getParticipantColor(hostUuid);
 
-    // Build host row: chip | favicon title (same line as progress bar's video)
+    // Build host row: chip | service icon + title (same line as progress bar's video)
     let html = `<div style="display: flex; align-items: center; gap: 8px;">`;
     html += `<div class="attendee-chip" style="background: ${hostColor};"><span>${hostName}</span></div>`;
 
-    // Add host's activity info
+    // Add host's activity info with service icon
     const activity = this._state.co_watcher_activities?.[hostUuid];
     if (activity) {
-      // Use favicon if available, fallback to YouTube icon placeholder
-      const favicon = activity.favicon
-        ? `<img src="${activity.favicon}" style="width: 14px; height: 14px; object-fit: contain;" alt="" onerror="this.style.display='none'">`
-        : '<span style="width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; background: rgba(255,255,255,0.1); border-radius: 2px;">▶</span>';
+      // Map service to icon (activity_id format is "service-type" or just "service")
+      const serviceMap: Record<string, string> = {
+        'youtube': 'youtube.png',
+        'youtube-tab': 'youtube.png',
+        'spotify': 'spotify.png',
+        'twitch': 'twitch.png',
+        'netflix': 'netflix.png',
+        'steam': 'steam.png',
+      };
+
+      let iconHtml = '';
+      // Try to match service from activity_id
+      for (const [service, icon] of Object.entries(serviceMap)) {
+        if (activity.activity_id.includes(service)) {
+          try {
+            const iconUrl = chrome.runtime.getURL(`public/icons/${icon}`);
+            iconHtml = `<img src="${iconUrl}" style="width: 14px; height: 14px; object-fit: contain;" alt="">`;
+          } catch (e) {
+            // Fallback if icon URL fails
+            iconHtml = '';
+          }
+          break;
+        }
+      }
+
       const title = this.escapeHtml(activity.content.substring(0, 40));
-      html += `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #aaa;">${favicon}<span>${title}</span></span>`;
+      html += `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #aaa;">${iconHtml}<span>${title}</span></span>`;
     }
 
     html += `</div>`;
