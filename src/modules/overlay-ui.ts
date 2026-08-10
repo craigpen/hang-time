@@ -1290,13 +1290,26 @@ export class OverlayUI {
     watchingTogetherRow.style.display = '';
 
     const hostContainer = document.getElementById('host-chip-container');
-    if (!hostContainer || !this._state.host_nickname) return;
-
-    // Show "You" if user is the host, otherwise show host's nickname
-    const hostName = this._state.is_user_host ? 'You' : this.escapeHtml(this._state.host_nickname);
+    if (!hostContainer) return;
 
     // Get host UUID and color
     const hostUuid = this.getHostUuid();
+    if (!hostUuid) return; // Shouldn't happen but guard against it
+
+    // Show "You" if user is the host, otherwise show host's nickname from nicknameMap
+    let hostName: string;
+    if (this._state.is_user_host) {
+      hostName = 'You';
+    } else {
+      const nickname = this.nicknameMap.get(hostUuid);
+      if (!nickname) {
+        console.debug('[OverlayUI] Missing nickname for host UUID:', hostUuid);
+        hostName = this._state.host_nickname || 'Host';
+      } else {
+        hostName = this.escapeHtml(nickname);
+      }
+    }
+
     const hostColor = this.getParticipantColor(hostUuid);
 
     // Build host display: chip + favicon title (no "(host)" label)
@@ -1418,11 +1431,19 @@ export class OverlayUI {
     for (const uuid of allCoWatchers) {
       if (uuid === hostUuid) continue; // Skip host (shown on line 2)
 
-      const nickname = this.nicknameMap.get(uuid);
-      if (!nickname) continue; // Skip if no nickname
+      let displayName: string;
+      if (uuid === this.userId) {
+        displayName = 'You';
+      } else {
+        const nickname = this.nicknameMap.get(uuid);
+        if (!nickname) {
+          console.debug('[OverlayUI] Missing nickname for co-watcher:', uuid);
+          continue; // Skip if no nickname (shouldn't happen for friends)
+        }
+        displayName = this.escapeHtml(nickname);
+      }
 
       const color = this.getParticipantColor(uuid);
-      const displayName = uuid === this.userId ? 'You' : this.escapeHtml(nickname);
       chips.push(`<div class="attendee-chip" style="background: ${color};"><span>${displayName}</span></div>`);
     }
 
