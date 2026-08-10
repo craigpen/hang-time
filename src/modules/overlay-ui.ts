@@ -995,24 +995,10 @@ export class OverlayUI {
     if (!this.container) return;
 
     // Only show if:
-    // 1. 2+ session members are online (have activity < 1 hour old)
+    // 1. 2+ session members exist (inactivity checking disabled for testing)
     // 2. OR the overlay is pinned
-    const ONE_HOUR_MS = 60 * 60 * 1000;
-    let onlineMembers = 0;
     const sessionMembers = this._state.session_members || [];
-
-    for (const uuid of sessionMembers) {
-      const activity = this._state.co_watcher_activities?.[uuid];
-      const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
-      if (lastMeasuredAt) {
-        const timeSinceLastSeen = Date.now() - lastMeasuredAt;
-        if (timeSinceLastSeen < ONE_HOUR_MS) {
-          onlineMembers++;
-        }
-      }
-    }
-
-    const hasCoWatchSession = onlineMembers >= 2;
+    const hasCoWatchSession = sessionMembers.length >= 2;
     if (!hasCoWatchSession && !this._state.pinned) {
       return;
     }
@@ -1300,24 +1286,9 @@ export class OverlayUI {
    * Guest Mode: <2 watching same video → show "Choose next:" + guest rows
    */
   private renderHostRow(): void {
-    // Determine which mode we're in: count active members on same video (exclude offline users)
-    const ONE_HOUR_MS = 60 * 60 * 1000;
-    let activeMembersOnSameVideo = 0;
-
-    if (this._state.watching_together) {
-      for (const uuid of this._state.watching_together) {
-        const activity = this._state.co_watcher_activities?.[uuid];
-        const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
-        if (lastMeasuredAt) {
-          const timeSinceLastSeen = Date.now() - lastMeasuredAt;
-          if (timeSinceLastSeen < ONE_HOUR_MS) {
-            activeMembersOnSameVideo++;
-          }
-        }
-      }
-    }
-
-    const isHostMode = activeMembersOnSameVideo >= 2;
+    // Determine which mode we're in: count members on same video (inactivity checking disabled for testing)
+    const watchingTogether = this._state.watching_together || [];
+    const isHostMode = watchingTogether.length >= 2;
     const watchingRow = document.getElementById('watching-together-row');
     const hostContainer = document.getElementById('host-chip-container');
     const guestContainer = document.getElementById('guest-chips-container');
@@ -1413,6 +1384,11 @@ export class OverlayUI {
    * Guests shown on separate row below host
    */
   private getActivityFreshnessStyle(uuid: string): { shouldHide: boolean; opacity: number } {
+    // TESTING: Disabled inactivity hiding/graying to isolate bug 1
+    // All members render at full opacity regardless of activity age
+    return { shouldHide: false, opacity: 1 };
+
+    /* Original logic (disabled for testing):
     const activity = this._state.co_watcher_activities?.[uuid];
 
     // Always show self (You) at full opacity, regardless of inactivity
@@ -1436,6 +1412,7 @@ export class OverlayUI {
       return { shouldHide: false, opacity: 0.5 }; // AFK - desaturate
     }
     return { shouldHide: false, opacity: 1 }; // Active - normal
+    */
   }
 
   private renderGuestChips(container: HTMLElement): void {
