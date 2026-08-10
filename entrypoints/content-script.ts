@@ -782,9 +782,18 @@ function establishConnection(): void {
               overlayUI.setNicknameMap(nicknameMapObj);
             }
 
+            // Detect if user has diverged to a different activity than the session
+            const sessionActivityId = message.data.activity_id;
+            const userCurrentActivityId = tracker?.currentActivityId;
+            const hasUserDiverged = userCurrentActivityId && userCurrentActivityId !== sessionActivityId;
+
+            // If user diverged, use their current activity as the "primary" activity for display
+            // This ensures all co-watchers show as guests with their activities relative to user's current video
+            const displayActivityId = hasUserDiverged ? userCurrentActivityId : sessionActivityId;
+
             // Only update messages if we received them from backend or have no current messages
             const stateUpdate: Partial<OverlayState> = {
-              activity_id: message.data.activity_id,
+              activity_id: displayActivityId,
               host_nickname: message.data.host_nickname,
               watching_together: message.data.watching_together || [],
               host_progress: message.data.host_progress,
