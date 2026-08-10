@@ -150,10 +150,11 @@ export class CoWatcherDetector {
       })));
 
       // Sort by contentTimestamp (or fallback to timestamp) to find host (earliest = host)
-      // Tiebreaker: if timestamps within 1 second, sort by friend_uuid for deterministic results
+      // Tiebreaker: if timestamps within 100ms, sort by friend_uuid for deterministic results
+      // (100ms threshold captures simultaneous starts, avoids favoring null over UUIDs)
       coWatchers.sort((a, b) => {
         const diff = a.timestamp - b.timestamp;
-        const TIMESTAMP_THRESHOLD = 1000; // 1 second
+        const TIMESTAMP_THRESHOLD = 100; // 100ms - true simultaneous starts only
 
         if (Math.abs(diff) > TIMESTAMP_THRESHOLD) {
           // Timestamps far enough apart - use timestamp alone
@@ -161,7 +162,7 @@ export class CoWatcherDetector {
           console.debug(`[TimestampMigration] SORT activity=${matchedActivityId}: a(${a.friend_uuid}/${a.timestamp}ms) vs b(${b.friend_uuid}/${b.timestamp}ms), diff=${diff}ms => winner=${result < 0 ? 'a' : 'b'}`);
           return diff;
         } else {
-          // Timestamps within threshold - use friend_uuid as tiebreaker for stability
+          // Timestamps within 100ms threshold - use friend_uuid as tiebreaker for stability
           const tiebreakerDiff = (a.friend_uuid || '').localeCompare(b.friend_uuid || '');
           console.debug(`[TimestampMigration] SORT (TIEBREAK) activity=${matchedActivityId}: within ${Math.abs(diff)}ms threshold, a(${a.friend_uuid}) vs b(${b.friend_uuid}) => winner=${tiebreakerDiff < 0 ? 'a' : tiebreakerDiff > 0 ? 'b' : 'equal'}`);
           return tiebreakerDiff;
