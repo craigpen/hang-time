@@ -1410,8 +1410,7 @@ export class OverlayUI {
         console.error('[OverlayUI] CRITICAL: No nickname in map for co-watcher UUID:', uuid);
         console.error('[OverlayUI] nicknameMap contents:', Object.fromEntries(this.nicknameMap));
         console.error('[OverlayUI] watching_together:', this._state.watching_together);
-        // Do not fall back to truncated UUID - this is a data consistency bug
-        const displayName = `<missing-name-${uuid.slice(0, 8)}>`;
+        // Data consistency bug - co-watcher must be a friend, so must have nickname
         continue; // Skip rendering this co-watcher
       }
       const displayName = uuid === this.userId ? 'You' : this.escapeHtml(nickname);
