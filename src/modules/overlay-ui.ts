@@ -559,30 +559,30 @@ export class OverlayUI {
             <button class="icon-button" id="pin-button" title="Pin overlay">📌</button>
           </div>
         </div>
-        <!-- Host row: chip + progress bar + controls -->
-        <div class="attendees-row" id="host-row">
-          <div class="attendees-label">Host:</div>
-          <div id="host-chip-container"></div>
-          <div class="progress-bar-wrapper">
-            <div class="progress-bar-container">
-              <div class="progress-bar-fill" id="progress-bar-fill"></div>
-              <div class="guest-markers-container" id="guest-markers-container"></div>
-              <div class="gap-indicator" id="gap-indicator" style="display: none;"></div>
-              <div class="user-position-marker" id="user-position-marker" style="display: none;"></div>
-              <div class="progress-bar-marker" id="progress-bar-marker"></div>
+        <!-- Watching together: progress bar + host chip + guest chips + sync -->
+        <div class="watching-together-row" id="watching-together-row">
+          <div class="watching-together-label">Watching together:</div>
+          <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+            <div id="host-chip-container"></div>
+            <div class="progress-bar-wrapper">
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="progress-bar-fill"></div>
+                <div class="guest-markers-container" id="guest-markers-container"></div>
+                <div class="gap-indicator" id="gap-indicator" style="display: none;"></div>
+                <div class="user-position-marker" id="user-position-marker" style="display: none;"></div>
+                <div class="progress-bar-marker" id="progress-bar-marker"></div>
+              </div>
+              <div class="progress-bar-controls">
+                <div class="host-state-indicator" id="host-state-indicator">-</div>
+                <button id="progress-sync-button" title="Sync to host position">↻</button>
+              </div>
             </div>
-            <div class="progress-bar-controls">
-              <div class="host-state-indicator" id="host-state-indicator">-</div>
-              <button id="progress-sync-button" title="Sync to host position">↻</button>
-            </div>
+            <div id="guest-chips-container" style="display: flex; gap: 4px;"></div>
           </div>
         </div>
 
-        <!-- Guest row: guest chips -->
-        <div class="attendees-row" id="guest-row">
-          <div class="attendees-label">Guest:</div>
-          <div id="guest-chips-container"></div>
-        </div>
+        <!-- Guest rows: for divergence display -->
+        <div id="guest-rows-container"></div>
       </div>
 
 
@@ -1268,22 +1268,22 @@ export class OverlayUI {
   }
 
   /**
-   * Render host row with chip and progress bar
+   * Render watching-together row with progress bar and chips
    * Only show when 2+ people are on the same activity
    */
   private renderHostRow(): void {
-    const hostRow = document.getElementById('host-row');
-    if (!hostRow) return;
+    const watchingTogetherRow = document.getElementById('watching-together-row');
+    if (!watchingTogetherRow) return;
 
-    // Only show Host/Guest row if 2+ people are watching the same activity
+    // Only show when 2+ people are watching the same activity
     const hasCoWatchers = this._state.watching_together && this._state.watching_together.length >= 2;
 
     if (!hasCoWatchers) {
-      hostRow.style.display = 'none';
+      watchingTogetherRow.style.display = 'none';
       return;
     }
 
-    hostRow.style.display = '';
+    watchingTogetherRow.style.display = '';
 
     const hostContainer = document.getElementById('host-chip-container');
     if (!hostContainer || !this._state.host_nickname) return;
@@ -1373,97 +1373,99 @@ export class OverlayUI {
   }
 
   /**
-   * Render guest row with all co-watchers in the session
-   * Session persists through divergence, so all co-watchers stay visible
-   * Host row shows when 2+ are on the same activity; otherwise show all as guest rows
+   * Render guest displays based on watching_together
+   * When 2+ on same activity: inline guest chips
+   * When < 2 on same activity: guest rows with divergence display
    */
   private renderGuestRow(): void {
-    const guestContainer = document.getElementById('guest-chips-container');
-    if (!guestContainer) {
-      return;
+    const hasCoWatchers = this._state.watching_together && this._state.watching_together.length >= 2;
+    const hostUuid = this.getHostUuid();
+    const allCoWatchers = this._state.co_watcher_activities ? Object.keys(this._state.co_watcher_activities) : [];
+
+    if (hasCoWatchers) {
+      // When 2+ watching together: show inline guest chips
+      this.renderInlineGuestChips(allCoWatchers, hostUuid);
+    } else {
+      // When < 2 watching together: show divergence rows
+      this.renderDivergenceRows(allCoWatchers);
     }
+  }
+
+  /**
+   * Render inline guest chips (when 2+ watching together)
+   */
+  private renderInlineGuestChips(allCoWatchers: string[], hostUuid: string | undefined): void {
+    const guestContainer = document.getElementById('guest-chips-container');
+    if (!guestContainer) return;
 
     const chips: string[] = [];
 
-    // Determine if Host row is shown (2+ on same activity)
-    const hasCoWatchers = this._state.watching_together && this._state.watching_together.length >= 2;
-    const hostUuid = this.getHostUuid();
-
-    // Get all co-watchers from co_watcher_activities (session members, not activity-filtered)
-    const allCoWatchers = this._state.co_watcher_activities ? Object.keys(this._state.co_watcher_activities) : [];
-
-    console.debug('[OverlayUI] renderGuestRow: allCoWatchers=', allCoWatchers, 'watching_together=', this._state.watching_together, 'showHostRow=', hasCoWatchers);
-
-    // If not host (and Host row is shown), render self first in red
-    if (!this._state.is_user_host && hasCoWatchers) {
-      const selfChip = `<div class="attendee-chip" style="background: #ef4444;">
-        <span>You</span>
-      </div>`;
-      chips.push(selfChip);
-    }
-
-    // Render all co-watchers from the session (not just those on same activity)
+    // Add all co-watchers except self and host
     for (const uuid of allCoWatchers) {
-      if (uuid === this.userId) {
-        continue; // Skip self
-      }
-
-      // When Host row is shown: skip host
-      // When Host row is hidden: include host (everyone is equal in diverged state)
-      if (hasCoWatchers && uuid === hostUuid) {
-        continue;
-      }
+      if (uuid === this.userId || uuid === hostUuid) continue;
 
       const nickname = this.nicknameMap.get(uuid);
-      if (!nickname) {
-        console.error('[OverlayUI] CRITICAL: No nickname in map for co-watcher UUID:', uuid);
-        console.error('[OverlayUI] nicknameMap contents:', Object.fromEntries(this.nicknameMap));
-        console.error('[OverlayUI] watching_together:', this._state.watching_together);
-        // Data consistency bug - co-watcher must be a friend, so must have nickname
-        continue; // Skip rendering this co-watcher
-      }
-      const displayName = uuid === this.userId ? 'You' : this.escapeHtml(nickname);
+      if (!nickname) continue; // Skip if no nickname
+
       const color = this.getParticipantColor(uuid);
+      const displayName = this.escapeHtml(nickname);
+      chips.push(`<div class="attendee-chip" style="background: ${color};"><span>${displayName}</span></div>`);
+    }
 
-      // Check if guest is on different activity (divergence)
+    guestContainer.innerHTML = chips.join('');
+  }
+
+  /**
+   * Render guest rows with divergence display (when < 2 watching together)
+   */
+  private renderDivergenceRows(allCoWatchers: string[]): void {
+    const guestRowsContainer = document.getElementById('guest-rows-container');
+    if (!guestRowsContainer) return;
+
+    const rows: string[] = [];
+
+    for (const uuid of allCoWatchers) {
+      if (uuid === this.userId) continue; // Skip self
+
+      const nickname = this.nicknameMap.get(uuid);
+      if (!nickname) continue; // Skip if no nickname
+
+      const color = this.getParticipantColor(uuid);
+      const displayName = this.escapeHtml(nickname);
       const guestActivity = this._state.co_watcher_activities?.[uuid];
-      const isOnDifferentActivity = guestActivity && guestActivity.activity_id !== this._state.activity_id;
+      const isWatchingVideo = guestActivity && guestActivity.activity_id;
 
-      let chip: string;
-      if (isOnDifferentActivity && guestActivity) {
-        // Guest is on different video: show nickname | [favicon] title | [play icon]
-        const faviconHtml = guestActivity.favicon ? `<img src="${guestActivity.favicon}" style="width: 16px; height: 16px; margin-right: 4px;" alt="">` : '';
-        const title = this.escapeHtml(guestActivity.content.substring(0, 30));
-        chip = `
-          <div style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: rgba(255, 255, 255, 0.08); border-radius: 6px; margin-bottom: 4px;">
-            <div class="attendee-chip" style="background: ${color}; flex-shrink: 0;">
-              <span>${displayName}</span>
-            </div>
-            <div style="display: flex; align-items: center; color: #aaa; font-size: 12px;">
+      let row: string;
+      if (isWatchingVideo) {
+        // Guest is watching a video: show chip | favicon title | join button
+        const faviconHtml = guestActivity.favicon ? `<img src="${guestActivity.favicon}" style="width: 16px; height: 16px;" alt="">` : '';
+        const title = this.escapeHtml(guestActivity.content.substring(0, 40));
+        row = `
+          <div style="display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px;">
+            <div class="attendee-chip" style="background: ${color}; flex-shrink: 0;"><span>${displayName}</span></div>
+            <span style="color: #999;">|</span>
+            <div style="display: flex; align-items: center; gap: 4px; flex: 1;">
               ${faviconHtml}
-              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</span>
+              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #aaa;">${title}</span>
             </div>
-            <button class="join-button" data-uuid="${uuid}" style="padding: 6px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">▶</button>
+            <button class="join-button" data-uuid="${uuid}" style="padding: 4px 6px; background: #3b82f6; color: white; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; font-size: 12px;">▶</button>
           </div>
         `;
       } else {
-        // Guest on same activity: show nickname chip only
-        chip = `<div class="attendee-chip" style="background: ${color};">
-          <span>${displayName}</span>
-        </div>`;
+        // Guest not watching video: just show chip
+        row = `<div style="padding: 2px 0;"><div class="attendee-chip" style="background: ${color};"><span>${displayName}</span></div></div>`;
       }
 
-      chips.push(chip);
+      rows.push(row);
     }
 
-    // If no co-watchers, show "Waiting for co-watchers"
-    if (chips.length === 0) {
-      guestContainer.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 13px; padding: 12px;">Waiting for co-watchers...</div>';
+    if (rows.length === 0) {
+      guestRowsContainer.innerHTML = '';
     } else {
-      guestContainer.innerHTML = chips.join('');
+      guestRowsContainer.innerHTML = rows.join('');
 
       // Attach click listeners to join buttons
-      for (const button of guestContainer.querySelectorAll('.join-button')) {
+      for (const button of guestRowsContainer.querySelectorAll('.join-button')) {
         button.addEventListener('click', (e) => {
           const uuid = (e.target as HTMLElement).getAttribute('data-uuid');
           if (uuid) {
