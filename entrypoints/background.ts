@@ -1087,14 +1087,14 @@ function _startCoWatcherDetectionCycle(): void {
             }
 
             // Build co-watcher activities map for divergence display (includes self + others)
-            const coWatcherActivities: Record<string, {activity_id: string; content: string; favicon?: string}> = {};
+            const coWatcherActivities: Record<string, {activity_id: string; content: string; service?: string}> = {};
 
             // Add self's activity (needed when user is host, so host title can be shown)
             if (userActivity && selfUuid) {
               coWatcherActivities[selfUuid] = {
                 activity_id: userActivity.id || '',
                 content: userActivity.content || videoTitle || '',
-                favicon: userActivity.metadata?.favicon,
+                service: userActivity.service || '',
               };
             }
 
@@ -1111,7 +1111,7 @@ function _startCoWatcherDetectionCycle(): void {
                     coWatcherActivities[coWatcherId] = {
                       activity_id: friendActivity.id || '',
                       content: friendActivity.content || '',
-                      favicon: friendActivity.metadata?.favicon,
+                      service: friendActivity.service || '',
                     };
                   }
                 }
@@ -1482,7 +1482,7 @@ chrome.runtime.onConnect.addListener((port) => {
             }
 
             // Build co-watcher activities map for divergence display (includes self + others)
-            const coWatcherActivities: Record<string, {activity_id: string; content: string; favicon?: string}> = {};
+            const coWatcherActivities: Record<string, {activity_id: string; content: string; service?: string}> = {};
 
             // Add self's activity (needed when user is host, so host title can be shown)
             if (userProfile?.uuid) {
@@ -1492,7 +1492,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 coWatcherActivities[userProfile.uuid] = {
                   activity_id: userActivity.id || '',
                   content: userActivity.content || '',
-                  favicon: userActivity.metadata?.favicon,
+                  service: userActivity.service || '',
                 };
               }
             }
@@ -1509,7 +1509,7 @@ chrome.runtime.onConnect.addListener((port) => {
                     coWatcherActivities[coWatcherId] = {
                       activity_id: friendActivity.id || '',
                       content: friendActivity.content || '',
-                      favicon: friendActivity.metadata?.favicon,
+                      service: friendActivity.service || '',
                     };
                   }
                 }

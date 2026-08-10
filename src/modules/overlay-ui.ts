@@ -1337,7 +1337,7 @@ export class OverlayUI {
     // Add host's activity info with service icon
     const activity = this._state.co_watcher_activities?.[hostUuid];
     if (activity) {
-      // Map service to icon (activity_id format is "service-type" or just "service")
+      // Map service to icon
       const serviceMap: Record<string, string> = {
         'youtube': 'youtube.png',
         'youtube-tab': 'youtube.png',
@@ -1348,17 +1348,16 @@ export class OverlayUI {
       };
 
       let iconHtml = '';
-      // Try to match service from activity_id
-      for (const [service, icon] of Object.entries(serviceMap)) {
-        if (activity.activity_id.includes(service)) {
+      if (activity.service) {
+        const icon = serviceMap[activity.service];
+        if (icon) {
           try {
             const iconUrl = chrome.runtime.getURL(`public/icons/${icon}`);
             iconHtml = `<img src="${iconUrl}" style="width: 14px; height: 14px; object-fit: contain;" alt="">`;
           } catch (e) {
-            // Fallback if icon URL fails
+            // Silent fallback
             iconHtml = '';
           }
-          break;
         }
       }
 
