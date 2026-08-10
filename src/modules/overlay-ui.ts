@@ -1314,6 +1314,7 @@ export class OverlayUI {
 
   /**
    * MODE A: Render host chip with activity info
+   * Host is always shown first with the title (associated with progress bar above)
    */
   private renderHostChip(container: HTMLElement): void {
     const hostUuid = this.getHostUuid();
@@ -1328,21 +1329,26 @@ export class OverlayUI {
     hostName = this.escapeHtml(hostName);
 
     const hostColor = this.getParticipantColor(hostUuid);
-    let html = `<div class="attendee-chip" style="background: ${hostColor};"><span>${hostName}</span></div>`;
+
+    // Build host row: chip | favicon title (same line as progress bar's video)
+    let html = `<div style="display: flex; align-items: center; gap: 8px;">`;
+    html += `<div class="attendee-chip" style="background: ${hostColor};"><span>${hostName}</span></div>`;
 
     // Add host's activity info
     const activity = this._state.co_watcher_activities?.[hostUuid];
     if (activity) {
-      const favicon = activity.favicon ? `<img src="${activity.favicon}" style="width: 14px; height: 14px; margin-right: 4px;" alt="">` : '';
+      const favicon = activity.favicon ? `<img src="${activity.favicon}" style="width: 14px; height: 14px;" alt="">` : '';
       const title = this.escapeHtml(activity.content.substring(0, 40));
-      html += ` <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #aaa;">${favicon}<span>${title}</span></span>`;
+      html += `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #aaa;">${favicon}<span>${title}</span></span>`;
     }
 
+    html += `</div>`;
     container.innerHTML = html;
   }
 
   /**
    * MODE A: Render guest chips (everyone except host)
+   * Guests shown on separate row below host
    */
   private renderGuestChips(container: HTMLElement): void {
     const allCoWatchers = this._state.co_watcher_activities ? Object.keys(this._state.co_watcher_activities) : [];
@@ -1365,7 +1371,12 @@ export class OverlayUI {
       chips.push(`<div class="attendee-chip" style="background: ${color};"><span>${name}</span></div>`);
     }
 
-    container.innerHTML = chips.join('');
+    if (chips.length > 0) {
+      // Wrap guest chips in a flex container for proper spacing
+      container.innerHTML = `<div style="display: flex; gap: 4px; flex-wrap: wrap;">${chips.join('')}</div>`;
+    } else {
+      container.innerHTML = '';
+    }
   }
 
   /**
