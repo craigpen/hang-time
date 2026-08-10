@@ -185,7 +185,7 @@ export class CoWatcherDetector {
         detected_at: Date.now(),
       };
 
-      console.log('[CoWatcher] DEBUG: session.members:', session.members.map(cw => ({ id: cw, length: cw.length })));
+      console.log('[CoWatcher] DEBUG: activity session co_watchers:', session.co_watchers.map(cw => ({ id: cw, length: cw.length })));
 
       console.debug('[CoWatcher] Co-watch session detected:', {
         activity_id: session.activity_id,

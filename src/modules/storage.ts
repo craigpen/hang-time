@@ -665,7 +665,18 @@ export class StorageManager {
   // ============================================================================
 
   async getActiveSession(): Promise<CoWatchSession | null> {
-    return this.get<CoWatchSession | null>(STORAGE_KEYS.ACTIVE_SESSION, null);
+    const session = this.get<any>(STORAGE_KEYS.ACTIVE_SESSION, null);
+    if (!session) return null;
+
+    // Migrate old co_watchers field to members
+    if (session.co_watchers && !session.members) {
+      session.members = session.co_watchers;
+      delete session.co_watchers;
+      // Save migrated version
+      await this.setActiveSession(session);
+    }
+
+    return session as CoWatchSession;
   }
 
   async setActiveSession(session: CoWatchSession): Promise<void> {
