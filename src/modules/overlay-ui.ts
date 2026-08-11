@@ -1069,10 +1069,24 @@ export class OverlayUI {
   }
 
   /**
-   * Sync button clicked
+   * Sync button clicked - update UI immediately, send to background for confirmation
    */
   private onSyncClick(): void {
-    console.debug('[OverlayUI] Sync button clicked, activity:', this._state.activity_id);
+    if (!this._state.host_progress_timestamp || this._state.host_progress === undefined) {
+      return;
+    }
+
+    // Calculate host's current position locally (optimistic update)
+    const elapsedMs = Date.now() - this._state.host_progress_timestamp;
+    const syncPosition = this._state.host_state === 'playing'
+      ? this._state.host_progress + (elapsedMs / 1000)
+      : this._state.host_progress;
+
+    // Update UI immediately
+    this._state.user_progress = syncPosition;
+    this.render();
+
+    // Send to background for persistence
     window.postMessage({ type: 'HANG_TIME_SYNC_REQUEST', data: { activity_id: this._state.activity_id } }, '*');
   }
 
@@ -1625,9 +1639,11 @@ export class OverlayUI {
         const userColor = this.getParticipantColor(msg.sender_id);
         // Use "You" for user's own messages, otherwise lookup display name from state nicknameMap
         const displayName = isUser ? 'You' : (this._state.nicknameMap?.[msg.sender_id] || msg.sender || 'Unknown');
+        // Apply freshness opacity to match guest row dimming
+        const { opacity } = this.getActivityFreshnessStyle(msg.sender_id);
         return `
           <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}">
-            <div class="attendee-chip" style="background: ${userColor}; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);">${this.escapeHtml(displayName)}</div>
+            <div class="attendee-chip" style="background: ${userColor}; opacity: ${opacity}; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);">${this.escapeHtml(displayName)}</div>
             <div class="message-content" style="background: rgba(255, 255, 255, 0.08); color: white;">${this.linkifyContent(msg.content)}</div>
           </div>
         `;
