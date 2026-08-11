@@ -306,16 +306,24 @@ export class StorageManager {
   /**
    * Get all file logs (shared across all instances, not session-namespaced)
    * Used for diagnostic logging export
+   * Reads from cache first (where recent logs are), then storage
    */
   async getAllFileLogs(): Promise<Record<string, string>> {
     try {
-      // File logs are stored with shared keys (not session-namespaced) so we need direct access
-      // This is intentional for diagnostic purposes - logs should be aggregated across instances
-      const allData = await chrome.storage.local.get(null);
       const logs: Record<string, string> = {};
 
-      for (const [key, value] of Object.entries(allData)) {
+      // First check the in-memory cache for unsync'd logs (highest priority)
+      for (const [key, value] of Object.entries(this.cache)) {
         if (key.startsWith('hang_time_file_logs_')) {
+          const profileId = key.replace('hang_time_file_logs_', '');
+          logs[profileId] = value as string;
+        }
+      }
+
+      // Then check storage for any logs not in cache
+      const allData = await chrome.storage.local.get(null);
+      for (const [key, value] of Object.entries(allData)) {
+        if (key.startsWith('hang_time_file_logs_') && !(key in this.cache)) {
           const profileId = key.replace('hang_time_file_logs_', '');
           logs[profileId] = value as string;
         }
