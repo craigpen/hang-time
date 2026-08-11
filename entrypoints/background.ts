@@ -818,27 +818,7 @@ function _startCoWatcherDetectionCycle(): void {
 
       // Check session staleness (self inactive 10+ min for testing)
       if (persistentSession) {
-        const userProfile = await storageManager.getUserProfile();
-        const selfUuid = userProfile?.uuid;
-        const coWatcherActivities = await detector.getCoWatcherActivities();
-
-        const selfActivity = coWatcherActivities?.[selfUuid!];
-        const lastMeasuredAt = selfActivity?.metadata?.progress_measured_at || selfActivity?.timestamp;
-        const TEN_MIN_MS = 10 * 60 * 1000;
         const TWO_MIN_MS = 2 * 60 * 1000; // Testing grace period
-
-        if (lastMeasuredAt && (Date.now() - lastMeasuredAt) >= TEN_MIN_MS) {
-          // Self is hidden (inactive 10+ min)
-          if (!persistentSession.stale_at) {
-            persistentSession.stale_at = Date.now();
-            await storageManager.setActiveSession(persistentSession);
-            console.log('[Background] Session marked stale (self hidden 10+ min)');
-          }
-        } else if (persistentSession.stale_at) {
-          // Self became active again, clear stale mark
-          persistentSession.stale_at = undefined;
-          await storageManager.setActiveSession(persistentSession);
-        }
 
         // If stale for 2+ min, purge session (testing)
         if (persistentSession.stale_at && (Date.now() - persistentSession.stale_at) > TWO_MIN_MS) {
