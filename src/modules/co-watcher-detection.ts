@@ -284,9 +284,12 @@ export class CoWatcherDetector {
         // Update activity context if there's a new matched activity
         if (activityCoWatch.co_watchers.length > 0) {
           session.activity_id = activityCoWatch.activity_id;
-          // Only set host on initial creation. Once set, keep the same host (don't override with own view)
-          if (!session.host_friend_uuid) {
-            session.host_friend_uuid = activityCoWatch.host_friend_uuid;
+          // Always update host when there's an activity match (host is determined by immutable contentTimestamp)
+          // This ensures host re-determination after reload, not "first to set wins"
+          const previousHost = session.host_friend_uuid;
+          session.host_friend_uuid = activityCoWatch.host_friend_uuid;
+          if (previousHost !== activityCoWatch.host_friend_uuid) {
+            console.log('[CoWatcher] Host changed:', { from: previousHost, to: activityCoWatch.host_friend_uuid });
           }
           console.log('[CoWatcher] Updated session activity context:', { session_id: session.session_id, activity_id: session.activity_id, host: session.host_friend_uuid });
         } else {

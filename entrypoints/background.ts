@@ -823,7 +823,7 @@ function _startCoWatcherDetectionCycle(): void {
         // Count members with recent activity (not older than PURGE_AFTER_MS)
         const userProfile = await storageManager.getUserProfile();
         const selfUuid = userProfile?.uuid;
-        const allFriends = await friendManager.getAllFriends();
+        const allFriends = await getFriendManager().getAllFriends();
         const friendMap = new Map(allFriends.map(f => [f.uuid, f]));
 
         let activeCount = 0;

@@ -1238,27 +1238,42 @@ export class OverlayUI {
     const gapIndicatorEl = document.getElementById('gap-indicator') as HTMLElement;
 
     if (hostPositionMarkerEl || gapIndicatorEl) {
-      if (!this._state.is_user_host && this._state.host_progress !== undefined && this._state.user_progress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
-        const hostPercent = Math.min((this._state.host_progress / this._state.host_duration) * 100, 100);
-        const userPercent = Math.min((this._state.user_progress / this._state.host_duration) * 100, 100);
+      if (!this._state.is_user_host && this._state.host_progress !== undefined && this._state.user_progress !== undefined && this._state.host_progress_timestamp !== undefined && this._state.host_duration && this._state.host_duration > 0) {
+        // Calculate host's current position (same as arrow logic)
+        const elapsedSinceHostMeasureMs = Date.now() - this._state.host_progress_timestamp;
+        const hostCurrentPosition = this._state.host_state === 'playing'
+          ? this._state.host_progress + (elapsedSinceHostMeasureMs / 1000)
+          : this._state.host_progress;
+        const gap = Math.abs(this._state.user_progress - hostCurrentPosition);
+        const SYNC_THRESHOLD = 5;
 
-        // Show host position marker
-        if (hostPositionMarkerEl) {
-          hostPositionMarkerEl.style.left = hostPercent + '%';
-          hostPositionMarkerEl.style.display = 'block';
+        // Only show host marker and gap line if gap is significant
+        if (gap > SYNC_THRESHOLD) {
+          const hostPercent = Math.min((hostCurrentPosition / this._state.host_duration) * 100, 100);
+          const userPercent = Math.min((this._state.user_progress / this._state.host_duration) * 100, 100);
+
+          // Show host position marker
+          if (hostPositionMarkerEl) {
+            hostPositionMarkerEl.style.left = hostPercent + '%';
+            hostPositionMarkerEl.style.display = 'block';
+          }
+
+          // Show gap indicator line between user and host positions
+          if (gapIndicatorEl) {
+            const startPercent = Math.min(userPercent, hostPercent);
+            const endPercent = Math.max(userPercent, hostPercent);
+            const gapWidth = endPercent - startPercent;
+            gapIndicatorEl.style.left = startPercent + '%';
+            gapIndicatorEl.style.width = gapWidth + '%';
+            gapIndicatorEl.style.display = 'block';
+          }
+
+          console.debug('[OverlayUI] Host position marker shown at', hostPercent + '%, gap from', userPercent + '%');
+        } else {
+          if (hostPositionMarkerEl) hostPositionMarkerEl.style.display = 'none';
+          if (gapIndicatorEl) gapIndicatorEl.style.display = 'none';
+          console.debug('[OverlayUI] Host/gap markers hidden - gap too small:', gap);
         }
-
-        // Show gap indicator line between user and host positions
-        if (gapIndicatorEl) {
-          const startPercent = Math.min(userPercent, hostPercent);
-          const endPercent = Math.max(userPercent, hostPercent);
-          const gapWidth = endPercent - startPercent;
-          gapIndicatorEl.style.left = startPercent + '%';
-          gapIndicatorEl.style.width = gapWidth + '%';
-          gapIndicatorEl.style.display = 'block';
-        }
-
-        console.debug('[OverlayUI] Host position marker shown at', hostPercent + '%, gap from', userPercent + '%');
       } else {
         if (hostPositionMarkerEl) hostPositionMarkerEl.style.display = 'none';
         if (gapIndicatorEl) gapIndicatorEl.style.display = 'none';
