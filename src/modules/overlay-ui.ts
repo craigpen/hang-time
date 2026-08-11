@@ -687,7 +687,7 @@ export class OverlayUI {
     }
     this._eventListenersSetup = true;
 
-    // Always set up discovery listener - let show() decide visibility based on watching_together
+    // Discovery listener - only show overlay if there's an active co-watch session
     if (!this.initialMouseMoveListener && this.container) {
       this.initialMouseMoveListener = (e: MouseEvent) => {
         if (!this.container) return;
@@ -696,7 +696,8 @@ export class OverlayUI {
         const isOverlay = e.clientX >= rect.left && e.clientX <= rect.right &&
                          e.clientY >= rect.top && e.clientY <= rect.bottom;
 
-        if (isOverlay) {
+        // Only show on hover if there's an active co-watch session (2+ members)
+        if (isOverlay && this._state.session_members?.length >= 2) {
           this.show();
         }
       };
