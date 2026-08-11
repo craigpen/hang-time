@@ -78,6 +78,14 @@ export class StorageManager {
   }
 
   /**
+   * DEBUG: Get messages from memory cache (inspect without reload)
+   */
+  debugGetCachedMessages(): Message[] {
+    const namespacedKey = `${this.sessionId}:messages`;
+    return this.cache.get(namespacedKey) || [];
+  }
+
+  /**
    * Prefix a storage key with the session ID for instance isolation.
    * Shared keys (like logs) are NOT namespaced so all instances can write to them.
    * If no session ID is set, uses unnamespaced key (during initialization).
@@ -569,68 +577,45 @@ export class StorageManager {
    * Get all messages for a specific activity (from all senders, including self)
    * Returns messages sorted by timestamp (oldest to newest)
    */
-  async getActivityMessages(activityId: string): Promise<Message[]> {
-    const key = `activity_messages_${activityId}`;
-    const messages = await this.get<Message[]>(key);
-    return messages ? messages.sort((a, b) => a.timestamp - b.timestamp) : [];
-  }
-
-  /**
-   * Add message to an activity (single activity-centric storage)
-   * Keeps only 50 most recent messages per activity
-   */
-  async addActivityMessage(activityId: string, message: Message): Promise<void> {
-    const key = `activity_messages_${activityId}`;
-    const messages = await this.get<Message[]>(key) || [];
-
-    // Add new message
-    messages.push(message);
-
-    await this.set(key, messages);
-  }
-
-  /**
-   * Mark message as read in an activity
-   */
-  async markMessageAsRead(activityId: string, messageId: string): Promise<void> {
-    const key = `activity_messages_${activityId}`;
-    const messages = await this.get<Message[]>(key) || [];
-    const message = messages.find((m) => m.id === messageId);
-    if (message) {
-      message.read = true;
-      await this.set(key, messages);
-    }
-  }
-
-  /**
-   * Check if there are unread messages for an activity from any sender
-   */
-  async hasUnreadMessages(activityId: string): Promise<boolean> {
-    const messages = await this.getActivityMessages(activityId);
-    return messages.some((m) => !m.read && !m.is_outbound);
-  }
-
   // ============================================================================
-  // MESSAGES (Unified session-centric approach - NEW MODEL)
+  // MESSAGES (Unified user-centric approach - NEW MODEL)
   // ============================================================================
 
   /**
    * Get all messages ever stored (unified model)
+   * Keyed by user UUID (stable) not session ID (ephemeral)
    * Returns messages sorted by timestamp (oldest to newest)
    */
   async getAllMessages(): Promise<Message[]> {
-    const messages = await this.get<Message[]>('messages', []);
-    return messages.sort((a, b) => a.timestamp - b.timestamp);
+    const profile = await this.getUserProfile();
+    if (!profile?.uuid) return [];
+
+    const messagesKey = `messages_${profile.uuid}`;
+    const messages = await chrome.storage.local.get([messagesKey]);
+    const allMessages = messages[messagesKey] as Message[] || [];
+    return allMessages.sort((a, b) => a.timestamp - b.timestamp);
   }
 
   /**
    * Add message to unified messages array
+   * Keyed by user UUID (stable) not session ID (ephemeral)
    * New model: messages have from (sender UUID) and recipients[] (recipient UUIDs)
+   * Writes immediately to disk (don't wait for batched sync)
    */
   async addMessage(message: Message): Promise<void> {
-    const messages = await this.get<Message[]>('messages', []);
-    messages.push(message);
-    await this.set('messages', messages);
+    const profile = await this.getUserProfile();
+    if (!profile?.uuid) {
+      console.warn('[Storage] Cannot store message - user UUID not available');
+      return;
+    }
+
+    const messagesKey = `messages_${profile.uuid}`;
+    const messages = await chrome.storage.local.get([messagesKey]);
+    const allMessages = messages[messagesKey] as Message[] || [];
+    allMessages.push(message);
+
+    // Write directly to chrome.storage.local, bypassing cache to ensure immediate persistence
+    await chrome.storage.local.set({ [messagesKey]: allMessages });
   }
 
   /**

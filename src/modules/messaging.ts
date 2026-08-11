@@ -264,31 +264,18 @@ export class MessagingManager {
       }
       console.log(`[Messaging] [MESSAGE_FLOW] ✅ Event queued with event_id: ${event.id.substring(0, 16)}...`);
 
-      // Store in local message history as outbound
-      const localMessage: any = {
+      // Store in unified messages array (session-based model only)
+      const unifiedMessage: Message = {
         id: event.id,
-        friend_id: recipientFriend.uuid,
-        friend_identifier: recipientFriend.uuid,
-        sender_identifier: userProfile.uuid,
-        activity_id: message.activity_id,
-        service: message.service,
-        type: message.type as 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response',
+        from: userProfile.uuid,
+        recipients: [recipientFriend.uuid],
+        type: message.type,
         content: message.content,
-        is_outbound: true,
         timestamp: message.timestamp,
-        read: true,
       };
 
-      // Add sync-specific fields if present
-      if (message.position !== undefined) {
-        localMessage.position = message.position;
-      }
-      if (message.sent_at !== undefined) {
-        localMessage.sent_at = message.sent_at;
-      }
-
       try {
-        await this.storageManager.addActivityMessage(message.activity_id, localMessage);
+        await this.storageManager.addMessage(unifiedMessage);
         console.log('[Messaging] [MESSAGE_FLOW] ✅ Stored sent message:', {
           activity_id: message.activity_id,
           type: message.type,
@@ -354,47 +341,27 @@ export class MessagingManager {
         return null;
       }
 
-      // Create message record
-      const storedMessage: any = {
+      // Store in unified messages array (session-based model only)
+      const unifiedMessage: Message = {
         id: eventId,
-        friend_id: friend.uuid,
-        friend_identifier: friend.uuid,
-        sender_identifier: friend.uuid,
+        from: friend.uuid,
+        recipients: [userProfile.uuid],
+        type: message.type,
+        content: message.content,
+        timestamp: message.timestamp || timestamp,
+      };
+      await this.storageManager.addMessage(unifiedMessage);
+      console.debug('[Messaging] Stored message from:', friend.uuid, 'type:', message.type);
+
+      // Return message info for handler routing
+      return {
+        type: message.type,
         activity_id: message.activity_id,
         service: message.service,
-        type: message.type as 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response',
         content: message.content,
-        is_outbound: false,
-        timestamp: message.timestamp || timestamp,
-        read: false,
+        position: message.position,
+        sent_at: message.sent_at,
       };
-
-      // Add sync-specific fields if present
-      if (message.position !== undefined) {
-        storedMessage.position = message.position;
-      }
-      if (message.sent_at !== undefined) {
-        storedMessage.sent_at = message.sent_at;
-      }
-
-      // Store in activity-scoped storage (backward compatibility)
-      await this.storageManager.addActivityMessage(message.activity_id, storedMessage);
-
-      // Also store in unified messages array (for session-based visibility)
-      if (userProfile?.uuid) {
-        const unifiedMessage: any = {
-          id: eventId,
-          from: friend.uuid,
-          recipients: [userProfile.uuid],
-          content: message.content,
-          timestamp: message.timestamp || timestamp,
-        };
-        await this.storageManager.addMessage(unifiedMessage);
-        console.debug('[Messaging] Stored unified message from:', friend.uuid);
-      }
-
-      console.debug('[Messaging] Received message from:', friend.uuid, 'type:', message.type);
-      return storedMessage;
     } catch (error) {
       console.error('[Messaging] Failed to receive/decrypt message:', error);
       return null;

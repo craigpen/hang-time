@@ -436,13 +436,6 @@ export class PopupController {
               }
             }
 
-            // Reload messages in case new ones arrived
-            const messageList = existingWrapper.querySelector('.activity-message-list') as HTMLElement;
-            const messageContainer = existingWrapper.querySelector('.activity-message-container') as HTMLElement;
-            if (messageList && messageContainer) {
-              messageList.innerHTML = ''; // Clear old messages before reloading
-              this._loadActivityMessages(friendId, activity.id, messageList, messageContainer);
-            }
           }
         }
       }
@@ -1049,8 +1042,7 @@ export class PopupController {
 
   private _handleDeleteFriend(friendId: string, friendName: string): void {
     const minimalFriend: Friend = {
-      id: friendId,
-      identifier: '',
+      uuid: friendId,
       pubkey: '',
       local_name: friendName,
       added_at: 0,
@@ -1058,6 +1050,7 @@ export class PopupController {
       muted: false,
       hidden_services: [],
       current_activities: {},
+      state: 'active',
     };
     this._handleRemoveFriend(minimalFriend);
   }
@@ -1502,21 +1495,6 @@ export class PopupController {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.type === 'NEW_MESSAGE') {
         const { message: msg, friendId, activityId } = message.data;
-        // Update message list if the activity container is visible
-        if (activityId) {
-          const wrapper = document.querySelector(`[data-activity-id="${activityId}"]`) as HTMLElement;
-          if (wrapper) {
-            const messageList = wrapper.querySelector('.activity-message-list') as HTMLElement;
-            if (messageList) {
-              this._renderMessage(messageList, msg);
-              // Show message container if it's not already
-              const messageContainer = wrapper.querySelector('.activity-message-container') as HTMLElement;
-              if (messageContainer && messageContainer.style.display === 'none') {
-                messageContainer.style.display = 'block';
-              }
-            }
-          }
-        }
       } else if (message.type === 'FRIEND_ACTIVITY_CHANGED') {
         // Friend's activities changed - refresh immediately
         this.refreshFriends().catch((error) => {
@@ -2778,21 +2756,6 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       const messageContainers = document.querySelectorAll('.activity-message-container');
       let targetMessageList: HTMLElement | null = null;
 
-      for (const container of messageContainers) {
-        const wrapper = container.closest('.activity-item-wrapper');
-        if (wrapper) {
-          // Try to match by activity ID first
-          if (activity.id && wrapper.dataset.activityId === activity.id) {
-            targetMessageList = container.querySelector('.activity-message-list') as HTMLElement;
-            break;
-          }
-          // Fallback: check if this is a message container visible in the UI (the one the user just opened)
-          if ((container as HTMLElement).style.display !== 'none') {
-            targetMessageList = container.querySelector('.activity-message-list') as HTMLElement;
-            // Don't break, keep looking in case we find an exact ID match
-          }
-        }
-      }
 
       // Optimistically render message if we found the target
       if (targetMessageList) {

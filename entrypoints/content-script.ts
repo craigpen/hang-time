@@ -277,10 +277,7 @@ class GenericVideoTracker {
     const isPaused = this.activeVideoElement.paused;
 
     if (duration > 0 && duration < 60) {
-      // Ad detected, unhook silently (already filtered in _findAndHookVideo)
-      this._removeVideoListeners();
-      this.activeVideoElement = null;
-      setTimeout(() => this._findAndHookVideo(), 100);
+      // Ad detected - skip reporting, keep video hooked for when main content resumes
       return;
     }
 
@@ -796,6 +793,7 @@ function establishConnection(): void {
               activity_id: displayActivityId,
               host_nickname: message.data.host_nickname,
               watching_together: message.data.watching_together || [],
+              session_members: message.data.session_members || [],
               host_progress: message.data.host_progress,
               host_progress_timestamp: message.data.host_progress_timestamp,
               host_state: message.data.host_state,
@@ -833,16 +831,6 @@ function establishConnection(): void {
               user_position: newPosition,
             });
             console.debug('[ContentScript] Sync complete, updated position to:', newPosition);
-          }
-          break;
-
-        case 'ACTIVITY_MESSAGES':
-          if (!overlayUI) return;
-          // Load initial messages for this activity (on page reload)
-          const initialMessages = message.data?.messages || [];
-          if (initialMessages.length > 0) {
-            console.debug('[ContentScript] Loaded', initialMessages.length, 'initial messages for activity');
-            overlayUI.setState({ messages: initialMessages });
           }
           break;
 
@@ -1027,13 +1015,6 @@ function initializeOverlay(): void {
   // Pass port to overlay for direct messaging
   if (port) {
     overlayUI.setPort(port);
-    // Request initial messages for this activity (to restore chat on page reload)
-    if (tracker && (tracker as any).currentActivityId) {
-      port.postMessage({
-        type: 'GET_ACTIVITY_MESSAGES_FOR_OVERLAY',
-        data: { activityId: (tracker as any).currentActivityId },
-      });
-    }
   }
 
   // Listen for overlay interactions
