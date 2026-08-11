@@ -53,7 +53,6 @@ export class OverlayUI {
   private nicknameMap: Map<string, string> = new Map(); // sender_uuid -> display name
   private initialMouseMoveListener: ((e: MouseEvent) => void) | null = null; // Store listener reference for cleanup
   private _eventListenersSetup = false; // Guard to ensure listeners only set up once
-  private hoverTimeout: NodeJS.Timeout | null = null; // Delay for hover detection
   private initTime = Date.now(); // Track when overlay was initialized
   private _state: OverlayState = {
     visible: false,
@@ -138,6 +137,11 @@ export class OverlayUI {
         #hang-time-overlay.hidden {
           opacity: 0;
           pointer-events: auto;
+        }
+
+        #hang-time-overlay.fading-out {
+          transition: opacity 3s ease-out;
+          opacity: 0;
         }
 
         #resize-handle {
@@ -702,32 +706,26 @@ export class OverlayUI {
 
     // Delay hover listeners to avoid catching synthetic mouseenter events during initialization
     window.setTimeout(() => {
+      console.log('[OverlayUI] Setting up hover listeners, container:', !!this.container);
       if (!this.container) return;
 
       this.container.addEventListener('mouseenter', (e) => {
-        // Disable discovery listener permanently once user discovers overlay via hover
-        // Only hover listeners (mouseenter/mouseleave) control visibility after discovery
         if (this.initialMouseMoveListener) {
           document.removeEventListener('mousemove', this.initialMouseMoveListener);
           this.initialMouseMoveListener = null;
         }
-        // Delay show by 200ms to require actual hovering, not just a quick touch
-        if (this.hoverTimeout) {
-          clearTimeout(this.hoverTimeout);
+        if (this.hideTimer) {
+          clearTimeout(this.hideTimer);
+          this.hideTimer = null;
         }
-        this.hoverTimeout = window.setTimeout(() => {
-          this.show();
-          this.hoverTimeout = null;
-        }, 200);
+        if (this.fadeTimeoutId) {
+          clearTimeout(this.fadeTimeoutId);
+          this.fadeTimeoutId = null;
+        }
+        this.show();
       });
 
-      // Hide with fade when mouse leaves overlay
       this.container.addEventListener('mouseleave', (e) => {
-        // Cancel pending hover-show if user leaves before 200ms
-        if (this.hoverTimeout) {
-          clearTimeout(this.hoverTimeout);
-          this.hoverTimeout = null;
-        }
         if (!this._state.pinned) {
           this.startFadeOut();
         }
@@ -989,29 +987,12 @@ export class OverlayUI {
   }
 
   /**
-   * Show overlay (only if there's an active co-watch session or pinned)
+   * Show overlay immediately
    */
   show(): void {
     if (!this.container) return;
-
-    // Only show if:
-    // 1. 2+ session members exist (inactivity checking disabled for testing)
-    // 2. OR the overlay is pinned
-    const sessionMembers = this._state.session_members || [];
-    const hasCoWatchSession = sessionMembers.length >= 2;
-    if (!hasCoWatchSession && !this._state.pinned) {
-      return;
-    }
-
-    // Cancel any pending fade-out
-    if (this.hideTimer) clearTimeout(this.hideTimer);
-    if (this.fadeTimeoutId) clearTimeout(this.fadeTimeoutId);
-    this.hideTimer = null;
-    this.fadeTimeoutId = null;
-
-    // Show overlay - CSS handles opacity via .hidden class and slider
-    this.container.style.transition = '';
     this.container.classList.remove('hidden');
+    this.container.classList.remove('fading-out');
     this._state.visible = true;
   }
 
@@ -1028,26 +1009,31 @@ export class OverlayUI {
    * Fade out overlay: wait 3 seconds then fade over 3 seconds then hide
    */
   private startFadeOut(): void {
+    console.log('[OverlayUI] startFadeOut called, container:', !!this.container, 'pinned:', this._state.pinned);
     if (!this.container || this._state.pinned) return;
 
     // Cancel any existing timers
     if (this.hideTimer) clearTimeout(this.hideTimer);
     if (this.fadeTimeoutId) clearTimeout(this.fadeTimeoutId);
 
+    console.log('[OverlayUI] Starting 3s delay before fade');
     // Wait 3 seconds before starting fade
     this.hideTimer = window.setTimeout(() => {
-      if (!this.container) return;
+      console.log('[OverlayUI] hideTimer callback fired, container:', !!this.container);
+      if (!this.container) {
+        console.log('[OverlayUI] Container is null, aborting fade');
+        return;
+      }
 
-      // Set up CSS transition for smooth fade (3 second fade)
-      this.container.style.transition = 'opacity 3s ease-out';
-      this.container.style.opacity = '0';
+      // Set up CSS fade via class
+      console.log('[OverlayUI] Adding fading-out class for fade animation');
+      this.container.classList.add('fading-out');
 
       // Hide after fade completes
       this.fadeTimeoutId = window.setTimeout(() => {
         this.hide();
-        // Reset transition and timeouts
         if (this.container) {
-          this.container.style.transition = '';
+          this.container.classList.remove('fading-out');
         }
         this.fadeTimeoutId = null;
         this.hideTimer = null;
@@ -1104,16 +1090,13 @@ export class OverlayUI {
   setState(newState: Partial<OverlayState>): void {
     this._state = { ...this._state, ...newState };
 
-    // If co-watch session ended (no more session members), hide the overlay
-    // Use session_members (all members) not watching_together (only same activity)
-    // so overlay stays visible even in divergence mode
+    // If co-watch session ended, hide the overlay
     if (this._state.session_members.length === 0) {
       this.hide();
     } else {
+      // Just render state changes, don't auto-show
+      // Visibility is controlled solely by hover events (mouseenter/mouseleave)
       this.render();
-      // Auto-show overlay when there's an active co-watch session
-      // (user should see it immediately, not wait for mouse interaction)
-      this.show();
     }
   }
 
@@ -1717,14 +1700,9 @@ export class OverlayUI {
    */
   destroy(): void {
     console.debug('[OverlayUI] destroy() called for userId:', this.userId);
-    // Clean up event listeners and timers
     if (this.initialMouseMoveListener) {
       document.removeEventListener('mousemove', this.initialMouseMoveListener);
       this.initialMouseMoveListener = null;
-    }
-    if (this.hoverTimeout) {
-      clearTimeout(this.hoverTimeout);
-      this.hoverTimeout = null;
     }
     if (this.container) {
       console.debug('[OverlayUI] Removing container from DOM');
