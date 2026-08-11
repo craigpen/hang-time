@@ -723,7 +723,10 @@ export class OverlayUI {
           clearTimeout(this.fadeTimeoutId);
           this.fadeTimeoutId = null;
         }
-        this.show();
+        // Only show on hover if there's an active co-watch session (2+ members)
+        if (this._state.session_members?.length >= 2) {
+          this.show();
+        }
       });
 
       this.container.addEventListener('mouseleave', (e) => {
