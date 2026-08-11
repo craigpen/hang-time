@@ -145,6 +145,7 @@ export interface CoWatchSession {
   is_active: boolean; // Whether user is still in the session
   activity_id?: string; // Current activity being co-watched (needed for existing flows: sync, messages, etc)
   host_friend_uuid?: string; // Who initiated current activity (needed for existing flows)
+  stale_at?: number; // When self became hidden (inactive 60+ min). Session purged 1 hour after this.
 }
 
 // ============================================================================

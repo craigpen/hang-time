@@ -1384,35 +1384,31 @@ export class OverlayUI {
    * Guests shown on separate row below host
    */
   private getActivityFreshnessStyle(uuid: string): { shouldHide: boolean; opacity: number } {
-    // TESTING: Disabled inactivity hiding/graying to isolate bug 1
-    // All members render at full opacity regardless of activity age
-    return { shouldHide: false, opacity: 1 };
-
-    /* Original logic (disabled for testing):
     const activity = this._state.co_watcher_activities?.[uuid];
-
-    // Always show self (You) at full opacity, regardless of inactivity
-    if (uuid === this.userId) {
-      return { shouldHide: false, opacity: 1 };
-    }
-
-    // For friends, check progress_measured_at (when content script last ran) for inactivity
     const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
     if (!lastMeasuredAt) {
       return { shouldHide: false, opacity: 1 };
     }
 
     const timeSinceLastSeen = Date.now() - lastMeasuredAt;
-    const FIFTEEN_MIN_MS = 15 * 60 * 1000;
-    const ONE_HOUR_MS = 60 * 60 * 1000;
+    const THIRTY_MIN_MS = 30 * 60 * 1000;
+    const SIXTY_MIN_MS = 60 * 60 * 1000;
 
-    if (timeSinceLastSeen >= ONE_HOUR_MS) {
+    // Self dims after 60 min (never dims earlier)
+    if (uuid === this.userId) {
+      if (timeSinceLastSeen >= SIXTY_MIN_MS) {
+        return { shouldHide: true, opacity: 0 }; // Hidden - inactive 60+ min
+      }
+      return { shouldHide: false, opacity: 1 }; // Always active until 60 min
+    }
+
+    // Guests dim after 30 min, hide after 60 min
+    if (timeSinceLastSeen >= SIXTY_MIN_MS) {
       return { shouldHide: true, opacity: 0 }; // Offline - hide
-    } else if (timeSinceLastSeen >= FIFTEEN_MIN_MS) {
+    } else if (timeSinceLastSeen >= THIRTY_MIN_MS) {
       return { shouldHide: false, opacity: 0.5 }; // AFK - desaturate
     }
     return { shouldHide: false, opacity: 1 }; // Active - normal
-    */
   }
 
   private renderGuestChips(container: HTMLElement): void {

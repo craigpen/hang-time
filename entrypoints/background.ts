@@ -107,6 +107,14 @@ chrome.runtime.onStartup?.addListener(async () => {
   // Re-initialize services on startup (service worker was terminated, globals are reset)
   await initializeExtension();
   console.log('[Background] Extension re-initialized after startup');
+
+  // Check for stale sessions on startup
+  const session = await storageManager.getActiveSession();
+  if (session?.stale_at) {
+    console.log('[Background] Stale session found on startup, purging');
+    await storageManager.clearActiveSession();
+  }
+
   await _reinjectionContentScripts();
 });
 
@@ -807,6 +815,38 @@ function _startCoWatcherDetectionCycle(): void {
       const detector = getCoWatcherDetector();
       const activitySession = await detector.detectCoWatchSession();
       let persistentSession = await detector.getCurrentCoWatchSession();
+
+      // Check session staleness (self inactive 60+ min)
+      if (persistentSession) {
+        const userProfile = await storageManager.getUserProfile();
+        const selfUuid = userProfile?.uuid;
+        const coWatcherActivities = await detector.getCoWatcherActivities();
+
+        const selfActivity = coWatcherActivities?.[selfUuid!];
+        const lastMeasuredAt = selfActivity?.metadata?.progress_measured_at || selfActivity?.timestamp;
+        const SIXTY_MIN_MS = 60 * 60 * 1000;
+        const ONE_HOUR_MS = 60 * 60 * 1000;
+
+        if (lastMeasuredAt && (Date.now() - lastMeasuredAt) >= SIXTY_MIN_MS) {
+          // Self is hidden (inactive 60+ min)
+          if (!persistentSession.stale_at) {
+            persistentSession.stale_at = Date.now();
+            await storageManager.setActiveSession(persistentSession);
+            console.log('[Background] Session marked stale (self hidden 60+ min)');
+          }
+        } else if (persistentSession.stale_at) {
+          // Self became active again, clear stale mark
+          persistentSession.stale_at = undefined;
+          await storageManager.setActiveSession(persistentSession);
+        }
+
+        // If stale for 1+ hour, purge session
+        if (persistentSession.stale_at && (Date.now() - persistentSession.stale_at) > ONE_HOUR_MS) {
+          await storageManager.clearActiveSession();
+          console.log('[Background] Session purged (stale 1+ hour)');
+          persistentSession = null;
+        }
+      }
 
       // Send CO_WATCH_UPDATE if either:
       // 1. Activity match found (co-watchers on same video), OR
