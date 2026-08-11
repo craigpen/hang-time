@@ -1391,21 +1391,21 @@ export class OverlayUI {
     }
 
     const timeSinceLastSeen = Date.now() - lastMeasuredAt;
-    const THIRTY_MIN_MS = 30 * 60 * 1000;
-    const SIXTY_MIN_MS = 60 * 60 * 1000;
+    const FIVE_MIN_MS = 5 * 60 * 1000;
+    const TEN_MIN_MS = 10 * 60 * 1000;
 
-    // Self dims after 60 min (never dims earlier)
+    // Self dims after 10 min (never dims earlier) - TESTING
     if (uuid === this.userId) {
-      if (timeSinceLastSeen >= SIXTY_MIN_MS) {
-        return { shouldHide: true, opacity: 0 }; // Hidden - inactive 60+ min
+      if (timeSinceLastSeen >= TEN_MIN_MS) {
+        return { shouldHide: true, opacity: 0 }; // Hidden - inactive 10+ min
       }
-      return { shouldHide: false, opacity: 1 }; // Always active until 60 min
+      return { shouldHide: false, opacity: 1 }; // Always active until 10 min
     }
 
-    // Guests dim after 30 min, hide after 60 min
-    if (timeSinceLastSeen >= SIXTY_MIN_MS) {
+    // Guests dim after 5 min, hide after 10 min - TESTING
+    if (timeSinceLastSeen >= TEN_MIN_MS) {
       return { shouldHide: true, opacity: 0 }; // Offline - hide
-    } else if (timeSinceLastSeen >= THIRTY_MIN_MS) {
+    } else if (timeSinceLastSeen >= FIVE_MIN_MS) {
       return { shouldHide: false, opacity: 0.5 }; // AFK - desaturate
     }
     return { shouldHide: false, opacity: 1 }; // Active - normal

@@ -816,7 +816,7 @@ function _startCoWatcherDetectionCycle(): void {
       const activitySession = await detector.detectCoWatchSession();
       let persistentSession = await detector.getCurrentCoWatchSession();
 
-      // Check session staleness (self inactive 60+ min)
+      // Check session staleness (self inactive 10+ min for testing)
       if (persistentSession) {
         const userProfile = await storageManager.getUserProfile();
         const selfUuid = userProfile?.uuid;
@@ -824,15 +824,15 @@ function _startCoWatcherDetectionCycle(): void {
 
         const selfActivity = coWatcherActivities?.[selfUuid!];
         const lastMeasuredAt = selfActivity?.metadata?.progress_measured_at || selfActivity?.timestamp;
-        const SIXTY_MIN_MS = 60 * 60 * 1000;
-        const ONE_HOUR_MS = 60 * 60 * 1000;
+        const TEN_MIN_MS = 10 * 60 * 1000;
+        const TWO_MIN_MS = 2 * 60 * 1000; // Testing grace period
 
-        if (lastMeasuredAt && (Date.now() - lastMeasuredAt) >= SIXTY_MIN_MS) {
-          // Self is hidden (inactive 60+ min)
+        if (lastMeasuredAt && (Date.now() - lastMeasuredAt) >= TEN_MIN_MS) {
+          // Self is hidden (inactive 10+ min)
           if (!persistentSession.stale_at) {
             persistentSession.stale_at = Date.now();
             await storageManager.setActiveSession(persistentSession);
-            console.log('[Background] Session marked stale (self hidden 60+ min)');
+            console.log('[Background] Session marked stale (self hidden 10+ min)');
           }
         } else if (persistentSession.stale_at) {
           // Self became active again, clear stale mark
@@ -840,10 +840,10 @@ function _startCoWatcherDetectionCycle(): void {
           await storageManager.setActiveSession(persistentSession);
         }
 
-        // If stale for 1+ hour, purge session
-        if (persistentSession.stale_at && (Date.now() - persistentSession.stale_at) > ONE_HOUR_MS) {
+        // If stale for 2+ min, purge session (testing)
+        if (persistentSession.stale_at && (Date.now() - persistentSession.stale_at) > TWO_MIN_MS) {
           await storageManager.clearActiveSession();
-          console.log('[Background] Session purged (stale 1+ hour)');
+          console.log('[Background] Session purged (stale 2+ min)');
           persistentSession = null;
         }
       }
