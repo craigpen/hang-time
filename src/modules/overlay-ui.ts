@@ -1380,32 +1380,20 @@ export class OverlayUI {
    * MODE A: Render guest chips (everyone except host)
    * Guests shown on separate row below host
    */
-  private getActivityFreshnessStyle(uuid: string): { shouldHide: boolean; opacity: number } {
+  private getActivityFreshnessStyle(uuid: string): { opacity: number } {
     const activity = this._state.co_watcher_activities?.[uuid];
     const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
     if (!lastMeasuredAt) {
-      return { shouldHide: false, opacity: 1 };
+      return { opacity: 1 };
     }
 
+    const DIM_AFTER_MS = 5 * 60 * 1000;      // 5 minutes
     const timeSinceLastSeen = Date.now() - lastMeasuredAt;
-    const FIVE_MIN_MS = 5 * 60 * 1000;
-    const TEN_MIN_MS = 10 * 60 * 1000;
 
-    // Self never hides - always visible (P2P requirement: users see themselves)
-    if (uuid === this.userId) {
-      if (timeSinceLastSeen >= FIVE_MIN_MS) {
-        return { shouldHide: false, opacity: 0.5 }; // Dim after 5 min
-      }
-      return { shouldHide: false, opacity: 1 }; // Active
+    if (timeSinceLastSeen >= DIM_AFTER_MS) {
+      return { opacity: 0.5 }; // Dimmed after 5 min inactivity
     }
-
-    // Others dim after 5 min, hide after 10 min
-    if (timeSinceLastSeen >= TEN_MIN_MS) {
-      return { shouldHide: true, opacity: 0 }; // Offline - hide
-    } else if (timeSinceLastSeen >= FIVE_MIN_MS) {
-      return { shouldHide: false, opacity: 0.5 }; // AFK - desaturate
-    }
-    return { shouldHide: false, opacity: 1 }; // Active - normal
+    return { opacity: 1 }; // Active
   }
 
   private renderGuestChips(container: HTMLElement): void {
@@ -1425,8 +1413,7 @@ export class OverlayUI {
     for (const uuid of sorted) {
       if (uuid === hostUuid) continue; // Skip host (shown separately)
 
-      const { shouldHide, opacity } = this.getActivityFreshnessStyle(uuid);
-      if (shouldHide) continue; // Hide if offline (10+ min no activity)
+      const { opacity } = this.getActivityFreshnessStyle(uuid);
 
       let name: string;
       if (uuid === this.userId) {
@@ -1468,8 +1455,7 @@ export class OverlayUI {
     });
 
     for (const uuid of sorted) {
-      const { shouldHide, opacity } = this.getActivityFreshnessStyle(uuid);
-      if (shouldHide) continue; // Hide if offline (10+ min no activity)
+      const { opacity } = this.getActivityFreshnessStyle(uuid);
 
       let name: string;
       if (uuid === this.userId) {
@@ -1553,10 +1539,6 @@ export class OverlayUI {
 
     for (const uuid of this._state.watching_together) {
       if (uuid === this.userId) continue;
-
-      // Skip offline members (10+ min no activity)
-      const { shouldHide } = this.getActivityFreshnessStyle(uuid);
-      if (shouldHide) continue;
 
       const color = this.getParticipantColor(uuid);
       const marker = document.createElement('div');

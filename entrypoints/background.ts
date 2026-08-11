@@ -816,14 +816,39 @@ function _startCoWatcherDetectionCycle(): void {
       const activitySession = await detector.detectCoWatchSession();
       let persistentSession = await detector.getCurrentCoWatchSession();
 
-      // Check session staleness (self inactive 10+ min for testing)
-      if (persistentSession) {
-        const TWO_MIN_MS = 2 * 60 * 1000; // Testing grace period
+      // Check if session should be purged (active users < 2)
+      if (persistentSession && persistentSession.members) {
+        const PURGE_AFTER_MS = 10 * 60 * 1000; // 10 minutes
 
-        // If stale for 2+ min, purge session (testing)
-        if (persistentSession.stale_at && (Date.now() - persistentSession.stale_at) > TWO_MIN_MS) {
+        // Count members with recent activity (not older than PURGE_AFTER_MS)
+        const userProfile = await storageManager.getUserProfile();
+        const selfUuid = userProfile?.uuid;
+        const allFriends = await friendManager.getAllFriends();
+        const friendMap = new Map(allFriends.map(f => [f.uuid, f]));
+
+        let activeCount = 0;
+        for (const memberId of persistentSession.members) {
+          let activity = null;
+          if (memberId === selfUuid) {
+            // Check self's activity
+            const myActivities = await storageManager.getMyActivities();
+            activity = Object.values(myActivities || {})[0];
+          } else {
+            // Check friend's activity
+            const friend = friendMap.get(memberId);
+            activity = friend?.current_activities ? Object.values(friend.current_activities)[0] : null;
+          }
+
+          const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
+          if (lastMeasuredAt && (Date.now() - lastMeasuredAt) < PURGE_AFTER_MS) {
+            activeCount++;
+          }
+        }
+
+        // Purge session if fewer than 2 active members
+        if (activeCount < 2) {
           await storageManager.clearActiveSession();
-          console.log('[Background] Session purged (stale 2+ min)');
+          console.log('[Background] Session purged: only', activeCount, 'active member(s)');
           persistentSession = null;
         }
       }
