@@ -1391,15 +1391,15 @@ export class OverlayUI {
     const FIVE_MIN_MS = 5 * 60 * 1000;
     const TEN_MIN_MS = 10 * 60 * 1000;
 
-    // Self dims after 10 min (never dims earlier) - TESTING
+    // Self never hides - always visible (P2P requirement: users see themselves)
     if (uuid === this.userId) {
-      if (timeSinceLastSeen >= TEN_MIN_MS) {
-        return { shouldHide: true, opacity: 0 }; // Hidden - inactive 10+ min
+      if (timeSinceLastSeen >= FIVE_MIN_MS) {
+        return { shouldHide: false, opacity: 0.5 }; // Dim after 5 min
       }
-      return { shouldHide: false, opacity: 1 }; // Always active until 10 min
+      return { shouldHide: false, opacity: 1 }; // Active
     }
 
-    // Guests dim after 5 min, hide after 10 min - TESTING
+    // Others dim after 5 min, hide after 10 min
     if (timeSinceLastSeen >= TEN_MIN_MS) {
       return { shouldHide: true, opacity: 0 }; // Offline - hide
     } else if (timeSinceLastSeen >= FIVE_MIN_MS) {
