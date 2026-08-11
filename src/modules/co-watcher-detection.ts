@@ -284,8 +284,11 @@ export class CoWatcherDetector {
         // Update activity context if there's a new matched activity
         if (activityCoWatch.co_watchers.length > 0) {
           session.activity_id = activityCoWatch.activity_id;
-          session.host_friend_uuid = activityCoWatch.host_friend_uuid;
-          console.log('[CoWatcher] Updated session activity context:', { session_id: session.session_id, activity_id: session.activity_id });
+          // Only set host on initial creation. Once set, keep the same host (don't override with own view)
+          if (!session.host_friend_uuid) {
+            session.host_friend_uuid = activityCoWatch.host_friend_uuid;
+          }
+          console.log('[CoWatcher] Updated session activity context:', { session_id: session.session_id, activity_id: session.activity_id, host: session.host_friend_uuid });
         } else {
           // No current match, but keep session active for divergence tracking
           console.log('[CoWatcher] No activity match, keeping session active:', { session_id: session.session_id, current_activity: session.activity_id });
