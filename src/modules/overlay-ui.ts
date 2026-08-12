@@ -56,6 +56,7 @@ export class OverlayUI {
   private initTime = Date.now(); // Track when overlay was initialized
   private syncInProgress = false; // Track if sync is pending completion
   private windowMessageHandler: ((event: MessageEvent) => void) | null = null; // Store for cleanup
+  private lastUserProgressUpdate: number = 0; // Track when user_progress was last set (for extrapolation)
   private _state: OverlayState = {
     visible: false,
     pinned: false,
@@ -1127,9 +1128,35 @@ export class OverlayUI {
   }
 
   /**
+   * Get extrapolated user progress between CO_WATCH_UPDATE messages
+   * Prevents arrow from looking "stuck" during playback
+   */
+  private getExtrapolatedUserProgress(): number {
+    if (this._state.user_progress === undefined || this.lastUserProgressUpdate === 0) {
+      return this._state.user_progress || 0;
+    }
+
+    // If host is paused, don't extrapolate
+    if (this._state.host_state !== 'playing') {
+      return this._state.user_progress;
+    }
+
+    // Extrapolate by adding elapsed time since last update
+    const elapsedMs = Date.now() - this.lastUserProgressUpdate;
+    const extrapolatedProgress = this._state.user_progress + (elapsedMs / 1000);
+
+    return Math.min(extrapolatedProgress, this._state.host_duration || extrapolatedProgress);
+  }
+
+  /**
    * Update overlay state and rendering
    */
   setState(newState: Partial<OverlayState>): void {
+    // Track when user_progress is updated for extrapolation
+    if (newState.user_progress !== undefined) {
+      this.lastUserProgressUpdate = Date.now();
+    }
+
     this._state = { ...this._state, ...newState };
 
     // If co-watch session ended, hide the overlay
@@ -1208,16 +1235,14 @@ export class OverlayUI {
 
       if (!this._state.is_user_host && this._state.user_progress !== undefined && this._state.host_progress !== undefined && this._state.host_progress_timestamp !== undefined && this._state.host_duration && this._state.host_duration > 0) {
         // Calculate where host actually is now by adding elapsed time since their progress was measured
-        // host_progress_timestamp = when host's content script measured their progress (progress_measured_at)
-        // elapsed = time from measurement to now
-        // Note: progress values are in seconds, elapsed is in ms. Convert ms to seconds for addition.
-        // Only extrapolate forward if host is playing, not if paused
         const elapsedSinceHostMeasureMs = Date.now() - this._state.host_progress_timestamp;
         const hostCurrentPosition = this._state.host_state === 'playing'
           ? this._state.host_progress + (elapsedSinceHostMeasureMs / 1000)
           : this._state.host_progress;
 
-        const gap = Math.abs(this._state.user_progress - hostCurrentPosition);
+        // Use extrapolated user progress for smooth arrow movement between updates
+        const extrapolatedUserProgress = this.getExtrapolatedUserProgress();
+        const gap = Math.abs(extrapolatedUserProgress - hostCurrentPosition);
         const SYNC_THRESHOLD = 5; // 5 seconds (gap is in seconds)
 
         console.debug('[OverlayUI] Arrow gap calculation:', {
@@ -1232,17 +1257,17 @@ export class OverlayUI {
         });
 
         if (gap > SYNC_THRESHOLD) {
-          const userPercent = Math.min((this._state.user_progress / this._state.host_duration) * 100, 100);
+          const userPercent = Math.min((extrapolatedUserProgress / this._state.host_duration) * 100, 100);
           markerEl.style.left = userPercent + '%';
 
           // Arrow points toward host (use current position, not old measurement)
           markerEl.classList.remove('arrow-left', 'arrow-right');
-          if (this._state.user_progress < hostCurrentPosition) {
+          if (extrapolatedUserProgress < hostCurrentPosition) {
             markerEl.classList.add('arrow-right'); // User behind, arrow points right (toward host ahead)
-            console.debug('[OverlayUI] Arrow RIGHT: user behind', { user: this._state.user_progress, host: hostCurrentPosition });
-          } else if (this._state.user_progress > hostCurrentPosition) {
+            console.debug('[OverlayUI] Arrow RIGHT: user behind', { user: extrapolatedUserProgress, host: hostCurrentPosition });
+          } else if (extrapolatedUserProgress > hostCurrentPosition) {
             markerEl.classList.add('arrow-left'); // User ahead, arrow points left (toward host behind)
-            console.debug('[OverlayUI] Arrow LEFT: user ahead', { user: this._state.user_progress, host: hostCurrentPosition });
+            console.debug('[OverlayUI] Arrow LEFT: user ahead', { user: extrapolatedUserProgress, host: hostCurrentPosition });
           }
 
           markerEl.style.display = 'block';
@@ -1268,13 +1293,15 @@ export class OverlayUI {
         const hostCurrentPosition = this._state.host_state === 'playing'
           ? this._state.host_progress + (elapsedSinceHostMeasureMs / 1000)
           : this._state.host_progress;
-        const gap = Math.abs(this._state.user_progress - hostCurrentPosition);
+        // Use extrapolated user progress for smooth marker movement
+        const extrapolatedUserProgress = this.getExtrapolatedUserProgress();
+        const gap = Math.abs(extrapolatedUserProgress - hostCurrentPosition);
         const SYNC_THRESHOLD = 5;
 
         // Only show host marker and gap line if gap is significant
         if (gap > SYNC_THRESHOLD) {
           const hostPercent = Math.min((hostCurrentPosition / this._state.host_duration) * 100, 100);
-          const userPercent = Math.min((this._state.user_progress / this._state.host_duration) * 100, 100);
+          const userPercent = Math.min((extrapolatedUserProgress / this._state.host_duration) * 100, 100);
 
           // Show host position marker
           if (hostPositionMarkerEl) {
