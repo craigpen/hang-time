@@ -62,8 +62,6 @@ class GenericVideoTracker {
   private cachedNetflixTitle: string | null = null;
   private currentActivityId: string | null = null;
   private currentActivityContentTimestamp: number | null = null;
-  private lastReportedDuration: number = 0; // Track duration to detect ad transitions
-
   constructor() {}
 
   init(): void {
@@ -277,8 +275,8 @@ class GenericVideoTracker {
     const currentTime = Math.floor(this.activeVideoElement.currentTime || 0);
     const isPaused = this.activeVideoElement.paused;
 
-    // Ad detection: skip reporting for short videos or anomalous progress
-    if (this._isLikelyAd(duration, currentTime)) {
+    if (duration > 0 && duration < 60) {
+      // Ad detected - skip reporting, keep video hooked for when main content resumes
       return;
     }
 
@@ -292,7 +290,6 @@ class GenericVideoTracker {
 
     this.lastReportTimestamp = now;
     this.lastReportedTime = currentTime;
-    this.lastReportedDuration = duration;
 
     if (url.includes('youtube.com') || url.includes('youtu.be')) {
       if (!url.includes('watch?v=')) {
@@ -569,27 +566,6 @@ class GenericVideoTracker {
       // Any error accessing chrome = context is invalid
       return false;
     }
-  }
-
-  private _isLikelyAd(duration: number, currentTime: number): boolean {
-    // Ad detection: check for short duration (classic pre/post-roll ad)
-    if (duration > 0 && duration < 60) {
-      return true; // Short video = ad
-    }
-
-    // Check for duration change - indicates video switched (main content → ad or vice versa)
-    if (this.lastReportedDuration > 0 && duration > 0 && Math.abs(duration - this.lastReportedDuration) > 10) {
-      console.debug('[ContentScript] Duration changed significantly:', this.lastReportedDuration, '→', duration, '(ad transition detected)');
-      return true; // Duration mismatch = ad transition
-    }
-
-    // Check for backwards progress jump (video restarted or jumped back)
-    if (currentTime < this.lastReportedTime - 2) { // Allow 2s tolerance for seeking backwards
-      console.debug('[ContentScript] Progress jumped backwards:', this.lastReportedTime, '→', currentTime, '(ad transition detected)');
-      return true; // Backwards jump = ad or content switch
-    }
-
-    return false;
   }
 
   private _cleanup(): void {
