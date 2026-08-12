@@ -141,6 +141,27 @@ export class CoWatcherDetector {
         return null;
       }
 
+      // Check if both activities are fresh (not stale from idle period)
+      // Only create session if both user and all co-watchers have recent activity
+      const ACTIVITY_FRESHNESS_MS = 10 * 60 * 1000; // 10 minutes, same as purge timeout
+      const now = Date.now();
+      for (const coWatcher of coWatchers) {
+        const activity = coWatcher.friend_uuid === null
+          ? userActivity
+          : friends.find(f => f.uuid === coWatcher.friend_uuid)?.current_activities?.[matchedActivityId];
+
+        const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
+        if (!lastMeasuredAt || (now - lastMeasuredAt) >= ACTIVITY_FRESHNESS_MS) {
+          console.debug('[CoWatcher] Activity too stale, blocking session creation:', {
+            activity_id: matchedActivityId,
+            member: coWatcher.friend_uuid === null ? 'self' : coWatcher.friend_uuid,
+            lastMeasuredAt,
+            ageMs: lastMeasuredAt ? now - lastMeasuredAt : 'unknown'
+          });
+          return null;
+        }
+      }
+
       // Log what's actually in coWatchers before sort
       console.debug(`[TimestampMigration] coWatchers before sort:`, coWatchers.map(cw => ({
         friend_uuid: cw.friend_uuid,
