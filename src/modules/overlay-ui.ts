@@ -57,6 +57,7 @@ export class OverlayUI {
   private syncInProgress = false; // Track if sync is pending completion
   private windowMessageHandler: ((event: MessageEvent) => void) | null = null; // Store for cleanup
   private lastUserProgressUpdate: number = 0; // Track when user_progress was last set (for extrapolation)
+  private markersVisible = false; // Track current visibility state for hysteresis
   private _state: OverlayState = {
     visible: false,
     pinned: false,
@@ -1243,7 +1244,8 @@ export class OverlayUI {
         // Use extrapolated user progress for smooth arrow movement between updates
         const extrapolatedUserProgress = this.getExtrapolatedUserProgress();
         const gap = Math.abs(extrapolatedUserProgress - hostCurrentPosition);
-        const SYNC_THRESHOLD = 5; // 5 seconds (gap is in seconds)
+        const SHOW_THRESHOLD = 6; // Show when gap exceeds 6 seconds
+        const HIDE_THRESHOLD = 4; // Hide when gap drops below 4 seconds
 
         console.debug('[OverlayUI] Arrow gap calculation:', {
           user_progress: this._state.user_progress,
@@ -1251,12 +1253,19 @@ export class OverlayUI {
           hostCurrentPosition,
           elapsedSinceHostMeasureMs: Date.now() - this._state.host_progress_timestamp,
           gap,
-          SYNC_THRESHOLD,
+          markersVisible: this.markersVisible,
           host_state: this._state.host_state,
-          showArrow: gap > SYNC_THRESHOLD,
         });
 
-        if (gap > SYNC_THRESHOLD) {
+        // Hysteresis: show at 6s, hide at 4s, stay in between
+        let shouldShow = this.markersVisible; // Keep current state by default
+        if (gap > SHOW_THRESHOLD) {
+          shouldShow = true;
+        } else if (gap < HIDE_THRESHOLD) {
+          shouldShow = false;
+        }
+
+        if (shouldShow) {
           const userPercent = Math.min((extrapolatedUserProgress / this._state.host_duration) * 100, 100);
           markerEl.style.left = userPercent + '%';
 
@@ -1272,9 +1281,11 @@ export class OverlayUI {
 
           markerEl.style.display = 'block';
           console.debug('[OverlayUI] Arrow SHOWN at', userPercent + '%');
+          this.markersVisible = true;
         } else {
           markerEl.style.display = 'none';
           console.debug('[OverlayUI] Arrow hidden: gap too small');
+          this.markersVisible = false;
         }
       } else {
         markerEl.style.display = 'none';
@@ -1296,10 +1307,18 @@ export class OverlayUI {
         // Use extrapolated user progress for smooth marker movement
         const extrapolatedUserProgress = this.getExtrapolatedUserProgress();
         const gap = Math.abs(extrapolatedUserProgress - hostCurrentPosition);
-        const SYNC_THRESHOLD = 5;
+        const SHOW_THRESHOLD = 6;
+        const HIDE_THRESHOLD = 4;
 
-        // Only show host marker and gap line if gap is significant
-        if (gap > SYNC_THRESHOLD) {
+        // Hysteresis: show at 6s, hide at 4s, stay in between (use same state as arrow)
+        let shouldShow = this.markersVisible;
+        if (gap > SHOW_THRESHOLD) {
+          shouldShow = true;
+        } else if (gap < HIDE_THRESHOLD) {
+          shouldShow = false;
+        }
+
+        if (shouldShow) {
           const hostPercent = Math.min((hostCurrentPosition / this._state.host_duration) * 100, 100);
           const userPercent = Math.min((extrapolatedUserProgress / this._state.host_duration) * 100, 100);
 
