@@ -54,6 +54,8 @@ export class OverlayUI {
   private initialMouseMoveListener: ((e: MouseEvent) => void) | null = null; // Store listener reference for cleanup
   private _eventListenersSetup = false; // Guard to ensure listeners only set up once
   private initTime = Date.now(); // Track when overlay was initialized
+  private syncInProgress = false; // Track if sync is pending completion
+  private windowMessageHandler: ((event: MessageEvent) => void) | null = null; // Store for cleanup
   private _state: OverlayState = {
     visible: false,
     pinned: false,
@@ -834,6 +836,21 @@ export class OverlayUI {
       syncButton.addEventListener('click', () => this.onSyncClick());
     }
 
+    // Window message listener for sync completion
+    if (!this.windowMessageHandler) {
+      this.windowMessageHandler = (event: MessageEvent) => {
+        if (event.source !== window) return;
+
+        if (event.data.type === 'HANG_TIME_SYNC_COMPLETE') {
+          console.debug('[OverlayUI] Sync complete, updating user_progress to', event.data.data?.position);
+          this._state.user_progress = event.data.data?.position;
+          this.syncInProgress = false;
+          this.render();
+        }
+      };
+      window.addEventListener('message', this.windowMessageHandler);
+    }
+
     // Message input and send button
     const messageInput = document.getElementById('message-input') as HTMLTextAreaElement;
     const sendButton = document.getElementById('send-button');
@@ -1073,25 +1090,32 @@ export class OverlayUI {
   }
 
   /**
-   * Sync button clicked - update UI immediately, send to background for confirmation
+   * Sync button clicked - send to content script, wait for actual video seek
    */
   private onSyncClick(): void {
     if (!this._state.host_progress_timestamp || this._state.host_progress === undefined) {
       return;
     }
 
-    // Calculate host's current position locally (optimistic update)
-    const elapsedMs = Date.now() - this._state.host_progress_timestamp;
-    const syncPosition = this._state.host_state === 'playing'
-      ? this._state.host_progress + (elapsedMs / 1000)
-      : this._state.host_progress;
+    if (this.syncInProgress) {
+      console.debug('[OverlayUI] Sync already in progress, ignoring click');
+      return;
+    }
 
-    // Update UI immediately
-    this._state.user_progress = syncPosition;
-    this.render();
+    this.syncInProgress = true;
+    console.debug('[OverlayUI] Sync initiated, waiting for video seek confirmation');
 
-    // Send to background for persistence
+    // Send to content script to seek the video
+    // Don't update overlay state yet - wait for HANG_TIME_SYNC_COMPLETE confirmation
     window.postMessage({ type: 'HANG_TIME_SYNC_REQUEST', data: { activity_id: this._state.activity_id } }, '*');
+
+    // Set a timeout to reset syncInProgress flag if sync takes too long
+    setTimeout(() => {
+      if (this.syncInProgress) {
+        console.warn('[OverlayUI] Sync confirmation timeout, resetting flag');
+        this.syncInProgress = false;
+      }
+    }, 2000);
   }
 
   /**
@@ -1720,6 +1744,10 @@ export class OverlayUI {
     if (this.initialMouseMoveListener) {
       document.removeEventListener('mousemove', this.initialMouseMoveListener);
       this.initialMouseMoveListener = null;
+    }
+    if (this.windowMessageHandler) {
+      window.removeEventListener('message', this.windowMessageHandler);
+      this.windowMessageHandler = null;
     }
     if (this.container) {
       console.debug('[OverlayUI] Removing container from DOM');
