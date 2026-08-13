@@ -816,12 +816,43 @@ function _startCoWatcherDetectionCycle(): void {
       const activitySession = await detector.detectCoWatchSession();
       let persistentSession = await detector.getCurrentCoWatchSession();
 
-      // If no activity match found but session exists, clear it (activities are stale)
-      // This prevents overlays from lingering after both participants go idle
+      // If no activity match found but session exists, check if it should be cleared
+      // Only clear if BOTH activities are stale (> 10 min) - this means both are idle
+      // If at least one activity is recent, it's divergence (one person switched videos) - keep session
       if (!activitySession && persistentSession) {
-        await storageManager.clearActiveSession();
-        console.log('[Background] Cleared stale session: no activity match for > 10 minutes');
-        persistentSession = null;
+        const ACTIVITY_FRESHNESS_MS = 10 * 60 * 1000; // 10 minutes
+        const now = Date.now();
+        const userProfile = await storageManager.getUserProfile();
+        const selfUuid = userProfile?.uuid;
+        const allFriends = await getFriendManager().getAllFriends();
+        const friendMap = new Map(allFriends.map(f => [f.uuid, f]));
+
+        let staleCount = 0;
+        for (const memberId of persistentSession.members) {
+          let activity = null;
+          if (memberId === selfUuid) {
+            const myActivities = await storageManager.getMyActivities();
+            activity = Object.values(myActivities || {})[0];
+          } else {
+            const friend = friendMap.get(memberId);
+            activity = friend?.current_activities ? Object.values(friend.current_activities)[0] : null;
+          }
+
+          const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
+          if (!lastMeasuredAt || (now - lastMeasuredAt) >= ACTIVITY_FRESHNESS_MS) {
+            staleCount++;
+          }
+        }
+
+        // Only clear if ALL members are stale (both idle > 10 min)
+        if (staleCount === persistentSession.members.length) {
+          await storageManager.clearActiveSession();
+          console.log('[Background] Cleared stale session: all members idle > 10 minutes');
+          persistentSession = null;
+        } else {
+          // At least one member has recent activity - this is divergence, keep session
+          console.debug('[Background] Divergence detected: keeping session despite no activity match');
+        }
       }
 
       // Check if session should be purged (active users < 2)
