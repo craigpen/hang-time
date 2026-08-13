@@ -816,6 +816,14 @@ function _startCoWatcherDetectionCycle(): void {
       const activitySession = await detector.detectCoWatchSession();
       let persistentSession = await detector.getCurrentCoWatchSession();
 
+      // If no activity match found but session exists, clear it (activities are stale)
+      // This prevents overlays from lingering after both participants go idle
+      if (!activitySession && persistentSession) {
+        await storageManager.clearActiveSession();
+        console.log('[Background] Cleared stale session: no activity match for > 10 minutes');
+        persistentSession = null;
+      }
+
       // Check if session should be purged (active users < 2)
       if (persistentSession && persistentSession.members) {
         const PURGE_AFTER_MS = 10 * 60 * 1000; // 10 minutes
