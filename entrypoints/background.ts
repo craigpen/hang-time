@@ -861,6 +861,34 @@ function _startCoWatcherDetectionCycle(): void {
         }
       }
 
+      // If session was just cleared, notify content scripts to hide overlay
+      if (!activitySession && !persistentSession && callCount > 1) {
+        // Session cleared (either stale or purged) - send final update to close overlay
+        console.log('[Background] Broadcasting session cleared to close overlays');
+        for (const tabId of activeContentScriptPorts.keys()) {
+          try {
+            const port = activeContentScriptPorts.get(tabId);
+            if (port) {
+              port.postMessage({
+                type: 'CO_WATCH_UPDATE',
+                data: {
+                  session_members: [],
+                  watching_together: [],
+                  messages: [],
+                  host_nickname: undefined,
+                  is_user_host: false,
+                  user_nickname: '',
+                  co_watcher_activities: {},
+                },
+              });
+            }
+          } catch (e) {
+            console.debug(`[Background] Failed to send session-cleared update to tab ${tabId}:`, e);
+          }
+        }
+        return; // Don't continue to regular broadcast
+      }
+
       // Send CO_WATCH_UPDATE if either:
       // 1. Activity match found (co-watchers on same video), OR
       // 2. Persistent session active (co-watchers diverged but still in session)
