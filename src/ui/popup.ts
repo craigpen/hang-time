@@ -1862,7 +1862,9 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       const profile = await this.storage.getUserProfile();
       if (!profile) return;
 
-      const integrations = ['steam-api', 'spotify-api', 'twitch-api', 'discord-api'];
+      // STUB: Spotify and Twitch integrations disabled for MVP
+      // Future: spotify-api (co-listening), twitch-api (streaming detection)
+      const integrations = ['steam-api', 'discord-api']; // spotify-api, twitch-api commented out - see above
       for (const service of integrations) {
         const statusEl = document.getElementById(`status-${service}-popup`);
         if (!statusEl) continue;
@@ -1943,7 +1945,8 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       }
 
       // Load service toggles for browser tabs
-      const tabServices = ['youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
+      // STUB: Twitch tab detection disabled for MVP
+      const tabServices = ['youtube-tab', 'netflix-tab', 'video-tab']; // 'twitch-tab' disabled - see HTML
       for (const service of tabServices) {
         const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
         if (toggle && profile.services_enabled) {
@@ -1952,7 +1955,8 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       }
 
       // Load service toggles for OAuth integrations
-      const oauthServices = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api'];
+      // STUB: Spotify and Twitch stubs disabled for MVP
+      const oauthServices = ['steam-api', 'discord-api']; // 'spotify-api', 'twitch-api' commented out - disabled
       for (const service of oauthServices) {
         const toggle = document.getElementById(`service-${service}-enabled`) as HTMLInputElement;
         if (toggle && profile.services_enabled) {
@@ -2032,7 +2036,8 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
   }
 
   private async _loadOAuthStatusInPanel(): Promise<void> {
-    const oauthServices = ['spotify-api', 'twitch-api'];
+    // STUB: Spotify and Twitch OAuth stubs disabled for MVP
+    const oauthServices: string[] = []; // ['spotify-api', 'twitch-api'] - disabled, see above
     for (const service of oauthServices) {
       try {
         console.debug(`[Popup] Loading OAuth status for ${service}`);
@@ -2483,15 +2488,17 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       console.debug('[Popup] Saving settings - discord:', discordInput, 'steam-id:', steamIdInput ? 'set' : 'empty', 'steam-key:', steamApiKeyInput ? 'set' : 'empty');
 
       // Collect service toggles for browser tabs
+      // STUB: Twitch tab detection disabled for MVP
       const servicesEnabled: Record<string, boolean> = {};
-      const tabServices = ['youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
+      const tabServices = ['youtube-tab', 'netflix-tab', 'video-tab']; // 'twitch-tab' disabled
       for (const service of tabServices) {
         const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
         servicesEnabled[service] = toggle?.checked ?? false;
       }
 
       // Collect service toggles for OAuth integrations
-      const oauthServices = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api'];
+      // STUB: Spotify and Twitch stubs disabled for MVP
+      const oauthServices = ['steam-api', 'discord-api']; // 'spotify-api', 'twitch-api' disabled - see HTML comments
       for (const service of oauthServices) {
         const toggle = document.getElementById(`service-${service}-enabled`) as HTMLInputElement;
         servicesEnabled[service] = toggle?.checked ?? false;

@@ -146,9 +146,13 @@ export class CoWatcherDetector {
       const ACTIVITY_FRESHNESS_MS = 10 * 60 * 1000; // 10 minutes, same as purge timeout
       const now = Date.now();
       for (const coWatcher of coWatchers) {
-        const activity = coWatcher.friend_uuid === null
-          ? userActivity
-          : friends.find(f => f.uuid === coWatcher.friend_uuid)?.current_activities?.[matchedActivityId];
+        let activity;
+        if (coWatcher.friend_uuid === null) {
+          activity = userActivity;
+        } else {
+          const friend = friends.find(f => f.uuid === coWatcher.friend_uuid);
+          activity = friend ? Object.values(friend.current_activities || {}).find(a => a?.id === matchedActivityId) : undefined;
+        }
 
         const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
         if (!lastMeasuredAt || (now - lastMeasuredAt) >= ACTIVITY_FRESHNESS_MS) {

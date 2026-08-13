@@ -236,10 +236,11 @@
             <input type="checkbox" id="service-netflix-tab-popup" data-service="netflix-tab" class="service-toggle">
             <span>Netflix</span>
           </label>
-          <label class="checkbox-label">
+          <!-- STUB: Twitch tab detection disabled for MVP. Future development planned for co-streaming and stream watching. -->
+          <!-- <label class="checkbox-label">
             <input type="checkbox" id="service-twitch-tab-popup" data-service="twitch-tab" class="service-toggle">
             <span>Twitch (Web)</span>
-          </label>
+          </label> -->
           <label class="checkbox-label">
             <input type="checkbox" id="service-video-tab-popup" data-service="video-tab" class="service-toggle">
             <span>Other Video Sites</span>
@@ -257,6 +258,7 @@
         <div>
           <h4 style="margin: 0 0 12px 0; font-size: 0.9em; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">API Integrations</h4>
 
+          <!-- STUB: Spotify integration disabled for MVP. Future development planned for co-listening and playback sync.
           <div class="service-row">
             <input type="checkbox" id="service-spotify-api-enabled" class="service-enable-toggle" data-service="spotify-api" checked>
             <div class="service-col1">
@@ -270,7 +272,9 @@
               <div id="spotify-api-auth-popup-container" class="service-actions"></div>
             </div>
           </div>
+          -->
 
+          <!-- STUB: Twitch API integration disabled for MVP. Future development planned for streaming detection and stream co-watching.
           <div class="service-row">
             <input type="checkbox" id="service-twitch-api-enabled" class="service-enable-toggle" data-service="twitch-api" checked>
             <div class="service-col1">
@@ -284,6 +288,7 @@
               <div id="twitch-api-auth-popup-container" class="service-actions"></div>
             </div>
           </div>
+          -->
 
           <div class="service-row">
             <input type="checkbox" id="service-steam-api-enabled" class="service-enable-toggle" data-service="steam-api" checked>
