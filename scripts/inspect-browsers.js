@@ -10,26 +10,16 @@ import http from 'http';
 
 const PORTS = [9222, 9223];
 
-function fetchJson(port, path = '/json') {
-  return new Promise((resolve) => {
-    const req = http.get({ host: '127.0.0.1', port, path, timeout: 1500 }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch {
-          resolve(null);
-        }
-      });
+async function fetchJson(port, path = '/json') {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}${path}`, {
+      signal: AbortSignal.timeout(2000),
     });
-
-    req.on('error', () => resolve(null));
-    req.on('timeout', () => {
-      req.destroy();
-      resolve(null);
-    });
-  });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 function sendCdpCommand(wsUrl, method, params = {}) {
@@ -133,6 +123,26 @@ async function inspectPort(port, options) {
       }
     }
 
+    if (options.logs) {
+      console.log(`\n  Fetching recent logs from [${bgTarget.title}]:`);
+      try {
+        const result = await sendCdpCommand(bgTarget.webSocketDebuggerUrl, 'Runtime.evaluate', {
+          expression: `new Promise(r => {
+            chrome.storage.local.get(null, items => {
+              const logKeys = Object.keys(items).filter(k => k.includes('file_logs') || k.includes('log'));
+              const logs = logKeys.map(k => items[k]);
+              r(logs.length > 0 ? logs.join('\\n') : 'No stored file logs found in storage yet.');
+            });
+          })`,
+          returnByValue: true,
+          awaitPromise: true,
+        });
+        console.log(`  Logs:\n`, result.result?.value ?? result.result);
+      } catch (err) {
+        console.error(`  Logs fetch error:`, err.message);
+      }
+    }
+
     if (options.storage) {
       console.log(`\n  Dumping chrome.storage.local for [${bgTarget.title}]:`);
       try {
@@ -156,6 +166,7 @@ async function main() {
   const args = process.argv.slice(2);
   const options = {
     storage: args.includes('--storage'),
+    logs: args.includes('--logs'),
     eval: null,
     port: null,
   };
