@@ -120,6 +120,7 @@ async function main() {
     `--load-extension=${extensionPath}`,
     '--no-first-run',
     '--no-default-browser-check',
+    '--new-window',
   ];
 
   const argsB = [
@@ -129,6 +130,7 @@ async function main() {
     `--load-extension=${extensionPath}`,
     '--no-first-run',
     '--no-default-browser-check',
+    '--new-window',
   ];
 
   function launchInstance(args) {
@@ -147,6 +149,9 @@ async function main() {
 
   console.log(`[Dual Launcher] Spawning Instance 1 (Port ${portA})...`);
   await launchInstance(argsA);
+
+  // Wait 1.5s before spawning instance 2 to prevent startup race condition
+  await new Promise((resolve) => setTimeout(resolve, 1500));
 
   console.log(`[Dual Launcher] Spawning Instance 2 (Port ${portB})...`);
   await launchInstance(argsB);
