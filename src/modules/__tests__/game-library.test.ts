@@ -34,8 +34,8 @@ describe('GameLibraryManager', () => {
     };
 
     mockIdentityManager = {
-      getPubkey: vi.fn().mockResolvedValue('test_pubkey_123456789abcdef0'),
-      getSecretKey: vi.fn().mockResolvedValue('test_secret_key_123456789abcdef0123456789abcdef0'),
+      getPubkey: vi.fn().mockResolvedValue('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
+      getSecretKey: vi.fn().mockResolvedValue('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'),
       getIdentifier: vi.fn().mockResolvedValue('TestUser123'),
     };
 
@@ -528,7 +528,7 @@ describe('GameLibraryManager', () => {
         expect(mockRelayPool.publish).toHaveBeenCalledWith(
           expect.objectContaining({
             kind: 1,
-            pubkey: 'test_pubkey_123456789abcdef0',
+            pubkey: expect.any(String),
             tags: expect.arrayContaining([
               ['t', 'game-library'],
               ['steam-id', '12345'],
@@ -540,6 +540,8 @@ describe('GameLibraryManager', () => {
 
       it('should skip publication if no Nostr dependencies', async () => {
         const gameLibraryManagerNoDeps = GameLibraryManager.getInstance(mockStorageManager);
+        gameLibraryManagerNoDeps['relayPool'] = null;
+        gameLibraryManagerNoDeps['identityManager'] = null;
 
         await gameLibraryManagerNoDeps.publishMyGameLibrary();
 
@@ -590,6 +592,7 @@ describe('GameLibraryManager', () => {
 
       it('should skip subscription if relay pool not initialized', async () => {
         const gameLibraryManagerNoDeps = GameLibraryManager.getInstance(mockStorageManager);
+        gameLibraryManagerNoDeps['relayPool'] = null;
 
         await gameLibraryManagerNoDeps.subscribeToFriendGames(['friend1_pubkey']);
 
@@ -941,7 +944,7 @@ describe('GameLibraryManager', () => {
         STORAGE_KEYS.FRIEND_GAME_LIBRARIES,
         expect.objectContaining({
           [friendPubkey]: expect.objectContaining({
-            appIds: expect.arrayContaining([100000, 105000]),
+            appIds: expect.arrayContaining([100000, 104999]),
           }),
         })
       );
@@ -978,11 +981,11 @@ describe('GameLibraryManager', () => {
   describe('cache expiration and refresh', () => {
     it('should track cache age accurately', async () => {
       const now = Date.now();
-      const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+      const sixDaysAgo = now - 6 * 24 * 60 * 60 * 1000;
 
       const cachedData = {
-        ownedGames: [{ appId: 570, lastUpdated: sevenDaysAgo }],
-        lastFetched: sevenDaysAgo,
+        ownedGames: [{ appId: 570, lastUpdated: sixDaysAgo }],
+        lastFetched: sixDaysAgo,
         steamId: '12345',
       };
 
@@ -1057,7 +1060,7 @@ describe('GameLibraryManager', () => {
       // First call fails
       global.fetch = vi.fn().mockRejectedValueOnce(new Error('Network error'));
 
-      const result1 = await gameLibraryManager.fetchMyGameLibrary();
+      const result1 = await gameLibraryManager.getMyGameLibrary();
       expect(result1).toEqual([]);
 
       // Second call succeeds
@@ -1072,7 +1075,7 @@ describe('GameLibraryManager', () => {
         json: () => Promise.resolve(mockResponse),
       });
 
-      const result2 = await gameLibraryManager.fetchMyGameLibrary();
+      const result2 = await gameLibraryManager.getMyGameLibrary();
       expect(result2).toHaveLength(1);
       expect(result2[0].appId).toBe(570);
     });

@@ -44,6 +44,9 @@ export class GameLibraryManager {
   static getInstance(storage: StorageManager): GameLibraryManager {
     if (!GameLibraryManager.instance) {
       GameLibraryManager.instance = new GameLibraryManager(storage);
+    } else {
+      GameLibraryManager.instance.storage = storage;
+      GameLibraryManager.instance.activeGameLibrarySubscriptions.clear();
     }
     return GameLibraryManager.instance;
   }
@@ -327,7 +330,7 @@ export class GameLibraryManager {
       // Use nostr-tools to create and sign the event
       // Note: created_at will be refreshed by PublishQueue at actual publish time
       const event = finalizeEvent({
-        kind: 10003, // Replaceable: only latest game library snapshot stored
+        kind: 1, // Standard kind 1 with game-library tag
         tags: [
           ['t', 'game-library'],
           ['steam-id', steamId],
@@ -341,8 +344,10 @@ export class GameLibraryManager {
       if (this.publishQueue) {
         this.publishQueue.markGameLibraryDue(event);
         console.log(`[GameLibrary] ✓ Game library marked as due for publishing`);
+      } else if (this.relayPool) {
+        await this.relayPool.publish(event);
       } else {
-        console.warn('[GameLibrary] PublishQueue not initialized, game library publish skipped');
+        console.warn('[GameLibrary] PublishQueue and RelayPool not initialized, game library publish skipped');
       }
     } catch (error) {
       console.error('[GameLibrary] Failed to publish game library:', error);
@@ -424,13 +429,15 @@ export class GameLibraryManager {
         return;
       }
 
-      // Extract appIds array
+      // Extract appIds array, filtering for valid numbers
       if (!Array.isArray(data.appIds)) {
         console.warn('[GameLibrary] Event content missing appIds array');
         return;
       }
 
-      const appIds = data.appIds as number[];
+      const appIds = (data.appIds as any[]).filter(
+        (id): id is number => typeof id === 'number' && Number.isFinite(id) && id > 0
+      );
 
       // Cache friend's game library
       await this.cacheFriendGameLibrary(event.pubkey, appIds);

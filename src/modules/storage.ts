@@ -748,17 +748,16 @@ export class StorageManager {
   }
 
   /**
-   * Remove expired invites (older than 24 hours)
+   * Remove expired invites (older than 2 hours by default)
    * Returns count of removed invites
    */
-  async removeExpiredInvites(): Promise<number> {
+  async removeExpiredInvites(maxAgeMs: number = 2 * 60 * 60 * 1000): Promise<number> {
     const invites = await this.getPendingInvites();
     const now = Date.now();
-    const oneDayMs = 24 * 60 * 60 * 1000;
     let removedCount = 0;
 
     for (const [activityId, inviteData] of Object.entries(invites)) {
-      if (now - inviteData.sentAt > oneDayMs) {
+      if (now - inviteData.sentAt > maxAgeMs) {
         delete invites[activityId];
         removedCount++;
       }
@@ -992,6 +991,21 @@ export class StorageManager {
   }
 
   /**
+   * Set Netflix title with metadata
+   */
+  async setNetflixTitle(
+    title: string,
+    metadata?: { source?: string; confidence?: string; extractedAt?: number }
+  ): Promise<void> {
+    await this.set(STORAGE_KEYS.NETFLIX_TITLE_DATA, {
+      value: title,
+      extractedAt: metadata?.extractedAt ?? Date.now(),
+      source: metadata?.source || 'unknown',
+      confidence: metadata?.confidence || 'medium',
+    });
+  }
+
+  /**
    * Clear Netflix title (used for cleanup/expiration)
    */
   async clearNetflixTitle(): Promise<void> {
@@ -1153,7 +1167,7 @@ export class StorageManager {
   // HEALTH MONITORING & DEBUG (Legacy)
   // ============================================================================
 
-/**
+  /**
    * Get Netflix extraction logs (for debugging)
    */
   async getNetflixExtractionLogs(): Promise<string[]> {
@@ -1166,6 +1180,20 @@ export class StorageManager {
   }
 
   /**
+   * Add Netflix extraction log entry (keeps last 100 entries)
+   */
+  async addNetflixExtractionLog(log: string): Promise<void> {
+    try {
+      const logs = await this.getNetflixExtractionLogs();
+      logs.push(log);
+      const trimmed = logs.slice(-100);
+      await this.set(STORAGE_KEYS.NETFLIX_EXTRACTION_LOGS, trimmed);
+    } catch (error) {
+      console.error('[Storage] Failed to add Netflix extraction log:', error);
+    }
+  }
+
+  /**
    * Get Netflix debug captures (for debugging)
    */
   async getNetflixDebugCaptures(): Promise<Record<string, any>[]> {
@@ -1174,6 +1202,17 @@ export class StorageManager {
     } catch (error) {
       console.error('[Storage] Failed to get Netflix debug captures:', error);
       return [];
+    }
+  }
+
+  /**
+   * Set Netflix debug captures
+   */
+  async setNetflixDebugCaptures(captures: Record<string, any>[]): Promise<void> {
+    try {
+      await this.set(STORAGE_KEYS.NETFLIX_DEBUG_CAPTURES, captures);
+    } catch (error) {
+      console.error('[Storage] Failed to set Netflix debug captures:', error);
     }
   }
 }

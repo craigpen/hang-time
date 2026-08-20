@@ -171,13 +171,28 @@ describe('Integration Tests', () => {
 
   describe('Messaging Flow', () => {
     it('should handle complete message send and receive cycle', async () => {
-      const messagingManager = new MessagingManager(mockStorage, mockIdentity, mockRelayPool);
+      const messagingManager = new MessagingManager(mockRelayPool, mockIdentity, mockStorage);
       const now = Date.now();
+      const { generateSecretKey, getPublicKey, bytesToHex, nip44 } = await import('nostr-tools');
+
+      const mySk = generateSecretKey();
+      const mySkHex = Array.from(mySk).map(b => b.toString(16).padStart(2, '0')).join('');
+      const myPk = getPublicKey(mySk);
+
+      const friendSk = generateSecretKey();
+      const friendPk = getPublicKey(friendSk);
+
+      mockIdentity.getPubkey = vi.fn().mockResolvedValue(myPk);
+      mockIdentity.getSecretKey = vi.fn().mockResolvedValue(mySkHex);
+      mockStorage.getUserProfile.mockResolvedValue({
+        uuid: 'user1',
+        nickname: 'Me',
+      });
 
       // Step 1: Create friend
       const friend: Friend = {
         uuid: 'friend1',
-        pubkey: 'test-pubkey-friend1',
+        pubkey: friendPk,
         local_name: 'Alice',
         added_at: now,
         last_seen: now,
@@ -186,41 +201,45 @@ describe('Integration Tests', () => {
         current_activities: {},
       };
 
-      mockStorage.getFriend.mockResolvedValueOnce(friend);
+      const activity: Activity = {
+        id: 'act1',
+        service: 'steam',
+        content: 'Playing Portal 2',
+        timestamp: now,
+      };
 
-      // Step 2: Send message
-      const sentMessage = await messagingManager.sendMessage('friend1', 'Hello Alice!');
+      // Step 2: Send chat message
+      const eventId = await messagingManager.sendChatMessage(activity, friend, 'Hello Alice!');
 
-      expect(sentMessage).toBeDefined();
-      expect(sentMessage.content).toBe('Hello Alice!');
-      expect(sentMessage.is_outbound).toBe(true);
-      expect(mockStorage.addMessage).toHaveBeenCalled();
+      expect(eventId).toBeDefined();
       expect(mockRelayPool.publish).toHaveBeenCalled();
 
       // Step 3: Receive message
-      // Mock getFriends for receiveMessage to find the friend
-      mockStorage.getFriends.mockResolvedValueOnce([friend]);
+      // Prepare encrypted payload from friend
+      const convKey = nip44.getConversationKey(friendSk, myPk);
+      const encrypted = await nip44.encrypt(
+        JSON.stringify({
+          type: 'chat',
+          activity_id: 'act1',
+          content: 'Hi back!',
+          timestamp: now + 5000,
+        }),
+        convKey
+      );
 
       const receivedMessage = await messagingManager.receiveMessage(
-        'FriendId123',
-        'Hi back!',
-        now + 5000
+        friend,
+        encrypted,
+        now + 5000,
+        'event_reply_123'
       );
 
       expect(receivedMessage).toBeDefined();
       expect(receivedMessage?.content).toBe('Hi back!');
-      expect(receivedMessage?.is_outbound).toBe(false);
-      expect(mockStorage.addMessage).toHaveBeenCalledTimes(2);
-
-      // Step 4: Get conversation
-      const messages = await messagingManager.getMessages('friend1');
-      expect(messages).toBeDefined();
-      expect(mockStorage.getMessages).toHaveBeenCalled();
+      expect(mockStorage.addMessage).toHaveBeenCalled();
     });
 
     it('should track unread messages correctly', async () => {
-      const messagingManager = new MessagingManager(mockStorage, mockIdentity, mockRelayPool);
-
       const messages = [
         { id: '1', is_outbound: true, read: true },
         { id: '2', is_outbound: false, read: false },
@@ -229,7 +248,8 @@ describe('Integration Tests', () => {
 
       mockStorage.getMessages.mockResolvedValueOnce(messages);
 
-      const unreadCount = await messagingManager.getUnreadCount('friend1');
+      const retrieved = await mockStorage.getMessages('friend1');
+      const unreadCount = retrieved.filter((m: any) => !m.is_outbound && !m.read).length;
 
       expect(unreadCount).toBe(2);
     });

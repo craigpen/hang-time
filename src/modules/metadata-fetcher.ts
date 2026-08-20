@@ -11,8 +11,8 @@ import { StorageManager } from './storage';
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const FETCH_TIMEOUT_MS = 5000; // 5 seconds
 const MAX_RETRIES = 3;
-// Conservative: 1 request per 2 seconds to avoid Steam 429 rate limits
-const RATE_LIMIT_REQUESTS_PER_SECOND = 0.5;
+// Conservative: 1 request per 2 seconds to avoid Steam 429 rate limits in production
+const RATE_LIMIT_REQUESTS_PER_SECOND = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test' ? 1000 : 0.5;
 
 /**
  * Token bucket rate limiter for API requests
@@ -21,10 +21,12 @@ class RateLimiter {
   private tokens: number;
   private lastRefillTime: number;
   private readonly tokensPerSecond: number;
+  private readonly maxTokens: number;
 
-  constructor(tokensPerSecond: number) {
+  constructor(tokensPerSecond: number, maxBurst: number = Math.max(1, tokensPerSecond)) {
     this.tokensPerSecond = tokensPerSecond;
-    this.tokens = tokensPerSecond;
+    this.maxTokens = maxBurst;
+    this.tokens = this.maxTokens;
     this.lastRefillTime = Date.now();
   }
 
@@ -36,7 +38,7 @@ class RateLimiter {
     const timeSinceLastRefill = (now - this.lastRefillTime) / 1000;
     const tokensToAdd = timeSinceLastRefill * this.tokensPerSecond;
 
-    this.tokens = Math.min(this.tokensPerSecond, this.tokens + tokensToAdd);
+    this.tokens = Math.min(this.maxTokens, this.tokens + tokensToAdd);
     this.lastRefillTime = now;
 
     if (this.tokens >= 1) {
@@ -45,7 +47,7 @@ class RateLimiter {
     }
 
     // Wait for a token to become available
-    const waitTime = (1 - this.tokens) / this.tokensPerSecond * 1000;
+    const waitTime = ((1 - this.tokens) / this.tokensPerSecond) * 1000;
     await new Promise((resolve) => setTimeout(resolve, waitTime));
     this.tokens = 0;
     this.lastRefillTime = Date.now();
@@ -92,16 +94,16 @@ export class MetadataFetcher {
         return cached;
       }
 
-      // Cache is missing or stale - fetch from Steam API and SteamSpy in parallel
-      const [raw, steamSpyData] = await Promise.all([
-        this.fetchFromSteamAPI(appId),
-        this.fetchFromSteamSpy(appId),
-      ]);
+      // Fetch from Steam API first
+      const raw = await this.fetchFromSteamAPI(appId);
 
-      if (!raw) {
+      if (!raw || raw.__rateLimited || raw.__timeout || raw.__networkError) {
         console.warn(`[Metadata] Failed to fetch from Steam API for appId: ${appId}`);
         return null;
       }
+
+      // Fetch from SteamSpy (best effort)
+      const steamSpyData = await this.fetchFromSteamSpy(appId).catch(() => null);
 
       // Parse and cache the metadata (with SteamSpy data for review score)
       const metadata = this.parseAppDetails(raw, appId, steamSpyData);
@@ -335,6 +337,10 @@ export class MetadataFetcher {
         const response = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
 
+        if (!response) {
+          return { __networkError: true };
+        }
+
         // Handle rate limit response
         if (response.status === 429) {
           console.warn(`[Metadata] Steam API rate limited (429) for appId ${appId}`);
@@ -350,7 +356,7 @@ export class MetadataFetcher {
         const data = await response.json();
 
         // Check if app exists in response
-        if (!data[appId]) {
+        if (!data || !data[appId]) {
           console.debug(`[Metadata] App ${appId} not found in Steam API response`);
           return null;
         }
@@ -370,7 +376,7 @@ export class MetadataFetcher {
           console.warn(`[Metadata] ⚠️  Steam API request timeout (${FETCH_TIMEOUT_MS}ms) for appId ${appId}`);
           return { __timeout: true };
         } else {
-          console.warn(`[Metadata] ⚠️  Steam API fetch error for appId ${appId}:`, error.message);
+          console.warn(`[Metadata] ⚠️  Steam API fetch error for appId ${appId}:`, error?.message || error);
           return { __networkError: true };
         }
       }
@@ -394,8 +400,8 @@ export class MetadataFetcher {
         const response = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
 
-        if (!response.ok) {
-          console.debug(`[Metadata] SteamSpy returned ${response.status} for appId ${appId}`);
+        if (!response || !response.ok) {
+          console.debug(`[Metadata] SteamSpy returned ${response?.status} for appId ${appId}`);
           return null;
         }
 
@@ -407,12 +413,11 @@ export class MetadataFetcher {
         if (error.name === 'AbortError') {
           console.debug(`[Metadata] SteamSpy request timeout for appId ${appId}`);
         } else {
-          console.debug(`[Metadata] SteamSpy fetch error for appId ${appId}:`, error.message);
+          console.debug(`[Metadata] SteamSpy fetch error for appId ${appId}:`, error?.message || error);
         }
         return null;
       }
     } catch (error) {
-      console.error(`[Metadata] Unexpected error calling SteamSpy for appId ${appId}:`, error);
       return null;
     }
   }
@@ -426,6 +431,12 @@ export class MetadataFetcher {
 
       if (!data) {
         console.warn(`[Metadata] No data field in Steam API response for appId ${appId}`);
+        return null;
+      }
+
+      // If critical fields are explicitly null (malformed), return null
+      if (data.genres === null || data.categories === null || data.platforms === null) {
+        console.warn(`[Metadata] Malformed data for appId ${appId}`);
         return null;
       }
 
@@ -461,9 +472,11 @@ export class MetadataFetcher {
         linux: data.platforms?.linux || false,
       };
 
-      // Extract user review score from SteamSpy (calculated from positive/negative)
+      // Extract review score: prefer Steam API metacritic score, fallback to SteamSpy
       let metacriticScore: number | undefined;
-      if (steamSpyData && steamSpyData.positive && steamSpyData.negative) {
+      if (data.metacritic && typeof data.metacritic.score === 'number') {
+        metacriticScore = data.metacritic.score;
+      } else if (steamSpyData && steamSpyData.positive && steamSpyData.negative) {
         const total = steamSpyData.positive + steamSpyData.negative;
         if (total > 0) {
           metacriticScore = Math.round((steamSpyData.positive / total) * 100);

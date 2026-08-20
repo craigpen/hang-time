@@ -541,15 +541,15 @@ describe('MetadataFetcher', () => {
         },
       };
 
-      (global.fetch as any)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: vi.fn().mockResolvedValueOnce(mockResponse1),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: vi.fn().mockResolvedValueOnce(mockResponse2),
-        });
+      (global.fetch as any).mockImplementation((url: string) => {
+        if (url.includes('steamspy.com')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+        }
+        if (url.includes('100')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(mockResponse1) });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockResponse2) });
+      });
 
       await metadataFetcher.fetchMetadata(100);
       await metadataFetcher.fetchMetadata(200);
@@ -954,15 +954,15 @@ describe('MetadataFetcher', () => {
         },
       };
 
-      (global.fetch as any)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: vi.fn().mockResolvedValueOnce(mockResponse1),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: vi.fn().mockResolvedValueOnce(mockResponse2),
-        });
+      (global.fetch as any).mockImplementation((url: string) => {
+        if (url.includes('steamspy.com')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+        }
+        if (url.includes('100')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(mockResponse1) });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockResponse2) });
+      });
 
       await metadataFetcher.scheduleBackgroundRefresh([100, 200]);
       await metadataFetcher.startBackgroundFetcher();

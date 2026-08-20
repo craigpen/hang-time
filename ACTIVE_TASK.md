@@ -16,18 +16,21 @@ Establish disciplined development guidelines and stabilize the automated test su
   - [x] Define mandatory 5-step operational loop (Anchor $\rightarrow$ Code $\rightarrow$ Verify $\rightarrow$ Commit $\rightarrow$ Sync).
   - [x] Create `ACTIVE_TASK.md` as the working memory anchor.
 
-- [ ] **Step 2: Fix Test Suite Regressions**
-  - [ ] Fix `src/ui/__tests__/games.test.ts` controller naming mismatch.
-  - [ ] Fix `src/modules/__tests__/metadata-fetcher.test.ts` timer/rate-limiter tests.
-  - [ ] Run full test suite and ensure 100% pass rate (`cmd /c npm run test:run`).
-  - [ ] Fix duplicate class member `_showSuccess` warning in `src/ui/popup.ts`.
+- [x] **Step 2: Fix Test Suite Regressions**
+  - [x] Fix `src/ui/__tests__/games.test.ts` controller naming mismatch.
+  - [x] Fix `src/modules/__tests__/metadata-fetcher.test.ts` timer/rate-limiter tests and Steam API / SteamSpy mock sequencing.
+  - [x] Fix `src/modules/__tests__/game-library.test.ts` singleton test pollution, hex keys, and publish fallback.
+  - [x] Fix `src/modules/storage.test.ts` and `src/__tests__/integration.test.ts` messaging & storage mocks.
+  - [x] Fix `tests/activity-datastore.test.ts`, `tests/invite-cleanup.test.ts`, and `tests/storage-manager.test.ts`.
+  - [x] Run full test suite and ensure 100% pass rate (`cmd /c npm run test:run` — 265/265 tests passing across 11 files).
+  - [x] Fix duplicate class member `_showSuccess` warning in `src/ui/popup.ts`.
 
-- [ ] **Step 3: Verification & Baseline Commit**
-  - [ ] Verify Chrome and Firefox builds (`cmd /c npm run build:all`).
-  - [ ] Commit all fixes to `feat/antigravity-dev` with atomic commit.
-  - [ ] Push to origin.
+- [x] **Step 3: Verification & Baseline Commit**
+  - [x] Verify Chrome and Firefox builds (`cmd /c npm run build:all`).
+  - [x] Commit all fixes to `feat/antigravity-dev` with atomic commit.
+  - [x] Push to origin.
 
 ---
 
 ## 📌 Next Immediate Step
-Fix the `GamesTabController` import/class name mismatch in `src/ui/__tests__/games.test.ts` and resolve Vitest timer mocks in `src/modules/__tests__/metadata-fetcher.test.ts`.
+Ready for next task (Session Model divergence / feature development).

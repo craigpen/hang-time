@@ -15,8 +15,7 @@ import {
   ValidationError,
 } from '../src/modules/activity-validation';
 import { ActivityDatastore } from '../src/modules/activity-datastore';
-import { StorageManager } from '../src/modules/storage';
-import { Activity } from '../src/types';
+import { Activity, STORAGE_KEYS } from '../src/types';
 
 // ============================================================================
 // VALIDATION TESTS
@@ -306,7 +305,7 @@ describe('ActivityDatastore', () => {
   let mockStorage: Partial<StorageManager>;
 
   beforeEach(() => {
-    // Create mock storage with correct API (get/set, not getValue/setValue)
+    // Create mock storage with correct API (get/set, getMyActivities/setMyActivities)
     const store = new Map<string, any>();
     mockStorage = {
       get: vi.fn((key: string, defaultValue?: any) => Promise.resolve(store.get(key) ?? defaultValue)),
@@ -314,9 +313,14 @@ describe('ActivityDatastore', () => {
         store.set(key, value);
         return Promise.resolve();
       }),
+      getMyActivities: vi.fn(() => Promise.resolve(store.get(STORAGE_KEYS.MY_ACTIVITIES) ?? {})),
+      setMyActivities: vi.fn((activities: any) => {
+        store.set(STORAGE_KEYS.MY_ACTIVITIES, activities);
+        return Promise.resolve();
+      }),
     } as any;
 
-    datastore = new ActivityDatastore(mockStorage as StorageManager);
+    datastore = new ActivityDatastore(mockStorage as any);
   });
 
   describe('createActivity', () => {
@@ -498,30 +502,33 @@ describe('ActivityDatastore', () => {
     it('removes corrupted activities', async () => {
       // Manually insert corrupted activity (bypassing validation)
       const store = new Map<string, any>();
+      const corruptedActivities = {
+        'corrupted-1': {
+          id: 'corrupted-1',
+          service: 'youtube-tab',
+          content: '• Bullet contaminated',
+          state: 'playing',
+          audio: 'off',
+          timestamp: Date.now(),
+          metadata: {},
+        },
+      };
+      store.set(STORAGE_KEYS.MY_ACTIVITIES, corruptedActivities);
+
       const mockStorageWithData = {
-        get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'activities') {
-            return Promise.resolve({
-              'corrupted-1': {
-                id: 'corrupted-1',
-                service: 'youtube-tab',
-                content: '• Bullet contaminated',
-                state: 'playing',
-                audio: 'off',
-                timestamp: Date.now(),
-                metadata: {},
-              },
-            });
-          }
-          return Promise.resolve(store.get(key) ?? defaultValue);
-        }),
+        get: vi.fn((key: string, defaultValue?: any) => Promise.resolve(store.get(key) ?? defaultValue)),
         set: vi.fn((key: string, value: any) => {
           store.set(key, value);
           return Promise.resolve();
         }),
+        getMyActivities: vi.fn(() => Promise.resolve(store.get(STORAGE_KEYS.MY_ACTIVITIES) ?? {})),
+        setMyActivities: vi.fn((activities: any) => {
+          store.set(STORAGE_KEYS.MY_ACTIVITIES, activities);
+          return Promise.resolve();
+        }),
       } as any;
 
-      const testDatastore = new ActivityDatastore(mockStorageWithData as StorageManager);
+      const testDatastore = new ActivityDatastore(mockStorageWithData as any);
       const removed = await testDatastore.cleanupCorrupted();
       expect(removed).toBeGreaterThan(0);
     });

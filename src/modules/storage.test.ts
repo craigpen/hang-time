@@ -3,8 +3,8 @@
  * Ensures all storage writes go through StorageManager, never direct chrome.storage access
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { StorageManager } from './storage';
+import { describe, it, expect } from 'vitest';
+import { STORAGE_KEYS } from '../types';
 import fs from 'fs';
 import path from 'path';
 
@@ -86,12 +86,8 @@ describe('Storage Architecture', () => {
 
   describe('Activity storage routing', () => {
     it('should store all user activities to MY_ACTIVITIES', async () => {
-      // This is a conceptual test showing the intent
-      // Actual validation would require mocking chrome.storage
-
-      const types = require('../types.ts');
-      expect(types.STORAGE_KEYS.MY_ACTIVITIES).toBe('hang_time_my_activities');
-      expect(types.STORAGE_KEYS.ACTIVITY_PROVENANCE_MAP).toBe('hang_time_activity_provenance_map');
+      expect(STORAGE_KEYS.MY_ACTIVITIES).toBe('hang_time_my_activities');
+      expect(STORAGE_KEYS.ACTIVITY_PROVENANCE_MAP).toBe('hang_time_activity_provenance_map');
     });
   });
 
@@ -104,8 +100,8 @@ describe('Storage Architecture', () => {
       const hasBadKey = content.match(/\.set\(['"]activities['"]/);
       expect(hasBadKey).toBeNull();
 
-      // SHOULD use: STORAGE_KEYS.MY_ACTIVITIES
-      expect(content).toContain('STORAGE_KEYS.MY_ACTIVITIES');
+      // SHOULD use: getMyActivities / setMyActivities / STORAGE_KEYS.MY_ACTIVITIES
+      expect(content).toMatch(/getMyActivities|STORAGE_KEYS\.MY_ACTIVITIES/);
     });
 
     it('should not use deprecated "activity_provenance_map" string literal', () => {

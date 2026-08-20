@@ -27,8 +27,9 @@ async function cleanupOrphanedInvites(
   let removed = 0;
 
   for (const [activityId, inviteData] of Object.entries(pendingInvites)) {
+    const friend = inviteData.friendUuid || (inviteData as any).friendId;
     // Only check invites for this friend
-    if (inviteData.friendUuid !== friendUuid) {
+    if (friend !== friendUuid) {
       continue;
     }
 

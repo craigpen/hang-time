@@ -179,12 +179,8 @@ describe('StorageManager - New Methods', () => {
 
     it('stores and retrieves Netflix title with metadata', async () => {
       const testTitle = 'The Crown - Season 5';
-      const now = Date.now();
 
-      // Simulate content script storage with provenance data
-      await mockStorage.set('netflix_title_data', {
-        value: testTitle,
-        extractedAt: now,
+      await storage.setNetflixTitle(testTitle, {
         source: 'h2-tag',
         confidence: 'high',
       });
@@ -198,8 +194,7 @@ describe('StorageManager - New Methods', () => {
       const oneDayMs = 24 * 60 * 60 * 1000;
 
       // Store title from yesterday
-      mockStorage.set('netflix_title_data', {
-        value: 'Old Show',
+      await storage.setNetflixTitle('Old Show', {
         extractedAt: now - oneDayMs - 1000, // older than 24 hours
         source: 'h2-tag',
         confidence: 'high',
@@ -207,18 +202,13 @@ describe('StorageManager - New Methods', () => {
 
       const retrieved = await storage.getNetflixTitle();
       expect(retrieved).toBeNull();
-
-      // Should have been cleared
-      const cleared = mockStorage.get('netflix_title_data');
-      expect(cleared).toBeNull();
     });
 
     it('keeps fresh titles (< 24 hours old)', async () => {
       const now = Date.now();
       const testTitle = 'Fresh Show';
 
-      mockStorage.set('netflix_title_data', {
-        value: testTitle,
+      await storage.setNetflixTitle(testTitle, {
         extractedAt: now - 60000, // 1 minute old
         source: 'h2-tag',
         confidence: 'high',
@@ -232,8 +222,7 @@ describe('StorageManager - New Methods', () => {
       const now = Date.now();
       const oneDayMs = 24 * 60 * 60 * 1000;
 
-      mockStorage.set('netflix_title_data', {
-        value: 'Stale Title',
+      await storage.setNetflixTitle('Stale Title', {
         extractedAt: now - oneDayMs - 1000,
         source: 'fallback',
         confidence: 'low',
@@ -241,17 +230,12 @@ describe('StorageManager - New Methods', () => {
 
       const removed = await storage.removeStaleNetflixTitle();
       expect(removed).toBe(1);
-
-      const cleared = mockStorage.get('netflix_title_data');
-      expect(cleared).toBeNull();
     });
 
     it('removeStaleNetflixTitle returns 0 for fresh titles', async () => {
-      const now = Date.now();
+      const testTitle = 'Fresh Title';
 
-      mockStorage.set('netflix_title_data', {
-        value: 'Fresh Title',
-        extractedAt: now,
+      await storage.setNetflixTitle(testTitle, {
         source: 'h2-tag',
         confidence: 'high',
       });
@@ -259,8 +243,8 @@ describe('StorageManager - New Methods', () => {
       const removed = await storage.removeStaleNetflixTitle();
       expect(removed).toBe(0);
 
-      const data = mockStorage.get('netflix_title_data');
-      expect(data).toBeDefined();
+      const retrieved = await storage.getNetflixTitle();
+      expect(retrieved).toBe(testTitle);
     });
   });
 

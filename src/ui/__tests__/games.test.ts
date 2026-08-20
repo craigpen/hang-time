@@ -108,9 +108,11 @@ describe('GamesTabController', () => {
     // Setup mocks
     mockGameLibraryManager = {
       getMyGameLibrary: vi.fn(),
+      getFriendGameLibrary: vi.fn(),
     };
 
     mockMetadataFetcher = {
+      getCachedMetadata: vi.fn(),
       getMetadata: vi.fn(),
     };
 
@@ -119,7 +121,17 @@ describe('GamesTabController', () => {
       setUserProfile: vi.fn(),
     };
 
-    controller = new DiscoveryTabController(
+    // Mock chrome.runtime.sendMessage
+    global.chrome = {
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+        }),
+      } as any,
+    } as any;
+
+    controller = new GamesTabController(
       mockPopupElement,
       mockGameLibraryManager,
       mockMetadataFetcher,
@@ -135,7 +147,7 @@ describe('GamesTabController', () => {
   describe('initialization', () => {
     it('should initialize controller', async () => {
       mockStorage.getUserProfile.mockResolvedValue({
-        discovery_ui_state: {
+        games_ui_state: {
           filters: { genres: ['action'], modes: [], playtime: 'all' },
           sortBy: 'most-friends',
         },
@@ -148,7 +160,7 @@ describe('GamesTabController', () => {
 
     it('should load saved UI state from storage', async () => {
       const savedState = {
-        discovery_ui_state: {
+        games_ui_state: {
           filters: { genres: ['action', 'rpg'], modes: ['multiplayer'], playtime: 'week' },
           sortBy: 'score',
         },
@@ -162,7 +174,7 @@ describe('GamesTabController', () => {
     });
 
     it('should handle missing saved state gracefully', async () => {
-      mockStorage.getUserProfile.mockResolvedValue({ discovery_ui_state: undefined });
+      mockStorage.getUserProfile.mockResolvedValue({ games_ui_state: undefined });
 
       await controller.init();
 
@@ -173,7 +185,7 @@ describe('GamesTabController', () => {
   describe('rendering', () => {
     beforeEach(async () => {
       mockStorage.getUserProfile.mockResolvedValue({
-        discovery_ui_state: {
+        games_ui_state: {
           filters: { genres: [], modes: [], playtime: 'all' },
           sortBy: 'most-friends',
         },
@@ -212,7 +224,7 @@ describe('GamesTabController', () => {
       };
 
       mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
-      mockMetadataFetcher.getMetadata.mockImplementation((appId: number) => {
+      mockMetadataFetcher.getCachedMetadata.mockImplementation((appId: number) => {
         return Promise.resolve(appId === 1 ? metadata1 : metadata2);
       });
 
@@ -249,7 +261,7 @@ describe('GamesTabController', () => {
 
       const renderPromise = controller.render();
       const results = document.getElementById('game-results');
-      expect(results?.innerHTML).toContain('Loading');
+      expect(results?.innerHTML).toContain('loading-skeleton');
 
       await renderPromise;
     });
@@ -294,7 +306,7 @@ describe('GamesTabController', () => {
   describe('filtering logic', () => {
     beforeEach(async () => {
       mockStorage.getUserProfile.mockResolvedValue({
-        discovery_ui_state: {
+        games_ui_state: {
           filters: { genres: [], modes: [], playtime: 'all' },
           sortBy: 'most-friends',
         },
@@ -333,7 +345,7 @@ describe('GamesTabController', () => {
       };
 
       mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
-      mockMetadataFetcher.getMetadata.mockImplementation((appId: number) => {
+      mockMetadataFetcher.getCachedMetadata.mockImplementation((appId: number) => {
         return Promise.resolve(appId === 1 ? metadata1 : metadata2);
       });
 
@@ -342,17 +354,10 @@ describe('GamesTabController', () => {
       if (actionCheckbox) {
         actionCheckbox.checked = true;
       }
+      const applyBtn = document.getElementById('apply-filters-btn') as HTMLButtonElement;
+      applyBtn?.click();
 
-      global.chrome = {
-        runtime: {
-          sendMessage: vi.fn().mockResolvedValue({
-            success: true,
-            data: [],
-          }),
-        } as any,
-      } as any;
-
-      await controller.render();
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const results = document.getElementById('game-results');
       expect(results?.innerHTML).toContain('Action Game');
@@ -402,7 +407,7 @@ describe('GamesTabController', () => {
       };
 
       mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
-      mockMetadataFetcher.getMetadata.mockImplementation((appId: number) => {
+      mockMetadataFetcher.getCachedMetadata.mockImplementation((appId: number) => {
         if (appId === 1) return Promise.resolve(metadata1);
         if (appId === 2) return Promise.resolve(metadata2);
         return Promise.resolve(metadata3);
@@ -413,17 +418,10 @@ describe('GamesTabController', () => {
       const rpgCheckbox = document.querySelector('.genre-filter[value="rpg"]') as HTMLInputElement;
       if (actionCheckbox) actionCheckbox.checked = true;
       if (rpgCheckbox) rpgCheckbox.checked = true;
+      const applyBtn = document.getElementById('apply-filters-btn') as HTMLButtonElement;
+      applyBtn?.click();
 
-      global.chrome = {
-        runtime: {
-          sendMessage: vi.fn().mockResolvedValue({
-            success: true,
-            data: [],
-          }),
-        } as any,
-      } as any;
-
-      await controller.render();
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const results = document.getElementById('game-results');
       expect(results?.innerHTML).toContain('Action Game');
@@ -435,7 +433,7 @@ describe('GamesTabController', () => {
   describe('sorting logic', () => {
     beforeEach(async () => {
       mockStorage.getUserProfile.mockResolvedValue({
-        discovery_ui_state: {
+        games_ui_state: {
           filters: { genres: [], modes: [], playtime: 'all' },
           sortBy: 'most-friends',
         },
@@ -474,13 +472,14 @@ describe('GamesTabController', () => {
       };
 
       mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
-      mockMetadataFetcher.getMetadata.mockImplementation((appId: number) => {
+      mockMetadataFetcher.getCachedMetadata.mockImplementation((appId: number) => {
         return Promise.resolve(appId === 1 ? metadata1 : metadata2);
       });
 
       const sortDropdown = document.getElementById('sort-dropdown') as HTMLSelectElement;
       if (sortDropdown) {
         sortDropdown.value = 'score';
+        sortDropdown.dispatchEvent(new Event('change'));
       }
 
       global.chrome = {
@@ -542,7 +541,7 @@ describe('GamesTabController', () => {
       };
 
       mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
-      mockMetadataFetcher.getMetadata.mockImplementation((appId: number) => {
+      mockMetadataFetcher.getCachedMetadata.mockImplementation((appId: number) => {
         if (appId === 1) return Promise.resolve(metadata1);
         if (appId === 2) return Promise.resolve(metadata2);
         return Promise.resolve(metadata3);
@@ -551,6 +550,7 @@ describe('GamesTabController', () => {
       const sortDropdown = document.getElementById('sort-dropdown') as HTMLSelectElement;
       if (sortDropdown) {
         sortDropdown.value = 'alphabetical';
+        sortDropdown.dispatchEvent(new Event('change'));
       }
 
       global.chrome = {
@@ -578,7 +578,7 @@ describe('GamesTabController', () => {
   describe('filter chips', () => {
     beforeEach(async () => {
       mockStorage.getUserProfile.mockResolvedValue({
-        discovery_ui_state: {
+        games_ui_state: {
           filters: { genres: [], modes: [], playtime: 'all' },
           sortBy: 'most-friends',
         },
@@ -600,23 +600,16 @@ describe('GamesTabController', () => {
       };
 
       mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
-      mockMetadataFetcher.getMetadata.mockResolvedValue(metadata);
+      mockMetadataFetcher.getCachedMetadata.mockResolvedValue(metadata);
 
       const actionCheckbox = document.querySelector('.genre-filter[value="action"]') as HTMLInputElement;
       if (actionCheckbox) {
         actionCheckbox.checked = true;
       }
+      const applyBtn = document.getElementById('apply-filters-btn') as HTMLButtonElement;
+      applyBtn?.click();
 
-      global.chrome = {
-        runtime: {
-          sendMessage: vi.fn().mockResolvedValue({
-            success: true,
-            data: [],
-          }),
-        } as any,
-      } as any;
-
-      await controller.render();
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const chipsContainer = document.getElementById('active-filters');
       expect(chipsContainer?.innerHTML).toContain('action');
@@ -632,7 +625,7 @@ describe('GamesTabController', () => {
   describe('state persistence', () => {
     it('should save filter state to storage', async () => {
       mockStorage.getUserProfile.mockResolvedValue({
-        discovery_ui_state: {
+        games_ui_state: {
           filters: { genres: [], modes: [], playtime: 'all' },
           sortBy: 'most-friends',
         },
@@ -649,7 +642,7 @@ describe('GamesTabController', () => {
   describe('refresh', () => {
     beforeEach(async () => {
       mockStorage.getUserProfile.mockResolvedValue({
-        discovery_ui_state: {
+        games_ui_state: {
           filters: { genres: [], modes: [], playtime: 'all' },
           sortBy: 'most-friends',
         },
@@ -671,7 +664,7 @@ describe('GamesTabController', () => {
       };
 
       mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
-      mockMetadataFetcher.getMetadata.mockResolvedValue(metadata);
+      mockMetadataFetcher.getCachedMetadata.mockResolvedValue(metadata);
 
       global.chrome = {
         runtime: {
