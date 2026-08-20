@@ -183,27 +183,39 @@ export class GameLibraryManager {
   /**
    * Get cached friend's game library if fresh
    */
-  async getFriendGameLibrary(friendPubkey: string): Promise<OwnedGame[] | null> {
+  async getFriendGameLibrary(friendIdentifier: string): Promise<OwnedGame[] | null> {
     try {
       const friendLibraries = await this.storage.get<Record<string, CachedFriendGameLibrary>>(
         STORAGE_KEYS.FRIEND_GAME_LIBRARIES,
         {}
       );
 
-      const friendData = friendLibraries?.[friendPubkey];
+      if (!friendLibraries) {
+        console.debug('[GameLibrary] No friend libraries cached');
+        return null;
+      }
+
+      // Check direct key or match by pubkey property
+      let friendData = friendLibraries[friendIdentifier];
       if (!friendData) {
-        console.debug('[GameLibrary] Friend library not cached:', friendPubkey);
+        friendData = Object.values(friendLibraries).find(
+          (entry) => entry.pubkey === friendIdentifier || (entry as any).uuid === friendIdentifier
+        );
+      }
+
+      if (!friendData) {
+        console.debug('[GameLibrary] Friend library not cached:', friendIdentifier);
         return null;
       }
 
       // Check if cache is stale
       if (this.isCacheStale(friendData.lastUpdated)) {
-        console.debug('[GameLibrary] Friend library cache stale:', friendPubkey);
+        console.debug('[GameLibrary] Friend library cache stale:', friendIdentifier);
         return null;
       }
 
       // Convert appIds back to OwnedGame[]
-      const games: OwnedGame[] = friendData.appIds.map(appId => ({
+      const games: OwnedGame[] = (friendData.appIds || []).map(appId => ({
         appId,
         lastUpdated: friendData.lastUpdated,
       }));
@@ -330,7 +342,7 @@ export class GameLibraryManager {
       // Use nostr-tools to create and sign the event
       // Note: created_at will be refreshed by PublishQueue at actual publish time
       const event = finalizeEvent({
-        kind: 1, // Standard kind 1 with game-library tag
+        kind: 10003, // Kind 10003 replaceable activity/game-library event
         tags: [
           ['t', 'game-library'],
           ['steam-id', steamId],

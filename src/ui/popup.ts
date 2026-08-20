@@ -164,6 +164,13 @@ export class PopupController {
         // Silently ignore if not available (non-critical)
       });
 
+      // Refresh Games tab if initialized
+      if (this.gamesTabController) {
+        await this.gamesTabController.refresh().catch((error) => {
+          console.debug('[Popup] Games tab refresh skipped/failed:', error);
+        });
+      }
+
       // Refresh Settings if panel is open
       if (this.settingsPanel && this.settingsPanel.style.display !== 'none') {
         await this._loadSettingsPanel();
@@ -332,7 +339,9 @@ export class PopupController {
         statusSpan.textContent = statusText;
         // Add class for "Last seen" styling
         statusSpan.classList.toggle('last-seen', statusText.includes('Last seen'));
+        statusSpan.classList.toggle('dnd-status', !!friend.dnd);
       }
+      element.classList.toggle('dnd-friend', !!friend.dnd);
     }
 
     // Update the activities container only if content changed
@@ -434,6 +443,38 @@ export class PopupController {
                   }
                 }
               }
+
+              // Clean up any legacy activity DND badge if present
+              const existingBadge = row.querySelector('.activity-dnd-badge');
+              if (existingBadge) {
+                existingBadge.remove();
+              }
+
+              // Update Join button if friendId !== 'self'
+              const isDnd = friend?.dnd || activity.dnd || activity.metadata?.dnd;
+              const joinBtn = row.querySelector('.activity-action-join') as HTMLElement;
+              if (joinBtn && friendId !== 'self') {
+                if (isDnd) {
+                  joinBtn.textContent = '▶';
+                  joinBtn.title = 'Friend is in Do Not Disturb mode';
+                  joinBtn.classList.add('disabled');
+                } else {
+                  joinBtn.classList.remove('disabled');
+                  const hasPendingInvite = activity.id ? this.pendingInvitesByActivity.has(activity.id) : false;
+                  if (hasPendingInvite) {
+                    joinBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
+                      <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+                      <path d="M 2 6 L 12 13 L 22 6"></path>
+                    </svg>`;
+                    joinBtn.style.color = '#4CAF50';
+                    joinBtn.title = 'Accept or decline invite';
+                  } else {
+                    joinBtn.textContent = '▶';
+                    joinBtn.title = 'Join activity';
+                    joinBtn.style.color = '';
+                  }
+                }
+              }
             }
 
           }
@@ -458,6 +499,9 @@ export class PopupController {
   }
 
   private _getStatusText(friend: Friend): string {
+    if (friend.dnd) {
+      return '⛔ DND';
+    }
     const daysSinceLastSeen = Math.ceil((Date.now() - friend.last_seen) / (1000 * 60 * 60 * 24));
 
     // If 30+ days, show "Last seen X days ago"
@@ -522,6 +566,10 @@ export class PopupController {
     statusSpan.className = 'friend-status';
     if (statusText.includes('Last seen')) {
       statusSpan.classList.add('last-seen');
+    }
+    if (friend?.dnd) {
+      statusSpan.classList.add('dnd-status');
+      item.classList.add('dnd-friend');
     }
     statusSpan.textContent = statusText;
 
@@ -819,13 +867,6 @@ export class PopupController {
     row.appendChild(contentText);
 
     const isDnd = activity.dnd || activity.metadata?.dnd;
-    if (isDnd) {
-      const dndBadge = document.createElement('span');
-      dndBadge.className = 'activity-dnd-badge';
-      dndBadge.textContent = '⛔ DND';
-      dndBadge.title = 'Friend is in Do Not Disturb / Solo Mode';
-      row.appendChild(dndBadge);
-    }
 
     // Action buttons container
     const buttonsDiv = document.createElement('div');
@@ -857,10 +898,9 @@ export class PopupController {
       firstBtn.style.color = '#999';
       firstBtn.title = 'Invite friends';
     } else if (isDnd) {
-      firstBtn.textContent = '⛔';
-      firstBtn.title = 'Friend is in Do Not Disturb mode (Solo Mode)';
-      firstBtn.style.opacity = '0.4';
-      firstBtn.style.cursor = 'not-allowed';
+      firstBtn.textContent = '▶';
+      firstBtn.title = 'Friend is in Do Not Disturb mode';
+      firstBtn.classList.add('disabled');
     } else if (hasPendingInvite) {
       // Bold green envelope for accepting invite
       firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
@@ -890,7 +930,7 @@ export class PopupController {
       if (isSelfActivity) {
         this._inviteToActivity(activity);
       } else if (isDnd) {
-        toastManager.show('Friend is in Do Not Disturb mode (Solo Mode)');
+        toastManager.show('Friend is in Do Not Disturb mode');
       } else if (currentHasPending) {
         console.debug('[Popup] Showing accept invite modal for:', friendId);
         // Use current activity (not stored invite) - stored activity may be stale placeholder from when invite arrived
@@ -1597,11 +1637,11 @@ export class PopupController {
 
     if (isDnd) {
       button.textContent = '⛔';
-      button.title = 'Do Not Disturb: ON (Solo Mode - Click to make available)';
+      button.title = 'Do Not Disturb';
       button.classList.add('dnd-active');
     } else {
       button.textContent = '🟢';
-      button.title = 'Do Not Disturb: OFF (Available - Click for DND/Solo)';
+      button.title = 'Available';
       button.classList.remove('dnd-active');
     }
   }
@@ -1626,9 +1666,9 @@ export class PopupController {
           this._updateDndButtonDisplay(dndToggleBtn, newDnd);
 
           if (newDnd) {
-            toastManager.show('⛔ Do Not Disturb enabled (Solo Mode)');
+            toastManager.show('⛔ Do Not Disturb');
           } else {
-            toastManager.show('🟢 Available (Co-watching enabled)');
+            toastManager.show('🟢 Available');
           }
 
           await this.refreshFriends();

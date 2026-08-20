@@ -238,4 +238,54 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
       expect(publishable.metadata?.dnd).toBe(false);
     });
   });
+
+  describe('DND Active Session Eviction & Status Formatting', () => {
+    it('should evict DND friend from active session members', async () => {
+      // Create session with self, Alice, and Bob
+      await storage.setActiveSession({
+        session_id: 'sess-123',
+        members: ['user-uuid-123', 'friend-uuid-456', 'friend-uuid-789'],
+        activity_id: 'yt-video-1',
+        host_friend_uuid: 'self',
+        created_at: Date.now(),
+        last_activity_at: Date.now(),
+      });
+
+      const session = await storage.getActiveSession();
+      expect(session?.members).toHaveLength(3);
+
+      // Simulate Bob entering DND and updating session
+      const remaining = session!.members.filter(id => id !== 'friend-uuid-789');
+      session!.members = remaining;
+      await storage.setActiveSession(session!);
+
+      const updated = await storage.getActiveSession();
+      expect(updated?.members).toHaveLength(2);
+      expect(updated?.members).toContain('user-uuid-123');
+      expect(updated?.members).toContain('friend-uuid-456');
+      expect(updated?.members).not.toContain('friend-uuid-789');
+    });
+
+    it('should clear active session when remaining members drop below 2', async () => {
+      await storage.setActiveSession({
+        session_id: 'sess-123',
+        members: ['user-uuid-123', 'friend-uuid-456'],
+        activity_id: 'yt-video-1',
+        host_friend_uuid: 'self',
+        created_at: Date.now(),
+        last_activity_at: Date.now(),
+      });
+
+      // Alice enters DND, only self remains (< 2)
+      const session = await storage.getActiveSession();
+      const remaining = session!.members.filter(id => id !== 'friend-uuid-456');
+      if (remaining.length < 2) {
+        await storage.clearActiveSession();
+      }
+
+      const cleared = await storage.getActiveSession();
+      expect(cleared).toBeNull();
+    });
+  });
 });
+

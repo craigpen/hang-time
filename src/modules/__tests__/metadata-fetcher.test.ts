@@ -122,6 +122,48 @@ describe('MetadataFetcher', () => {
 
       expect(result?.name).toBe('Dota 2');
       expect(global.fetch).toHaveBeenCalled(); // Should call API for refresh
+      expect((global.fetch as any).mock.calls[0][0]).toContain('&l=english');
+    });
+
+    it('should refetch if cached metadata contains non-English/Russian text', async () => {
+      const russianCachedMetadata: GameMetadata = {
+        appId: 221100,
+        name: 'DayZ',
+        genres: ['Экшены', 'Приключенческие игры'],
+        categories: ['Для нескольких игроков', 'ММО'],
+        platforms: { windows: true, mac: false, linux: false },
+        capsuleImageUrl: 'https://example.com/dayz.jpg',
+        storePageUrl: 'https://store.steampowered.com/app/221100/',
+        lastFetched: Date.now(), // Recent timestamp, but has Russian text
+        isCrossPlayable: false,
+      };
+
+      mockStorage.get.mockResolvedValueOnce({ 221100: russianCachedMetadata });
+
+      const mockEnglishResponse = {
+        221100: {
+          success: true,
+          data: {
+            name: 'DayZ',
+            genres: [{ description: 'Action' }, { description: 'Adventure' }],
+            categories: [{ description: 'Multi-player' }, { description: 'MMO' }],
+            platforms: { windows: true, mac: false, linux: false },
+            metacritic: { score: 77 },
+            header_image: 'https://example.com/dayz.jpg',
+          },
+        },
+      };
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValueOnce(mockEnglishResponse),
+      });
+
+      const result = await metadataFetcher.fetchMetadata(221100);
+
+      expect(result?.genres).toEqual(['Action', 'Adventure']);
+      expect(global.fetch).toHaveBeenCalled();
+      expect((global.fetch as any).mock.calls[0][0]).toContain('&l=english');
     });
 
     it('should return null if Steam API returns 404 (app not found)', async () => {
@@ -445,14 +487,17 @@ describe('MetadataFetcher', () => {
           });
         }
 
+        const match = url.match(/appids=(\d+)/);
+        const appId = match?.[1] || '0';
+
         return Promise.resolve({
           ok: true,
           json: () =>
             Promise.resolve({
-              [url.match(/appids=(\d+)/)?.[1]]: {
+              [appId]: {
                 success: true,
                 data: {
-                  name: `Game ${url.match(/appids=(\d+)/)?.[1]}`,
+                  name: `Game ${appId}`,
                   genres: [{ description: 'Action' }],
                   categories: [{ description: 'Single-player' }],
                   platforms: { windows: true, mac: false, linux: false },
@@ -833,6 +878,7 @@ describe('MetadataFetcher', () => {
 
       // Item should be re-queued
       const queue = metadataFetcher.getFetchQueue();
+      expect(queue).toBeDefined();
       // Queue might be empty now but will have item after backoff expires
 
       await metadataFetcher.stopBackgroundFetcher();
@@ -1188,7 +1234,7 @@ describe('MetadataFetcher', () => {
     });
 
     it('should handle Steam API DNS failure', async () => {
-      const error = new Error('getaddrinfo ENOTFOUND');
+      const error: any = new Error('getaddrinfo ENOTFOUND');
       error.code = 'ENOTFOUND';
 
       (global.fetch as any).mockRejectedValue(error);
@@ -1265,8 +1311,6 @@ describe('MetadataFetcher', () => {
     });
 
     it('should handle extremely large response body', async () => {
-      const largeContent = 'x'.repeat(50 * 1024 * 1024); // 50MB
-
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
         json: vi.fn().mockRejectedValueOnce(new Error('Response too large')),
@@ -1338,7 +1382,7 @@ describe('MetadataFetcher', () => {
           ok: true,
           json: () => {
             const match = url.match(/appids=(\d+)/);
-            const appId = match ? parseInt(match[1]) : 100;
+            const appId = match && match[1] ? parseInt(match[1]) : 100;
             return Promise.resolve({
               [appId]: {
                 success: true,

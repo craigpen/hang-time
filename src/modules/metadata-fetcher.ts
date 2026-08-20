@@ -66,7 +66,7 @@ export class MetadataFetcher {
   private processingIntervalId: NodeJS.Timeout | null = null;
   private globalRateLimitedUntil: number = 0; // Pause all processing if we hit Steam's limit
 
-  private constructor(private storage: StorageManager) {
+  constructor(private storage: StorageManager) {
     this.rateLimiter = new RateLimiter(RATE_LIMIT_REQUESTS_PER_SECOND);
   }
 
@@ -326,7 +326,7 @@ export class MetadataFetcher {
       // Acquire rate limit token before making request
       await this.rateLimiter.acquireToken();
 
-      const url = `${API_BASE}/appdetails?appids=${appId}`;
+      const url = `${API_BASE}/appdetails?appids=${appId}&l=english`;
 
       console.debug(`[Metadata] Calling Steam API: ${url}`);
 
@@ -527,6 +527,15 @@ export class MetadataFetcher {
   private isCacheStale(metadata: GameMetadata): boolean {
     const age = Date.now() - metadata.lastFetched;
     const isStale = age > CACHE_TTL_MS;
+
+    // Check if metadata contains non-Latin/Cyrillic characters (e.g. Russian from previous unlocalized fetch)
+    const textToCheck = (metadata.genres || []).concat(metadata.categories || []).concat([metadata.name || '']).join(' ');
+    const hasNonEnglish = /[\u0400-\u04FF]/.test(textToCheck);
+    if (hasNonEnglish) {
+      console.debug(`[Metadata] Cache contains non-English characters for appId ${metadata.appId}, marking as stale`);
+      return true;
+    }
+
     const ageInDays = Math.round(age / 1000 / 60 / 60 / 24);
     console.debug(`[Metadata] Cache age: ${ageInDays} days, stale: ${isStale}`);
     return isStale;

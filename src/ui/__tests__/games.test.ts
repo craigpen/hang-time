@@ -2,7 +2,7 @@
  * Tests for Games Tab UI Controller
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GamesTabController } from '../games';
 import { GameLibraryManager } from '../../modules/game-library';
 import { MetadataFetcher } from '../../modules/metadata-fetcher';

@@ -49,7 +49,7 @@ export interface UserProfile {
     new_message: boolean;
     join_suggestion: boolean;
   };
-  dnd_enabled?: boolean; // Do Not Disturb / Solo mode (bypasses co-watching and alerts)
+  dnd_enabled?: boolean; // Do Not Disturb mode (bypasses co-watching and alerts)
   publisher_config?: {
     enabled: boolean; // Global publishing on/off
     rate_ms: number; // Publishing interval in milliseconds (default 12000)
@@ -131,7 +131,7 @@ export interface Friend {
   state: 'pending' | 'active'; // pending = invite sent, awaiting accept; active = mutual friends
   initiated_by_me?: boolean; // true if we sent the friend request, false if they sent it, undefined for active friends
   discord_info?: string; // Discord server invite link for coordination
-  dnd?: boolean; // True if friend is currently in Do Not Disturb / Solo mode
+  dnd?: boolean; // True if friend is currently in Do Not Disturb mode
 }
 
 export interface FriendList extends Array<Friend> {}

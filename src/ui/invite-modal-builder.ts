@@ -62,7 +62,7 @@ export async function showInviteModal(
 
   // Create friend checkboxes
   for (const friend of friends) {
-    if (friend.dnd) continue; // Skip friends in DND / Solo mode
+    if (friend.dnd) continue; // Skip friends in DND mode
 
     const friendCheckbox = document.createElement('label');
     friendCheckbox.className = 'invite-friend-item';

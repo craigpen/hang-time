@@ -314,11 +314,18 @@ export class ActivityPublisher {
         return;
       }
 
+      const profile = await this.storageManager.getUserProfile();
+      const isDnd = profile?.dnd_enabled ?? false;
+
       const tags: Array<[string, string]> = [
         ['service', activity.service],
         ['content', activityContent],
         ['activity_id', activity.id],
       ];
+
+      if (isDnd) {
+        tags.push(['dnd', 'true']);
+      }
 
       // Add state tag if present
       if (activity.state) {
@@ -346,7 +353,6 @@ export class ActivityPublisher {
       console.log(`[Publisher] 📤 Publish [atomic] ${activity.service} size=${eventSize}b | Settings: atomic=on`);
 
       // Load config for relay selection and retry settings
-      const profile = await this.storageManager.getUserProfile();
       const config = profile?.publisher_config;
       await this.relayPool.publish(event, config);
     } catch (error) {

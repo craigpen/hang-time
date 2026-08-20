@@ -569,8 +569,12 @@ async function initializeExtension(): Promise<void> {
     try {
       userGames = await gameLibraryManager.fetchMyGameLibrary();
       console.debug('[Background] Fetched user game library');
+      if (userGames.length > 0) {
+        await gameLibraryManager.publishMyGameLibrary();
+        console.debug('[Background] Published user game library to Nostr');
+      }
     } catch (error) {
-      console.warn('[Background] Failed to fetch game library:', error);
+      console.warn('[Background] Failed to fetch/publish game library:', error);
     }
 
     // Initialize metadata fetcher and start background fetcher
@@ -813,88 +817,69 @@ function _startCoWatcherDetectionCycle(): void {
     }
     try {
       const detector = getCoWatcherDetector();
-      const activitySession = await detector.detectCoWatchSession();
-      let persistentSession = await detector.getCurrentCoWatchSession();
+      const userProfile = await storageManager.getUserProfile();
+      const selfUuid = userProfile?.uuid;
 
-      // If no activity match found but session exists, check if it should be cleared
-      // Only clear if BOTH activities are stale (> 10 min) - this means both are idle
-      // If at least one activity is recent, it's divergence (one person switched videos) - keep session
-      if (!activitySession && persistentSession) {
-        const ACTIVITY_FRESHNESS_MS = 10 * 60 * 1000; // 10 minutes
-        const now = Date.now();
-        const userProfile = await storageManager.getUserProfile();
-        const selfUuid = userProfile?.uuid;
-        const allFriends = await getFriendManager().getAllFriends();
-        const friendMap = new Map(allFriends.map(f => [f.uuid, f]));
-
-        let staleCount = 0;
-        for (const memberId of persistentSession.members) {
-          let activity = null;
-          if (memberId === selfUuid) {
-            const myActivities = await storageManager.getMyActivities();
-            activity = Object.values(myActivities || {})[0];
-          } else {
-            const friend = friendMap.get(memberId);
-            activity = friend?.current_activities ? Object.values(friend.current_activities)[0] : null;
-          }
-
-          const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
-          if (!lastMeasuredAt || (now - lastMeasuredAt) >= ACTIVITY_FRESHNESS_MS) {
-            staleCount++;
-          }
-        }
-
-        // Only clear if ALL members are stale (both idle > 10 min)
-        if (staleCount === persistentSession.members.length) {
+      // If user has DND enabled, ensure any persistent co-watch session is cleared immediately
+      if (userProfile?.dnd_enabled) {
+        const currentSession = await detector.getCurrentCoWatchSession();
+        if (currentSession) {
           await storageManager.clearActiveSession();
-          console.log('[Background] Cleared stale session: all members idle > 10 minutes');
-          persistentSession = null;
-        } else {
-          // At least one member has recent activity - this is divergence, keep session
-          console.debug('[Background] Divergence detected: keeping session despite no activity match');
+          console.log('[Background] 🔕 User has DND enabled, cleared persistent co-watch session');
         }
       }
 
-      // Check if session should be purged (active users < 2)
+      const activitySession = await detector.detectCoWatchSession();
+      let persistentSession = await detector.getCurrentCoWatchSession();
+
+      // Check if persistent session should be purged or members filtered
       if (persistentSession && persistentSession.members) {
         const PURGE_AFTER_MS = 10 * 60 * 1000; // 10 minutes
-
-        // Count members with recent activity (not older than PURGE_AFTER_MS)
-        const userProfile = await storageManager.getUserProfile();
-        const selfUuid = userProfile?.uuid;
         const allFriends = await getFriendManager().getAllFriends();
         const friendMap = new Map(allFriends.map(f => [f.uuid, f]));
 
-        let activeCount = 0;
+        const validMembers: string[] = [];
         for (const memberId of persistentSession.members) {
-          let activity = null;
           if (memberId === selfUuid) {
-            // Check self's activity
-            const myActivities = await storageManager.getMyActivities();
-            activity = Object.values(myActivities || {})[0];
+            if (!userProfile?.dnd_enabled) {
+              const myActivities = await storageManager.getMyActivities();
+              const myAct = Object.values(myActivities || {})[0];
+              const lastMeasuredAt = myAct?.metadata?.progress_measured_at || myAct?.timestamp;
+              if (lastMeasuredAt && (Date.now() - lastMeasuredAt) < PURGE_AFTER_MS) {
+                validMembers.push(memberId);
+              }
+            }
           } else {
-            // Check friend's activity
             const friend = friendMap.get(memberId);
-            activity = friend?.current_activities ? Object.values(friend.current_activities)[0] : null;
-          }
-
-          const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
-          if (lastMeasuredAt && (Date.now() - lastMeasuredAt) < PURGE_AFTER_MS) {
-            activeCount++;
+            const isFriendDnd = friend?.dnd || Object.values(friend?.current_activities || {}).some(a => a?.dnd || a?.metadata?.dnd);
+            if (friend && !isFriendDnd && !friend.muted) {
+              const friendAct = friend.current_activities ? Object.values(friend.current_activities)[0] : null;
+              const lastMeasuredAt = friendAct?.metadata?.progress_measured_at || friendAct?.timestamp;
+              if (lastMeasuredAt && (Date.now() - lastMeasuredAt) < PURGE_AFTER_MS) {
+                validMembers.push(memberId);
+              }
+            }
           }
         }
 
-        // Purge session if fewer than 2 active members
-        if (activeCount < 2) {
+        const hasSelf = selfUuid ? validMembers.includes(selfUuid) : false;
+        const hasFriend = validMembers.some(id => id !== selfUuid);
+
+        // Session requires self AND at least one valid non-DND friend
+        if (validMembers.length < 2 || !hasSelf || !hasFriend) {
           await storageManager.clearActiveSession();
-          console.log('[Background] Session purged: only', activeCount, 'active member(s)');
+          console.log('[Background] Session purged: only', validMembers.length, 'valid active non-DND member(s)');
           persistentSession = null;
+        } else if (validMembers.length !== persistentSession.members.length) {
+          persistentSession.members = validMembers;
+          await storageManager.setActiveSession(persistentSession);
+          console.log('[Background] Session members updated:', validMembers);
         }
       }
 
       // If session was just cleared, notify content scripts to hide overlay
       if (!activitySession && !persistentSession && callCount > 1) {
-        // Session cleared (either stale or purged) - send final update to close overlay
+        // Session cleared (either stale, DND, or purged) - send final update to close overlay
         console.log('[Background] Broadcasting session cleared to close overlays');
         for (const tabId of activeContentScriptPorts.keys()) {
           try {
@@ -912,6 +897,7 @@ function _startCoWatcherDetectionCycle(): void {
                   co_watcher_activities: {},
                 },
               });
+              port.postMessage({ type: 'SESSION_ENDED' });
             }
           } catch (e) {
             console.debug(`[Background] Failed to send session-cleared update to tab ${tabId}:`, e);
@@ -1481,6 +1467,15 @@ chrome.runtime.onConnect.addListener((port) => {
               await initializeExtension();
             }
             const detector = getCoWatcherDetector();
+            const userProfile = await storageManager.getUserProfile();
+
+            if (userProfile?.dnd_enabled) {
+              port.postMessage({
+                type: 'OVERLAY_STATE',
+                data: null,
+              });
+              return;
+            }
 
             // Try to read stored session. If none exists, bootstrap by detecting current co-watchers
             let coWatchSession = await detector.getCurrentCoWatchSession();
@@ -1491,6 +1486,24 @@ chrome.runtime.onConnect.addListener((port) => {
               if (activitySession) {
                 await detector.createOrUpdateUserSession(activitySession);
                 coWatchSession = await detector.getCurrentCoWatchSession();
+              }
+            }
+
+            if (coWatchSession) {
+              const allFriends = await friendManager.getAllFriends();
+              const friendMap = new Map(allFriends.map(f => [f.uuid, f]));
+              const nonDndMembers = coWatchSession.members.filter(id => {
+                if (id === userProfile?.uuid) return true;
+                const f = friendMap.get(id);
+                return f && !f.dnd && !f.muted;
+              });
+
+              if (nonDndMembers.length < 2) {
+                await storageManager.clearActiveSession();
+                coWatchSession = null;
+              } else if (nonDndMembers.length !== coWatchSession.members.length) {
+                coWatchSession.members = nonDndMembers;
+                await storageManager.setActiveSession(coWatchSession);
               }
             }
 
@@ -1507,7 +1520,6 @@ chrome.runtime.onConnect.addListener((port) => {
 
             // Get co-watcher data (same as CO_WATCH_UPDATE builds)
             const friendManager = getFriendManager();
-            const userProfile = await storageManager.getUserProfile();
 
             // Build overlay state (parallel to CO_WATCH_UPDATE logic)
             let hostName = '';
@@ -2148,14 +2160,17 @@ async function _getAllActivities(): Promise<ExtensionResponse> {
     const friendManager = getFriendManager();
     const friends = await friendManager.getAllFriends();
 
-    // Build unified response: { myActivities: {...}, friends: [{uuid, local_name, current_activities, state, initiated_by_me}, ...] }
+    // Build unified response: { myActivities: {...}, friends: [{uuid, local_name, current_activities, state, dnd, muted, initiated_by_me}, ...] }
     const friendsData = friends.map((friend) => ({
       uuid: friend.uuid,
       local_name: friend.local_name,
       current_activities: friend.current_activities || {},
       state: friend.state,
+      dnd: friend.dnd ?? false,
+      muted: friend.muted ?? false,
       initiated_by_me: friend.initiated_by_me,
       pubkey: friend.pubkey,
+      last_seen: friend.last_seen,
     }));
 
     return {
@@ -2517,8 +2532,9 @@ async function _setDndMode(enabled?: boolean): Promise<ExtensionResponse> {
 
     // Trigger immediate activity publish so relays and friends get the updated DND state
     try {
-      const publisher = getActivityPublisher();
-      await publisher.publishActivities();
+      if (activityPublisher) {
+        await activityPublisher.publishActivityIfAllowed();
+      }
     } catch (e) {
       console.debug('[Background] Failed to publish activity on DND change:', e);
     }
@@ -2589,6 +2605,13 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
     if (data.publisher_config?.rate_ms !== undefined && publishQueue) {
       publishQueue.setPublishInterval(data.publisher_config.rate_ms);
       console.log(`[Background] Updated publish queue rate to ${data.publisher_config.rate_ms}ms`);
+    }
+
+    // If Steam configuration changed and is valid, refresh and publish game library
+    if ((data.steam_id !== undefined || data.steam_api_key !== undefined) && profile.steam_config?.steam_id && profile.steam_config?.api_key) {
+      _refreshGameLibrary().catch((error) => {
+        console.warn('[Background] Failed to refresh game library after Steam settings change:', error);
+      });
     }
 
     // If nickname or discord info changed, republish profile to Nostr
@@ -3262,13 +3285,58 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       }
 
       console.debug(`[Background] 📦 Storing activities for ${friend.local_name}: ${Object.keys(newCurrentActivities).join(', ')}`);
-      const isFriendDnd = activities.some(a => a.dnd || a.metadata?.dnd);
+      const isFriendDnd = event.tags.some(t => t[0] === 'dnd' && t[1] === 'true') || activities.some(a => a.dnd || a.metadata?.dnd);
+
+      // Ensure each activity stored has the dnd flag set consistently
+      for (const [service, act] of Object.entries(newCurrentActivities)) {
+        if (act) {
+          act.dnd = isFriendDnd;
+          if (act.metadata) {
+            act.metadata.dnd = isFriendDnd;
+          }
+        }
+      }
+
       await storageManager.updateFriend(friend.uuid, {
         current_activities: newCurrentActivities,
         dnd: isFriendDnd,
         last_seen: Date.now(),
       });
       console.log(`[Background] ✅ Stored ${Object.keys(newCurrentActivities).length} activities for ${friend.local_name} (DND: ${isFriendDnd})`);
+
+      // If friend is in DND mode, check if they were in an active co-watch session and remove or purge
+      if (isFriendDnd) {
+        const activeSession = await storageManager.getActiveSession();
+        if (activeSession && activeSession.members.includes(friend.uuid)) {
+          const remaining = activeSession.members.filter(id => id !== friend.uuid);
+          const userProf = await storageManager.getUserProfile();
+          const selfId = userProf?.uuid;
+          if (remaining.length < 2 || (selfId && !remaining.includes(selfId))) {
+            await storageManager.clearActiveSession();
+            console.log(`[Background] Cleared active session because member ${friend.local_name} is in DND`);
+            for (const [, port] of activeContentScriptPorts) {
+              try {
+                port.postMessage({
+                  type: 'CO_WATCH_UPDATE',
+                  data: {
+                    session_members: [],
+                    watching_together: [],
+                    messages: [],
+                    host_nickname: undefined,
+                    is_user_host: false,
+                    user_nickname: '',
+                    co_watcher_activities: {},
+                  },
+                });
+                port.postMessage({ type: 'SESSION_ENDED' });
+              } catch (e) {}
+            }
+          } else {
+            activeSession.members = remaining;
+            await storageManager.setActiveSession(activeSession);
+          }
+        }
+      }
 
       // Record processing success for each activity
       for (const activity of activities) {
@@ -3292,7 +3360,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       }
 
       // Send notification if friend came online (transition from no activities to some)
-      if (!wasActive && activities.length > 0) {
+      if (!wasActive && activities.length > 0 && !isFriendDnd) {
         try {
           const notificationManager = getNotificationManager();
           await notificationManager.notifyFriendOnline(friend.uuid, friend.local_name, activities[0].content);
@@ -3301,16 +3369,14 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         }
       }
 
-      // Only notify popup if something actually changed
-      if (changedServices.size > 0) {
-        try {
-          await chrome.runtime.sendMessage({
-            type: 'FRIEND_ACTIVITY_CHANGED',
-            data: { friendId: friend.uuid, changedServices: Array.from(changedServices) },
-          });
-        } catch (error) {
-          // Popup not open
-        }
+      // Notify popup of friend activity / DND change
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'FRIEND_ACTIVITY_CHANGED',
+          data: { friendId: friend.uuid, changedServices: Array.from(changedServices), dnd: isFriendDnd },
+        });
+      } catch (error) {
+        // Popup not open
       }
       return;
     } catch (error) {
@@ -3888,12 +3954,18 @@ async function _findGamesMissingMetadata(games: any[]): Promise<number[]> {
       {}
     );
 
-    // Find games missing metadata (no entry or missing name)
+    // Find games missing metadata (no entry, missing name, or containing non-English/Russian metadata)
     const missing: number[] = [];
     for (const game of games) {
       const meta = metadataCache[game.appId];
       if (!meta || !meta.name) {
         missing.push(game.appId);
+      } else {
+        const textToCheck = (meta.genres || []).concat(meta.categories || []).concat([meta.name || '']).join(' ');
+        if (/[\u0400-\u04FF]/.test(textToCheck)) {
+          console.debug(`[Background] Game appId ${game.appId} (${meta.name}) has non-English metadata, queuing for re-fetch`);
+          missing.push(game.appId);
+        }
       }
     }
 

@@ -509,7 +509,7 @@ describe('GameLibraryManager', () => {
     });
 
     describe('publishMyGameLibrary', () => {
-      it('should publish game library as Nostr kind 1 event', async () => {
+      it('should publish game library as Nostr kind 10003 event', async () => {
         const now = Date.now();
         const cachedData = {
           ownedGames: [
@@ -527,7 +527,7 @@ describe('GameLibraryManager', () => {
 
         expect(mockRelayPool.publish).toHaveBeenCalledWith(
           expect.objectContaining({
-            kind: 1,
+            kind: 10003,
             pubkey: expect.any(String),
             tags: expect.arrayContaining([
               ['t', 'game-library'],

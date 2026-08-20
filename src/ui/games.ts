@@ -388,7 +388,11 @@ export class GamesTabController {
 
     for (const friend of this.allFriends) {
       try {
-        const friendGames = await this.gameLibraryManager.getFriendGameLibrary(friend.pubkey);
+        const identifier = friend.pubkey || friend.uuid;
+        let friendGames = await this.gameLibraryManager.getFriendGameLibrary(identifier);
+        if (!friendGames && friend.uuid && friend.uuid !== identifier) {
+          friendGames = await this.gameLibraryManager.getFriendGameLibrary(friend.uuid);
+        }
         if (friendGames && friendGames.some((game) => game.appId === appId)) {
           friendNames.push(friend.local_name);
         }
