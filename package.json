@@ -1,6 +1,7 @@
 {
   "name": "hang-time",
   "version": "0.1.0",
+  "type": "module",
   "description": "Decentralized browser extension for co-consuming content with friends via Nostr",
   "scripts": {
     "build": "node scripts/build.js chrome",
@@ -9,6 +10,8 @@
     "build:all": "npm run build:chrome && npm run build:firefox",
     "test": "vitest",
     "test:run": "vitest run",
+    "dev:dual": "node scripts/launch-dual-edge.js",
+    "debug:inspect": "node scripts/inspect-browsers.js",
     "zip": "npm run build:all && node scripts/create-zip.js"
   },
   "keywords": [
