@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Hang Time - Background Service Worker
  * Main orchestration center for the extension
  * Handles: lifecycle, message routing, activity detection, Nostr subscriptions
@@ -1202,7 +1202,7 @@ function _startCoWatcherDetectionCycle(): void {
             }
 
             // Build co-watcher activities map for divergence display (includes self + others)
-            const coWatcherActivities: Record<string, {activity_id: string; content: string; service?: string; freshness_timestamp?: number; timestamp?: number; metadata?: any}> = {};
+            const coWatcherActivities: Record<string, {activity_id: string; content: string; url?: string; service?: string; freshness_timestamp?: number; timestamp?: number; metadata?: any}> = {};
 
             // Add self's current activity (needed for divergence display with actual content)
             console.log('[Background] [GET_OVERLAY_STATE] selfUuid:', selfUuid);
@@ -1216,6 +1216,7 @@ function _startCoWatcherDetectionCycle(): void {
                 coWatcherActivities[selfUuid] = {
                   activity_id: userCurrentActivity.id || '',
                   content: userCurrentActivity.content || videoTitle || '',
+                  url: userCurrentActivity.url,
                   service: userCurrentActivity.service || '',
                   freshness_timestamp: userCurrentActivity.freshness_timestamp || Date.now(),
                   timestamp: userCurrentActivity.timestamp,
@@ -1254,6 +1255,7 @@ function _startCoWatcherDetectionCycle(): void {
                     coWatcherActivities[coWatcherId] = {
                       activity_id: friendActivity.id || '',
                       content: friendActivity.content || '',
+                      url: friendActivity.url,
                       service: friendActivity.service || '',
                       freshness_timestamp: friendActivity.freshness_timestamp || Date.now(),
                       timestamp: friendActivity.timestamp,
@@ -1601,7 +1603,7 @@ chrome.runtime.onConnect.addListener((port) => {
             }
 
             // Build co-watcher activities map for divergence display (includes self + others)
-            const coWatcherActivities: Record<string, {activity_id: string; content: string; service?: string; freshness_timestamp?: number; timestamp?: number; metadata?: any}> = {};
+            const coWatcherActivities: Record<string, {activity_id: string; content: string; url?: string; service?: string; freshness_timestamp?: number; timestamp?: number; metadata?: any}> = {};
 
             // Add self's activity (needed when user is host, so host title can be shown)
             if (userProfile?.uuid) {
@@ -1612,6 +1614,7 @@ chrome.runtime.onConnect.addListener((port) => {
                 coWatcherActivities[userProfile.uuid] = {
                   activity_id: userActivity.id || '',
                   content: userActivity.content || '',
+                  url: userActivity.url,
                   service: userActivity.service || '',
                   freshness_timestamp: userActivity.freshness_timestamp || Date.now(),
                   timestamp: userActivity.timestamp,
@@ -1632,6 +1635,7 @@ chrome.runtime.onConnect.addListener((port) => {
                     coWatcherActivities[coWatcherId] = {
                       activity_id: friendActivity.id || '',
                       content: friendActivity.content || '',
+                      url: friendActivity.url,
                       service: friendActivity.service || '',
                       freshness_timestamp: friendActivity.freshness_timestamp || Date.now(),
                       timestamp: friendActivity.timestamp,
@@ -1765,6 +1769,38 @@ chrome.runtime.onConnect.addListener((port) => {
             }
           } catch (e) {
             console.error('[Background] Failed to leave session:', e);
+          }
+        } else if (message.type === 'JOIN_GUEST_ACTIVITY') {
+          try {
+            const { guest_uuid, activity_id, url } = message.data || {};
+            console.log('[Background] Received JOIN_GUEST_ACTIVITY:', { guest_uuid, activity_id, url, tabId });
+
+            let targetUrl = url;
+
+            // Fallback: If url was not provided in message payload, look it up from friend's activities
+            if (!targetUrl && guest_uuid) {
+              const friend = await getFriendManager().getFriend(guest_uuid);
+              if (friend?.current_activities) {
+                const friendActivity = Object.values(friend.current_activities).find(a => !activity_id || a?.id === activity_id) || Object.values(friend.current_activities)[0];
+                targetUrl = friendActivity?.url;
+              }
+            }
+
+            if (targetUrl) {
+              if (tabId !== undefined && tabId !== -1) {
+                // Navigate current tab to the guest's activity URL
+                await chrome.tabs.update(tabId, { url: targetUrl });
+                console.log(`[Background] Navigated tab ${tabId} to ${targetUrl}`);
+              } else {
+                // Fallback: create new tab if tabId not available
+                await chrome.tabs.create({ url: targetUrl, active: true });
+                console.log(`[Background] Opened new tab for ${targetUrl}`);
+              }
+            } else {
+              console.warn('[Background] Cannot join guest activity: no URL found', { guest_uuid, activity_id });
+            }
+          } catch (e) {
+            console.error('[Background] Failed to handle JOIN_GUEST_ACTIVITY:', e);
           }
         } else if (message.type === 'CONTENT_SCRIPT_ACTIVITY') {
           await _handleContentScriptActivity(message.data?.key, message.data?.value, tabId);

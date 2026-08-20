@@ -28,8 +28,7 @@ export interface OverlayState {
   guest_progress_timestamp?: number; // when guest progress was last updated
   activity_id?: string; // current/host's activity_id
   is_user_host?: boolean; // true if the user is the host
-  user_nickname?: string; // current user's nickname for sending messages
-  co_watcher_activities?: Record<string, {activity_id: string; content: string; favicon?: string}>; // UUID -> current activity for divergence display
+  co_watcher_activities?: Record<string, {activity_id: string; content: string; url?: string; service?: string; favicon?: string; freshness_timestamp?: number; timestamp?: number; metadata?: any}>; // UUID -> current activity for divergence display
 }
 
 export class OverlayUI {
@@ -926,14 +925,13 @@ export class OverlayUI {
 
     console.log('[OverlayUI] User clicked join for guest:', friendUuid, 'activity:', guestActivity.activity_id);
 
-    // Send message to content script to navigate to guest's video
-    // Content script will handle opening the URL
+    // Send message to background to navigate to guest's video
     this.port.postMessage({
       type: 'JOIN_GUEST_ACTIVITY',
       data: {
         guest_uuid: friendUuid,
         activity_id: guestActivity.activity_id,
-        url: guestActivity.content, // This might be title, not URL - backend will need to provide URL
+        url: guestActivity.url,
       }
     });
   }

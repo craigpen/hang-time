@@ -636,20 +636,25 @@ export class StorageManager {
    */
   async getVisibleMessages(myUUID: string, coWatchers: string[]): Promise<Message[]> {
     const allMessages = await this.getAllMessages();
-    const coWatcherSet = new Set(coWatchers);
+    const otherMemberSet = new Set(coWatchers.filter(id => id !== myUUID));
 
     return allMessages.filter(m => {
-      // Check if current user is involved (sender or recipient)
-      const isFromMe = m.from === myUUID;
-      const isToMe = m.recipients?.includes(myUUID) ?? false;
-      const userInvolved = isFromMe || isToMe;
+      // New model (from / recipients)
+      if (m.from) {
+        if (m.from === myUUID) {
+          return (m.recipients || []).some(r => otherMemberSet.has(r));
+        } else if (m.recipients?.includes(myUUID)) {
+          return otherMemberSet.has(m.from);
+        }
+        return false;
+      }
 
-      // Check if message involves a co-watcher
-      const senderIsCoWatcher = coWatcherSet.has(m.from || '');
-      const anyRecipientIsCoWatcher = (m.recipients || []).some(r => coWatcherSet.has(r));
-      const messageInvolvesCowatcher = senderIsCoWatcher || anyRecipientIsCoWatcher;
+      // Legacy model fallback (friend_uuid)
+      if (m.friend_uuid) {
+        return otherMemberSet.has(m.friend_uuid);
+      }
 
-      return userInvolved && messageInvolvesCowatcher;
+      return false;
     });
   }
 
@@ -658,7 +663,7 @@ export class StorageManager {
   // ============================================================================
 
   async getActiveSession(): Promise<CoWatchSession | null> {
-    const session = this.get<any>(STORAGE_KEYS.ACTIVE_SESSION, null);
+    const session = await this.get<any>(STORAGE_KEYS.ACTIVE_SESSION, null);
     if (!session) return null;
 
     // Migrate old co_watchers field to members
