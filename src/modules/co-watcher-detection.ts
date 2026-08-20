@@ -41,6 +41,12 @@ export class CoWatcherDetector {
       }
       const selfUuid = userProfile.uuid;
 
+      // If user has DND enabled, skip co-watch detection entirely
+      if (userProfile.dnd_enabled) {
+        console.debug('[CoWatcher] User has DND enabled, skipping co-watch detection');
+        return null;
+      }
+
       // Get all user activities (not just current)
       const myActivities = await this.storage.getMyActivities();
       if (!myActivities || Object.keys(myActivities).length === 0) {
@@ -57,7 +63,7 @@ export class CoWatcherDetector {
       console.log(`[CoWatcher] [MESSAGE_FLOW] Detecting: ${Object.keys(myActivities).length} user activities, ${friends.length} friends`);
       for (const friend of friends) {
         const actCount = friend.current_activities ? Object.keys(friend.current_activities).length : 0;
-        console.log(`[CoWatcher] [MESSAGE_FLOW]   Friend ${friend.local_name} (${friend.uuid}): ${actCount} activities`);
+        console.log(`[CoWatcher] [MESSAGE_FLOW]   Friend ${friend.local_name} (${friend.uuid}): ${actCount} activities (DND: ${friend.dnd ?? false})`);
         if (friend.current_activities) {
           for (const act of Object.values(friend.current_activities)) {
             console.log(`[CoWatcher] [MESSAGE_FLOW]     - ${act?.service} (${act?.id})`);
@@ -73,9 +79,11 @@ export class CoWatcherDetector {
         if (!userActivity?.id) continue;
 
         for (const friend of friends) {
-          if (!friend.current_activities) continue;
+          if (!friend.current_activities || friend.dnd || friend.muted) continue;
 
           for (const friendActivity of Object.values(friend.current_activities)) {
+            if (friendActivity?.dnd || friendActivity?.metadata?.dnd) continue;
+
             if (friendActivity?.id === userActivity.id) {
               console.log(`[CoWatcher] [MESSAGE_FLOW] ✅ Match found: ${userActivity.service} (${userActivity.id}) with ${friend.local_name}`);
               matchedActivityId = userActivity.id;
@@ -114,12 +122,13 @@ export class CoWatcherDetector {
       ];
 
       for (const friend of friends) {
-        if (!friend.current_activities) {
-          console.log(`[CoWatcher] [MESSAGE_FLOW] Friend ${friend.local_name} (${friend.uuid}) has no current_activities`);
+        if (!friend.current_activities || friend.dnd || friend.muted) {
           continue;
         }
 
         for (const activity of Object.values(friend.current_activities)) {
+          if (activity?.dnd || activity?.metadata?.dnd) continue;
+
           if (activity?.id === matchedActivityId) {
             if (activity.contentTimestamp) {
               coWatchers.push({

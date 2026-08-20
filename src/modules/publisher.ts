@@ -215,8 +215,8 @@ export class ActivityPublisher {
 
   private async _publishBundledActivities(activities: Activity[], mode: 'changed' | 'all' | 'compressed', config?: any): Promise<void> {
     try {
-      const pubkey = await this.identityManager.getPubkey();
-      console.debug(`[Publisher] 📝 Publishing activities with pubkey: ${pubkey}`);
+      const profile = await this.storageManager.getUserProfile();
+      const isDnd = profile?.dnd_enabled ?? false;
       const created_at = Math.floor(Date.now() / 1000);
       const kind = 10003; // Replaceable: only latest activity snapshot stored
 
@@ -228,13 +228,17 @@ export class ActivityPublisher {
         ['count', activities.length.toString()],
       ];
 
+      if (isDnd) {
+        tags.push(['dnd', 'true']);
+      }
+
       // Add service tags for each activity
       for (const activity of activities) {
         tags.push(['service', activity.service]);
       }
 
       // Serialize activities as JSON array with minimized payload (only published fields)
-      const publishableActivities = activities.map(a => this._toPublishableActivity(a));
+      const publishableActivities = activities.map(a => this._toPublishableActivity(a, isDnd));
       let content = JSON.stringify(publishableActivities);
 
       // Apply gzip compression if low_bandwidth_mode is enabled
@@ -390,7 +394,7 @@ export class ActivityPublisher {
     }
   }
 
-  private _toPublishableActivity(activity: Activity): any {
+  private _toPublishableActivity(activity: Activity, isDnd?: boolean): any {
     // Only publish fields needed by receivers
     // Normalize disconnected state to 'paused' for publishing (internal state not shared with friends)
     const publishState = activity.state === 'disconnected' ? 'paused' : activity.state;
@@ -405,12 +409,14 @@ export class ActivityPublisher {
       state: publishState,
       timestamp: activity.timestamp,
       contentTimestamp: activity.contentTimestamp, // Immutable start-watching time for reliable host determination
+      dnd: isDnd,
       metadata: activity.metadata ? {
         progress: activity.metadata.progress,
         duration: activity.metadata.duration,
+        dnd: isDnd,
         // Optionally add artist for Spotify when API is implemented
         // artist: activity.metadata.artist,
-      } : undefined,
+      } : (isDnd ? { dnd: true } : undefined),
     };
   }
 }

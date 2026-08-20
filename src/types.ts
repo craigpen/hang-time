@@ -49,6 +49,7 @@ export interface UserProfile {
     new_message: boolean;
     join_suggestion: boolean;
   };
+  dnd_enabled?: boolean; // Do Not Disturb / Solo mode (bypasses co-watching and alerts)
   publisher_config?: {
     enabled: boolean; // Global publishing on/off
     rate_ms: number; // Publishing interval in milliseconds (default 12000)
@@ -130,6 +131,7 @@ export interface Friend {
   state: 'pending' | 'active'; // pending = invite sent, awaiting accept; active = mutual friends
   initiated_by_me?: boolean; // true if we sent the friend request, false if they sent it, undefined for active friends
   discord_info?: string; // Discord server invite link for coordination
+  dnd?: boolean; // True if friend is currently in Do Not Disturb / Solo mode
 }
 
 export interface FriendList extends Array<Friend> {}
@@ -162,6 +164,7 @@ export interface Activity {
   freshness_timestamp: number; // When activity data was last refreshed (for staleness checks in overlay show logic)
   contentTimestamp?: number; // When content actually started being watched (immutable, set once per activity, used for host determination)
   is_fresh?: boolean; // Whether data came from responsive content script (true) or stored/stale data (false)
+  dnd?: boolean; // Whether the user/friend who published this activity was in DND mode
   provenance?: 'LOCAL_TAB' | 'LOCAL_STEAM' | 'LOCAL_SPOTIFY' | 'LOCAL_TWITCH' | 'FRIEND' | 'TEST'; // Source of activity: user's tab, Steam/Spotify/Twitch API, friend's data, or test
   metadata: {
     lastAccessed?: number; // Browser tab's lastAccessed time (for sorting order on remote side)
@@ -174,6 +177,7 @@ export interface Activity {
     appid?: number; // Steam app ID for steam-api service
     disconnected_reason?: string; // Reason why content script disconnected (for state === 'disconnected')
     favicon?: string; // Dynamic favicon URL from content script
+    dnd?: boolean; // DND flag in metadata
   };
 }
 

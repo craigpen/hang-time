@@ -818,6 +818,15 @@ export class PopupController {
     }
     row.appendChild(contentText);
 
+    const isDnd = activity.dnd || activity.metadata?.dnd;
+    if (isDnd) {
+      const dndBadge = document.createElement('span');
+      dndBadge.className = 'activity-dnd-badge';
+      dndBadge.textContent = '⛔ DND';
+      dndBadge.title = 'Friend is in Do Not Disturb / Solo Mode';
+      row.appendChild(dndBadge);
+    }
+
     // Action buttons container
     const buttonsDiv = document.createElement('div');
     buttonsDiv.className = 'activity-actions';
@@ -828,6 +837,7 @@ export class PopupController {
       console.log('[Popup] Rendering friend activity:', {
         service: activity.service,
         activityId: activity.id,
+        isDnd,
         hasPendingInvite,
         pendingInviteMap: Array.from(this.pendingInvitesByActivity.keys()),
         mapSize: this.pendingInvitesByActivity.size,
@@ -846,6 +856,11 @@ export class PopupController {
       </svg>`;
       firstBtn.style.color = '#999';
       firstBtn.title = 'Invite friends';
+    } else if (isDnd) {
+      firstBtn.textContent = '⛔';
+      firstBtn.title = 'Friend is in Do Not Disturb mode (Solo Mode)';
+      firstBtn.style.opacity = '0.4';
+      firstBtn.style.cursor = 'not-allowed';
     } else if (hasPendingInvite) {
       // Bold green envelope for accepting invite
       firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
@@ -866,6 +881,7 @@ export class PopupController {
         service: activity.service,
         activityId: activity.id,
         isSelfActivity,
+        isDnd,
         hasPendingInvite,
         currentHasPending,
         mapKeys: Array.from(this.pendingInvitesByActivity.keys()),
@@ -873,6 +889,8 @@ export class PopupController {
 
       if (isSelfActivity) {
         this._inviteToActivity(activity);
+      } else if (isDnd) {
+        toastManager.show('Friend is in Do Not Disturb mode (Solo Mode)');
       } else if (currentHasPending) {
         console.debug('[Popup] Showing accept invite modal for:', friendId);
         // Use current activity (not stored invite) - stored activity may be stale placeholder from when invite arrived
@@ -1534,13 +1552,18 @@ export class PopupController {
       // Collect keys that changed
       const changedKeys = Object.keys(changes);
       const keysToRefresh = changedKeys.filter(key =>
-        key === STORAGE_KEYS.MY_ACTIVITIES || key === STORAGE_KEYS.RECEIVED_INVITES
+        key === STORAGE_KEYS.MY_ACTIVITIES || key === STORAGE_KEYS.RECEIVED_INVITES || key === STORAGE_KEYS.USER_PROFILE
       );
 
       // Refresh changed keys from storage into cache (keeps cache in sync with background)
       if (keysToRefresh.length > 0) {
         console.debug('[Popup] Storage changed, refreshing cache for keys:', keysToRefresh);
         this.storage.refreshKeysFromStorage(keysToRefresh).then(() => {
+          if (changedKeys.includes(STORAGE_KEYS.USER_PROFILE)) {
+            this._updateDndButtonDisplay().catch((error) => {
+              console.error('[Popup] Failed to refresh DND display:', error);
+            });
+          }
           // Reload affected data
           if (changedKeys.includes(STORAGE_KEYS.MY_ACTIVITIES)) {
             this._loadMyActivity().catch((error) => {
@@ -1563,7 +1586,59 @@ export class PopupController {
     });
   }
 
+  private async _updateDndButtonDisplay(btn?: HTMLElement | null, isDnd?: boolean): Promise<void> {
+    const button = btn || document.getElementById('dnd-toggle-btn');
+    if (!button) return;
+
+    if (isDnd === undefined) {
+      const profile = await this.storage.getUserProfile();
+      isDnd = profile?.dnd_enabled ?? false;
+    }
+
+    if (isDnd) {
+      button.textContent = '⛔';
+      button.title = 'Do Not Disturb: ON (Solo Mode - Click to make available)';
+      button.classList.add('dnd-active');
+    } else {
+      button.textContent = '🟢';
+      button.title = 'Do Not Disturb: OFF (Available - Click for DND/Solo)';
+      button.classList.remove('dnd-active');
+    }
+  }
+
   private _setupEventListeners(): void {
+    // DND toggle button
+    const dndToggleBtn = document.getElementById('dnd-toggle-btn');
+    if (dndToggleBtn) {
+      this._updateDndButtonDisplay(dndToggleBtn);
+
+      dndToggleBtn.addEventListener('click', async () => {
+        try {
+          const currentProfile = await this.storage.getUserProfile();
+          const newDnd = !(currentProfile?.dnd_enabled ?? false);
+
+          await chrome.runtime.sendMessage({
+            type: 'SET_DND_MODE',
+            data: { enabled: newDnd },
+          });
+
+          await this.storage.setDndMode(newDnd);
+          this._updateDndButtonDisplay(dndToggleBtn, newDnd);
+
+          if (newDnd) {
+            toastManager.show('⛔ Do Not Disturb enabled (Solo Mode)');
+          } else {
+            toastManager.show('🟢 Available (Co-watching enabled)');
+          }
+
+          await this.refreshFriends();
+        } catch (error) {
+          console.error('[Popup] Failed to toggle DND mode:', error);
+          this._showError('Failed to toggle DND mode');
+        }
+      });
+    }
+
     // Manual refresh button (both header and settings panel use same function)
     const refreshBtn = document.getElementById('refresh-friends-btn');
     if (refreshBtn) {
@@ -2598,7 +2673,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       }
 
       const friends = (friendsResponse.data.friends || []) as Friend[];
-      const activeFriends = friends.filter((f) => Object.keys(f.current_activities || {}).length > 0);
+      const activeFriends = friends.filter((f) => !f.dnd && Object.keys(f.current_activities || {}).length > 0);
 
       if (activeFriends.length === 0) {
         this._showError('No active friends to invite');

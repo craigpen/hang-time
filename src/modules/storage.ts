@@ -431,6 +431,15 @@ export class StorageManager {
     await this.update(STORAGE_KEYS.USER_PROFILE, updates);
   }
 
+  async getDndMode(): Promise<boolean> {
+    const profile = await this.getUserProfile();
+    return profile?.dnd_enabled ?? false;
+  }
+
+  async setDndMode(enabled: boolean): Promise<void> {
+    await this.updateUserProfile({ dnd_enabled: enabled });
+  }
+
   // ============================================================================
   // FRIENDS
   // ============================================================================

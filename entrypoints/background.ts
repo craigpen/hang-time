@@ -2006,6 +2006,12 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'MUTE_FRIEND':
       return _muteFriend(message.data?.friendId, message.data?.mute);
 
+    case 'GET_DND_MODE':
+      return _getDndMode();
+
+    case 'SET_DND_MODE':
+      return _setDndMode(message.data?.enabled);
+
     case 'GET_OAUTH_STATUS':
       return _getOAuthStatus(message.data?.service);
 
@@ -2474,6 +2480,53 @@ async function _muteFriend(friendId?: string, mute?: boolean): Promise<Extension
     return { success: true };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to mute/unmute friend' };
+  }
+}
+
+async function _getDndMode(): Promise<ExtensionResponse> {
+  try {
+    const enabled = await storageManager.getDndMode();
+    return { success: true, data: { enabled } };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get DND mode' };
+  }
+}
+
+async function _setDndMode(enabled?: boolean): Promise<ExtensionResponse> {
+  if (enabled === undefined || typeof enabled !== 'boolean') {
+    return { success: false, error: 'enabled (boolean) required' };
+  }
+
+  try {
+    await storageManager.setDndMode(enabled);
+    console.log(`[Background] 🔕 DND mode set to: ${enabled}`);
+
+    if (enabled) {
+      // Clear active co-watch session and notify all content scripts to close overlays
+      await storageManager.clearActiveSession();
+      for (const [, port] of activeContentScriptPorts) {
+        try {
+          port.postMessage({
+            type: 'SESSION_ENDED',
+          });
+        } catch (e) {
+          console.warn('[Background] Failed to notify content script of session end on DND:', e);
+        }
+      }
+    }
+
+    // Trigger immediate activity publish so relays and friends get the updated DND state
+    try {
+      const publisher = getActivityPublisher();
+      await publisher.publishActivities();
+    } catch (e) {
+      console.debug('[Background] Failed to publish activity on DND change:', e);
+    }
+
+    return { success: true, data: { enabled } };
+  } catch (error) {
+    console.error('[Background] Failed to set DND mode:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to set DND mode' };
   }
 }
 
@@ -3209,11 +3262,13 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       }
 
       console.debug(`[Background] 📦 Storing activities for ${friend.local_name}: ${Object.keys(newCurrentActivities).join(', ')}`);
+      const isFriendDnd = activities.some(a => a.dnd || a.metadata?.dnd);
       await storageManager.updateFriend(friend.uuid, {
         current_activities: newCurrentActivities,
+        dnd: isFriendDnd,
         last_seen: Date.now(),
       });
-      console.log(`[Background] ✅ Stored ${Object.keys(newCurrentActivities).length} activities for ${friend.local_name}`);
+      console.log(`[Background] ✅ Stored ${Object.keys(newCurrentActivities).length} activities for ${friend.local_name} (DND: ${isFriendDnd})`);
 
       // Record processing success for each activity
       for (const activity of activities) {
