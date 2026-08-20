@@ -3,7 +3,7 @@
  * Main extension popup showing active friends
  */
 
-import { Friend, Activity, ExtensionResponse, STORAGE_KEYS, DEFAULT_RELAY_URLS } from '../types';
+import { Friend, Activity, STORAGE_KEYS, DEFAULT_RELAY_URLS } from '../types';
 import { StorageManager } from '../modules/storage';
 import { GameLibraryManager } from '../modules/game-library';
 import { MetadataFetcher } from '../modules/metadata-fetcher';

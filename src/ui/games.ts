@@ -34,7 +34,6 @@ export class GamesTabController {
   private currentSort: GamesUIState['sortBy'] = 'recent';
   private allFriends: Friend[] = [];
   private allGameMetadata: Map<number, GameMetadata> = new Map();
-  private loading: boolean = false;
 
   constructor(
     popupElement: HTMLElement | null,
@@ -659,7 +658,7 @@ export class GamesTabController {
       '"': '&quot;',
       "'": '&#039;',
     };
-    return text.replace(/[&<>"']/g, (char) => map[char]);
+    return text.replace(/[&<>"']/g, (char) => map[char] || char);
   }
 
   /**

@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GameLibraryManager, initializeGameLibraryManager } from '../game-library';
-import { STORAGE_KEYS, OwnedGame, NostrEvent } from '../../types';
+import { STORAGE_KEYS } from '../../types';
 
 describe('GameLibraryManager', () => {
   let gameLibraryManager: GameLibraryManager;

@@ -3,7 +3,7 @@
  * Consolidates invite modal logic used by both friend panel and discovery tab
  */
 
-import { Activity, Friend } from '../types';
+import { Friend } from '../types';
 
 export interface InviteModalOptions {
   title: string; // e.g., "Factorio" or "The Office"

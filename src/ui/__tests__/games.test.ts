@@ -4,10 +4,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GamesTabController } from '../games';
-import { GameLibraryManager } from '../../modules/game-library';
-import { MetadataFetcher } from '../../modules/metadata-fetcher';
-import { StorageManager } from '../../modules/storage';
-import { OwnedGame, GameMetadata, Friend, UserProfile } from '../../types';
 
 // Mock the modules
 vi.mock('../../modules/game-library');
