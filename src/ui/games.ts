@@ -34,6 +34,7 @@ export class GamesTabController {
   private currentSort: GamesUIState['sortBy'] = 'recent';
   private allFriends: Friend[] = [];
   private allGameMetadata: Map<number, GameMetadata> = new Map();
+  private loading: boolean = false;
 
   constructor(
     popupElement: HTMLElement | null,
@@ -45,6 +46,13 @@ export class GamesTabController {
     this.gameLibraryManager = gameLibraryManager;
     this.metadataFetcher = metadataFetcher;
     this.storage = storage;
+  }
+
+  /**
+   * Check if games tab is currently loading
+   */
+  isLoading(): boolean {
+    return this.loading;
   }
 
   /**

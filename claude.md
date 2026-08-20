@@ -36,8 +36,8 @@ To prevent amnesia, skipped tests, and lost context:
 3. **[Verify]**: Run verification commands in terminal before presenting code as complete:
    * Build check: `cmd /c node scripts/build.js chrome` (and `firefox`)
    * Test suite: `cmd /c npm run test:run` (or targeted `cmd /c npx vitest run <path>`)
-4. **[Commit]**: Create an atomic git commit with a clear, descriptive message upon passing verification.
-5. **[Sync]**: Update `ACTIVE_TASK.md` checklist and push branch periodically.
+4. **[Commit & Push]**: ALWAYS create an atomic git commit with a clear, descriptive message upon passing verification, and push to the remote branch with each set of changes.
+5. **[Sync]**: Update `ACTIVE_TASK.md` checklist.
 
 ---
 
