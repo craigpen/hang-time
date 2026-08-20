@@ -134,18 +134,20 @@ export class OverlayUI {
           flex-direction: column;
           overflow: hidden;
           transition: opacity 0.2s ease;
-          opacity: 0.8;
+          opacity: var(--overlay-opacity, 0.8);
           pointer-events: auto;
         }
 
         #hang-time-overlay.hidden {
-          opacity: 0;
-          pointer-events: auto;
+          opacity: 0 !important;
+          pointer-events: none !important;
+          visibility: hidden !important;
         }
 
         #hang-time-overlay.fading-out {
-          transition: opacity 3s ease-out;
-          opacity: 0;
+          transition: opacity 3s ease-out !important;
+          opacity: 0 !important;
+          pointer-events: auto;
         }
 
         #resize-handle {
@@ -673,12 +675,9 @@ export class OverlayUI {
    */
   private updateOpacity(): void {
     if (!this.container) return;
-    // Don't apply opacity if overlay is hidden - let CSS hide rule take precedence
-    if (this.container.classList.contains('hidden')) {
-      return;
-    }
     const opacity = this._state.opacity / 100;
-    this.container.style.opacity = opacity.toString();
+    this.container.style.setProperty('--overlay-opacity', opacity.toString());
+    this.container.style.opacity = '';
   }
 
   /**
@@ -702,7 +701,9 @@ export class OverlayUI {
 
         // Only show on hover if there's an active co-watch session (2+ members)
         if (isOverlay && this._state.session_members?.length >= 2) {
-          this.show();
+          if (this.container.classList.contains('hidden') || this.container.classList.contains('fading-out')) {
+            this.show();
+          }
         }
       };
       document.addEventListener('mousemove', this.initialMouseMoveListener);
@@ -715,10 +716,6 @@ export class OverlayUI {
       if (!this.container) return;
 
       this.container.addEventListener('mouseenter', (e) => {
-        if (this.initialMouseMoveListener) {
-          document.removeEventListener('mousemove', this.initialMouseMoveListener);
-          this.initialMouseMoveListener = null;
-        }
         if (this.hideTimer) {
           clearTimeout(this.hideTimer);
           this.hideTimer = null;
@@ -1014,9 +1011,18 @@ export class OverlayUI {
    */
   show(): void {
     if (!this.container) return;
+    if (this.hideTimer) {
+      clearTimeout(this.hideTimer);
+      this.hideTimer = null;
+    }
+    if (this.fadeTimeoutId) {
+      clearTimeout(this.fadeTimeoutId);
+      this.fadeTimeoutId = null;
+    }
     this.container.classList.remove('hidden');
     this.container.classList.remove('fading-out');
     this._state.visible = true;
+    this.updateOpacity();
   }
 
   /**
@@ -1024,14 +1030,23 @@ export class OverlayUI {
    */
   hide(): void {
     if (!this.container) return;
+    if (this.hideTimer) {
+      clearTimeout(this.hideTimer);
+      this.hideTimer = null;
+    }
+    if (this.fadeTimeoutId) {
+      clearTimeout(this.fadeTimeoutId);
+      this.fadeTimeoutId = null;
+    }
     this.container.classList.add('hidden');
+    this.container.classList.remove('fading-out');
     this._state.visible = false;
   }
 
   /**
    * Fade out overlay: wait 3 seconds then fade over 3 seconds then hide
    */
-  private startFadeOut(): void {
+  startFadeOut(): void {
     console.log('[OverlayUI] startFadeOut called, container:', !!this.container, 'pinned:', this._state.pinned);
     if (!this.container || this._state.pinned) return;
 
@@ -1043,8 +1058,7 @@ export class OverlayUI {
     // Wait 3 seconds before starting fade
     this.hideTimer = window.setTimeout(() => {
       console.log('[OverlayUI] hideTimer callback fired, container:', !!this.container);
-      if (!this.container) {
-        console.log('[OverlayUI] Container is null, aborting fade');
+      if (!this.container || this._state.pinned) {
         return;
       }
 
@@ -1052,12 +1066,9 @@ export class OverlayUI {
       console.log('[OverlayUI] Adding fading-out class for fade animation');
       this.container.classList.add('fading-out');
 
-      // Hide after fade completes
+      // Hide after fade completes (3 seconds)
       this.fadeTimeoutId = window.setTimeout(() => {
         this.hide();
-        if (this.container) {
-          this.container.classList.remove('fading-out');
-        }
         this.fadeTimeoutId = null;
         this.hideTimer = null;
       }, 3000);
@@ -1087,6 +1098,10 @@ export class OverlayUI {
     }
     if (this._state.pinned) {
       if (this.hideTimer) clearTimeout(this.hideTimer);
+      if (this.fadeTimeoutId) clearTimeout(this.fadeTimeoutId);
+      this.show();
+    } else {
+      this.startFadeOut();
     }
     console.debug('[OverlayUI] Pin toggled:', this._state.pinned);
   }

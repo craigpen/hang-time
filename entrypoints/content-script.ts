@@ -736,7 +736,8 @@ function establishConnection(): void {
             }
 
             // Mark overlay as shown once we pass freshness check
-            if (!overlayHasBeenShown) {
+            const isFirstShow = !overlayHasBeenShown;
+            if (isFirstShow) {
               overlayHasBeenShown = true;
               console.debug('[ContentScript] Overlay will be shown for first time');
             }
@@ -818,6 +819,12 @@ function establishConnection(): void {
             console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE MERGED:', mergedMessages.length, mergedMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
 
             overlayUI.setState(stateUpdate);
+            if (isFirstShow && (stateUpdate.session_members?.length || 0) >= 2) {
+              overlayUI.show();
+              if (!overlayUI.state.pinned) {
+                overlayUI.startFadeOut();
+              }
+            }
           }
           break;
 
