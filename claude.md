@@ -1,4 +1,60 @@
-# Claude Development Notes - Hang Time
+# Hang Time - Development & Architectural Guide
+
+## 🚨 NON-NEGOTIABLE ARCHITECTURAL INVARIANTS
+
+Every AI assistant (Antigravity, Claude, etc.) and developer **MUST** strictly follow these rules:
+
+1. **Storage Abstraction**:
+   * ❌ **NEVER** bypass `StorageManager` with direct `chrome.storage`, `localStorage`, or `sessionStorage` calls.
+   * ✅ **ALWAYS** use `StorageManager` (`src/modules/storage.ts`) for all data persistence and retrieval.
+2. **Immutable Timestamps**:
+   * ❌ **NEVER** overwrite or re-instantiate `contentTimestamp` after initial activity detection.
+   * ✅ `contentTimestamp` is set once per media item by the content script and is required for deterministic host election and time-sync interpolation across Nostr peers.
+3. **Content Script Lifecycle**:
+   * ❌ **NEVER** create raw orphaned listeners or elements that survive extension reloads.
+   * ✅ **ALWAYS** follow the `INSTANCE_ID` + `CLEANUP_EVENT` ownership pattern (`docs/MV3_CONTENT_SCRIPT_LIFECYCLE.md`). Clean up all DOM elements (`data-hang-time-ui`), port listeners, and event handlers on unload/reload.
+4. **Security & Zero Credential Leakage**:
+   * ❌ **NEVER** log tokens, private keys, or secret identifiers in `console.log` or error strings.
+   * ❌ **NEVER** use `innerHTML` for dynamic content. Always use `textContent` or `createElement` with property setters to prevent XSS.
+5. **Nostr Networking & Rate Limiting**:
+   * ❌ **NEVER** publish directly to relays without routing through `publishQueue`.
+   * ✅ **ALWAYS** enforce the 3-tier priority queue: (1) User Actions (invites/DMs) > (2) Profile Updates > (3) Game Libraries & Activities.
+   * ✅ **ALWAYS** use Kind-1059 gift wraps with NIP-44 encryption for private messages and invites.
+   * ✅ **ALWAYS** manage message state client-side (`PendingInvite`, `PendingMessage`); do not rely on relay retention.
+6. **UI & CSS Standards**:
+   * ❌ **NEVER** write inline CSS styles (`style="..."`).
+   * ✅ **ALWAYS** use CSS classes in `src/styles/` supporting light/dark theme variables from `theme.css`.
+
+---
+
+## 🔄 THE 5-STEP OPERATIONAL LOOP (MANDATORY ON EVERY TASK)
+
+To prevent amnesia, skipped tests, and lost context:
+
+1. **[Anchor]**: Check `ACTIVE_TASK.md` to confirm the goal, rationale, and active subtasks.
+2. **[Code]**: Implement changes while adhering to the invariants above.
+3. **[Verify]**: Run verification commands in terminal before presenting code as complete:
+   * Build check: `cmd /c node scripts/build.js chrome` (and `firefox`)
+   * Test suite: `cmd /c npm run test:run` (or targeted `cmd /c npx vitest run <path>`)
+4. **[Commit]**: Create an atomic git commit with a clear, descriptive message upon passing verification.
+5. **[Sync]**: Update `ACTIVE_TASK.md` checklist and push branch periodically.
+
+---
+
+## 🛠️ VERIFICATION COMMANDS
+
+```bash
+# Build
+cmd /c node scripts/build.js chrome     # Build Chrome extension
+cmd /c node scripts/build.js firefox    # Build Firefox extension
+cmd /c npm run build:all                # Build both targets
+
+# Tests
+cmd /c npm run test:run                 # Run all vitest tests
+cmd /c npx vitest run <test-path>       # Run specific test file
+```
+
+---
 
 ## Project Phase: MVP Development (Starting 2026-07-21)
 
