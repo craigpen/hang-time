@@ -104,15 +104,15 @@ async function inspectPort(port, options) {
     console.log(`  ${prefix} ${t.type.padEnd(14)} ${t.title.substring(0, 40).padEnd(42)} ${t.url?.substring(0, 60)}`);
   }
 
-  // If storage or eval requested, run against background worker or first extension page
-  const bgTarget = targets.find((t) => t.type === 'service_worker' && t.url?.includes('background.js')) || extensionTargets[0];
+  for (const extTarget of extensionTargets) {
+    if (!extTarget.webSocketDebuggerUrl) continue;
 
-  if (bgTarget && bgTarget.webSocketDebuggerUrl) {
+    console.log(`\n  --- Inspecting [${extTarget.type}] ${extTarget.title || extTarget.url} ---`);
+
     if (options.eval) {
-      console.log(`\n  Executing in [${bgTarget.type}] ${bgTarget.title}:`);
       console.log(`  > ${options.eval}`);
       try {
-        const result = await sendCdpCommand(bgTarget.webSocketDebuggerUrl, 'Runtime.evaluate', {
+        const result = await sendCdpCommand(extTarget.webSocketDebuggerUrl, 'Runtime.evaluate', {
           expression: options.eval,
           returnByValue: true,
           awaitPromise: true,
@@ -123,40 +123,29 @@ async function inspectPort(port, options) {
       }
     }
 
-    if (options.logs) {
-      console.log(`\n  Fetching recent logs from [${bgTarget.title}]:`);
+    if (options.logs || options.storage) {
       try {
-        const result = await sendCdpCommand(bgTarget.webSocketDebuggerUrl, 'Runtime.evaluate', {
-          expression: `new Promise(r => {
-            chrome.storage.local.get(null, items => {
-              const logKeys = Object.keys(items).filter(k => k.includes('file_logs') || k.includes('log'));
-              const logs = logKeys.map(k => items[k]);
-              r(logs.length > 0 ? logs.join('\\n') : 'No stored file logs found in storage yet.');
-            });
-          })`,
-          returnByValue: true,
-          awaitPromise: true,
-        });
-        console.log(`  Logs:\n`, result.result?.value ?? result.result);
-      } catch (err) {
-        console.error(`  Logs fetch error:`, err.message);
-      }
-    }
-
-    if (options.storage) {
-      console.log(`\n  Dumping chrome.storage.local for [${bgTarget.title}]:`);
-      try {
-        const result = await sendCdpCommand(bgTarget.webSocketDebuggerUrl, 'Runtime.evaluate', {
-          expression: 'new Promise(r => chrome.storage.local.get(null, r))',
+        const result = await sendCdpCommand(extTarget.webSocketDebuggerUrl, 'Runtime.evaluate', {
+          expression: `new Promise(r => chrome.storage.local.get(null, r))`,
           returnByValue: true,
           awaitPromise: true,
         });
         const storageData = result.result?.value || {};
         const keys = Object.keys(storageData);
-        console.log(`  Keys (${keys.length}): ${keys.join(', ')}`);
-        console.log(`  Storage Content:\n`, JSON.stringify(storageData, null, 2));
+        if (keys.length > 0) {
+          console.log(`  📦 Storage Keys (${keys.length}): ${keys.join(', ')}`);
+          if (options.storage) {
+            console.log(`  Storage Content:\n`, JSON.stringify(storageData, null, 2));
+          }
+          if (options.logs) {
+            const logKeys = keys.filter(k => k.includes('file_logs') || k.includes('log'));
+            if (logKeys.length > 0) {
+              console.log(`  📄 Logs:\n`, logKeys.map(k => storageData[k]).join('\n'));
+            }
+          }
+        }
       } catch (err) {
-        console.error(`  Storage dump error:`, err.message);
+        // ignore targets that don't support storage
       }
     }
   }
