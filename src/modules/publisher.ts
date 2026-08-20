@@ -128,6 +128,11 @@ export class ActivityPublisher {
         relays: Object.fromEntries(DEFAULT_RELAY_URLS.map(url => [url.replace('wss://', '').replace('ws://', '').replace(/\/$/, ''), true])),
       };
 
+      if (config && !config.enabled) {
+        console.debug('[Publisher] Publishing is disabled in config');
+        return;
+      }
+
       // Check if publish queue allows activity publish this cycle
       const shouldPublishActivity = this.publishQueue ? this.publishQueue.shouldPublishActivity() : true;
       if (!shouldPublishActivity) {
@@ -156,11 +161,9 @@ export class ActivityPublisher {
         validActivities[activityId] = activity;
       });
 
-      // Publish activities if any are available
-      if (Object.keys(validActivities).length > 0) {
-        await this._publishServices(validActivities, 'all', config);
-        this.publishCount++;
-      }
+      // Publish activities (including empty list on 'all' mode to broadcast idle state)
+      await this._publishServices(validActivities, 'all', config);
+      this.publishCount++;
     } catch (error) {
       console.error('[Publisher] Failed to publish activities:', error);
     }
@@ -178,6 +181,12 @@ export class ActivityPublisher {
       : Object.values(activities).filter((a): a is Activity => !!a);
 
     if (activitiesToPublish.length === 0) {
+      if (mode === 'all') {
+        // When publishing full snapshot ('all'), publish empty bundle to clear stale activities on relays
+        console.debug('[Publisher] Publishing empty activity bundle (idle state)');
+        await this._publishBundledActivities([], 'all', config);
+        return;
+      }
       console.debug('[Publisher] No activities to publish');
       return;
     }
