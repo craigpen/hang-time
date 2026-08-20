@@ -7,7 +7,7 @@
  * - Profile 3 on Port 9223
  */
 
-import { spawn, execSync } from 'child_process';
+import { spawn, exec, execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
