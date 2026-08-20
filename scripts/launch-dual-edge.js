@@ -52,30 +52,26 @@ async function main() {
   console.log(`\n========================================================`);
   console.log(`  Hang Time Dual Browser Test Environment (MS Edge)`);
   console.log(`========================================================`);
-  console.log(`  • Instance 1: ${profileA} -> Debug Port http://127.0.0.1:${portA}`);
-  console.log(`  • Instance 2: ${profileB} -> Debug Port http://127.0.0.1:${portB}`);
+  console.log(`  • Instance 1: Profile 2 (folder 'Profile 1') -> Debug Port http://127.0.0.1:${portA}`);
+  console.log(`  • Instance 2: Profile 3 (folder 'Profile 2') -> Debug Port http://127.0.0.1:${portA}`);
   console.log(`  • Extension : ${extensionPath}`);
   console.log(`========================================================\n`);
 
-  const dataDirA = path.join(process.env.USERPROFILE || 'C:\\temp', '.hangtime-edge-profile2');
-  const dataDirB = path.join(process.env.USERPROFILE || 'C:\\temp', '.hangtime-edge-profile3');
-
-  if (!fs.existsSync(dataDirA)) fs.mkdirSync(dataDirA, { recursive: true });
-  if (!fs.existsSync(dataDirB)) fs.mkdirSync(dataDirB, { recursive: true });
-
+  // Real Edge profile mapping:
+  // Folder "Profile 1" -> UI Display Name "Profile 2"
+  // Folder "Profile 2" -> UI Display Name "Profile 3"
   const argsA = [
     `--remote-debugging-port=${portA}`,
     '--remote-allow-origins=*',
-    `--user-data-dir=${dataDirA}`,
+    `--profile-directory=Profile 1`,
     `--load-extension=${extensionPath}`,
     '--no-first-run',
     '--no-default-browser-check',
   ];
 
   const argsB = [
-    `--remote-debugging-port=${portB}`,
     '--remote-allow-origins=*',
-    `--user-data-dir=${dataDirB}`,
+    `--profile-directory=Profile 2`,
     `--load-extension=${extensionPath}`,
     '--no-first-run',
     '--no-default-browser-check',
@@ -116,13 +112,12 @@ async function main() {
     return false;
   }
 
-  const readyA = await checkPortReady(portA);
-  const readyB = await checkPortReady(portB);
+  const ready = await checkPortReady(portA);
 
-  if (readyA && readyB) {
-    console.log(`\n✅ Both Edge test instances are ready and listening on ports ${portA} & ${portB}!`);
+  if (ready) {
+    console.log(`\n✅ Edge test instances are ready and listening on debug port ${portA}!`);
   } else {
-    console.log(`\n⚠️ Readiness status: Port ${portA}: ${readyA ? 'OK' : 'Waiting'}, Port ${portB}: ${readyB ? 'OK' : 'Waiting'}`);
+    console.log(`\n⚠️ Debug endpoint on port ${portA} is still initializing.`);
   }
   console.log(`To inspect live logs or state, run: npm run debug:inspect\n`);
 }
