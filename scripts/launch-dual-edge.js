@@ -57,9 +57,16 @@ async function main() {
   console.log(`  • Extension : ${extensionPath}`);
   console.log(`========================================================\n`);
 
+  const dataDirA = path.join(process.env.USERPROFILE || 'C:\\temp', '.hangtime-edge-profile2');
+  const dataDirB = path.join(process.env.USERPROFILE || 'C:\\temp', '.hangtime-edge-profile3');
+
+  if (!fs.existsSync(dataDirA)) fs.mkdirSync(dataDirA, { recursive: true });
+  if (!fs.existsSync(dataDirB)) fs.mkdirSync(dataDirB, { recursive: true });
+
   const argsA = [
     `--remote-debugging-port=${portA}`,
-    `--profile-directory=${profileA}`,
+    '--remote-allow-origins=*',
+    `--user-data-dir=${dataDirA}`,
     `--load-extension=${extensionPath}`,
     '--no-first-run',
     '--no-default-browser-check',
@@ -67,24 +74,56 @@ async function main() {
 
   const argsB = [
     `--remote-debugging-port=${portB}`,
-    `--profile-directory=${profileB}`,
+    '--remote-allow-origins=*',
+    `--user-data-dir=${dataDirB}`,
     `--load-extension=${extensionPath}`,
     '--no-first-run',
     '--no-default-browser-check',
   ];
 
-  console.log(`[Dual Launcher] Spawning Instance 1 (${profileA})...`);
-  const procA = spawn(edgePath, argsA, { detached: true, stdio: 'ignore' });
-  procA.unref();
+  function launchInstance(args) {
+    const fullCmd = `start "" "${edgePath}" ${args.map((a) => `"${a}"`).join(' ')}`;
+    return new Promise((resolve, reject) => {
+      exec(fullCmd, (err) => {
+        if (err) {
+          console.error('[Dual Launcher] Launch error:', err.message);
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
 
-  // Small delay between launches to prevent process race
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  console.log(`[Dual Launcher] Spawning Instance 1 (Port ${portA})...`);
+  await launchInstance(argsA);
 
-  console.log(`[Dual Launcher] Spawning Instance 2 (${profileB})...`);
-  const procB = spawn(edgePath, argsB, { detached: true, stdio: 'ignore' });
-  procB.unref();
+  console.log(`[Dual Launcher] Spawning Instance 2 (Port ${portB})...`);
+  await launchInstance(argsB);
 
-  console.log(`\n✅ Both Edge instances launched!`);
+  console.log(`\n[Dual Launcher] Waiting for debug endpoints to be ready...`);
+
+  async function checkPortReady(port, maxAttempts = 10) {
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const res = await fetch(`http://127.0.0.1:${port}/json/version`);
+        if (res.ok) return true;
+      } catch {
+        // wait and retry
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    return false;
+  }
+
+  const readyA = await checkPortReady(portA);
+  const readyB = await checkPortReady(portB);
+
+  if (readyA && readyB) {
+    console.log(`\n✅ Both Edge test instances are ready and listening on ports ${portA} & ${portB}!`);
+  } else {
+    console.log(`\n⚠️ Readiness status: Port ${portA}: ${readyA ? 'OK' : 'Waiting'}, Port ${portB}: ${readyB ? 'OK' : 'Waiting'}`);
+  }
   console.log(`To inspect live logs or state, run: npm run debug:inspect\n`);
 }
 
