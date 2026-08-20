@@ -547,32 +547,24 @@ See **PHASES.md** for detailed phase breakdown, deliverables, and success criter
 - **Messages** = P2P (encrypted, independent "full conversation history")
 - **Overlay** = UI (ephemeral, render-time state for visibility/opacity/pin)
 
-**Status**: Design locked. All architecture decisions finalized. Ready for implementation.
+**Status**: Complete. Session Model, Divergence navigation, DND Mode, and Game Discovery implemented and tested.
 
-**Current Status (Session 2026-08-09):**
-- Phase 3-4: Core features implemented and tested ✅
-- Phase 9 (Overlay State): Hybrid architecture complete ✅
-- Session Model: Design complete, locked, ready to implement ✅
-- Game Discovery: Backend complete; UI (games.ts) pending implementation
-- Activity datastore: 6-phase implementation plan established for data integrity layer
-- Logging: Console hook pattern + file rotation (2MB limit) implemented
-- Publishing: Three-tier priority queue, deduplication, and rate limiting working
-- **Next**: Implement session model (phase 10):
-  1. Session storage operations (create, delete, query)
-  2. Message refactor (activity_messages → unified messages[])
-  3. Overlay: display co_watchers and divergence state
-  4. Overlay: join buttons for diverged guests
-  5. Leave session button
+**Current Architecture Status:**
+- Phase 3-4: Core activity detection and Nostr pub/sub complete ✅
+- Phase 9: Hybrid overlay state management complete ✅
+- Session Model & Divergence: Implemented with `JOIN_GUEST_ACTIVITY` navigation flow ✅
+- Do Not Disturb (DND) / Solo Mode: Implemented with participant eviction & overlay suppression ✅
+- Game Discovery: Steam library sync (Kind 10003), English metadata queue, and Games tab UI complete ✅
+- Automated Tests: 293+ tests passing across 14 test suites ✅
+- Builds: Chrome MV3 and Firefox MV3 packaging working cleanly ✅
 
 ### References
 
 - **Project Overview**: README.md
-- **Development Phases**: docs/PHASES.md
-- **Agent Pipeline**: AGENTS.md
+- **Agent Instructions**: AGENTS.md
 - **Architecture**: docs/ARCHITECTURE.md
-- **Rate Limiting Strategy**: docs/RATE-LIMITING-PLAN.md
-- **Game Discovery Implementation**: docs/GAME_DISCOVERY_IMPLEMENTATION.md
-- **MV3 Content Script Lifecycle**: docs/MV3_CONTENT_SCRIPT_LIFECYCLE.md (extension reload recovery pattern)
-- **Phase 1 Overlay State Ownership**: docs/PHASE1_STATE_OWNERSHIP.md (hybrid architecture, message contracts, hydration flows)
-- **Session Model**: docs/SESSION_MODEL.md (co-watch architecture, lifecycle, data model, edge cases)
-- **Archived Documentation**: docs/archived/ (historical, UI-dependent, or future features)
+- **Session Model & Divergence**: docs/SESSION_MODEL.md
+- **Game Discovery**: docs/GAME_DISCOVERY.md
+- **Rate Limiting & Queueing**: docs/RATE_LIMITING.md
+- **MV3 Content Script Lifecycle**: docs/MV3_CONTENT_SCRIPT_LIFECYCLE.md
+- **Session & Feature Testing**: docs/SESSION_TESTING_GUIDE.md

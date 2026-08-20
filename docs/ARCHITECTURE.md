@@ -1,575 +1,133 @@
-# HANG TIME BROWSER EXTENSION - COMPREHENSIVE ARCHITECTURE DESIGN
+# Hang Time - Architecture & System Design
 
-## EXECUTIVE SUMMARY
+## 1. Executive Summary
 
-Hang Time is a decentralized browser extension that enables real-time co-consumption of content with friends via Nostr relays. The architecture follows Manifest V3 patterns with clear module hierarchy, type-safe TypeScript, and security-first token handling.
-
-**Key Architectural Principles:**
-- **Modular Design**: Clear separation of concerns (activity detection, Nostr integration, UI, storage)
-- **Type Safety**: All modules use strict TypeScript with explicit types
-- **Security-First**: OAuth tokens stored locally, never logged, messages encrypted via Nostr kind 1059 (NIP-44)
-- **Decentralized**: No backend—all communication via public Nostr relays
-- **Resilient**: Service worker state-less design; relays can reconnect automatically
-- **Observable**: Structured logging with module prefixes for debugging
+Hang Time is a decentralized browser extension (Manifest V3) that enables real-time co-watching, co-gaming, and co-listening with friends via Nostr relays. It requires zero centralized backends, zero user accounts/databases, and stores all keys, tokens, and history locally in the browser.
 
 ---
 
-## 1. MODULE HIERARCHY
+## 2. Architectural Invariants
+
+Every subsystem and AI agent working on Hang Time must strictly maintain these non-negotiable architectural invariants:
+
+1. **Storage Abstraction via `StorageManager`**:
+   - Never call raw `chrome.storage.local`, `localStorage`, or `sessionStorage` directly.
+   - All persistence, multi-tab caching, dynamic namespaces, and profile access must route through `StorageManager` (`src/modules/storage.ts`).
+2. **Immutable `contentTimestamp` Logic**:
+   - `contentTimestamp` represents the exact Unix timestamp when a specific media item started playing on the client.
+   - It is immutable for the lifetime of that media item and is deterministically used for peer host election (earliest `contentTimestamp` = host).
+   - High-precision time sync uses `metadata.progress` + `metadata.progress_measured_at` to interpolate real-time playback position across peers.
+3. **MV3 Content Script Cleanup Lifecycle**:
+   - Every content script instance generates a unique `INSTANCE_ID` and registers a `CLEANUP_EVENT` listener on `window`.
+   - Before mounting UI (`#hang-time-overlay`) or attaching DOM/port listeners, existing instances are signaled to clean up.
+   - Ports and observers must be disconnected upon navigation or extension reloads (`docs/MV3_CONTENT_SCRIPT_LIFECYCLE.md`).
+4. **Zero Credential Leakage & NIP-44 Encryption**:
+   - OAuth tokens, private keys (nsec/hex), and sensitive IDs are strictly local and never logged or published.
+   - Direct messages, friend requests, and invites use NIP-17 direct messages with NIP-44 authenticated encryption (Kind 1059 gift wraps).
+5. **Rate-Limited 3-Tier `PublishQueue`**:
+   - Never publish raw Nostr events ad-hoc from business logic.
+   - All relay writes route through `PublishQueue` (`src/modules/publish-queue.ts`) enforcing:
+     - **Priority 1 (Immediate)**: User Actions (Invites, Chat messages, Friend requests, DND state changes).
+     - **Priority 2 (Standard)**: Profile updates, status changes.
+     - **Priority 3 (Background)**: Activity updates (3-sec throttle) and Game Libraries (Kind 10003).
+6. **Clean CSS & Design System**:
+   - Zero inline `style="..."` attributes for static styling.
+   - All UI elements use semantic CSS classes referencing variables in `src/styles/theme.css`.
+
+---
+
+## 3. System Architecture & Module Hierarchy
 
 ```
 hang-time/
 ├── entrypoints/
-│   └── background.ts               [Service worker main entry]
-│       └── Orchestrates extension lifecycle, message routing
+│   ├── background.ts                  # Service worker orchestrator & message router
+│   ├── content-script.ts              # In-page media monitor & overlay injector
+│   └── oauth-handler.ts               # Spotify/Twitch OAuth callback listener
 │
 ├── src/
-│   ├── types.ts                    [Shared type definitions]
-│   │   ├── User, Friend, Activity, Message types
-│   │   ├── NostrEvent, OAuth token types
-│   │   └── Storage schema types
+│   ├── types.ts                       # Shared type definitions (Activity, Friend, CoWatchSession, etc.)
 │   │
-│   ├── modules/                    [Business logic layer]
-│   │   ├── nostr.ts               [Nostr relay pool]
-│   │   │   └── RelayPool class, event pub/sub, relay management
-│   │   │
-│   │   ├── storage.ts             [Local data persistence]
-│   │   │   └── StorageManager class, get/set/delete operations
-│   │   │
-│   │   ├── identity.ts            [Memorable identifier management]
-│   │   │   └── Generate, store, retrieve user ID
-│   │   │
-│   │   ├── friends.ts             [Friend list & management]
-│   │   │   └── Add, remove, rename, mute friends
-│   │   │
-│   │   ├── messages.ts            [Encrypted chat]
-│   │   │   └── Send/receive encrypted Nostr kind 1059 events (NIP-44)
-│   │   │
-│   │   ├── services/               [Activity detection per platform]
-│   │   │   ├── spotify.ts         [Spotify activity & OAuth]
-│   │   │   ├── twitch.ts          [Twitch activity & OAuth]
-│   │   │   ├── steam.ts           [Steam game detection]
-│   │   │   ├── tabs.ts            [Netflix/YouTube tab monitoring]
-│   │   │   └── types.ts           [Service types & interfaces]
-│   │   │
-│   │   ├── activity.ts            [Activity detection orchestrator]
-│   │   │   └── Monitors all services, publishes changes to Nostr
-│   │   │
-│   │   └── notifications.ts       [Browser notifications]
-│   │       └── Notify user of friend activity
+│   ├── modules/                       # Core business logic layer
+│   │   ├── storage.ts                 # StorageManager: namespaced persistence & caching
+│   │   ├── identity.ts                # IdentityManager: Nostr keys, npub/nsec, display names
+│   │   ├── friends.ts                 # FriendManager: CRUD, nickname overrides, muting
+│   │   ├── messaging.ts               # MessagingManager: NIP-17 / NIP-44 encrypted chat & invites
+│   │   ├── nostr.ts                   # RelayPool & RelayConnection WebSocket pub/sub
+│   │   ├── publish-queue.ts           # PublishQueue: 3-tier priority event queue & dispatch
+│   │   ├── publisher.ts               # ActivityPublisher: serializes & bundles Nostr activities
+│   │   ├── co-watcher-detection.ts    # CoWatcherDetector: matching, host election, freshness checks
+│   │   ├── game-library.ts            # GameLibraryManager: Steam sync & Kind-10003 Nostr events
+│   │   ├── metadata-fetcher.ts        # MetadataFetcher: Steam API metadata queue & cache
+│   │   ├── overlay-ui.ts              # OverlayUI: in-page overlay rendering (Host vs Guest modes)
+│   │   └── services/                  # Platform detection services
+│   │       ├── activity-detector.ts   # Detection orchestrator across all services
+│   │       ├── tab-monitor.ts         # YouTube / Netflix / Generic video tab monitor
+│   │       ├── spotify.ts             # Spotify Web API poller & OAuth
+│   │       ├── twitch.ts              # Twitch Helix API poller & OAuth
+│   │       └── steam.ts               # Steam Web API poller
 │   │
-│   ├── ui/                        [User interface layer]
-│   │   ├── popup.ts              [Main popup controller]
-│   │   │   └── Display active friends, handle clicks
-│   │   │
-│   │   ├── settings.ts           [Settings page controller]
-│   │   │   └── Service toggles, auth, preferences
-│   │   │
-│   │   ├── overlays/             [Overlay components]
-│   │   │   ├── chatOverlay.ts   [Chat box for co-watching]
-│   │   │   ├── joinHandler.ts   [Handle join actions]
-│   │   │   └── voicePrompt.ts   [Discord voice link]
-│   │   │
-│   │   └── components/
-│   │       ├── friendCard.ts     [Friend activity card component]
-│   │       ├── messageDisplay.ts [Chat message rendering]
-│   │       └── settingsForm.ts   [Form helpers]
+│   ├── ui/                            # Extension UI Controllers
+│   │   ├── popup.ts                   # PopupController: My Activity, Friends list, DND toggle, Settings
+│   │   ├── games.ts                   # GamesTabController: Steam games, filters, friend library comparison
+│   │   └── invite-modal-builder.ts    # showInviteModal: shared invite modal for friends & games
 │   │
-│   ├── utils/                    [Shared utilities]
-│   │   ├── validation.ts         [Input validation, type guards]
-│   │   ├── encryption.ts         [Message encryption/decryption]
-│   │   ├── urls.ts               [URL parsing for content detection]
-│   │   ├── errorHandling.ts      [Error logging and recovery]
-│   │   └── constants.ts          [Global constants]
-│   │
-│   ├── styles/                   [CSS only—no inline styles]
-│   │   ├── popup.css
-│   │   ├── settings.css
-│   │   ├── overlays.css
-│   │   └── theme.css             [Dark/light mode variables]
-│   │
-│   ├── popup.html                [Popup UI]
-│   ├── settings.html             [Settings UI]
-│   └── overlay.html              [Overlay template]
+│   └── styles/                        # CSS Themes and Layouts
+│       ├── popup.css                  # Popup UI & Tabs styles
+│       ├── overlay.css                # In-page overlay (Host Mode & Guest Mode) styles
+│       └── theme.css                  # Light/Dark CSS design tokens
 │
-├── scripts/
-│   ├── build.js                  [esbuild pipeline]
-│   └── create-zip.js             [Package for release]
+├── docs/                              # Technical Specifications & Guides
+│   ├── ARCHITECTURE.md                # This document
+│   ├── SESSION_MODEL.md               # Session lifecycle, divergence, DND, overlay modes
+│   ├── GAME_DISCOVERY.md              # Steam game sync, Kind 10003 events, metadata fetching
+│   ├── MV3_CONTENT_SCRIPT_LIFECYCLE.md# Content script DOM & port lifecycle patterns
+│   ├── RATE_LIMITING.md               # PublishQueue priority rates & throttling specs
+│   └── SESSION_TESTING_GUIDE.md       # Manual & automated testing procedures
 │
-├── docs/
-│   ├── ARCHITECTURE.md           [This file]
-│   ├── DATA_MODEL.md             [Storage schema details]
-│   ├── MODULES.md                [Module interface specs]
-│   └── DATA_FLOWS.md             [Sequence diagrams]
-│
-├── tests/                        [Test files]
-│   ├── modules/
-│   │   ├── nostr.test.ts
-│   │   ├── storage.test.ts
-│   │   ├── services/
-│   │   └── activity.test.ts
-│   ├── ui/
-│   └── integration/
-│
-├── manifest.json                 [Extension manifest]
-├── package.json
-├── tsconfig.json                 [TypeScript config]
-├── vitest.config.js
-└── .claude/settings.json         [Claude Code config]
-```
-
-### Module Responsibilities
-
-| Module | Responsibility | Dependencies | State |
-|--------|-----------------|-------------|-------|
-| **nostr** | Relay pool, event pub/sub | storage | Relay connections (reconnect on failure) |
-| **storage** | Local data persistence | types | Direct chrome.storage.local access |
-| **identity** | Memorable ID generation | storage | Single ID per extension |
-| **friends** | Friend list management | storage, nostr, types | Friend list + last_seen times |
-| **messages** | Encrypted chat | nostr, storage, encryption | Message history per friend |
-| **services/** | Activity detection | storage, types | Service state (tokens, last activity) |
-| **activity** | Orchestrate detection | services/, nostr, storage | Current activity state |
-| **notifications** | Browser notifications | friends, activity | Recent notifications (avoid spam) |
-| **popup** | Main UI controller | friends, activity, messages | UI state (expanded card, etc.) |
-| **settings** | Settings management | storage, services/ | User preferences |
-| **overlays/** | Chat/join overlays | messages, activity, urls | Overlay state (visible, position) |
-
----
-
-## 2. DATA MODELS
-
-### 2.1 Core Storage Schema
-
-All data stored in `chrome.storage.local`:
-
-```typescript
-// User Profile
-interface UserProfile {
-  memorable_identifier: string;
-  created_at: number;
-  discord_info?: string;
-  services_enabled: {
-    spotify: boolean;
-    twitch: boolean;
-    steam: boolean;
-    netflix: boolean;
-    youtube: boolean;
-  };
-  notification_preferences: {
-    friend_online: boolean;
-    new_message: boolean;
-    join_suggestion: boolean;
-  };
-}
-
-// OAuth Token (stored per service, never logged)
-interface OAuthToken {
-  service: 'spotify' | 'twitch';
-  access_token: string;
-  refresh_token?: string;
-  expires_at: number;
-  scopes: string[];
-}
-
-// Friend
-interface Friend {
-  id: string;
-  identifier: string;
-  local_name: string;
-  added_at: number;
-  last_seen: number;
-  muted: boolean;
-  hidden_services: string[];
-  current_activity?: Activity;
-  current_activity_timestamp?: number;
-}
-
-// Activity
-interface Activity {
-  service: 'spotify' | 'twitch' | 'steam' | 'netflix' | 'youtube' | 'idle';
-  content: string;
-  url?: string;
-  timestamp: number;
-  metadata: {
-    duration?: number;
-    progress?: number;
-    artist?: string;
-    title?: string;
-    thumbnailUrl?: string;
-  };
-}
-
-// Message (encrypted chat)
-interface Message {
-  id: string;
-  sender_identifier: string;
-  recipient_identifier: string;
-  content_encrypted: string;
-  timestamp: number;
-  read: boolean;
-  nostr_event_id?: string;
-}
-
-// Nostr Event
-interface NostrEvent {
-  id: string;
-  pubkey: string;
-  created_at: number;
-  kind: number;
-  tags: [string, string][];
-  content: string;
-  sig?: string;
-}
-
-// Settings
-interface Settings {
-  theme: 'light' | 'dark' | 'auto';
-  relay_urls: string[];
-  activity_poll_interval_ms: number;
-  publish_rate_limit_ms: number;
-  show_offline_friends: boolean;
-}
-```
-
-### 2.2 Storage Layout
-
-```typescript
-{
-  "hang_time_user_profile": UserProfile,
-  "hang_time_friends": Friend[],
-  "hang_time_messages_[friend_id]": Message[],
-  "hang_time_oauth_tokens": { [service]: OAuthToken }[],
-  "hang_time_current_activity": Activity,
-  "hang_time_settings": Settings,
-  "hang_time_activity_history_[friend_id]": Activity[]
-}
+└── scripts/
+    ├── build.js                       # esbuild build pipeline (Chrome & Firefox MV3)
+    ├── launch-dual-edge.js            # Automated dual-profile testing runner
+    └── inspect-browsers.js            # Chrome DevTools protocol inspector
 ```
 
 ---
 
-## 3. NOSTR INTEGRATION
+## 4. Subsystem Details
 
-### Relay Pool Architecture
+### 4.1 Nostr Protocol & Identity
+- **Keys**: Every user has a standard secp256k1 keypair (`IdentityManager`). The user can import an existing `nsec` or auto-generate one.
+- **Presence / Activity**: Published as Kind `30315` (or Kind `1` legacy replaceable) with tags `['d', 'hang-time-activity']`, `['t', service]`, `['c', contentTimestamp]`, `['dnd', 'true'|'false']`.
+- **Game Library**: Published as Kind `10003` replaceable event tagged `['t', 'game-library']`, `['steam-id', steamId]` containing `{ appIds: number[], count: number, timestamp: number }`.
+- **Direct Messaging & Invites**: Encapsulated in Kind `1059` Gift Wraps with NIP-44 encrypted payloads.
 
-```typescript
-export interface IRelayConnection {
-  url: string;
-  isConnected: boolean;
-  subscribe(identifier: string, callback: (event: NostrEvent) => void): void;
-  publish(event: NostrEvent): Promise<void>;
-  disconnect(): Promise<void>;
-}
+### 4.2 Session Model & Divergence
+- **Persistent Sessions**: Sessions (`CoWatchSession`) persist in storage (`STORAGE_KEYS.ACTIVE_SESSION`). When two users watch the same video, a session is formed. If one user navigates to another video, the session remains active (**Divergence**).
+- **Dual Mode Overlay**:
+  - **Host Mode** (`watching_together >= 2`): Renders synchronized playback bar, position markers for guests, sync button, and chat.
+  - **Guest / Divergence Mode** (`watching_together < 2`): Renders "Choose Next" card showing friend's video title and a `[Join]` button (`JOIN_GUEST_ACTIVITY`).
+- **Do Not Disturb (DND) / Solo Mode**:
+  - Suppresses automatic session detection.
+  - Clears active sessions and broadcasts `SESSION_ENDED` to unmount overlays.
+  - Excludes DND friends from invite modals and disables Join buttons in popup UI.
 
-export class RelayPool {
-  private relays: Map<string, IRelayConnection> = new Map();
-  private subscriptions: Map<string, Set<Function>> = new Map();
-  private reconnectTimers: Map<string, NodeJS.Timeout> = new Map();
+### 4.3 Content Script & Overlay Lifecycle
+- Runs on supported video platforms (`*://*.youtube.com/*`, `*://*.netflix.com/*`, etc.).
+- Measures playback progress, video duration, and state (`playing` / `paused`).
+- Injects a shadow/isolated DOM overlay (`#hang-time-overlay`) communicating with the background service worker via Chrome runtime ports.
 
-  static readonly DEFAULT_RELAYS = [
-    'wss://nostr.pub',
-    'wss://relay.damus.io',
-    'wss://nos.lol',
-    'wss://relayable.org',
-  ];
-  static readonly RELAY_TIMEOUT_MS = 5000;
-  static readonly RECONNECT_INTERVAL_MS = 10000;
-
-  async connect(relayUrl: string): Promise<void> { /* ... */ }
-  async publish(event: NostrEvent): Promise<{ successes: number; failures: number }> { /* ... */ }
-  subscribe(identifier: string, callback: (event: NostrEvent) => void): void { /* ... */ }
-  async disconnect(): Promise<void> { /* ... */ }
-}
-```
-
-### Event Kinds
-
-**Kind 1: Activity Events**
-```typescript
-{
-  kind: 1,
-  pubkey: user_identifier,
-  content: "Listening to Song X on Spotify",
-  tags: [
-    ["service", "spotify"],
-    ["content", "Song X"],
-    ["url", "spotify:track:..."]
-  ],
-  created_at: timestamp
-}
-```
-
-**Kind 4: Encrypted Direct Messages**
-```typescript
-{
-  kind: 4,
-  pubkey: sender_identifier,
-  content: "<encrypted message>",
-  tags: [["p", recipient_identifier]],
-  created_at: timestamp
-}
-```
+### 4.4 Steam Game Discovery
+- Fetches user owned games from Steam Web API (`IPlayerService/GetOwnedGames`).
+- Background worker fetches detailed metadata in English (`&l=english`) from Steam Store API with a 0.5 req/sec rate limiter.
+- Matches owned games against friends' Kind-10003 game libraries to highlight common games and owner counts.
 
 ---
 
-## 4. SERVICE DETECTION ARCHITECTURE
+## 5. Verification & Testing Strategy
 
-### Service Module Pattern
-
-Each service implements `IServiceModule`:
-
-```typescript
-export interface IServiceModule {
-  isEnabled(): Promise<boolean>;
-  getCurrentActivity(): Promise<Activity | null>;
-  hasToken(): Promise<boolean>;
-  clearToken(): Promise<void>;
-  getAuthUrl(): Promise<string>;
-  handleAuthCallback(code: string): Promise<void>;
-}
-```
-
-**Services:**
-- **Spotify**: OAuth 2.0 + API query
-- **Twitch**: OAuth 2.0 + API query
-- **Steam**: Public API (no OAuth)
-- **Netflix/YouTube**: Tab detection via chrome.tabs.query()
-
----
-
-## 5. BACKGROUND SERVICE WORKER
-
-### Initialization Lifecycle
-
-```typescript
-// entrypoints/background.ts
-
-chrome.runtime.onInstalled.addListener(async (details) => {
-  if (details.reason === 'install') {
-    await initializeExtension();
-    chrome.runtime.openOptionsPage();
-  }
-});
-
-async function initializeExtension(): Promise<void> {
-  // 1. Initialize modules
-  // 2. Generate memorable identifier
-  // 3. Connect to Nostr relays
-  // 4. Start activity detector
-  // 5. Subscribe to all friends
-}
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Handle popup ↔ background communication
-  // Message types: GET_ACTIVE_FRIENDS, SEND_MESSAGE, ADD_FRIEND, etc.
-});
-```
-
----
-
-## 6. UI ARCHITECTURE
-
-### Popup
-
-Main popup displays active friends as cards:
-- Card shows: Friend name + activity badge (🎵 Spotify: Song X)
-- Click to expand: Shows full details, actions (Join Now, Message)
-- Settings button to access full settings page
-
-### Settings Page
-
-- Service toggles (Spotify, Twitch, Steam, Netflix, YouTube)
-- Display user's memorable identifier (copy button)
-- Connect buttons for OAuth services
-- Discord username/invite link
-- Notification preferences
-
-### Overlays
-
-- **Chat overlay**: Floating box for encrypted messages during co-watching
-- **Voice prompt**: "Join [Friend]'s Discord?" with one-click link
-- **Join handler**: Opens content, initiates time-sync if applicable
-
-### Styling
-
-- CSS files only (no inline styles)
-- Dark/light mode support via `@media (prefers-color-scheme)`
-- Reference: nas-download-helper popup for clean aesthetic
-
----
-
-## 7. COMMUNICATION PATTERNS
-
-### Background ↔ Popup (chrome.runtime.sendMessage)
-
-| Type | Direction | Purpose |
-|------|-----------|---------|
-| GET_CURRENT_ACTIVITY | Popup→BG | Fetch current user activity |
-| GET_ACTIVE_FRIENDS | Popup→BG | Fetch online friends list |
-| ADD_FRIEND | Popup→BG | Add new friend |
-| SEND_MESSAGE | Popup→BG | Send encrypted message |
-| ACTIVITY_CHANGED | BG→Popup | Notify of user's activity change |
-| FRIEND_ACTIVITY_UPDATED | BG→Popup | Notify of friend's activity |
-| NEW_MESSAGE | BG→Popup | Notify of new message |
-
-### Storage
-
-All data persisted in `chrome.storage.local` via StorageManager abstraction:
-```typescript
-class StorageManager {
-  async get(key: string, defaultValue?: any): Promise<any>;
-  async set(key: string, value: any): Promise<void>;
-  async update(key: string, updates: Record<string, any>): Promise<void>;
-  async delete(key: string): Promise<void>;
-}
-```
-
----
-
-## 8. SECURITY & PRIVACY
-
-### OAuth Tokens
-- **Storage**: `chrome.storage.local` only
-- **Never logged**: No console.log() of tokens
-- **Refresh handling**: Detect expiration, refresh before use
-- **Scopes**: Only request necessary scopes
-
-### Message Encryption
-- **Nostr kind 1059**: Standard NIP-44 encryption (modern, recommended)
-- **Never plaintext**: All chat encrypted end-to-end
-- **Decryption on receive**: Only recipient can decrypt
-
-### XSS Prevention
-- **No innerHTML**: Use `textContent` for user data
-- **DOM creation**: Prefer `createElement()` over HTML strings
-- **Input validation**: Validate all data before display
-
-### Data Published to Nostr
-- **Never logs**: Personal info, passwords, tokens
-- **Only activity**: "Playing Song X", "Watching Twitch Stream Y"
-- **Identifiers**: Memorable IDs, not real names
-
----
-
-## 9. TYPESCRIPT CONFIGURATION
-
-```json
-{
-  "compilerOptions": {
-    "strict": true,
-    "noImplicitAny": true,
-    "noImplicitThis": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "noImplicitReturns": true,
-    "target": "ES2020",
-    "module": "ESNext",
-    "moduleResolution": "node",
-    "declaration": true,
-    "sourceMap": true
-  }
-}
-```
-
----
-
-## 10. BUILD PIPELINE
-
-**esbuild Configuration** (`scripts/build.js`):
-- Compile TypeScript to JavaScript
-- Bundle modules (no tree-shaking, keep readable)
-- Separate entry points:
-  - `entrypoints/background.ts` → `dist/[browser]-mv3/background.js`
-  - `src/ui/popup.ts` → `dist/[browser]-mv3/popup.js`
-  - `src/ui/settings.ts` → `dist/[browser]-mv3/settings.js`
-- Copy static files (HTML, CSS, manifest)
-- Generate Chrome and Firefox builds
-
-**Build Commands**:
-```bash
-npm run build:chrome   # Build Chrome extension
-npm run build:firefox  # Build Firefox extension  
-npm run build:all      # Build both
-npm run zip            # Package for release
-```
-
----
-
-## 11. IMPLEMENTATION PRIORITY (PHASE 2)
-
-### Week 1: Core Infrastructure
-1. **Types Module** - Data structure definitions
-2. **Storage Manager** - Local persistence layer
-3. **Identity Manager** - Memorable ID generation
-4. **Build Pipeline** - esbuild configuration
-
-### Week 2: Nostr Integration
-5. **Relay Pool** - WebSocket connections, pub/sub
-6. **Background Service Worker** - Orchestration, message routing
-
-### Week 3: Activity Detection
-7. **Service Interfaces** - IServiceModule contract
-8. **Tab Service** - Netflix/YouTube detection
-9. **Activity Orchestrator** - Polls services, publishes to Nostr
-
-### Week 4: UI & User Interaction
-10. **Friend Manager** - Friend list operations
-11. **Popup UI** - Display active friends
-12. **Settings UI** - Configuration
-
-### Week 5: OAuth & Advanced Services
-13. **Spotify Service** - OAuth + API
-14. **Twitch Service** - OAuth + API
-15. **Steam Service** - Public API
-
-### Week 6: Chat & Polish
-16. **Encryption Manager** - Message encryption
-17. **Message Manager** - Encrypted messaging
-18. **Chat Overlay** - Co-watching chat
-
----
-
-## 12. VALIDATION CHECKPOINTS
-
-Each module must pass:
-- ✅ **Type Safety**: All functions typed, no `any` in critical modules
-- ✅ **Security**: No credential logging, message validation
-- ✅ **Architecture**: No circular dependencies, proper layering
-- ✅ **Tests**: Unit tests for critical paths
-
-See AGENTS.md for full validation pipeline.
-
----
-
-## 13. KNOWN CONSTRAINTS
-
-### Manifest V3
-- Service worker can restart; no in-memory state
-- Use `chrome.storage.local` for all persistence
-- Message handling must be async-safe
-
-### Nostr
-- No guaranteed event ordering
-- Relays may have high latency
-- Implement retry logic for failed subscriptions
-
-### OAuth
-- Handle token refresh before expiration
-- User may revoke tokens in service settings
-- Graceful degradation if OAuth fails
-
-### Browser Compatibility
-- MVP targets Chrome/Edge/Opera (MV3)
-- Firefox support planned post-MVP
-- Use webextension-polyfill for API compatibility
-
----
-
-## 14. SUCCESS CRITERIA FOR PHASE 1
-
-✅ Architecture document complete and reviewed  
-✅ Module hierarchy clearly defined  
-✅ Data models documented  
-✅ API boundaries established  
-✅ Passes AGENTS.md Architecture Validator constraints  
-✅ Team aligned before Phase 2 coding begins  
-
-This architecture is ready for implementation. See PHASES.md for Phase 2 development sequence.
+1. **Automated Unit & Integration Tests**:
+   - `vitest` test suite covering storage, session model, divergence, DND mode, game libraries, metadata caching, and UI controllers.
+   - Verification command: `cmd /c npm run test:run`.
+2. **Build Pipeline**:
+   - `scripts/build.js` compiles TypeScript via `esbuild` for both Chrome MV3 (`dist/chrome-mv3/`) and Firefox MV3 (`dist/firefox-mv3/`).
+   - Verification command: `cmd /c npm run build:all`.
