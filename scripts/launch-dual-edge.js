@@ -135,26 +135,19 @@ async function main() {
 
   function launchInstance(args) {
     const fullCmd = `start "" "${edgePath}" ${args.map((a) => `"${a}"`).join(' ')}`;
-    return new Promise((resolve, reject) => {
-      exec(fullCmd, (err) => {
-        if (err) {
-          console.error('[Dual Launcher] Launch error:', err.message);
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
+    exec(fullCmd, (err) => {
+      if (err) console.error('[Dual Launcher] Launch warning:', err.message);
     });
   }
 
   console.log(`[Dual Launcher] Spawning Instance 1 (Port ${portA})...`);
-  await launchInstance(argsA);
+  launchInstance(argsA);
 
-  // Wait 1.5s before spawning instance 2 to prevent startup race condition
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  // Wait 2s before spawning instance 2 so Instance 1 initializes its directory lock
+  await new Promise((resolve) => setTimeout(resolve, 2000));
 
   console.log(`[Dual Launcher] Spawning Instance 2 (Port ${portB})...`);
-  await launchInstance(argsB);
+  launchInstance(argsB);
 
   console.log(`\n[Dual Launcher] Waiting for debug endpoints to be ready...`);
 
