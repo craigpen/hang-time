@@ -3069,11 +3069,10 @@ async function _handleProfileEvent(event: NostrEvent): Promise<void> {
 }
 
 async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {
-  console.log(`[Background] ðŸ”¨ Received event from friend ${friendIdentifier.substring(0, 8)}... kind=${event.kind} tags=${event.tags.map(t => t[0]).join(',')}`);
-
+  console.log(`[Background] 🔨 Received event from friend ${friendIdentifier.substring(0, 8)}... kind=${event.kind} tags=${event.tags.map(t => t[0]).join(',')}`);
 
   const friends = await storageManager.getFriends();
-  const friend = friends.find((f) => f.uuid === friendIdentifier);
+  const friend = friends.find((f) => f.uuid === friendIdentifier || f.local_name === friendIdentifier || f.pubkey === event.pubkey);
 
   if (!friend) {
     console.debug(`[Background] Friend ${friendIdentifier} not found in local list, ignoring event`);
@@ -3425,7 +3424,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
 async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent): Promise<void> {
   try {
     const friends = await storageManager.getFriends();
-    const friend = friends.find((f) => f.uuid === friendIdentifier);
+    const friend = friends.find((f) => f.uuid === friendIdentifier || f.local_name === friendIdentifier || f.pubkey === event.pubkey);
 
     if (!friend) {
       console.warn('[Message] Friend not found for message:', friendIdentifier);
