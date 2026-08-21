@@ -123,17 +123,20 @@ export class OverlayUI {
           right: 20px;
           width: 320px;
           max-height: 80vh;
-          background: rgba(0, 0, 0, 0.95);
-          border-radius: 8px;
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+          background: rgba(15, 23, 42, 0.88);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 12px;
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
           z-index: 9999;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
           color: white;
           display: flex;
           flex-direction: column;
           overflow: hidden;
-          transition: opacity 0.2s ease;
-          opacity: var(--overlay-opacity, 0.8);
+          transition: opacity 0.2s ease, transform 0.2s ease;
+          opacity: var(--overlay-opacity, 0.85);
           pointer-events: auto;
         }
 
@@ -153,23 +156,24 @@ export class OverlayUI {
           position: absolute;
           bottom: 0;
           right: 0;
-          width: 20px;
-          height: 20px;
+          width: 18px;
+          height: 18px;
           cursor: nwse-resize;
           user-select: none;
-          background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.2) 50%);
-          border-radius: 0 0 8px 0;
+          background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.25) 50%);
+          border-radius: 0 0 12px 0;
         }
 
         #resize-handle:hover {
-          background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.4) 50%);
+          background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.5) 50%);
         }
 
         .overlay-header {
-          padding: 12px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 10px 12px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
           cursor: grab;
           user-select: none;
+          background: rgba(255, 255, 255, 0.02);
         }
 
         .overlay-header:active {
@@ -185,13 +189,49 @@ export class OverlayUI {
         }
 
         .video-title {
-          font-size: 14px;
-          font-weight: 600;
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 0.3px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+          color: rgba(255, 255, 255, 0.95);
           flex: 1;
+        }
+
+        .overlay-role-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-height: 20px;
+        }
+
+        .overlay-role-label {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.6px;
+          text-transform: uppercase;
+          color: rgba(255, 255, 255, 0.45);
+          min-width: 44px;
+          flex-shrink: 0;
+        }
+
+        .video-title-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.85);
+          font-weight: 500;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .media-title-text {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         .progress-bar-wrapper {
@@ -203,22 +243,30 @@ export class OverlayUI {
 
         .progress-bar-container {
           flex: 1;
-          height: 8px;
-          background: rgba(255, 255, 255, 0.2);
-          border-radius: 4px;
+          height: 6px;
+          background: rgba(255, 255, 255, 0.15);
+          border-radius: 3px;
           overflow: visible;
           position: relative;
           display: flex;
           align-items: center;
         }
 
+        .progress-time-display {
+          font-size: 10px;
+          font-weight: 600;
+          font-variant-numeric: tabular-nums;
+          color: rgba(255, 255, 255, 0.6);
+          white-space: nowrap;
+        }
+
         #progress-sync-button {
           display: none;
-          padding: 4px 6px;
-          background: rgba(255, 255, 255, 0.15);
+          padding: 2px 6px;
+          background: rgba(255, 255, 255, 0.12);
           border: 1px solid rgba(255, 255, 255, 0.2);
           color: white;
-          border-radius: 3px;
+          border-radius: 4px;
           cursor: pointer;
           font-size: 11px;
           white-space: nowrap;
@@ -226,12 +274,14 @@ export class OverlayUI {
         }
 
         #progress-sync-button:hover {
-          background: rgba(255, 255, 255, 0.25);
+          background: rgba(255, 255, 255, 0.22);
+          border-color: rgba(255, 255, 255, 0.35);
         }
 
         .progress-bar-fill {
           height: 100%;
           background: linear-gradient(90deg, #10b981, #059669);
+          border-radius: 3px;
           width: 0%;
           transition: width 0.1s linear;
         }
@@ -241,9 +291,9 @@ export class OverlayUI {
           top: 50%;
           transform: translateY(-50%);
           left: 0%;
-          width: 16px;
-          height: 20px;
-          background: #ef4444;
+          width: 14px;
+          height: 16px;
+          background: #818cf8;
           transition: left 0.1s linear;
           user-select: none;
           pointer-events: none;
@@ -262,45 +312,26 @@ export class OverlayUI {
           top: 50%;
           transform: translateY(-50%);
           width: 3px;
-          height: 20px;
-          background: #3b82f6;
+          height: 16px;
+          background: #10b981;
           left: 0%;
           transition: left 0.1s linear;
-          box-shadow: 0 0 4px rgba(59, 130, 246, 0.8);
+          box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
           pointer-events: none;
-        }
-
-        .attendees-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 12px;
-          margin-bottom: 8px;
-        }
-
-        .attendees-label {
-          color: rgba(255, 255, 255, 0.6);
-          font-size: 11px;
-          min-width: 38px;
-          font-weight: 600;
-        }
-
-        #guest-chips-container {
-          display: flex;
-          gap: 6px;
-          align-items: center;
-          flex-wrap: wrap;
         }
 
         .attendee-chip {
           display: inline-flex;
           align-items: center;
-          padding: 2px 6px;
-          border-radius: 3px;
-          font-size: 12px;
+          padding: 2px 8px;
+          border-radius: 9999px;
+          font-size: 11px;
           color: white;
-          font-weight: 500;
+          font-weight: 600;
+          letter-spacing: 0.2px;
           text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+          transition: all 0.15s ease;
         }
 
         .progress-bar-controls {
@@ -323,8 +354,9 @@ export class OverlayUI {
           top: 50%;
           transform: translateY(-50%);
           width: 2px;
-          height: 16px;
+          height: 14px;
           left: 0%;
+          border-radius: 1px;
           transition: left 0.1s linear;
         }
 
@@ -333,8 +365,9 @@ export class OverlayUI {
           top: 50%;
           transform: translateY(-50%);
           width: 2px;
-          height: 16px;
-          background: #ef4444;
+          height: 14px;
+          background: #818cf8;
+          border-radius: 1px;
           left: 0%;
           transition: left 0.1s linear;
           pointer-events: none;
@@ -346,7 +379,7 @@ export class OverlayUI {
           top: 50%;
           transform: translateY(-50%);
           height: 2px;
-          background: #ef4444;
+          background: #818cf8;
           left: 0%;
           transition: left 0.1s linear, width 0.1s linear;
           pointer-events: none;
@@ -354,14 +387,14 @@ export class OverlayUI {
         }
 
         .host-state-indicator {
-          min-width: 24px;
+          min-width: 18px;
           font-size: 11px;
           color: rgba(255, 255, 255, 0.6);
           text-align: center;
         }
 
         .host-state-indicator.host-state-playing {
-          color: #4ade80;
+          color: #10b981;
         }
 
         .icon-buttons {
@@ -372,76 +405,72 @@ export class OverlayUI {
         }
 
         .icon-button {
-          width: 20px;
-          height: 20px;
+          width: 22px;
+          height: 22px;
           padding: 0;
-          background: transparent;
-          border: 1px solid rgba(255, 255, 255, 0.4);
-          border-radius: 2px;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          border-radius: 6px;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
           transition: all 0.2s ease;
-          font-size: 12px;
+          font-size: 11px;
+          color: rgba(255, 255, 255, 0.7);
         }
 
         .icon-button:hover {
-          border-color: rgba(255, 255, 255, 0.7);
+          background: rgba(255, 255, 255, 0.12);
+          border-color: rgba(255, 255, 255, 0.3);
+          color: white;
         }
 
         #pin-button.pinned {
-          background: #ff6b6b;
-          border-color: #ff6b6b;
+          background: rgba(245, 158, 11, 0.2);
+          border-color: rgba(245, 158, 11, 0.5);
+          color: #fbbf24;
         }
 
         #discord-button {
-          width: 20px;
-          height: 20px;
-          padding: 0;
-          background-size: 18px 18px;
+          background-size: 16px 16px;
           background-position: center;
           background-repeat: no-repeat;
-          background-color: transparent;
-          border: 1px solid rgba(255, 255, 255, 0.4);
-          border-radius: 2px;
-          cursor: pointer;
-          transition: all 0.2s ease;
+          font-size: 0;
         }
 
         #discord-button:hover {
-          border-color: rgba(255, 255, 255, 0.7);
           opacity: 0.9;
         }
 
         .opacity-slider {
-          width: 60px;
-          height: 6px;
+          width: 55px;
+          height: 4px;
           cursor: pointer;
-          accent-color: #6b7280;
+          accent-color: #94a3b8;
           flex-shrink: 0;
           -webkit-appearance: none;
           appearance: none;
-          background: rgba(107, 114, 128, 0.3);
-          border-radius: 3px;
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 2px;
           outline: none;
         }
 
         .opacity-slider::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
-          width: 14px;
-          height: 14px;
+          width: 12px;
+          height: 12px;
           border-radius: 50%;
-          background: #6b7280;
+          background: #cbd5e1;
           cursor: pointer;
         }
 
         .opacity-slider::-moz-range-thumb {
-          width: 14px;
-          height: 14px;
+          width: 12px;
+          height: 12px;
           border-radius: 50%;
-          background: #6b7280;
+          background: #cbd5e1;
           cursor: pointer;
           border: none;
         }
@@ -451,25 +480,33 @@ export class OverlayUI {
           border: none;
         }
 
-        .sync-button:hover {
-          background: rgba(45, 166, 255, 0.9);
+        .divergence-join-btn {
+          background: rgba(16, 185, 129, 0.15);
+          border: 1px solid rgba(16, 185, 129, 0.3);
+          color: #34d399;
+          border-radius: 6px;
+          width: 22px;
+          height: 22px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          padding: 0;
+          flex-shrink: 0;
         }
 
-        #discord-button {
-          background-size: 18px 18px;
-          background-position: center;
-          background-repeat: no-repeat;
-          font-size: 0;
-        }
-
-        #discord-button:hover {
-          opacity: 0.8;
+        .divergence-join-btn:hover {
+          background: rgba(16, 185, 129, 0.3);
+          border-color: rgba(16, 185, 129, 0.6);
+          color: #10b981;
+          transform: scale(1.05);
         }
 
         .hang-time-chat-container {
           flex: 1;
           overflow-y: auto;
-          padding: 8px;
+          padding: 8px 10px;
           display: flex;
           flex-direction: column;
           gap: 6px;
@@ -477,71 +514,77 @@ export class OverlayUI {
 
         .chat-message {
           display: flex;
-          gap: 4px;
-          font-size: 13px;
+          flex-direction: column;
+          gap: 2px;
+          font-size: 12px;
           line-height: 1.4;
-          align-items: baseline;
+          max-width: 85%;
         }
 
-        .message-user {
-          flex-direction: row-reverse;
+        .chat-message.message-user {
+          align-self: flex-end;
+          align-items: flex-end;
+        }
+
+        .chat-message.message-friend {
+          align-self: flex-start;
+          align-items: flex-start;
         }
 
         .message-content {
-          max-width: 80%;
-          padding: 4px 8px;
-          border-radius: 3px;
+          padding: 6px 10px;
+          border-radius: 12px;
           word-wrap: break-word;
+          font-size: 12px;
           flex: 0 1 auto;
         }
 
         .message-friend .message-content {
           background: rgba(255, 255, 255, 0.08);
-          color: rgba(255, 255, 255, 0.9);
+          color: rgba(255, 255, 255, 0.95);
+          border-bottom-left-radius: 4px;
         }
 
         .message-user .message-content {
-          background: rgba(96, 165, 250, 0.3);
+          background: rgba(99, 102, 241, 0.3);
+          border: 1px solid rgba(99, 102, 241, 0.35);
           color: white;
-        }
-
-        .message-sender {
-          font-size: 12px;
-          font-weight: 600;
-          white-space: nowrap;
-          flex-shrink: 0;
+          border-bottom-right-radius: 4px;
         }
 
         .message-input-container {
-          padding: 8px;
-          border-top: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 8px 10px;
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
           display: flex;
           gap: 6px;
           align-items: flex-end;
+          background: rgba(255, 255, 255, 0.02);
         }
 
         #message-input {
           flex: 1;
           min-height: 20px;
           max-height: 60px;
-          padding: 4px 6px;
-          background: rgba(255, 255, 255, 0.05);
-          border: none;
-          border-radius: 2px;
+          padding: 5px 8px;
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 6px;
           color: white;
           font-size: 12px;
           font-family: inherit;
           resize: none;
           outline: none;
           overflow-y: auto;
+          transition: border-color 0.2s ease, background 0.2s ease;
         }
 
         #message-input::placeholder {
-          color: rgba(255, 255, 255, 0.3);
+          color: rgba(255, 255, 255, 0.35);
         }
 
         #message-input:focus {
-          background: rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.09);
+          border-color: rgba(99, 102, 241, 0.5);
         }
 
         #send-button {
@@ -551,32 +594,41 @@ export class OverlayUI {
           color: rgba(255, 255, 255, 0.5);
           cursor: pointer;
           font-size: 14px;
-          transition: color 0.2s;
+          transition: color 0.2s, transform 0.1s;
         }
 
         #send-button:hover {
-          color: rgba(255, 255, 255, 0.8);
+          color: rgba(255, 255, 255, 0.9);
+          transform: translateY(-1px);
         }
 
         #send-button:active {
-          color: #4ade80;
+          color: #34d399;
+          transform: translateY(0);
         }
       </style>
 
       <div class="overlay-header">
         <div class="header-top">
-          <div class="video-title" id="overlay-title">Loading...</div>
+          <div class="video-title" id="overlay-title">Hang Time</div>
           <div class="icon-buttons">
             <input type="range" min="10" max="100" value="80" class="opacity-slider" id="opacity-slider" title="Overlay opacity">
             <button class="icon-button" id="discord-button" title="Open Discord with host"></button>
             <button class="icon-button" id="pin-button" title="Pin overlay">📌</button>
           </div>
         </div>
-        <!-- Line 1: Watching label + progress bar + sync button -->
-        <div class="watching-together-row" id="watching-together-row" style="margin-bottom: 8px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <div class="watching-together-label" style="flex-shrink: 0;">Watching:</div>
-            <div class="progress-bar-wrapper" style="flex: 1;">
+
+        <!-- Mode A: Co-Watching Layout -->
+        <div id="watching-together-section" style="display: flex; flex-direction: column; gap: 6px;">
+          <!-- Line 1: Host Row -->
+          <div id="host-chip-container" class="overlay-role-row"></div>
+
+          <!-- Line 2: Video Title -->
+          <div id="media-title-container" class="video-title-row"></div>
+
+          <!-- Line 3: Progress Bar + Time + Sync button -->
+          <div class="watching-together-row" id="watching-together-row">
+            <div class="progress-bar-wrapper">
               <div class="progress-bar-container">
                 <div class="progress-bar-fill" id="progress-bar-fill"></div>
                 <div class="guest-markers-container" id="guest-markers-container"></div>
@@ -585,26 +637,24 @@ export class OverlayUI {
                 <div class="progress-bar-marker" id="progress-bar-marker"></div>
               </div>
               <div class="progress-bar-controls">
+                <span class="progress-time-display" id="progress-time-display">0:00</span>
                 <div class="host-state-indicator" id="host-state-indicator">-</div>
                 <button id="progress-sync-button" title="Sync to host position">↻</button>
               </div>
             </div>
           </div>
+
+          <!-- Line 4: Guest chips -->
+          <div id="guest-chips-container" class="overlay-role-row"></div>
         </div>
 
-        <!-- Line 2: Host chip + (host) | favicon title -->
-        <div id="host-chip-container" style="margin-bottom: 8px;"></div>
-
-        <!-- Line 3: Guest chips -->
-        <div id="guest-chips-container" style="display: flex; gap: 4px; margin-bottom: 8px;"></div>
-
-        <!-- Divergence display: for when < 2 watching together -->
+        <!-- Mode B: Divergence display (< 2 watching together) -->
         <div id="guest-rows-container"></div>
       </div>
 
 
       <div class="hang-time-chat-container" id="hang-time-chat-container">
-        <div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>
+        <div style="text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 12px 0;">No messages yet</div>
       </div>
 
       <div class="message-input-container">
@@ -955,10 +1005,20 @@ export class OverlayUI {
   }
 
   /**
+   * Format seconds to mm:ss
+   */
+  private formatTime(totalSeconds: number): string {
+    if (!totalSeconds || isNaN(totalSeconds) || totalSeconds < 0) return '0:00';
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = Math.floor(totalSeconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  /**
    * Get participant color based on their role:
-   * - Host: always green
-   * - Non-host self: always red
-   * - Others: fixed mapped color
+   * - Host: always mint / emerald (#10b981)
+   * - Non-host self: sleek indigo (#818cf8)
+   * - Others: fixed mapped pastel color
    */
   private getParticipantColor(uuid: string | undefined): string {
     if (!uuid) {
@@ -967,14 +1027,14 @@ export class OverlayUI {
 
     const hostUuid = this.getHostUuid();
 
-    // Rule 1: Host is always green
+    // Rule 1: Host is always green/emerald
     if (uuid === hostUuid) {
       return '#10b981';
     }
 
-    // Rule 2: Current user (not host) is always red
+    // Rule 2: Current user (when guest) is indigo
     if (uuid === this.userId) {
-      return '#ef4444';
+      return '#818cf8';
     }
 
     // Rule 3: Other guests get fixed mapped color
@@ -982,15 +1042,15 @@ export class OverlayUI {
       return this.userColorMap.get(uuid)!;
     }
 
-    // Deterministic color palette for other guests
+    // Deterministic curated color palette for other guests
     const guestColors = [
-      '#f59e0b', // amber
       '#06b6d4', // cyan
-      '#8b5cf6', // violet
-      '#ec4899', // pink
-      '#6366f1', // indigo
+      '#f59e0b', // amber
+      '#f43f5e', // rose
       '#14b8a6', // teal
-      '#f97316', // orange
+      '#a855f7', // purple
+      '#3b82f6', // blue
+      '#fb923c', // orange
     ];
 
     let hash = 0;
@@ -1212,6 +1272,22 @@ export class OverlayUI {
     const markerEl = document.getElementById('progress-bar-marker') as HTMLElement;
     const syncBtn = document.getElementById('progress-sync-button') as HTMLElement;
     const stateIndicator = document.getElementById('host-state-indicator') as HTMLElement;
+    const timeDisplayEl = document.getElementById('progress-time-display') as HTMLElement;
+
+    // Update time display
+    if (timeDisplayEl) {
+      if (this._state.host_progress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
+        const cur = this.formatTime(this._state.host_progress);
+        const dur = this.formatTime(this._state.host_duration);
+        timeDisplayEl.textContent = `${cur} / ${dur}`;
+        timeDisplayEl.style.display = 'inline';
+      } else if (this._state.host_progress !== undefined) {
+        timeDisplayEl.textContent = this.formatTime(this._state.host_progress);
+        timeDisplayEl.style.display = 'inline';
+      } else {
+        timeDisplayEl.style.display = 'none';
+      }
+    }
 
     // Update host state indicator
     if (stateIndicator) {
@@ -1234,6 +1310,7 @@ export class OverlayUI {
       // Position host marker at host's current position
       if (hostMarkerEl) {
         hostMarkerEl.style.left = hostPercent + '%';
+        hostMarkerEl.style.background = this.getParticipantColor(this.getHostUuid());
       }
     }
 
@@ -1281,6 +1358,7 @@ export class OverlayUI {
         if (shouldShow) {
           const userPercent = Math.min((extrapolatedUserProgress / this._state.host_duration) * 100, 100);
           markerEl.style.left = userPercent + '%';
+          markerEl.style.background = this.getParticipantColor(this.userId);
 
           // Arrow points toward host (use current position, not old measurement)
           markerEl.classList.remove('arrow-left', 'arrow-right');
@@ -1306,7 +1384,7 @@ export class OverlayUI {
       }
     }
 
-    // Show host position marker (blue vertical line at right edge of progress bar) for guests
+    // Show host position marker (vertical line) for guests
     const hostPositionMarkerEl = document.getElementById('user-position-marker') as HTMLElement;
     const gapIndicatorEl = document.getElementById('gap-indicator') as HTMLElement;
 
@@ -1338,6 +1416,7 @@ export class OverlayUI {
           // Show host position marker
           if (hostPositionMarkerEl) {
             hostPositionMarkerEl.style.left = hostPercent + '%';
+            hostPositionMarkerEl.style.background = this.getParticipantColor(this.getHostUuid());
             hostPositionMarkerEl.style.display = 'block';
           }
 
@@ -1348,6 +1427,7 @@ export class OverlayUI {
             const gapWidth = endPercent - startPercent;
             gapIndicatorEl.style.left = startPercent + '%';
             gapIndicatorEl.style.width = gapWidth + '%';
+            gapIndicatorEl.style.background = this.getParticipantColor(this.userId);
             gapIndicatorEl.style.display = 'block';
           }
 
@@ -1380,16 +1460,17 @@ export class OverlayUI {
   }
 
   /**
-   * REFACTORED: Simple two-mode rendering
-   * Host Mode: 2+ watching same video → show host + progress bar
+   * Simple two-mode rendering
+   * Host Mode: 2+ watching same video → show host + media title + progress bar + guests
    * Guest Mode: <2 watching same video → show "Choose next:" + guest rows
    */
   private renderHostRow(): void {
-    // Determine which mode we're in: count members on same video (inactivity checking disabled for testing)
     const watchingTogether = this._state.watching_together || [];
     const isHostMode = watchingTogether.length >= 2;
     const watchingRow = document.getElementById('watching-together-row');
+    const watchingSection = document.getElementById('watching-together-section');
     const hostContainer = document.getElementById('host-chip-container');
+    const mediaContainer = document.getElementById('media-title-container');
     const guestContainer = document.getElementById('guest-chips-container');
     const guestRowsContainer = document.getElementById('guest-rows-container');
 
@@ -1397,11 +1478,12 @@ export class OverlayUI {
 
     if (isHostMode) {
       // HOST MODE: 2+ watching same video
+      if (watchingSection) watchingSection.style.display = 'flex';
       watchingRow.style.display = '';
       guestRowsContainer.innerHTML = ''; // Hide divergence rows
 
-      // Render host chip + activity
-      this.renderHostChip(hostContainer);
+      // Render host chip + media title
+      this.renderHostChip(hostContainer, mediaContainer);
 
       // Render guest chips
       this.renderGuestChips(guestContainer);
@@ -1412,8 +1494,10 @@ export class OverlayUI {
       }
     } else {
       // GUEST MODE: <2 watching same video (divergence)
+      if (watchingSection) watchingSection.style.display = 'none';
       watchingRow.style.display = 'none';
       hostContainer.innerHTML = '';
+      if (mediaContainer) mediaContainer.innerHTML = '';
       guestContainer.innerHTML = '';
 
       // Render "Choose next:" with guest rows
@@ -1423,9 +1507,9 @@ export class OverlayUI {
 
   /**
    * MODE A: Render host chip with activity info
-   * Host is always shown first with the title (associated with progress bar above)
+   * Host is always shown first with the title (associated with progress bar)
    */
-  private renderHostChip(container: HTMLElement): void {
+  private renderHostChip(container: HTMLElement, mediaContainer?: HTMLElement | null): void {
     const hostUuid = this.getHostUuid();
     if (!hostUuid) return;
 
@@ -1439,48 +1523,51 @@ export class OverlayUI {
 
     const hostColor = this.getParticipantColor(hostUuid);
 
-    // Build host row: chip | service icon + title (same line as progress bar's video)
-    let html = `<div style="display: flex; align-items: center; gap: 8px;">`;
-    html += `<div class="attendee-chip" style="background: ${hostColor};"><span>${hostName}</span></div>`;
+    // Build host role row: label + pill
+    container.innerHTML = `
+      <span class="overlay-role-label">HOST</span>
+      <div class="attendee-chip" style="background: ${hostColor};"><span>${hostName}</span></div>
+    `;
 
-    // Add host's activity info with service icon
-    const activity = this._state.co_watcher_activities?.[hostUuid];
-    if (activity) {
-      // Map service to icon
-      const serviceMap: Record<string, string> = {
-        'youtube': 'youtube.png',
-        'youtube-tab': 'youtube.png',
-        'spotify': 'spotify.png',
-        'twitch': 'twitch.png',
-        'netflix': 'netflix.png',
-        'steam': 'steam.png',
-      };
+    // Render media title underneath host
+    if (mediaContainer) {
+      const activity = this._state.co_watcher_activities?.[hostUuid];
+      if (activity && activity.content) {
+        const serviceMap: Record<string, string> = {
+          'youtube': 'youtube.png',
+          'youtube-tab': 'youtube.png',
+          'spotify': 'spotify.png',
+          'twitch': 'twitch.png',
+          'netflix': 'netflix.png',
+          'steam': 'steam.png',
+        };
 
-      let iconHtml = '';
-      if (activity.service) {
-        const icon = serviceMap[activity.service];
-        if (icon) {
+        let iconHtml = '';
+        if (activity.service && serviceMap[activity.service]) {
           try {
-            const iconUrl = chrome.runtime.getURL(`public/icons/${icon}`);
-            iconHtml = `<img src="${iconUrl}" style="width: 14px; height: 14px; object-fit: contain;" alt="">`;
+            const iconUrl = chrome.runtime.getURL(`public/icons/${serviceMap[activity.service]}`);
+            iconHtml = `<img src="${iconUrl}" style="width: 14px; height: 14px; object-fit: contain; flex-shrink: 0;" alt="">`;
           } catch (e) {
-            // Silent fallback
             iconHtml = '';
           }
         }
+
+        const title = this.escapeHtml(activity.content);
+        mediaContainer.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 6px; padding-left: 2px; overflow: hidden; width: 100%;">
+            ${iconHtml}
+            <span class="media-title-text" title="${title}">${title}</span>
+          </div>
+        `;
+      } else {
+        mediaContainer.innerHTML = '';
       }
-
-      const title = this.escapeHtml(activity.content.substring(0, 40));
-      html += `<span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #aaa;">${iconHtml}<span>${title}</span></span>`;
     }
-
-    html += `</div>`;
-    container.innerHTML = html;
   }
 
   /**
    * MODE A: Render guest chips (everyone except host)
-   * Guests shown on separate row below host
+   * Guests shown on separate row below progress bar
    */
   private getActivityFreshnessStyle(uuid: string): { opacity: number } {
     const activity = this._state.co_watcher_activities?.[uuid];
@@ -1499,8 +1586,6 @@ export class OverlayUI {
   }
 
   private renderGuestChips(container: HTMLElement): void {
-    // Show all session members (same as Guest Mode)
-    // Host/Guest Mode difference is only in the TOP section, not in who's displayed
     const allCoWatchers = this._state.session_members || [];
     const hostUuid = this.getHostUuid();
     const chips: string[] = [];
@@ -1531,8 +1616,10 @@ export class OverlayUI {
     }
 
     if (chips.length > 0) {
-      // Wrap guest chips in a flex container for proper spacing
-      container.innerHTML = `<div style="display: flex; gap: 4px; flex-wrap: wrap;">${chips.join('')}</div>`;
+      container.innerHTML = `
+        <span class="overlay-role-label">GUESTS</span>
+        <div style="display: flex; gap: 4px; flex-wrap: wrap; align-items: center;">${chips.join('')}</div>
+      `;
     } else {
       container.innerHTML = '';
     }
@@ -1542,12 +1629,11 @@ export class OverlayUI {
    * MODE B: Render "Choose next:" section with guest rows
    */
   private renderChooseNextRows(container: HTMLElement): void {
-    // Use persistent session members, not ephemeral co_watcher_activities keys
     const sessionMembers = this._state.session_members || [];
     const rows: string[] = [];
 
-    // Add label
-    rows.push('<div style="font-size: 12px; color: #aaa; margin-bottom: 8px;">Choose next:</div>');
+    // Add label (matching test expectation "Choose next:")
+    rows.push('<div class="overlay-role-label" style="margin-bottom: 8px;">Choose next:</div>');
 
     // Sort with self first
     const sorted = [...sessionMembers].sort((a, b) => {
@@ -1594,28 +1680,39 @@ export class OverlayUI {
         }
 
         const title = this.escapeHtml(activity.content.substring(0, 40));
+        const isSelf = uuid === this.userId;
+        const joinBtnHtml = isSelf ? '' : `
+          <button class="divergence-join-btn join-button" data-uuid="${uuid}" title="Join activity">
+            <svg viewBox="0 0 24 24" fill="currentColor" style="width: 12px; height: 12px; pointer-events: none;">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          </button>
+        `;
+
         row = `
-          <div style="display: grid; grid-template-columns: 60px 14px 1fr 14px; align-items: center; gap: 8px; height: 24px; font-size: 12px; opacity: ${opacity};">
-            <div class="attendee-chip" style="background: ${color};"><span>${name}</span></div>
-            <div style="display: flex; align-items: center; justify-content: center; width: 14px;">
-              ${iconHtml}
+          <div class="divergence-row" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); margin-bottom: 4px; opacity: ${opacity};">
+            <div style="display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1;">
+              <div class="attendee-chip" style="background: ${color}; flex-shrink: 0;"><span>${name}</span></div>
+              <div style="display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden;">
+                ${iconHtml}
+                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: rgba(255, 255, 255, 0.85);" title="${this.escapeHtml(activity.content)}">${title}</span>
+              </div>
             </div>
-            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #aaa;">${title}</span>
-            <button class="join-button" data-uuid="${uuid}" style="background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center;">
-              <svg viewBox="0 0 24 24" fill="#4CAF50" stroke="none" style="width: 14px; height: 14px;">
-                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-              </svg>
-            </button>
+            ${joinBtnHtml}
           </div>
         `;
       } else {
-        row = `<div style="padding: 2px 0; opacity: ${opacity};"><div class="attendee-chip" style="background: ${color};"><span>${name}</span></div></div>`;
+        row = `
+          <div class="divergence-row" style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; opacity: ${opacity}; margin-bottom: 4px;">
+            <div class="attendee-chip" style="background: ${color}; flex-shrink: 0;"><span>${name}</span></div>
+            <span style="font-size: 11px; color: rgba(255, 255, 255, 0.4); font-style: italic;">Browsing...</span>
+          </div>
+        `;
       }
       rows.push(row);
     }
 
     if (rows.length === 1) {
-      // Only label, no guests
       container.innerHTML = '';
     } else {
       container.innerHTML = rows.join('');
@@ -1623,7 +1720,8 @@ export class OverlayUI {
       // Attach join listeners
       for (const btn of container.querySelectorAll('.join-button')) {
         btn.addEventListener('click', (e) => {
-          const uuid = (e.target as HTMLElement).getAttribute('data-uuid');
+          const target = (e.target as HTMLElement).closest('.join-button') as HTMLElement;
+          const uuid = target?.getAttribute('data-uuid') || (e.target as HTMLElement).getAttribute('data-uuid');
           if (uuid) this.handleJoinGuest(uuid);
         });
       }
@@ -1695,7 +1793,7 @@ export class OverlayUI {
   }
 
   /**
-   * Render chat messages
+   * Render chat messages with consecutive message grouping and unified pill styling
    */
   private renderMessages(): void {
     const container = document.getElementById('hang-time-chat-container');
@@ -1705,34 +1803,39 @@ export class OverlayUI {
     }
 
     if (this._state.messages.length === 0) {
-      container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>';
+      container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 12px 0;">No messages yet</div>';
       return;
     }
 
     const validMessages = this._state.messages.filter(msg => msg && msg.content);
 
     if (validMessages.length === 0) {
-      container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px;">No messages yet</div>';
+      container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 12px 0;">No messages yet</div>';
       return;
     }
 
-    const html = validMessages
-      .map(msg => {
-        const isUser = msg.sender_id === this.userId;
-        // Get color using participant color rules - same as chips
-        const userColor = this.getParticipantColor(msg.sender_id);
-        // Use "You" for user's own messages, otherwise lookup display name from state nicknameMap
-        const displayName = isUser ? 'You' : (this._state.nicknameMap?.[msg.sender_id] || msg.sender || 'Unknown');
-        // Apply freshness opacity to match guest row dimming
-        const { opacity } = this.getActivityFreshnessStyle(msg.sender_id);
-        return `
-          <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}">
-            <div class="attendee-chip" style="background: ${userColor}; opacity: ${opacity}; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);">${this.escapeHtml(displayName)}</div>
-            <div class="message-content" style="background: rgba(255, 255, 255, 0.08); color: white;">${this.linkifyContent(msg.content)}</div>
-          </div>
-        `;
-      })
-      .join('');
+    let html = '';
+    let lastSenderId: string | null = null;
+
+    for (const msg of validMessages) {
+      const isUser = msg.sender_id === this.userId;
+      const userColor = this.getParticipantColor(msg.sender_id);
+      const displayName = isUser ? 'You' : (this._state.nicknameMap?.[msg.sender_id] || msg.sender || 'Unknown');
+      const { opacity } = this.getActivityFreshnessStyle(msg.sender_id);
+      const isConsecutive = lastSenderId === msg.sender_id;
+      lastSenderId = msg.sender_id;
+
+      const headerHtml = !isConsecutive
+        ? `<div class="attendee-chip" style="background: ${userColor}; opacity: ${opacity}; margin-bottom: 2px; font-size: 10px; padding: 1px 7px;">${this.escapeHtml(displayName)}</div>`
+        : '';
+
+      html += `
+        <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}" style="${isConsecutive ? 'margin-top: -3px;' : ''}">
+          ${headerHtml}
+          <div class="message-content">${this.linkifyContent(msg.content)}</div>
+        </div>
+      `;
+    }
 
     container.innerHTML = html;
 
