@@ -308,20 +308,23 @@ export class OverlayUI {
           top: 50%;
           transform: translateY(-50%);
           left: 0%;
-          width: 14px;
-          height: 16px;
+          width: 10px;
+          height: 12px;
           background: #f43f5e;
           transition: left 0.1s linear;
           user-select: none;
           pointer-events: none;
+          z-index: 6;
         }
 
         .progress-bar-marker.arrow-right {
           clip-path: polygon(0% 0%, 0% 100%, 100% 50%);
+          margin-left: 3px;
         }
 
         .progress-bar-marker.arrow-left {
           clip-path: polygon(100% 0%, 100% 100%, 0% 50%);
+          margin-left: -13px;
         }
 
         .progress-bar-host-marker {
@@ -381,13 +384,14 @@ export class OverlayUI {
           position: absolute;
           top: 50%;
           transform: translateY(-50%);
-          width: 2px;
-          height: 14px;
+          width: 3px;
+          height: 16px;
           background: #f43f5e;
-          border-radius: 1px;
+          border-radius: 1.5px;
           left: 0%;
           transition: left 0.1s linear;
           pointer-events: none;
+          box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
           z-index: 10;
         }
 
