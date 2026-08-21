@@ -183,16 +183,37 @@ export class CoWatcherDetector {
         userActualTs: cw.friend_uuid === null ? userActivity?.timestamp : undefined,
       })));
 
-      // Sort by contentTimestamp to find host (earliest = host)
-      // Direct comparison: earliest timestamp wins, no threshold or tiebreaker needed
-      coWatchers.sort((a, b) => {
-        const diff = a.timestamp - b.timestamp;
-        console.debug(`[TimestampMigration] SORT activity=${matchedActivityId}: a(${a.friend_uuid}/${a.timestamp}ms) vs b(${b.friend_uuid}/${b.timestamp}ms), diff=${diff}ms => winner=${diff < 0 ? 'a' : diff > 0 ? 'b' : 'tie'}`);
-        return diff;
-      });
+      // Store ALL co-watchers (including self) for host determination
+      // We need everyone's data to compute the host (earliest timestamp)
+      // When sending messages, SEND_MESSAGE handler filters self out
+      const allCoWatchers = coWatchers
+        .map(cw => cw.friend_uuid === null ? selfUuid : cw.friend_uuid)
+        .filter(uuid => uuid !== undefined);
 
-      const hostEntry = coWatchers[0];
-      const hostFriendUuid = hostEntry.friend_uuid === null ? 'self' : hostEntry.friend_uuid;
+      console.log('[CoWatcher] DEBUG: allCoWatchers:', allCoWatchers.map(cw => ({ id: cw, length: cw.length, preview: cw.slice(0, 20) })));
+
+      // Check if an existing active session has a sticky host still co-watching this activity
+      const existingSession = await this.storage.getActiveSession();
+      let hostFriendUuid: string;
+
+      const incumbentHost = existingSession?.is_active ? existingSession.host_friend_uuid : undefined;
+      const incumbentUuid = incumbentHost === 'self' ? selfUuid : incumbentHost;
+      const incumbentStillWatching = incumbentUuid && allCoWatchers.includes(incumbentUuid);
+
+      if (incumbentStillWatching && incumbentHost) {
+        hostFriendUuid = incumbentHost;
+        console.debug(`[TimestampMigration:CoWatcherHost] 🔒 Preserving sticky host: ${hostFriendUuid}`);
+      } else {
+        // Sort by contentTimestamp to elect new host (earliest = host)
+        coWatchers.sort((a, b) => {
+          const diff = a.timestamp - b.timestamp;
+          console.debug(`[TimestampMigration] SORT activity=${matchedActivityId}: a(${a.friend_uuid}/${a.timestamp}ms) vs b(${b.friend_uuid}/${b.timestamp}ms), diff=${diff}ms => winner=${diff < 0 ? 'a' : diff > 0 ? 'b' : 'tie'}`);
+          return diff;
+        });
+        const hostEntry = coWatchers[0];
+        hostFriendUuid = hostEntry.friend_uuid === null ? 'self' : hostEntry.friend_uuid;
+        console.debug(`[TimestampMigration:CoWatcherHost] 👑 Newly elected host: ${hostFriendUuid} with timestamp=${hostEntry.timestamp}`);
+      }
 
       // Get host's friendly name for logging
       let hostName = hostFriendUuid === 'self' ? 'You' : 'Unknown';
@@ -202,15 +223,6 @@ export class CoWatcherDetector {
           hostName = hostFriend.local_name;
         }
       }
-
-      // Store ALL co-watchers (including self) for host determination
-      // We need everyone's data to compute the host (earliest timestamp)
-      // When sending messages, SEND_MESSAGE handler filters self out
-      const allCoWatchers = coWatchers
-        .map(cw => cw.friend_uuid === null ? selfUuid : cw.friend_uuid)
-        .filter(uuid => uuid !== undefined);
-
-      console.log('[CoWatcher] DEBUG: allCoWatchers:', allCoWatchers.map(cw => ({ id: cw, length: cw.length, preview: cw.slice(0, 20) })));
 
       const session: ActivityCoWatchSession = {
         activity_id: matchedActivityId,
@@ -226,7 +238,6 @@ export class CoWatcherDetector {
         host: hostName,
         co_watchers_count: allCoWatchers.length,
       });
-      console.debug(`[TimestampMigration:CoWatcherHost] ✅ Host determined: ${hostName} (${hostFriendUuid}) with timestamp=${hostEntry.timestamp}`);
 
       return session;
     } catch (error) {
@@ -294,6 +305,8 @@ export class CoWatcherDetector {
     try {
       // Check if session already exists
       let session = await this.storage.getActiveSession();
+      const userProfile = await this.storage.getUserProfile();
+      const selfUuid = userProfile?.uuid || 'self';
 
       if (!session) {
         // Create new session with initial members (bootstrap from activity match)
@@ -318,12 +331,20 @@ export class CoWatcherDetector {
         // Update activity context if there's a new matched activity
         if (activityCoWatch.co_watchers.length > 0) {
           session.activity_id = activityCoWatch.activity_id;
-          // Always update host when there's an activity match (host is determined by immutable contentTimestamp)
-          // This ensures host re-determination after reload, not "first to set wins"
-          const previousHost = session.host_friend_uuid;
-          session.host_friend_uuid = activityCoWatch.host_friend_uuid;
-          if (previousHost !== activityCoWatch.host_friend_uuid) {
-            console.log('[CoWatcher] Host changed:', { from: previousHost, to: activityCoWatch.host_friend_uuid });
+          
+          // Sticky host logic: retain incumbent host if they are still actively co-watching this activity
+          const incumbentHost = session.host_friend_uuid;
+          const incumbentUuid = incumbentHost === 'self' ? selfUuid : incumbentHost;
+          const incumbentStillWatching = incumbentUuid && activityCoWatch.co_watchers.includes(incumbentUuid);
+
+          if (incumbentStillWatching && incumbentHost) {
+            console.log('[CoWatcher] 🔒 Preserving sticky host:', incumbentHost);
+          } else {
+            const previousHost = session.host_friend_uuid;
+            session.host_friend_uuid = activityCoWatch.host_friend_uuid;
+            if (previousHost !== activityCoWatch.host_friend_uuid) {
+              console.log('[CoWatcher] Host changed:', { from: previousHost, to: activityCoWatch.host_friend_uuid });
+            }
           }
           console.log('[CoWatcher] Updated session activity context:', { session_id: session.session_id, activity_id: session.activity_id, host: session.host_friend_uuid });
         } else {

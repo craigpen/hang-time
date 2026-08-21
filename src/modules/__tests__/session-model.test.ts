@@ -363,6 +363,44 @@ describe('Session Model & Divergence', () => {
       expect(divergedStoredSession?.is_active).toBe(true);
       expect(divergedStoredSession?.members).toEqual(['user-uuid-1234', 'friend-bob-uuid', 'friend-charlie-uuid']);
     });
+
+    it('preserves sticky host when candidate host timestamp changes as long as incumbent host is still co-watching', async () => {
+      const now = Date.now();
+
+      // 1. Initial session where Bob is host
+      const initialSession = {
+        activity_id: activityId1,
+        host_friend_uuid: 'friend-bob-uuid',
+        co_watchers: ['user-uuid-1234', 'friend-bob-uuid'],
+        detected_at: now,
+      };
+
+      const session = await detector.createOrUpdateUserSession(initialSession);
+      expect(session.host_friend_uuid).toBe('friend-bob-uuid');
+
+      // 2. Later update where detection algorithm nominated 'self' because of timestamp reload
+      const reloadUpdate = {
+        activity_id: activityId1,
+        host_friend_uuid: 'self', // Candidate host flipped to self due to reload
+        co_watchers: ['user-uuid-1234', 'friend-bob-uuid'],
+        detected_at: now + 5000,
+      };
+
+      const updated = await detector.createOrUpdateUserSession(reloadUpdate);
+      // Sticky host should still be Bob because Bob is still an active co-watcher
+      expect(updated.host_friend_uuid).toBe('friend-bob-uuid');
+
+      // 3. Host only transfers if incumbent host (Bob) leaves the co-watch
+      const bobLeftUpdate = {
+        activity_id: activityId1,
+        host_friend_uuid: 'self',
+        co_watchers: ['user-uuid-1234', 'friend-charlie-uuid'], // Bob left!
+        detected_at: now + 10000,
+      };
+
+      const transferred = await detector.createOrUpdateUserSession(bobLeftUpdate);
+      expect(transferred.host_friend_uuid).toBe('self');
+    });
   });
 
   describe('OverlayUI Mode Switching & JOIN_GUEST_ACTIVITY', () => {

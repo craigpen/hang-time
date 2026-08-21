@@ -129,10 +129,22 @@ class GenericVideoTracker {
     const service = provider.serviceName;
     const newActivityId = generateActivityId(service, url);
 
-    // If this is a new activity, get or create the content timestamp from StorageManager
+    // If this is a new activity, get or create the content timestamp from StorageManager / sessionStorage
     if (newActivityId !== this.currentActivityId) {
       this.currentActivityId = newActivityId;
-      this.currentActivityContentTimestamp = undefined; // Wait for response or timeout
+
+      // Try synchronous sessionStorage first (survives tab reloads)
+      let cachedTs: number | undefined = undefined;
+      try {
+        const storedStr = sessionStorage.getItem(`hang_time_content_ts_${newActivityId}`);
+        if (storedStr) {
+          cachedTs = parseInt(storedStr, 10);
+        }
+      } catch (e) {
+        // Ignore sessionStorage restrictions
+      }
+
+      this.currentActivityContentTimestamp = cachedTs; // Set cached if available, otherwise wait for response or timeout
 
       // Request existing contentTimestamp from background's StorageManager (primary memory storage)
       const requestTime = Date.now();
@@ -144,10 +156,13 @@ class GenericVideoTracker {
         console.log(`[TimestampMigration] REQUEST stored timestamp for activity ${newActivityId} at ${requestTime}`);
       }
 
-      // Fallback: if no response in 500ms, use current time
+      // Fallback: if no response in 500ms and no cached timestamp, use current time
       setTimeout(() => {
         if (this.currentActivityContentTimestamp === undefined) {
           this.currentActivityContentTimestamp = Date.now();
+          try {
+            sessionStorage.setItem(`hang_time_content_ts_${newActivityId}`, this.currentActivityContentTimestamp.toString());
+          } catch (e) {}
           console.log(`[TimestampMigration] FALLBACK after 500ms for activity ${newActivityId}: using ${this.currentActivityContentTimestamp}`);
         }
       }, 500);
@@ -276,8 +291,26 @@ class GenericVideoTracker {
     // Use stored contentTimestamp if this is the same activity, otherwise set it
     if (activityId !== this.currentActivityId) {
       this.currentActivityId = activityId;
-      this.currentActivityContentTimestamp = Date.now();
-      console.log(`[TimestampMigration:ContentTimestamp] SET for activity ${activityId}`);
+      let cachedTs: number | undefined = undefined;
+      try {
+        const storedStr = sessionStorage.getItem(`hang_time_content_ts_${activityId}`);
+        if (storedStr) cachedTs = parseInt(storedStr, 10);
+      } catch (e) {}
+      this.currentActivityContentTimestamp = cachedTs || Date.now();
+      try {
+        sessionStorage.setItem(`hang_time_content_ts_${activityId}`, this.currentActivityContentTimestamp.toString());
+      } catch (e) {}
+      console.log(`[TimestampMigration:ContentTimestamp] SET for activity ${activityId}: ${this.currentActivityContentTimestamp}`);
+    } else if (!this.currentActivityContentTimestamp) {
+      let cachedTs: number | undefined = undefined;
+      try {
+        const storedStr = sessionStorage.getItem(`hang_time_content_ts_${activityId}`);
+        if (storedStr) cachedTs = parseInt(storedStr, 10);
+      } catch (e) {}
+      this.currentActivityContentTimestamp = cachedTs || Date.now();
+      try {
+        sessionStorage.setItem(`hang_time_content_ts_${activityId}`, this.currentActivityContentTimestamp.toString());
+      } catch (e) {}
     }
 
     const activity = {
@@ -476,6 +509,9 @@ function establishConnection(): void {
             const stored = message.data?.contentTimestamp;
             if (stored) {
               tracker['currentActivityContentTimestamp'] = stored;
+              try {
+                sessionStorage.setItem(`hang_time_content_ts_${message.data.activityId}`, stored.toString());
+              } catch (e) {}
               console.log(`[TimestampMigration] RESPONSE for activity ${message.data.activityId}: REUSED stored=${stored}`);
             } else {
               console.log(`[TimestampMigration] RESPONSE for activity ${message.data.activityId}: not found in storage`);
