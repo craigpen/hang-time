@@ -50,6 +50,7 @@ export interface UserProfile {
     join_suggestion: boolean;
   };
   dnd_enabled?: boolean; // Do Not Disturb mode (bypasses co-watching and alerts)
+  game_discovery_enabled?: boolean; // Game library discovery enabled
   publisher_config?: {
     enabled: boolean; // Global publishing on/off
     rate_ms: number; // Publishing interval in milliseconds (default 12000)

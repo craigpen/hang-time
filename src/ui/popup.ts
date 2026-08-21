@@ -55,11 +55,9 @@ export class PopupController {
   private friendNicknameInput: HTMLInputElement | null = null;
   private settingsPanel: HTMLElement | null = null;
   private popupContainer: HTMLElement | null = null;
-  private userIdentifier: string | null = null;
   private userActivities: Activity[] = [];
   private expandedFriendsState: Map<string, boolean> = new Map();
   private serviceIntegrationEnabled: Map<string, boolean> = new Map();
-  private currentServiceActivities: Map<string, Activity | null> = new Map();
   private refreshPaused: boolean = false;
   private pendingInvitesByActivity: Map<string, string> = new Map(); // activityId -> friendId with pending invite
   private pendingInvitesData: Map<string, any> = new Map(); // activityId -> full pending invite data (activity, friendId, etc.)
@@ -183,16 +181,13 @@ export class PopupController {
   }
 
   private async _renderFriends(friends: Friend[]): Promise<void> {
-    const pendingCount = friends.filter(f => f.state === 'pending').length;
-    const activeCount = friends.filter(f => f.state === 'active').length;
-
     // Don't resize if settings panel is open
     const shouldResize = !this.settingsPanel || this.settingsPanel.style.display === 'none';
 
     // Create a map of existing friend elements by ID for targeted updates
     const existingElements = new Map<string, HTMLElement>();
     this.friendsList!.querySelectorAll('[data-friend-id]').forEach((el) => {
-      const friendId = (el as HTMLElement).dataset.friendId;
+      const friendId = (el as HTMLElement).dataset['friendId'];
       if (friendId) {
         existingElements.set(friendId, el as HTMLElement);
       }
@@ -307,9 +302,9 @@ export class PopupController {
   private _updateFriendItem(
     element: HTMLElement,
     friendId: string,
-    name: string,
+    _name: string,
     activities: Activity[],
-    isExpanded: boolean,
+    _isExpanded: boolean,
     friend?: Friend
   ): void {
     // Update status text if friend info provided
@@ -334,14 +329,14 @@ export class PopupController {
 
       // Remove old activities not in new list
       oldActivities.forEach((el) => {
-        const activityId = (el as HTMLElement).dataset.activityId;
-        if (!newActivityIds.includes(activityId)) {
+        const activityId = (el as HTMLElement).dataset['activityId'];
+        if (activityId && !newActivityIds.includes(activityId)) {
           el.remove();
         }
       });
 
       // Add new activities and reload messages for all existing activities
-      const existingActivityIds = Array.from(oldActivities).map((el) => (el as HTMLElement).dataset.activityId);
+      const existingActivityIds = Array.from(oldActivities).map((el) => (el as HTMLElement).dataset['activityId']);
       for (const activity of activities) {
         const activityId = activity.id || '';
         if (!existingActivityIds.includes(activityId)) {
@@ -350,7 +345,7 @@ export class PopupController {
         } else {
           // For existing activities, only update progress bar and state (don't recreate entire row)
           const existingWrapper = Array.from(oldActivities).find(
-            (el) => (el as HTMLElement).dataset.activityId === activityId
+            (el) => (el as HTMLElement).dataset['activityId'] === activityId
           ) as HTMLElement | undefined;
           if (existingWrapper && activity.id && friendId) {
             const row = existingWrapper.querySelector('.activity-item-row') as HTMLElement;
@@ -498,7 +493,7 @@ export class PopupController {
   private _createFriendItem(id: string, name: string, activities: Activity[], isExpanded: boolean, friend?: Friend): HTMLElement {
     const item = document.createElement('div');
     item.className = 'friend-item';
-    item.dataset.friendId = id;
+    item.dataset['friendId'] = id;
 
     const isInactive = activities.length === 0;
     const statusText = friend ? this._getStatusText(friend) : (isInactive ? 'Inactive' : 'Active');
@@ -605,7 +600,7 @@ export class PopupController {
   private _createPendingFriendItem(id: string, name: string, initiatedByMe: boolean = true): HTMLElement {
     const item = document.createElement('div');
     item.className = 'friend-item pending-friend-item';
-    item.dataset.friendId = id;
+    item.dataset['friendId'] = id;
 
     // Header
     const header = document.createElement('div');
@@ -668,7 +663,7 @@ export class PopupController {
   private _createActivityItemWithMessages(activity: Activity, friendId?: string): HTMLElement {
     const wrapper = document.createElement('div');
     wrapper.className = 'activity-item-wrapper';
-    wrapper.dataset.activityId = activity.id || '';
+    wrapper.dataset['activityId'] = activity.id || '';
     console.debug('[Popup] Creating activity item with ID:', activity.id, 'service:', activity.service, 'friend:', friendId);
 
     // Activity row (with favicon, content, buttons)
@@ -682,57 +677,7 @@ export class PopupController {
    * Load and render messages for an activity
    * Shows the message container if messages exist
    */
-  private async _loadActivityMessages(
-    friendId: string,
-    activityId: string,
-    messageListElement: HTMLElement,
-    messageContainer: HTMLElement
-  ): Promise<void> {
-    try {
-      console.debug('[Popup] Loading messages for activity:', activityId, 'friend:', friendId);
-      // Load messages from storage
-      const messagesResponse = await chrome.runtime.sendMessage({
-        type: 'GET_ACTIVITY_MESSAGES',
-        data: { friendId, activityId },
-      });
 
-      console.debug('[Popup] Messages response:', messagesResponse);
-      if (messagesResponse.success && messagesResponse.data?.length > 0) {
-        console.debug('[Popup] Found', messagesResponse.data.length, 'messages for activity', activityId);
-        // Render messages
-        for (const message of messagesResponse.data) {
-          this._renderMessage(messageListElement, message);
-        }
-        // Show container if there are messages
-        messageContainer.style.display = 'block';
-      } else {
-        console.debug('[Popup] No messages found for activity:', activityId);
-      }
-    } catch (error) {
-      console.error('[Popup] Error loading messages:', error);
-    }
-  }
-
-  /**
-   * Render a single message in the message list
-   */
-  private _renderMessage(messageListElement: HTMLElement, message: any): void {
-    const msgEl = document.createElement('div');
-    msgEl.className = `activity-message ${message.type}`;
-
-    // Format message text based on type
-    if (message.type === 'invite') {
-      msgEl.textContent = `${message.sender_identifier} invited you to join`;
-    } else if (message.type === 'join_accepted') {
-      msgEl.textContent = `${message.sender_identifier} joined ✓`;
-    } else if (message.type === 'join_declined') {
-      msgEl.textContent = `${message.sender_identifier} declined`;
-    } else if (message.type === 'chat') {
-      msgEl.textContent = `${message.sender_identifier}: ${message.content}`;
-    }
-
-    messageListElement.appendChild(msgEl);
-  }
 
   private _createActivityRow(activity: Activity, friendId?: string): HTMLElement {
     try {
@@ -935,118 +880,7 @@ export class PopupController {
     }
   }
 
-  private _createActivityItemElement(activity: Activity): HTMLElement {
-    const item = document.createElement('div');
-    item.className = 'activity-item-row';
 
-    const badge = this._getActivityBadge(activity.service);
-    const content = this._escapeHtml(activity.content);
-
-    item.innerHTML = `
-      <span class="activity-badge">${badge}</span>
-      <span class="activity-content-text">${content}</span>
-    `;
-
-    return item;
-  }
-
-  private _toggleCardExpanded(card: HTMLElement, friend: Friend): void {
-    const actionsDiv = card.querySelector('.friend-card-actions') as HTMLElement | null;
-    if (!actionsDiv) {
-      console.error('[Popup] Actions div not found');
-      return;
-    }
-    const isExpanded = actionsDiv.style.display !== 'none';
-
-    if (isExpanded) {
-      actionsDiv.style.display = 'none';
-      this.expandedFriendId = null;
-    } else {
-      // Collapse other expanded cards
-      if (this.expandedFriendId) {
-        const otherCard = document.querySelector(`[data-friend-id="${this.expandedFriendId}"]`) as HTMLElement | null;
-        if (otherCard) {
-          const otherActions = otherCard.querySelector('.friend-card-actions') as HTMLElement | null;
-          if (otherActions) otherActions.style.display = 'none';
-        }
-      }
-
-      actionsDiv.style.display = 'flex';
-      this.expandedFriendId = friend.uuid;
-
-      // Attach action handlers
-      const joinBtn = actionsDiv.querySelector('.btn-join') as HTMLButtonElement | null;
-      const msgBtn = actionsDiv.querySelector('.btn-message') as HTMLButtonElement | null;
-      const removeBtn = actionsDiv.querySelector('.btn-remove') as HTMLButtonElement | null;
-
-      if (joinBtn) {
-        joinBtn.onclick = (e: MouseEvent) => {
-          e.stopPropagation();
-          this._handleJoin(friend);
-        };
-      }
-
-      if (msgBtn) {
-        msgBtn.onclick = (e: MouseEvent) => {
-          e.stopPropagation();
-          this._handleMessage(friend);
-        };
-      }
-
-      if (removeBtn) {
-        removeBtn.onclick = (e: MouseEvent) => {
-          e.stopPropagation();
-          this._handleRemoveFriend(friend);
-        };
-      }
-    }
-  }
-
-  private async _handleJoin(friend: Friend): Promise<void> {
-    const activities = Object.values(friend.current_activities || {});
-    const activity = activities[0];
-    if (!activity) {
-      console.warn('[Popup] No activity for join action');
-      return;
-    }
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'JOIN_ACTIVITY',
-        data: { friendId: friend.uuid, activity },
-      });
-
-      if (response.success) {
-        console.debug(`[Popup] Successfully joined ${friend.local_name}'s activity`);
-      } else {
-        this._showError(response.error || 'Failed to join activity');
-      }
-    } catch (error) {
-      console.error('[Popup] Join action failed:', error);
-      this._showError('Failed to join activity');
-    }
-  }
-
-  private async _handleMessage(friend: Friend): Promise<void> {
-    try {
-      // Get messages from background
-      const response = await chrome.runtime.sendMessage({
-        type: 'GET_MESSAGES',
-        data: { friendId: friend.uuid },
-      });
-
-      if (!response.success) {
-        this._showError('Failed to load messages');
-        return;
-      }
-
-      // Open message modal
-      this._showMessageModal(friend, response.data || []);
-    } catch (error) {
-      console.error('[Popup] Message load failed:', error);
-      this._showError('Failed to load messages');
-    }
-  }
 
   private async _handleRemoveFriend(friend: Friend): Promise<void> {
     if (!confirm(`Remove friend "${friend.local_name}"?`)) {
@@ -1262,18 +1096,6 @@ export class PopupController {
 
   private async _loadMyActivity(): Promise<void> {
     try {
-      const identifierResponse = await chrome.runtime.sendMessage({
-        type: 'GET_USER_IDENTIFIER',
-      });
-
-      if (!identifierResponse.success || !identifierResponse.data) {
-        console.error('[Popup] Failed to get user identifier');
-        return;
-      }
-
-      const identifier = identifierResponse.data.identifier;
-      this.userIdentifier = identifier;
-
       // Get all activities from unified storage
       const response = await chrome.runtime.sendMessage({
         type: 'GET_ALL_ACTIVITIES',
@@ -1305,169 +1127,7 @@ export class PopupController {
     });
   }
 
-  private _createActivityItem(activity: Activity): HTMLElement {
-    const item = document.createElement('div');
-    item.className = 'activity-item-row';
-    item.title = activity.content;
 
-    // State indicator (on the left) - FIRST
-    if (activity.state) {
-      const stateIcon = document.createElement('span');
-      stateIcon.className = `activity-state-icon`;
-      stateIcon.textContent = activity.state === 'playing' ? '▶️' : '⏸️';
-      stateIcon.title = activity.state === 'playing' ? 'Playing' : 'Paused';
-      item.appendChild(stateIcon);
-
-      // Pipe separator
-      const separator = document.createElement('span');
-      separator.className = 'activity-separator';
-      separator.textContent = ' | ';
-      item.appendChild(separator);
-    }
-
-    // Favicon with fallback - SECOND
-    const faviconDiv = document.createElement('div');
-    faviconDiv.className = 'activity-item-favicon';
-    const img = document.createElement('img');
-
-    // Prefer dynamic favicon from metadata (for video-tab), fallback to service icon, then Google's service
-    const dynamicFavicon = activity.metadata?.favicon;
-    const domain = activity.metadata?.domain || new URL(activity.url || '').hostname;
-    const faviconUrl = dynamicFavicon ?
-      (dynamicFavicon.startsWith('http') ? dynamicFavicon : `https:${dynamicFavicon}`) :
-      (this._getFaviconUrl(activity.service) || `https://www.google.com/s2/favicons?domain=${domain}`);
-
-    img.src = faviconUrl;
-    img.alt = activity.service;
-    img.onerror = () => {
-      img.style.display = 'none';
-      const fallback = document.createElement('span');
-      fallback.textContent = this._getActivityBadge(activity.service);
-      faviconDiv.appendChild(fallback);
-    };
-    faviconDiv.appendChild(img);
-    item.appendChild(faviconDiv);
-
-    // Content text - THIRD
-    const contentText = document.createElement('span');
-    contentText.className = 'activity-content-text';
-    contentText.textContent = this._truncateActivityContent(activity.content);
-
-    // Apply disconnected styling
-    if (activity.state === 'disconnected') {
-      contentText.style.opacity = '0.5';
-      contentText.style.textDecoration = 'line-through';
-    }
-
-    item.appendChild(contentText);
-
-    // Action buttons container
-    const buttonsDiv = document.createElement('div');
-    buttonsDiv.className = 'activity-actions';
-
-    // Join button
-    // Check if we're watching together (same activity ID for same service)
-    const myActivityForService = this.userActivities.find(a => a.service === activity.service);
-    const isWatchingTogether = myActivityForService && myActivityForService.id === activity.id;
-
-    const joinBtn = document.createElement('button');
-    joinBtn.className = 'activity-action-btn activity-action-join';
-
-    if (isWatchingTogether) {
-      // Show "watching together" icon (solid play + people)
-      joinBtn.innerHTML = `<svg viewBox="0 0 120 140" fill="none" style="width: 20px; height: 20px;">
-        <rect x="10" y="10" width="100" height="60" rx="8" fill="none" stroke="currentColor" stroke-width="3"/>
-        <circle cx="60" cy="40" r="18" fill="currentColor"/>
-        <polygon points="54,33 54,47 73,40" fill="white"/>
-        <circle cx="30" cy="88" r="8" fill="currentColor"/>
-        <path d="M20 100 Q20 98 22 98 L38 98 Q40 98 40 100 L40 120 L20 120 Z" fill="currentColor"/>
-        <circle cx="60" cy="88" r="8" fill="currentColor"/>
-        <path d="M50 100 Q50 98 52 98 L68 98 Q70 98 70 100 L70 120 L50 120 Z" fill="currentColor"/>
-        <circle cx="90" cy="88" r="8" fill="currentColor"/>
-        <path d="M80 100 Q80 98 82 98 L98 98 Q100 98 100 100 L100 120 L80 120 Z" fill="currentColor"/>
-      </svg>`;
-      joinBtn.title = 'Watching together';
-      joinBtn.addEventListener('click', () => {
-        // Can still invite more people from your own My Activity
-        // This button is just for information, not actionable
-        toastManager.show('You\'re already watching together!');
-      });
-    } else {
-      // Show standard join arrow
-      joinBtn.textContent = '▶';
-      joinBtn.title = 'Join activity';
-      joinBtn.addEventListener('click', () => this._joinActivity(activity));
-    }
-
-    buttonsDiv.appendChild(joinBtn);
-
-    // Message button
-    const msgBtn = document.createElement('button');
-    msgBtn.className = 'activity-action-btn activity-action-message';
-    msgBtn.textContent = '💬';
-    msgBtn.title = 'Send message';
-    msgBtn.addEventListener('click', () => {
-      // Toggle message container visibility
-      const wrapper = item.closest('.activity-item-wrapper');
-      if (wrapper) {
-        const messageContainer = wrapper.querySelector('.activity-message-container') as HTMLElement;
-        if (messageContainer) {
-          messageContainer.style.display = messageContainer.style.display === 'none' ? 'block' : 'none';
-          // Focus the input if showing
-          if (messageContainer.style.display === 'block') {
-            const input = messageContainer.querySelector('.activity-message-input') as HTMLInputElement;
-            if (input) input.focus();
-          }
-        }
-      }
-      this._openMessageForActivity(activity, friendId);
-    });
-    buttonsDiv.appendChild(msgBtn);
-
-    // Sync button (video/music only)
-    if (['video-tab', 'spotify-api'].includes(activity.service)) {
-      const syncBtn = document.createElement('button');
-      syncBtn.className = 'activity-action-btn activity-action-sync';
-      syncBtn.textContent = '🕐';
-      syncBtn.title = 'Sync playback';
-      syncBtn.addEventListener('click', () => this._syncActivity(activity));
-      buttonsDiv.appendChild(syncBtn);
-    }
-
-    item.appendChild(buttonsDiv);
-
-    return item;
-  }
-
-  private _getFaviconUrl(service: string): string {
-    // Extract base service name from qualified name (e.g., 'spotify-api' -> 'spotify')
-    const baseService = service.replace('-api', '').replace('-tab', '');
-    const iconMap: Record<string, string> = {
-      netflix: 'public/icons/netflix.png',
-      youtube: 'public/icons/youtube.png',
-      spotify: 'public/icons/spotify.png',
-      twitch: 'public/icons/twitch.png',
-      steam: 'public/icons/steam.png',
-      discord: 'public/icons/discord.png',
-    };
-    const icon = iconMap[baseService];
-    if (!icon) return '';
-    return chrome.runtime.getURL(icon);
-  }
-
-  private _getServiceLabel(service: string): string {
-    // Extract base service name from qualified name (e.g., 'spotify-api' -> 'spotify')
-    const baseService = service.replace('-api', '').replace('-tab', '');
-    const labels: Record<string, string> = {
-      spotify: 'Spotify',
-      twitch: 'Twitch',
-      youtube: 'YouTube',
-      netflix: 'Netflix',
-      steam: 'Steam',
-      discord: 'Discord',
-    };
-    return labels[baseService] || service;
-  }
 
   private _truncateActivityContent(content: string): string {
     return content.length > 40 ? content.substring(0, 40) + '...' : content;
@@ -1523,9 +1183,9 @@ export class PopupController {
   }
 
   private _setupMessageListener(): void {
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
       if (message.type === 'NEW_MESSAGE') {
-        const { message: msg, friendId, activityId } = message.data;
+        // Handled via overlay / message components
       } else if (message.type === 'FRIEND_ACTIVITY_CHANGED') {
         // Friend's activities changed - refresh immediately
         this.refreshFriends().catch((error) => {
@@ -1688,7 +1348,7 @@ export class PopupController {
 
           // Create a SINGLE combined log file with all profiles
           const combinedLog = Object.entries(logs)
-            .map(([profileId, logText]) => logText)
+            .map(([_profileId, logText]) => logText)
             .join('\n\n' + '='.repeat(80) + '\n\n');
 
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -1771,7 +1431,7 @@ export class PopupController {
     if (importFileInput) {
       importFileInput.addEventListener('change', (e: Event) => {
         const files = (e.target as HTMLInputElement).files;
-        if (files && files.length > 0) {
+        if (files && files[0]) {
           this._importSettingsPopup(files[0]);
         }
       });
@@ -1796,7 +1456,7 @@ export class PopupController {
       if (toggle.id.endsWith('-popup')) {
         toggle.addEventListener('change', (e: Event) => {
           if (!(e.target instanceof HTMLInputElement)) return;
-          const service = e.target.dataset.service;
+          const service = e.target.dataset['service'];
           if (service) {
             this._toggleService(service, e.target.checked);
           }
@@ -2154,7 +1814,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         const connectBtn = document.createElement('button');
         connectBtn.className = 'btn-oauth';
         connectBtn.textContent = statusText;
-        connectBtn.dataset.service = service;
+        connectBtn.dataset['service'] = service;
         console.debug(`[Popup] Created ${service} button:`, connectBtn);
 
         connectBtn.addEventListener('click', (e) => {
@@ -2238,8 +1898,8 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
     // Service integration enable/disable checkboxes
     document.querySelectorAll('input.service-enable-toggle').forEach((toggle) => {
       if (toggle instanceof HTMLInputElement) {
-        toggle.addEventListener('change', (e: Event) => {
-          const service = toggle.dataset.service;
+        toggle.addEventListener('change', () => {
+          const service = toggle.dataset['service'];
           if (service) {
             const isEnabled = toggle.checked;
             this.serviceIntegrationEnabled.set(service, isEnabled);
@@ -2816,66 +2476,19 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
     }
   }
 
-  private async _openMessageForActivity(activity: Activity, friendId?: string): Promise<void> {
-    console.debug('[Popup] Opening message for activity:', activity.service, 'friend:', friendId);
-    try {
-      if (friendId && friendId !== 'self') {
-        // Just toggle message container visibility (already handled by message button)
-        // This is a no-op since the message button already does the toggle
-      } else {
-        // Self activity - open invite friends modal instead
-        this._inviteToActivity(activity);
-      }
-    } catch (error) {
-      console.error('[Popup] Failed to open message:', error);
-    }
-  }
-
-  private async _syncActivity(activity: Activity, friendId?: string): Promise<void> {
-    console.debug('[Popup] Syncing activity:', activity.service, 'friend:', friendId);
-    try {
-      await chrome.runtime.sendMessage({
-        type: 'SYNC_ACTIVITY',
-        data: { activity, friendId },
-      });
-    } catch (error) {
-      console.error('[Popup] Failed to sync activity:', error);
-    }
-  }
-
-  private async _sendActivityMessage(activity: Activity, friendId?: string, content: string): Promise<void> {
-    console.debug('[Popup] Sending activity message:', activity.service, 'friend:', friendId, 'content:', content);
-    try {
-      // Get user identifier first
-      const identifierResponse = await chrome.runtime.sendMessage({
-        type: 'GET_USER_IDENTIFIER',
-      });
-      const userIdentifier = typeof identifierResponse.data === 'string' ? identifierResponse.data : 'You';
-      console.debug('[Popup] User identifier:', userIdentifier, 'type:', typeof userIdentifier);
-
-      // Find the message list for this activity (search by service and content as fallback)
-      const messageContainers = document.querySelectorAll('.activity-message-container');
-      let targetMessageList: HTMLElement | null = null;
-
-
-      // Optimistically render message if we found the target
-      if (targetMessageList) {
-        this._renderMessage(targetMessageList, {
-          type: 'chat',
-          sender_identifier: userIdentifier,
-          content,
-          is_outbound: true,
-        });
-      }
-
-      // Send message to background
-      await chrome.runtime.sendMessage({
-        type: 'SEND_MESSAGE',
-        data: { activity, friendId, content },
-      });
-    } catch (error) {
-      console.error('[Popup] Failed to send message:', error);
-    }
+  private _getFaviconUrl(service: string): string {
+    const baseService = service.replace('-api', '').replace('-tab', '');
+    const iconMap: Record<string, string> = {
+      netflix: 'public/icons/netflix.png',
+      youtube: 'public/icons/youtube.png',
+      spotify: 'public/icons/spotify.png',
+      twitch: 'public/icons/twitch.png',
+      steam: 'public/icons/steam.png',
+      discord: 'public/icons/discord.png',
+    };
+    const icon = iconMap[baseService];
+    if (!icon) return '';
+    return chrome.runtime.getURL(icon);
   }
 
   private async _exportSettingsPopup(): Promise<void> {
@@ -3025,17 +2638,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
     }
   }
 
-  private _getActivityBadge(service: string): string {
-    const badges: Record<string, string> = {
-      spotify: '🎵',
-      twitch: '📺',
-      youtube: '📹',
-      netflix: '🎬',
-      steam: '🎮',
-      idle: '•',
-    };
-    return badges[service] ?? '•';
-  }
+
 
   private _escapeHtml(text: string): string {
     const div = document.createElement('div');
