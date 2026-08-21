@@ -65,6 +65,7 @@ export class PopupController {
   private pendingInvitesData: Map<string, any> = new Map(); // activityId -> full pending invite data (activity, friendId, etc.)
   private storage: StorageManager = new StorageManager();
   private gamesTabController: GamesTabController | null = null;
+  private showInactiveFriends: boolean = true;
 
   static readonly MY_ACTIVITY_REFRESH_MS = 3000; // Keep "My Activity" responsive
   static readonly FALLBACK_FRIENDS_REFRESH_MS = 15000; // Safety net for missed Nostr messages
@@ -197,52 +198,32 @@ export class PopupController {
       }
     });
 
-    // Handle "My Activity" (self)
+    // Handle "You" (self)
     let selfElement = existingElements.get('self');
     const selfExpanded = this.expandedFriendsState.get('self') ?? true;
     const sortedUserActivities = this._sortActivitiesByType(this.userActivities);
     if (!selfElement) {
       // Create new self element
-      selfElement = this._createFriendItem('self', 'My Activity', sortedUserActivities, selfExpanded);
+      selfElement = this._createFriendItem('self', 'You', sortedUserActivities, selfExpanded);
       selfElement.classList.add('user-item');
       selfElement.setAttribute('data-friend-id', 'self');
       this.friendsList!.insertBefore(selfElement, this.friendsList!.firstChild);
     } else {
       // Update self element in place
-      this._updateFriendItem(selfElement, 'self', 'My Activity', sortedUserActivities, selfExpanded);
+      this._updateFriendItem(selfElement, 'self', 'You', sortedUserActivities, selfExpanded);
     }
     selfElement.classList.toggle('expanded', selfExpanded);
 
-    // Create or update the Friend Activity header (positioned after My Activity)
-    let headerElement = this.friendsList!.querySelector('[data-header="friends-header"]') as HTMLElement | null;
-    if (!headerElement) {
-      headerElement = document.createElement('div');
-      headerElement.className = 'friends-header';
-      headerElement.setAttribute('data-header', 'friends-header');
-      headerElement.innerHTML = `
-        <h2>Friend Activity</h2>
-        <div class="friends-header-actions">
-          <button id="show-inactive-btn" class="btn-icon-small btn-toggle-inactive" title="Toggle offline friends">●</button>
-          <button id="add-friend-btn" class="btn-icon-small btn-add-friend" title="Add a friend">✚</button>
-        </div>
-      `;
-      this.friendsList!.appendChild(headerElement);
-
-      // Re-attach event listeners after creating header
-      const inactiveBtnNew = headerElement.querySelector('#show-inactive-btn');
-      const addFriendBtnNew = headerElement.querySelector('#add-friend-btn');
-      if (inactiveBtnNew) {
-        inactiveBtnNew.addEventListener('click', () => this._toggleShowInactiveFriends());
-      }
-      if (addFriendBtnNew) {
-        addFriendBtnNew.addEventListener('click', () => this._showAddFriendForm());
-      }
+    // Filter friends if showInactiveFriends is false
+    let displayFriends = friends;
+    if (!this.showInactiveFriends && friends) {
+      displayFriends = friends.filter(f => f.state === 'pending' || Object.keys(f.current_activities || {}).length > 0);
     }
 
     // Show "no friends" placeholder
-    if (!friends || friends.length === 0) {
+    if (!displayFriends || displayFriends.length === 0) {
       this.noFriendsPlaceholder!.style.display = 'block';
-      // Remove all existing friend elements (keep only self and header)
+      // Remove all existing friend elements (keep only self)
       existingElements.forEach((element, friendId) => {
         if (friendId !== 'self') {
           element.remove();
@@ -252,8 +233,8 @@ export class PopupController {
       this.noFriendsPlaceholder!.style.display = 'none';
 
       // Sort friends: pending first, then active
-      const pendingFriends = friends.filter(f => f.state === 'pending');
-      const activeFriends = friends.filter(f => f.state === 'active');
+      const pendingFriends = displayFriends.filter(f => f.state === 'pending');
+      const activeFriends = displayFriends.filter(f => f.state === 'active');
       const sortedFriends = [...pendingFriends, ...activeFriends];
 
       // Update existing friends and add new ones
@@ -823,12 +804,6 @@ export class PopupController {
       }
 
       row.appendChild(stateIcon);
-
-      // Pipe separator
-      const separator = document.createElement('span');
-      separator.className = 'activity-separator';
-      separator.textContent = ' | ';
-      row.appendChild(separator);
     }
 
     // Favicon (dynamic from site or service icon) - SECOND
@@ -891,19 +866,21 @@ export class PopupController {
 
     if (isSelfActivity) {
       // Thin gray envelope for inviting friends
-      firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
+      firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon" width="14" height="14">
         <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
         <path d="M 2 6 L 12 13 L 22 6"></path>
       </svg>`;
       firstBtn.style.color = '#999';
       firstBtn.title = 'Invite friends';
     } else if (isDnd) {
-      firstBtn.textContent = '▶';
+      firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="join-icon" width="13" height="13">
+        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+      </svg>`;
       firstBtn.title = 'Friend is in Do Not Disturb mode';
       firstBtn.classList.add('disabled');
     } else if (hasPendingInvite) {
       // Bold green envelope for accepting invite
-      firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
+      firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon" width="14" height="14">
         <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
         <path d="M 2 6 L 12 13 L 22 6"></path>
       </svg>`;
@@ -911,7 +888,9 @@ export class PopupController {
       firstBtn.title = 'Accept or decline invite';
     } else {
       // Play arrow for joining normally
-      firstBtn.textContent = '▶';
+      firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="join-icon" width="13" height="13">
+        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+      </svg>`;
       firstBtn.title = 'Join activity';
     }
 
@@ -940,12 +919,6 @@ export class PopupController {
       }
     });
     buttonsDiv.appendChild(firstBtn);
-
-    // Separator before action buttons
-    const actionSeparator = document.createElement('span');
-    actionSeparator.className = 'activity-separator';
-    actionSeparator.textContent = ' | ';
-    row.appendChild(actionSeparator);
 
     row.appendChild(buttonsDiv);
 
@@ -1857,6 +1830,12 @@ export class PopupController {
     const addFriendBtn = document.getElementById('add-friend-btn');
     if (addFriendBtn) {
       addFriendBtn.addEventListener('click', () => this._showAddFriendForm());
+    }
+
+    // Toggle inactive friends button
+    const showInactiveBtn = document.getElementById('show-inactive-btn');
+    if (showInactiveBtn) {
+      showInactiveBtn.addEventListener('click', () => this._toggleShowInactiveFriends());
     }
 
     // Form submit button
@@ -2981,6 +2960,19 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         }
       });
     }
+  }
+
+  private _toggleShowInactiveFriends(): void {
+    this.showInactiveFriends = !this.showInactiveFriends;
+    const btn = document.getElementById('show-inactive-btn');
+    if (btn) {
+      btn.classList.toggle('inactive-hidden', !this.showInactiveFriends);
+      btn.title = this.showInactiveFriends ? 'Hide offline friends' : 'Show offline friends';
+      btn.style.opacity = this.showInactiveFriends ? '1' : '0.4';
+    }
+    this.refreshFriends().catch((error) => {
+      console.error('[Popup] Failed to refresh friends:', error);
+    });
   }
 
   private _showAddFriendForm(): void {

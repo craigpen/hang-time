@@ -3,7 +3,7 @@
  */
 
 body {
-  width: 500px;
+  width: 380px;
   min-height: 100px;
   display: flex;
   flex-direction: column;
@@ -86,14 +86,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
+  padding: 10px 14px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
 }
 
 .popup-header h1 {
-  font-size: 1.1em;
+  font-size: 1.05em;
   margin: 0;
   color: var(--accent-primary);
 }
@@ -101,7 +101,7 @@ body {
 .header-buttons {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .btn-icon-small {
@@ -109,9 +109,10 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
-  padding: 4px 6px;
+  font-size: 13px;
+  padding: 5px 6px;
   line-height: 1;
+  color: var(--text-secondary);
   transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
@@ -121,6 +122,7 @@ body {
 .btn-icon-small:hover {
   background-color: var(--bg-hover, rgba(255, 255, 255, 0.08));
   border-color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .btn-dnd.dnd-active {
@@ -1662,8 +1664,7 @@ body.settings-open .popup-container {
 
 .friend-item.user-item {
   background-color: var(--bg-secondary);
-  border-bottom-color: var(--accent-primary);
-  border-bottom-width: 2px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .friend-item.inactive {
@@ -1973,21 +1974,34 @@ body.settings-open .popup-container {
 
 .tab-navigation {
   display: flex;
-  gap: 0;
+  align-items: center;
+  justify-content: space-between;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
   flex-shrink: 0;
+  padding-right: 8px;
+}
+
+.tab-buttons {
+  display: flex;
+  flex: 1;
+}
+
+.tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .tab-button {
   flex: 1;
-  padding: 12px 16px;
+  padding: 10px 14px;
   border: none;
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
   font-weight: 500;
-  font-size: 0.95em;
+  font-size: 0.9em;
   transition: all 0.2s;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
