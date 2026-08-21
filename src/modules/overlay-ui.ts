@@ -293,7 +293,7 @@ export class OverlayUI {
           left: 0%;
           width: 14px;
           height: 16px;
-          background: #818cf8;
+          background: #f43f5e;
           transition: left 0.1s linear;
           user-select: none;
           pointer-events: none;
@@ -366,7 +366,7 @@ export class OverlayUI {
           transform: translateY(-50%);
           width: 2px;
           height: 14px;
-          background: #818cf8;
+          background: #f43f5e;
           border-radius: 1px;
           left: 0%;
           transition: left 0.1s linear;
@@ -379,7 +379,7 @@ export class OverlayUI {
           top: 50%;
           transform: translateY(-50%);
           height: 2px;
-          background: #818cf8;
+          background: #f43f5e;
           left: 0%;
           transition: left 0.1s linear, width 0.1s linear;
           pointer-events: none;
@@ -546,8 +546,8 @@ export class OverlayUI {
         }
 
         .message-user .message-content {
-          background: rgba(99, 102, 241, 0.3);
-          border: 1px solid rgba(99, 102, 241, 0.35);
+          background: rgba(244, 63, 94, 0.25);
+          border: 1px solid rgba(244, 63, 94, 0.35);
           color: white;
           border-bottom-right-radius: 4px;
         }
@@ -584,7 +584,7 @@ export class OverlayUI {
 
         #message-input:focus {
           background: rgba(255, 255, 255, 0.09);
-          border-color: rgba(99, 102, 241, 0.5);
+          border-color: rgba(244, 63, 94, 0.5);
         }
 
         #send-button {
@@ -620,13 +620,10 @@ export class OverlayUI {
 
         <!-- Mode A: Co-Watching Layout -->
         <div id="watching-together-section" style="display: flex; flex-direction: column; gap: 6px;">
-          <!-- Line 1: Host Row -->
+          <!-- Line 1: Host Row (Includes inline Title) -->
           <div id="host-chip-container" class="overlay-role-row"></div>
 
-          <!-- Line 2: Video Title -->
-          <div id="media-title-container" class="video-title-row"></div>
-
-          <!-- Line 3: Progress Bar + Time + Sync button -->
+          <!-- Line 2: Progress Bar + Time + Sync button -->
           <div class="watching-together-row" id="watching-together-row">
             <div class="progress-bar-wrapper">
               <div class="progress-bar-container">
@@ -644,7 +641,7 @@ export class OverlayUI {
             </div>
           </div>
 
-          <!-- Line 4: Guest chips -->
+          <!-- Line 3: Guest chips -->
           <div id="guest-chips-container" class="overlay-role-row"></div>
         </div>
 
@@ -1017,7 +1014,7 @@ export class OverlayUI {
   /**
    * Get participant color based on their role:
    * - Host: always mint / emerald (#10b981)
-   * - Non-host self: sleek indigo (#818cf8)
+   * - Non-host self: vivid coral (#f43f5e)
    * - Others: fixed mapped pastel color
    */
   private getParticipantColor(uuid: string | undefined): string {
@@ -1032,9 +1029,9 @@ export class OverlayUI {
       return '#10b981';
     }
 
-    // Rule 2: Current user (when guest) is indigo
+    // Rule 2: Current user (when guest) is vivid coral
     if (uuid === this.userId) {
-      return '#818cf8';
+      return '#f43f5e';
     }
 
     // Rule 3: Other guests get fixed mapped color
@@ -1046,9 +1043,8 @@ export class OverlayUI {
     const guestColors = [
       '#06b6d4', // cyan
       '#f59e0b', // amber
-      '#f43f5e', // rose
-      '#14b8a6', // teal
       '#a855f7', // purple
+      '#14b8a6', // teal
       '#3b82f6', // blue
       '#fb923c', // orange
     ];
@@ -1470,7 +1466,6 @@ export class OverlayUI {
     const watchingRow = document.getElementById('watching-together-row');
     const watchingSection = document.getElementById('watching-together-section');
     const hostContainer = document.getElementById('host-chip-container');
-    const mediaContainer = document.getElementById('media-title-container');
     const guestContainer = document.getElementById('guest-chips-container');
     const guestRowsContainer = document.getElementById('guest-rows-container');
 
@@ -1482,8 +1477,8 @@ export class OverlayUI {
       watchingRow.style.display = '';
       guestRowsContainer.innerHTML = ''; // Hide divergence rows
 
-      // Render host chip + media title
-      this.renderHostChip(hostContainer, mediaContainer);
+      // Render host chip + inline media title
+      this.renderHostChip(hostContainer);
 
       // Render guest chips
       this.renderGuestChips(guestContainer);
@@ -1497,7 +1492,6 @@ export class OverlayUI {
       if (watchingSection) watchingSection.style.display = 'none';
       watchingRow.style.display = 'none';
       hostContainer.innerHTML = '';
-      if (mediaContainer) mediaContainer.innerHTML = '';
       guestContainer.innerHTML = '';
 
       // Render "Choose next:" with guest rows
@@ -1506,10 +1500,10 @@ export class OverlayUI {
   }
 
   /**
-   * MODE A: Render host chip with activity info
-   * Host is always shown first with the title (associated with progress bar)
+   * MODE A: Render host chip with inline activity title
+   * Host is shown first followed inline by the video title being tracked
    */
-  private renderHostChip(container: HTMLElement, mediaContainer?: HTMLElement | null): void {
+  private renderHostChip(container: HTMLElement): void {
     const hostUuid = this.getHostUuid();
     if (!hostUuid) return;
 
@@ -1523,46 +1517,44 @@ export class OverlayUI {
 
     const hostColor = this.getParticipantColor(hostUuid);
 
-    // Build host role row: label + pill
+    // Build inline media title & icon
+    let mediaHtml = '';
+    const activity = this._state.co_watcher_activities?.[hostUuid];
+    if (activity && activity.content) {
+      const serviceMap: Record<string, string> = {
+        'youtube': 'youtube.png',
+        'youtube-tab': 'youtube.png',
+        'spotify': 'spotify.png',
+        'twitch': 'twitch.png',
+        'netflix': 'netflix.png',
+        'steam': 'steam.png',
+      };
+
+      let iconHtml = '';
+      if (activity.service && serviceMap[activity.service]) {
+        try {
+          const iconUrl = chrome.runtime.getURL(`public/icons/${serviceMap[activity.service]}`);
+          iconHtml = `<img src="${iconUrl}" style="width: 14px; height: 14px; object-fit: contain; flex-shrink: 0;" alt="">`;
+        } catch (e) {
+          iconHtml = '';
+        }
+      }
+
+      const title = this.escapeHtml(activity.content);
+      mediaHtml = `
+        <div style="display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; flex: 1;">
+          ${iconHtml}
+          <span class="media-title-text" style="font-size: 11px; color: rgba(255, 255, 255, 0.85); font-weight: 500;" title="${title}">${title}</span>
+        </div>
+      `;
+    }
+
+    // Build host role row: label + pill + inline title
     container.innerHTML = `
       <span class="overlay-role-label">HOST</span>
-      <div class="attendee-chip" style="background: ${hostColor};"><span>${hostName}</span></div>
+      <div class="attendee-chip" style="background: ${hostColor}; flex-shrink: 0;"><span>${hostName}</span></div>
+      ${mediaHtml}
     `;
-
-    // Render media title underneath host
-    if (mediaContainer) {
-      const activity = this._state.co_watcher_activities?.[hostUuid];
-      if (activity && activity.content) {
-        const serviceMap: Record<string, string> = {
-          'youtube': 'youtube.png',
-          'youtube-tab': 'youtube.png',
-          'spotify': 'spotify.png',
-          'twitch': 'twitch.png',
-          'netflix': 'netflix.png',
-          'steam': 'steam.png',
-        };
-
-        let iconHtml = '';
-        if (activity.service && serviceMap[activity.service]) {
-          try {
-            const iconUrl = chrome.runtime.getURL(`public/icons/${serviceMap[activity.service]}`);
-            iconHtml = `<img src="${iconUrl}" style="width: 14px; height: 14px; object-fit: contain; flex-shrink: 0;" alt="">`;
-          } catch (e) {
-            iconHtml = '';
-          }
-        }
-
-        const title = this.escapeHtml(activity.content);
-        mediaContainer.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 6px; padding-left: 2px; overflow: hidden; width: 100%;">
-            ${iconHtml}
-            <span class="media-title-text" title="${title}">${title}</span>
-          </div>
-        `;
-      } else {
-        mediaContainer.innerHTML = '';
-      }
-    }
   }
 
   /**
