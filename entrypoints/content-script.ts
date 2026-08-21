@@ -540,27 +540,27 @@ function establishConnection(): void {
           }
           // Update overlay with co-watch data
           if (message.data) {
-            // Merge messages instead of replacing - preserve locally added messages
             const incomingMessages = message.data.messages || [];
             const currentMessages = overlayUI.state.messages || [];
 
-            // Deduplicate and merge: use content+sender_id as key
-            // (same message from same person, regardless of display name or timestamp variation)
-            const merged = new Map();
-            for (const msg of currentMessages) {
-              const key = `${msg.content}_${msg.sender_id}`;
-              merged.set(key, msg);
-            }
-            for (const msg of incomingMessages) {
-              const key = `${msg.content}_${msg.sender_id}`;
-              // Only add from backend if not already present (prefer local "You" over display name)
-              if (!merged.has(key)) {
-                merged.set(key, msg);
+            // Merge messages: combine current and incoming, sort chronologically, and deduplicate
+            const allCandidates = [...currentMessages, ...incomingMessages];
+            allCandidates.sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0));
+
+            const mergedMessages: any[] = [];
+            for (const msg of allCandidates) {
+              if (!msg || !msg.content) continue;
+              const isDupe = mergedMessages.some((existing) => {
+                if (existing.id && msg.id && existing.id === msg.id) return true;
+                if (existing.content === msg.content) {
+                  return Math.abs((existing.timestamp || 0) - (msg.timestamp || 0)) < 10000;
+                }
+                return false;
+              });
+              if (!isDupe) {
+                mergedMessages.push(msg);
               }
             }
-
-            // Sort by timestamp
-            const mergedMessages = Array.from(merged.values()).sort((a, b) => a.timestamp - b.timestamp);
 
             // Use nicknameMap from background (has complete participant info), fallback to extracting from messages
             let nicknameMapObj: Record<string, string> = message.data.nicknameMap || {};

@@ -1102,16 +1102,22 @@ function _startCoWatcherDetectionCycle(): void {
           }
 
           // Sort by timestamp and deduplicate
-          const deduped = new Map<string, any>();
-          recentMessages.forEach(msg => {
-            const key = `${msg.content}_${msg.timestamp}`; // Rough dedup
-            if (!deduped.has(key)) {
-              deduped.set(key, msg);
-            }
-          });
-          recentMessages.length = 0;
-          recentMessages.push(...Array.from(deduped.values()));
           recentMessages.sort((a, b) => a.timestamp - b.timestamp);
+          const deduped: typeof recentMessages = [];
+          for (const msg of recentMessages) {
+            const isDupe = deduped.some((existing) => {
+              if (existing.id && msg.id && existing.id === msg.id) return true;
+              if (existing.sender_id === msg.sender_id && existing.content === msg.content) {
+                return Math.abs(existing.timestamp - msg.timestamp) < 10000;
+              }
+              return false;
+            });
+            if (!isDupe) {
+              deduped.push(msg);
+            }
+          }
+          recentMessages.length = 0;
+          recentMessages.push(...deduped);
 
           // DEBUG: Log what messages are being broadcast
           if (recentMessages.length > 0) {
@@ -1614,6 +1620,21 @@ chrome.runtime.onConnect.addListener((port) => {
                 });
               }
               recentMessages.sort((a, b) => a.timestamp - b.timestamp);
+              const deduped: typeof recentMessages = [];
+              for (const msg of recentMessages) {
+                const isDupe = deduped.some((existing) => {
+                  if (existing.id && msg.id && existing.id === msg.id) return true;
+                  if (existing.sender_id === msg.sender_id && existing.content === msg.content) {
+                    return Math.abs(existing.timestamp - msg.timestamp) < 10000;
+                  }
+                  return false;
+                });
+                if (!isDupe) {
+                  deduped.push(msg);
+                }
+              }
+              recentMessages.length = 0;
+              recentMessages.push(...deduped);
             }
 
             // Build co-watcher activities map for divergence display (includes self + others)

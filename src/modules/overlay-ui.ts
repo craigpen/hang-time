@@ -729,6 +729,7 @@ export class OverlayUI {
           if (pinButton) {
             if (this._state.pinned) {
               pinButton.classList.add('pinned');
+              this.show();
             } else {
               pinButton.classList.remove('pinned');
             }
@@ -792,17 +793,19 @@ export class OverlayUI {
     }
     this._eventListenersSetup = true;
 
-    // Discovery listener - show overlay and cancel any fade-out if mouse is over overlay area
+    // Discovery listener - show overlay and cancel any fade-out if mouse is over overlay area or top-right zone
     if (!this.initialMouseMoveListener && this.container) {
       this.initialMouseMoveListener = (e: MouseEvent) => {
         if (!this.container) return;
 
         const rect = this.container.getBoundingClientRect();
-        const isOverlay = e.clientX >= rect.left && e.clientX <= rect.right &&
+        const isInsideOverlay = e.clientX >= rect.left && e.clientX <= rect.right &&
                          e.clientY >= rect.top && e.clientY <= rect.bottom;
+        // Also allow waking up by hovering near top-right default anchor zone
+        const isDefaultAnchorZone = (e.clientX >= window.innerWidth - 350 && e.clientY <= 250);
 
-        if (isOverlay) {
-          // Cancel any pending fade-out or hide timers whenever mouse is inside overlay
+        if (isInsideOverlay || isDefaultAnchorZone) {
+          // Cancel any pending fade-out or hide timers whenever mouse is inside overlay or anchor zone
           if (this.hideTimer) {
             clearTimeout(this.hideTimer);
             this.hideTimer = null;
@@ -1927,10 +1930,28 @@ export class OverlayUI {
       return;
     }
 
+    // Sort messages strictly chronologically (ascending)
+    const sorted = [...validMessages].sort((a, b) => a.timestamp - b.timestamp);
+
+    // Deduplicate any echo/optimistic duplicates
+    const deduped: typeof validMessages = [];
+    for (const msg of sorted) {
+      const isDupe = deduped.some((existing) => {
+        if (existing.id && msg.id && existing.id === msg.id) return true;
+        if (existing.content === msg.content) {
+          return Math.abs(existing.timestamp - msg.timestamp) < 10000;
+        }
+        return false;
+      });
+      if (!isDupe) {
+        deduped.push(msg);
+      }
+    }
+
     let html = '';
     let lastSenderId: string | null = null;
 
-    for (const msg of validMessages) {
+    for (const msg of deduped) {
       const isUser = msg.sender_id === this.userId;
       const userColor = this.getParticipantColor(msg.sender_id);
       const displayName = isUser ? 'You' : (this._state.nicknameMap?.[msg.sender_id] || msg.sender || 'Unknown');

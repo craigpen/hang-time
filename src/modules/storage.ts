@@ -614,7 +614,33 @@ export class StorageManager {
     const messagesKey = `messages_${profile.uuid}`;
     const messages = await chrome.storage.local.get([messagesKey]);
     const allMessages = messages[messagesKey] as Message[] || [];
-    return allMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Sort by timestamp ascending
+    allMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Robust deduplication (matching IDs or same content within 10 seconds)
+    const deduped: Message[] = [];
+    for (const msg of allMessages) {
+      if (!msg || !msg.content) continue;
+      const isDupe = deduped.some((existing) => {
+        if (existing.id && msg.id && existing.id === msg.id) return true;
+        if (existing.content === msg.content) {
+          return Math.abs(existing.timestamp - msg.timestamp) < 10000;
+        }
+        return false;
+      });
+
+      if (!isDupe) {
+        deduped.push(msg);
+      }
+    }
+
+    // If duplicates were purged, persist the clean array back to storage
+    if (deduped.length !== allMessages.length) {
+      await chrome.storage.local.set({ [messagesKey]: deduped });
+    }
+
+    return deduped;
   }
 
   /**
@@ -633,7 +659,27 @@ export class StorageManager {
     const messagesKey = `messages_${profile.uuid}`;
     const messages = await chrome.storage.local.get([messagesKey]);
     const allMessages = messages[messagesKey] as Message[] || [];
-    allMessages.push(message);
+
+    // Check if already exists by exact ID or near-duplicate
+    const existingIndex = allMessages.findIndex((existing) => {
+      if (existing.id && message.id && existing.id === message.id) return true;
+      if (existing.from === message.from && existing.content === message.content) {
+        return Math.abs(existing.timestamp - message.timestamp) < 10000;
+      }
+      return false;
+    });
+
+    if (existingIndex >= 0) {
+      // If existing had temporary ID and new one has Nostr hex ID, update it
+      const existing = allMessages[existingIndex];
+      if (existing && existing.id.startsWith('msg_') && !message.id.startsWith('msg_')) {
+        allMessages[existingIndex] = message;
+      }
+    } else {
+      allMessages.push(message);
+    }
+
+    allMessages.sort((a, b) => a.timestamp - b.timestamp);
 
     // Write directly to chrome.storage.local, bypassing cache to ensure immediate persistence
     await chrome.storage.local.set({ [messagesKey]: allMessages });
