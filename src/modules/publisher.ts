@@ -370,12 +370,11 @@ export class ActivityPublisher {
       contentTimestamp: activity.contentTimestamp, // Immutable start-watching time for reliable host determination
       dnd: isDnd,
       metadata: activity.metadata ? {
+        ...activity.metadata,
         progress: activity.metadata.progress,
         duration: activity.metadata.duration,
         progress_measured_at: activity.metadata.progress_measured_at,
         dnd: isDnd,
-        // Optionally add artist for Spotify when API is implemented
-        // artist: activity.metadata.artist,
       } : (isDnd ? { dnd: true } : undefined),
     };
   }

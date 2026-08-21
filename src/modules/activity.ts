@@ -18,8 +18,10 @@ export class ActivityDetector {
   private services: Map<string, IServiceModule> = new Map();
   private pollInterval: NodeJS.Timeout | null = null;
   private lastPublishedActivities: Activity[] = []; // Track for deduplication
+  private lastGhostCheckTimestamp = 0;
 
   static readonly POLL_INTERVAL_MS = 500;
+  static readonly GHOST_CHECK_INTERVAL_MS = 30000;
 
   constructor(private storageManager: StorageManager) {
     // Services will be registered separately via registerService()
@@ -94,17 +96,22 @@ export class ActivityDetector {
         }
       }
 
+      const now = Date.now();
+
       if (validatedActivities.length === 0) {
         console.debug('[Activity] No activities passed validation');
-        // Clean up ghost activities from closed tabs
-        const ghosts = await datastore.detectGhosts();
-        if (ghosts.length > 0) {
-          for (const g of ghosts) {
-            await datastore.deleteActivity(g.id);
+        // Clean up ghost activities from closed tabs periodically
+        if (now - this.lastGhostCheckTimestamp >= ActivityDetector.GHOST_CHECK_INTERVAL_MS) {
+          this.lastGhostCheckTimestamp = now;
+          const ghosts = await datastore.detectGhosts();
+          if (ghosts.length > 0) {
+            for (const g of ghosts) {
+              await datastore.deleteActivity(g.id);
+            }
+            console.debug('[Activity] Cleaned up', ghosts.length, 'ghost activities');
+            // Update my_activities after cleanup
+            await this._updateMyActivitiesFromDatastore();
           }
-          console.debug('[Activity] Cleaned up', ghosts.length, 'ghost activities');
-          // Update my_activities after cleanup
-          await this._updateMyActivitiesFromDatastore();
         }
         return;
       }
@@ -118,10 +125,13 @@ export class ActivityDetector {
         newActivityIds.size !== lastActivityIds.size ||
         Array.from(newActivityIds).some(id => !lastActivityIds.has(id));
 
-      // Clean up ghost activities from closed tabs before updating my_activities
-      const ghosts = await datastore.detectGhosts();
-      for (const g of ghosts) {
-        await datastore.deleteActivity(g.id);
+      // Clean up ghost activities from closed tabs periodically before updating my_activities
+      if (now - this.lastGhostCheckTimestamp >= ActivityDetector.GHOST_CHECK_INTERVAL_MS) {
+        this.lastGhostCheckTimestamp = now;
+        const ghosts = await datastore.detectGhosts();
+        for (const g of ghosts) {
+          await datastore.deleteActivity(g.id);
+        }
       }
 
       // Clean up stale API activities (from services that are enabled but didn't return anything)

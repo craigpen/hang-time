@@ -324,139 +324,36 @@ export class PopupController {
     const activitiesContainer = element.querySelector('.friend-activities') as HTMLElement;
     if (activitiesContainer) {
       // Update activities in place
-      const oldActivities = activitiesContainer.querySelectorAll('.activity-item-wrapper');
-      const newActivityIds = activities.map((a) => a.id || '');
+      const oldWrappers = Array.from(activitiesContainer.querySelectorAll<HTMLElement>('.activity-item-wrapper'));
+      const oldWrapperMap = new Map<string, HTMLElement>();
+      oldWrappers.forEach((el) => {
+        const activityId = el.dataset['activityId'];
+        if (activityId) oldWrapperMap.set(activityId, el);
+      });
+
+      const newActivityIds = new Set(activities.map((a) => a.id || ''));
 
       // Remove old activities not in new list
-      oldActivities.forEach((el) => {
-        const activityId = (el as HTMLElement).dataset['activityId'];
-        if (activityId && !newActivityIds.includes(activityId)) {
+      oldWrappers.forEach((el) => {
+        const activityId = el.dataset['activityId'];
+        if (activityId && !newActivityIds.has(activityId)) {
           el.remove();
+          oldWrapperMap.delete(activityId);
         }
       });
 
-      // Add new activities and reload messages for all existing activities
-      const existingActivityIds = Array.from(oldActivities).map((el) => (el as HTMLElement).dataset['activityId']);
+      // Synchronize each activity in sorted order
       for (const activity of activities) {
         const activityId = activity.id || '';
-        if (!existingActivityIds.includes(activityId)) {
-          const activityWrapper = this._createActivityItemWithMessages(activity, friendId);
-          activitiesContainer.appendChild(activityWrapper);
+        let wrapper = oldWrapperMap.get(activityId);
+
+        if (!wrapper) {
+          wrapper = this._createActivityItemWithMessages(activity, friendId);
+          activitiesContainer.appendChild(wrapper);
         } else {
-          // For existing activities, only update progress bar and state (don't recreate entire row)
-          const existingWrapper = Array.from(oldActivities).find(
-            (el) => (el as HTMLElement).dataset['activityId'] === activityId
-          ) as HTMLElement | undefined;
-          if (existingWrapper && activity.id && friendId) {
-            const row = existingWrapper.querySelector('.activity-item-row') as HTMLElement;
-            if (row) {
-              // Update progress bar CSS variable and attribute
-              if (activity.metadata?.progress !== undefined && activity.metadata?.duration && activity.metadata.duration > 0) {
-                const progressPercent = Math.min(100, Math.max(0, (activity.metadata.progress / activity.metadata.duration) * 100));
-                row.style.setProperty('--progress-percent', `${progressPercent}%`);
-                row.setAttribute('data-has-progress', 'true');
-              } else {
-                row.removeAttribute('data-has-progress');
-              }
-
-              // Update state icon and content text if state changed
-              const stateIcon = row.querySelector('.activity-state-icon') as HTMLElement;
-              const contentText = row.querySelector('.activity-content-text') as HTMLElement;
-
-              if (stateIcon && activity.state) {
-                // For Steam games, show controller emoji
-                if (activity.service === 'steam-api') {
-                  stateIcon.textContent = '🎮';
-                  stateIcon.title = 'Playing';
-                } else if (activity.state === 'disconnected') {
-                  // Content script disconnected: show red circle with slash
-                  stateIcon.innerHTML = `
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" class="state-icon-svg">
-                      <circle cx="12" cy="12" r="10"></circle>
-                      <line x1="5" y1="19" x2="19" y2="5"></line>
-                    </svg>
-                  `;
-                  stateIcon.title = 'Connection lost - reload tab';
-
-                  // Keep original content but style as disconnected
-                  if (contentText) {
-                    contentText.style.opacity = '0.5';
-                    contentText.style.textDecoration = 'line-through';
-                  }
-                } else {
-                  // Check if data is fresh from content script (for browser tabs)
-                  const isDataFresh = activity.is_fresh !== false;
-
-                  if (!isDataFresh) {
-                    // Stale data: show moon icon in yellow
-                    stateIcon.innerHTML = `
-                      <svg viewBox="0 0 24 24" fill="none" stroke="#FEF3C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="state-icon-svg">
-                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                      </svg>
-                    `;
-                    stateIcon.title = 'Content script unavailable (tab may be backgrounded)';
-                  } else if (activity.state === 'playing') {
-                    // Fresh playing: green play icon
-                    stateIcon.innerHTML = `
-                      <svg viewBox="0 0 24 24" fill="#4CAF50" stroke="none" class="state-icon-svg">
-                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                      </svg>
-                    `;
-                    stateIcon.title = 'Playing';
-                  } else {
-                    // Fresh paused: gray pause icon
-                    stateIcon.innerHTML = `
-                      <svg viewBox="0 0 24 24" fill="#9E9E9E" stroke="none" class="state-icon-svg">
-                        <rect x="6" y="4" width="4" height="16"></rect>
-                        <rect x="14" y="4" width="4" height="16"></rect>
-                      </svg>
-                    `;
-                    stateIcon.title = 'Paused';
-                  }
-
-                  // Restore normal content text for non-disconnected states
-                  if (contentText) {
-                    contentText.textContent = this._truncateActivityContent(activity.content);
-                    contentText.style.fontStyle = 'normal';
-                    contentText.style.opacity = '1';
-                  }
-                }
-              }
-
-              // Clean up any legacy activity DND badge if present
-              const existingBadge = row.querySelector('.activity-dnd-badge');
-              if (existingBadge) {
-                existingBadge.remove();
-              }
-
-              // Update Join button if friendId !== 'self'
-              const isDnd = friend?.dnd || activity.dnd || activity.metadata?.dnd;
-              const joinBtn = row.querySelector('.activity-action-join') as HTMLElement;
-              if (joinBtn && friendId !== 'self') {
-                if (isDnd) {
-                  joinBtn.textContent = '▶';
-                  joinBtn.title = 'Friend is in Do Not Disturb mode';
-                  joinBtn.classList.add('disabled');
-                } else {
-                  joinBtn.classList.remove('disabled');
-                  const hasPendingInvite = activity.id ? this.pendingInvitesByActivity.has(activity.id) : false;
-                  if (hasPendingInvite) {
-                    joinBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
-                      <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
-                      <path d="M 2 6 L 12 13 L 22 6"></path>
-                    </svg>`;
-                    joinBtn.style.color = '#4CAF50';
-                    joinBtn.title = 'Accept or decline invite';
-                  } else {
-                    joinBtn.textContent = '▶';
-                    joinBtn.title = 'Join activity';
-                    joinBtn.style.color = '';
-                  }
-                }
-              }
-            }
-
-          }
+          // For existing activities, update progress bar, state icon, content, and join buttons
+          this._updateExistingActivityRow(wrapper, activity, friendId, friend);
+          activitiesContainer.appendChild(wrapper); // Re-orders into sorted position
         }
       }
 
@@ -472,6 +369,114 @@ export class PopupController {
         const idleRow = activitiesContainer.querySelector('.activity-row');
         if (idleRow && idleRow.textContent === 'Idle') {
           idleRow.remove();
+        }
+      }
+    }
+  }
+
+  private _updateExistingActivityRow(
+    wrapper: HTMLElement,
+    activity: Activity,
+    friendId: string,
+    friend?: Friend
+  ): void {
+    const row = wrapper.querySelector('.activity-item-row') as HTMLElement;
+    if (!row) return;
+
+    // Update progress bar CSS variable and attribute
+    if (activity.metadata?.progress !== undefined && activity.metadata?.duration && activity.metadata.duration > 0) {
+      const progressPercent = Math.min(100, Math.max(0, (activity.metadata.progress / activity.metadata.duration) * 100));
+      row.style.setProperty('--progress-percent', `${progressPercent}%`);
+      row.setAttribute('data-has-progress', 'true');
+    } else {
+      row.removeAttribute('data-has-progress');
+    }
+
+    // Update state icon and content text if state changed
+    const stateIcon = row.querySelector('.activity-state-icon') as HTMLElement;
+    const contentText = row.querySelector('.activity-content-text') as HTMLElement;
+
+    if (stateIcon && activity.state) {
+      // For Steam games, show controller emoji
+      if (activity.service === 'steam-api') {
+        stateIcon.textContent = '🎮';
+        stateIcon.title = 'Playing';
+      } else if (activity.state === 'disconnected') {
+        stateIcon.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" class="state-icon-svg">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="5" y1="19" x2="19" y2="5"></line>
+          </svg>
+        `;
+        stateIcon.title = 'Connection lost - reload tab';
+
+        if (contentText) {
+          contentText.style.opacity = '0.5';
+          contentText.style.textDecoration = 'line-through';
+        }
+      } else {
+        const isDataFresh = activity.is_fresh !== false;
+
+        if (!isDataFresh) {
+          stateIcon.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="#FEF3C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="state-icon-svg">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          `;
+          stateIcon.title = 'Content script unavailable (tab may be backgrounded)';
+        } else if (activity.state === 'playing') {
+          stateIcon.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="#4CAF50" stroke="none" class="state-icon-svg">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          `;
+          stateIcon.title = 'Playing';
+        } else {
+          stateIcon.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="#9E9E9E" stroke="none" class="state-icon-svg">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+          `;
+          stateIcon.title = 'Paused';
+        }
+
+        if (contentText) {
+          contentText.textContent = this._truncateActivityContent(activity.content);
+          contentText.style.fontStyle = 'normal';
+          contentText.style.opacity = '1';
+        }
+      }
+    }
+
+    // Clean up any legacy activity DND badge if present
+    const existingBadge = row.querySelector('.activity-dnd-badge');
+    if (existingBadge) {
+      existingBadge.remove();
+    }
+
+    // Update Join button if friendId !== 'self'
+    const isDnd = friend?.dnd || activity.dnd || activity.metadata?.dnd;
+    const joinBtn = row.querySelector('.activity-action-join') as HTMLElement;
+    if (joinBtn && friendId !== 'self') {
+      if (isDnd) {
+        joinBtn.textContent = '▶';
+        joinBtn.title = 'Friend is in Do Not Disturb mode';
+        joinBtn.classList.add('disabled');
+      } else {
+        joinBtn.classList.remove('disabled');
+        const hasPendingInvite = activity.id ? this.pendingInvitesByActivity.has(activity.id) : false;
+        if (hasPendingInvite) {
+          joinBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
+            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+            <path d="M 2 6 L 12 13 L 22 6"></path>
+          </svg>`;
+          joinBtn.style.color = '#4CAF50';
+          joinBtn.title = 'Accept or decline invite';
+        } else {
+          joinBtn.textContent = '▶';
+          joinBtn.title = 'Join activity';
+          joinBtn.style.color = '';
         }
       }
     }
@@ -1227,28 +1232,35 @@ export class PopupController {
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName !== 'local') return;
 
-      // Collect keys that changed
+      // Collect keys that changed (handling namespaced keys e.g. "uuid:key")
       const changedKeys = Object.keys(changes);
-      const keysToRefresh = changedKeys.filter(key =>
-        key === STORAGE_KEYS.MY_ACTIVITIES || key === STORAGE_KEYS.RECEIVED_INVITES || key === STORAGE_KEYS.USER_PROFILE
+      const staticKeys = [
+        STORAGE_KEYS.MY_ACTIVITIES,
+        STORAGE_KEYS.FRIENDS_LIST,
+        STORAGE_KEYS.RECEIVED_INVITES,
+        STORAGE_KEYS.USER_PROFILE,
+      ];
+
+      const keysToRefresh = staticKeys.filter(staticKey =>
+        changedKeys.some(k => k === staticKey || k.endsWith(`:${staticKey}`))
       );
 
       // Refresh changed keys from storage into cache (keeps cache in sync with background)
       if (keysToRefresh.length > 0) {
         console.debug('[Popup] Storage changed, refreshing cache for keys:', keysToRefresh);
         this.storage.refreshKeysFromStorage(keysToRefresh).then(() => {
-          if (changedKeys.includes(STORAGE_KEYS.USER_PROFILE)) {
+          if (keysToRefresh.includes(STORAGE_KEYS.USER_PROFILE)) {
             this._updateDndButtonDisplay().catch((error) => {
               console.error('[Popup] Failed to refresh DND display:', error);
             });
           }
           // Reload affected data
-          if (changedKeys.includes(STORAGE_KEYS.MY_ACTIVITIES)) {
+          if (keysToRefresh.includes(STORAGE_KEYS.MY_ACTIVITIES)) {
             this._loadMyActivity().catch((error) => {
               console.error('[Popup] Failed to refresh activities:', error);
             });
           }
-          if (changedKeys.includes(STORAGE_KEYS.RECEIVED_INVITES)) {
+          if (keysToRefresh.includes(STORAGE_KEYS.RECEIVED_INVITES)) {
             this._loadPendingInvites().catch((error) => {
               console.error('[Popup] Failed to reload received invites:', error);
             });

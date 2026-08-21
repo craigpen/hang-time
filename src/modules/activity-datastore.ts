@@ -366,26 +366,45 @@ export class ActivityDatastore {
   async detectGhosts(): Promise<GhostActivity[]> {
     console.debug('[ActivityDatastore] Detecting ghost activities...');
 
-    // Get all open tabs
+    // Get all open tabs across all windows
     let openTabs: chrome.tabs.Tab[] = [];
     try {
-      openTabs = await chrome.tabs.query({ windowType: 'normal' });
+      openTabs = await chrome.tabs.query({});
     } catch (error) {
       console.warn('[ActivityDatastore] Could not query open tabs:', error);
       return [];
     }
 
+    // Safety guard: If no open tabs are returned (e.g. during browser startup or query failure),
+    // do not flag any activities as ghosts to prevent false positives.
+    if (!openTabs || openTabs.length === 0) {
+      console.debug('[ActivityDatastore] No open tabs returned from query; skipping ghost detection');
+      return [];
+    }
+
+    const openTabIds = new Set<number>();
     const openTabUrls = new Set<string>();
     for (const tab of openTabs) {
+      if (tab.id !== undefined) {
+        openTabIds.add(tab.id);
+      }
       if (tab.url) {
         openTabUrls.add(tab.url);
+        try {
+          const parsed = new URL(tab.url);
+          openTabUrls.add(parsed.origin + parsed.pathname);
+          // For YouTube, also include watch?v=ID without extra parameters
+          if (parsed.hostname.includes('youtube.com') && parsed.searchParams.has('v')) {
+            openTabUrls.add(`${parsed.origin}/watch?v=${parsed.searchParams.get('v')}`);
+          }
+        } catch {}
       }
     }
 
     const ghosts: GhostActivity[] = [];
     const all = await this.getAllActivities();
     const now = Date.now();
-    const GRACE_PERIOD_MS = 10000; // 10 second grace period for newly created activities
+    const GRACE_PERIOD_MS = 15000; // 15 second grace period for newly created activities
 
     for (const activity of all) {
       // Get this activity's provenance
@@ -398,22 +417,33 @@ export class ActivityDatastore {
         // Skip recently created activities (grace period to stabilize)
         const age = now - activity.timestamp;
         if (age < GRACE_PERIOD_MS) {
-          console.debug(`[ActivityDatastore] Skipping grace-period activity: ${activity.service} (age: ${age}ms)`);
           continue;
         }
 
-        // Activity should have a matching open tab
-        if (!activity.url) {
-          // No URL means it's incomplete - mark as ghost
-          ghosts.push({
-            id: activity.id,
-            service: activity.service,
-            content: activity.content,
-            lastSeen: activity.timestamp,
-            reason: `No URL for ${activity.service}`,
-          });
-        } else if (!openTabUrls.has(activity.url)) {
-          // URL doesn't match any open tab
+        // Check if matching tab ID exists
+        const hasMatchingTabId = activity.metadata?.tabId !== undefined && openTabIds.has(activity.metadata.tabId);
+
+        // Check if matching URL exists
+        let hasMatchingUrl = false;
+        if (activity.url) {
+          if (openTabUrls.has(activity.url)) {
+            hasMatchingUrl = true;
+          } else {
+            try {
+              const parsed = new URL(activity.url);
+              if (openTabUrls.has(parsed.origin + parsed.pathname)) {
+                hasMatchingUrl = true;
+              } else if (parsed.hostname.includes('youtube.com') && parsed.searchParams.has('v')) {
+                if (openTabUrls.has(`${parsed.origin}/watch?v=${parsed.searchParams.get('v')}`)) {
+                  hasMatchingUrl = true;
+                }
+              }
+            } catch {}
+          }
+        }
+
+        // Only mark as ghost if NEITHER tabId NOR URL matches any open tab
+        if (!hasMatchingTabId && !hasMatchingUrl) {
           ghosts.push({
             id: activity.id,
             service: activity.service,
