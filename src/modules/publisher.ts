@@ -372,6 +372,7 @@ export class ActivityPublisher {
       metadata: activity.metadata ? {
         progress: activity.metadata.progress,
         duration: activity.metadata.duration,
+        progress_measured_at: activity.metadata.progress_measured_at,
         dnd: isDnd,
         // Optionally add artist for Spotify when API is implemented
         // artist: activity.metadata.artist,

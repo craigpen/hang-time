@@ -3205,7 +3205,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
     return;
   }
 
-  if (isActivityTag === 'true' && typeTag === 'activity-state') {
+  if (event.kind === 10003 || typeTag === 'bundled' || (isActivityTag === 'true' && typeTag === 'activity-state')) {
     // Parse JSON array of activities
     try {
       // Check if event content is compressed
