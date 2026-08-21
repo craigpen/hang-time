@@ -863,7 +863,10 @@ export class OverlayUI {
         }
       });
 
-      this.container.addEventListener('mouseleave', (_e) => {
+      this.container.addEventListener('mouseleave', (e: MouseEvent) => {
+        if (this.container && e.relatedTarget && this.container.contains(e.relatedTarget as Node)) {
+          return;
+        }
         if (!this._state.pinned) {
           this.startFadeOut();
         }
@@ -1344,6 +1347,17 @@ export class OverlayUI {
       this.userId = newState.user_uuid;
     }
 
+    // Detect what specific components need re-rendering
+    const messagesChanged = newState.messages !== undefined && newState.messages !== this._state.messages;
+    const structureChanged = (
+      (newState.session_members !== undefined && newState.session_members !== this._state.session_members) ||
+      (newState.watching_together !== undefined && newState.watching_together !== this._state.watching_together) ||
+      (newState.host_nickname !== undefined && newState.host_nickname !== this._state.host_nickname) ||
+      (newState.host_uuid !== undefined && newState.host_uuid !== this._state.host_uuid) ||
+      (newState.is_user_host !== undefined && newState.is_user_host !== this._state.is_user_host) ||
+      (newState.co_watcher_activities !== undefined && newState.co_watcher_activities !== this._state.co_watcher_activities)
+    );
+
     // Preserve local client state (pinned, opacity, visible) if not explicitly overridden by incoming payload
     const preservedPinned = this._state.pinned;
     const preservedOpacity = this._state.opacity;
@@ -1361,9 +1375,18 @@ export class OverlayUI {
     if (this._state.session_members.length === 0) {
       this.hide();
     } else {
-      // Just render state changes, don't auto-show
-      // Visibility is controlled solely by hover events (mouseenter/mouseleave)
-      this.render();
+      // Guard: only render if overlay is in DOM
+      if (!this.container || !this.container.parentElement) {
+        return;
+      }
+      if (structureChanged) {
+        this.renderHostRow();
+        this.renderGuestRow();
+      }
+      if (messagesChanged) {
+        this.renderMessages();
+      }
+      this.renderHeader();
     }
   }
 

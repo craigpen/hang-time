@@ -176,7 +176,14 @@ class GenericVideoTracker {
       }
     };
     const emptiedHandler = () => this._onVideoEmptied();
-    const timeupdateHandler = () => this._updateLocalOverlayProgress();
+    let lastTimeUpdate = 0;
+    const timeupdateHandler = () => {
+      const now = Date.now();
+      if (now - lastTimeUpdate >= 500) {
+        lastTimeUpdate = now;
+        this._updateLocalOverlayProgress();
+      }
+    };
 
     this.activeVideoElement.addEventListener('play', playHandler);
     this.activeVideoElement.addEventListener('pause', pauseHandler);
