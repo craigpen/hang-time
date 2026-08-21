@@ -350,10 +350,13 @@ export class PopupController {
           if (existingWrapper && activity.id && friendId) {
             const row = existingWrapper.querySelector('.activity-item-row') as HTMLElement;
             if (row) {
-              // Update progress bar CSS variable only
+              // Update progress bar CSS variable and attribute
               if (activity.metadata?.progress !== undefined && activity.metadata?.duration && activity.metadata.duration > 0) {
-                const progressPercent = Math.min(100, (activity.metadata.progress / activity.metadata.duration) * 100);
+                const progressPercent = Math.min(100, Math.max(0, (activity.metadata.progress / activity.metadata.duration) * 100));
                 row.style.setProperty('--progress-percent', `${progressPercent}%`);
+                row.setAttribute('data-has-progress', 'true');
+              } else {
+                row.removeAttribute('data-has-progress');
               }
 
               // Update state icon and content text if state changed
@@ -693,9 +696,11 @@ export class PopupController {
         hasMetadata: !!activity.metadata,
       });
       if (activity.metadata?.progress !== undefined && activity.metadata?.duration && activity.metadata.duration > 0) {
-        const progressPercent = Math.min(100, (activity.metadata.progress / activity.metadata.duration) * 100);
-        console.log('[Popup] Setting progress bar:', progressPercent, '%');
+        const progressPercent = Math.min(100, Math.max(0, (activity.metadata.progress / activity.metadata.duration) * 100));
         row.style.setProperty('--progress-percent', `${progressPercent}%`);
+        row.setAttribute('data-has-progress', 'true');
+      } else {
+        row.removeAttribute('data-has-progress');
       }
 
     // State indicator (on the left) - FIRST

@@ -1338,7 +1338,7 @@ body.settings-open .popup-container {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 6px;
+  padding: 4px 6px;
   margin: 0 -6px;
   border-radius: 4px;
   font-size: 0.88em;
@@ -1353,16 +1353,31 @@ body.settings-open .popup-container {
   color: var(--text-primary);
 }
 
-.activity-item-row::after {
+.activity-item-row[data-has-progress="true"]::before {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 6px;
-  width: calc(var(--progress-percent) * (100% - 12px) / 100);
+  left: 0;
+  right: 0;
   height: 2px;
-  background-color: rgba(76, 175, 80, 0.7);
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.activity-item-row[data-has-progress="true"]::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: var(--progress-percent, 0%);
+  height: 2px;
+  background: linear-gradient(90deg, #10b981, #059669);
+  box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);
   transition: width 0.2s ease;
   border-radius: 1px;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .activity-badge {
