@@ -69,15 +69,22 @@ export class SpotifyService implements IServiceModule {
 
       const track = data.item;
       const artist = track.artists?.[0]?.name || 'Unknown Artist';
+      const now = Date.now();
+      const spotifyUrl = track.external_urls?.spotify;
+      const activityId = generateActivityId('spotify-api', spotifyUrl);
+      const contentTimestamp = (storedSpotify && storedSpotify.id === activityId && storedSpotify.contentTimestamp)
+        ? storedSpotify.contentTimestamp
+        : now;
 
       return {
-        id: generateActivityId('spotify-api', track.external_urls?.spotify),
+        id: activityId,
         service: 'spotify-api',
         content: `${track.name}`,
-        url: track.external_urls?.spotify,
+        url: spotifyUrl,
         state: data.is_playing ? 'playing' : 'paused',
-        timestamp: Date.now(),
-        freshness_timestamp: Date.now(),
+        timestamp: now,
+        contentTimestamp: contentTimestamp,
+        freshness_timestamp: now,
         is_fresh: true,
         metadata: {
           title: track.name,

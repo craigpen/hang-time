@@ -6,7 +6,6 @@
 
 import { Activity, IServiceModule } from '../../types';
 import { StorageManager } from '../storage';
-import { getFileLogger } from '../file-logger';
 
 export class TabService implements IServiceModule {
   private detectedActivity: Activity | null = null;
@@ -21,43 +20,54 @@ export class TabService implements IServiceModule {
   }
 
   /**
-   * Read activity from generic video tracker via MY_ACTIVITIES
+   * Read all video tab activities from MY_ACTIVITIES (most recent of EACH browser tab service)
    */
-  async getCurrentActivity(): Promise<Activity | null> {
+  async getAllCurrentActivities(): Promise<Activity[]> {
     try {
-      // Read from MY_ACTIVITIES (single source of truth)
       const myActivities = await this.storage.getMyActivities();
-      try {
-        const logger = getFileLogger();
-        logger.log('TabService', 'DEBUG', 'Read MY_ACTIVITIES', { keys: Object.keys(myActivities) });
-      } catch {}
+      const videoServices = ['youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
+      const mostRecentByService: Partial<Record<string, Activity>> = {};
 
-      // Search for video tab activity by service type (not by hardcoded key)
-      const videoServices = ['video-tab', 'youtube-tab', 'netflix-tab', 'twitch-tab'];
-      for (const [activityId, activity] of Object.entries(myActivities)) {
+      for (const activity of Object.values(myActivities)) {
         if (activity && videoServices.includes(activity.service)) {
-          try {
-            const logger = getFileLogger();
-            logger.log('TabService', 'INFO', `Found ${activity.service} activity`, {
-              id: activityId,
-              content: activity.content?.substring(0, 50)
-            });
-          } catch {}
-          this.detectedActivity = activity;
-          return activity;
+          const service = activity.service;
+          const existing = mostRecentByService[service];
+          const actTime = (activity.metadata?.lastAccessed as number) || activity.timestamp || 0;
+          const existingTime = existing ? ((existing.metadata?.lastAccessed as number) || existing.timestamp || 0) : -1;
+
+          if (!existing || actTime > existingTime) {
+            mostRecentByService[service] = activity;
+          }
         }
       }
 
-      try {
-        const logger = getFileLogger();
-        logger.log('TabService', 'DEBUG', 'No video-tab activity found in storage');
-      } catch {}
-      return null;
+      return Object.values(mostRecentByService).filter((a): a is Activity => Boolean(a));
     } catch (error) {
-      try {
-        const logger = getFileLogger();
-        logger.log('TabService', 'ERROR', 'Failed to read activities from storage', { error: String(error) });
-      } catch {}
+      console.error('[TabService] Failed to read all activities from storage:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Read the single most recent video tab activity from generic video tracker via MY_ACTIVITIES
+   */
+  async getCurrentActivity(): Promise<Activity | null> {
+    try {
+      const allTabActivities = await this.getAllCurrentActivities();
+      if (allTabActivities.length === 0) {
+        return null;
+      }
+
+      // Sort by most recent
+      allTabActivities.sort((a, b) => {
+        const aTime = (a.metadata?.lastAccessed as number) || a.timestamp || 0;
+        const bTime = (b.metadata?.lastAccessed as number) || b.timestamp || 0;
+        return bTime - aTime;
+      });
+
+      this.detectedActivity = allTabActivities[0] || null;
+      return this.detectedActivity;
+    } catch (error) {
       console.error('[TabService] Failed to read activities from storage:', error);
       return null;
     }

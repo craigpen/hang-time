@@ -247,7 +247,7 @@ export class ActivityDetector {
       }
     }
 
-    // Check browser tabs (platform-specific video detection)
+    // Check browser tabs (platform-specific video detection - most recent of EACH service)
     const tabService = this.services.get('tabs') as any;
     if (tabService) {
       try {
@@ -255,24 +255,24 @@ export class ActivityDetector {
         logger.log('Activity', 'DEBUG', 'Checking tab service...');
       } catch {}
       try {
-        const videoActivity = await tabService.getCurrentActivity();
-        if (videoActivity) {
-          try {
-            const logger = getFileLogger();
-            logger.log('Activity', 'INFO', `Tab service found activity: ${videoActivity.service} - ${videoActivity.content}`);
-          } catch {}
-          // Check if this specific service is enabled (youtube-tab, netflix-tab, twitch-tab, or video-tab)
-          const serviceEnabled = servicesEnabled[videoActivity.service as ServiceName];
-          if (serviceEnabled !== false) {
-            // Default to enabled if not explicitly disabled
-            activities.push(videoActivity);
-            seenServices.add(videoActivity.service);
+        const tabActivities: Activity[] = typeof tabService.getAllCurrentActivities === 'function'
+          ? await tabService.getAllCurrentActivities()
+          : (await tabService.getCurrentActivity() ? [await tabService.getCurrentActivity()] : []);
+
+        for (const videoActivity of tabActivities) {
+          if (videoActivity) {
+            try {
+              const logger = getFileLogger();
+              logger.log('Activity', 'INFO', `Tab service found activity: ${videoActivity.service} - ${videoActivity.content}`);
+            } catch {}
+            // Check if this specific service is enabled (youtube-tab, netflix-tab, twitch-tab, or video-tab)
+            const serviceEnabled = servicesEnabled[videoActivity.service as ServiceName];
+            if (serviceEnabled !== false) {
+              // Default to enabled if not explicitly disabled
+              activities.push(videoActivity);
+              seenServices.add(videoActivity.service);
+            }
           }
-        } else {
-          try {
-            const logger = getFileLogger();
-            logger.log('Activity', 'DEBUG', 'Tab service returned no activity');
-          } catch {}
         }
       } catch (error) {
         try {

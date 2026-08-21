@@ -151,20 +151,27 @@ export class SteamService implements IServiceModule {
       const gameName = player.gameextrainfo || `Game (${player.gameid})`;
       console.debug('[Steam] Currently playing:', gameName);
 
-      // Fresh data from API
+      const now = Date.now();
       const steamUrl = `steam://run/${player.gameid}`;
+      const activityId = generateActivityId('steam-api', steamUrl);
+      const contentTimestamp = (storedSteam && storedSteam.id === activityId && storedSteam.contentTimestamp)
+        ? storedSteam.contentTimestamp
+        : now;
+
       return {
-        id: generateActivityId('steam-api', steamUrl),
+        id: activityId,
         service: 'steam-api',
         content: gameName,
         url: steamUrl,
         state: 'playing',
-        timestamp: Date.now(),
-        freshness_timestamp: Date.now(),
+        timestamp: now,
+        contentTimestamp: contentTimestamp,
+        freshness_timestamp: now,
         is_fresh: true,
         metadata: {
           title: gameName,
           steamId: player.steamid,
+          appid: player.gameid ? parseInt(player.gameid, 10) : undefined,
         },
       };
     } catch (error) {

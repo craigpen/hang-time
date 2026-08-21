@@ -104,14 +104,21 @@ export class TwitchService implements IServiceModule {
         return null;
       }
 
+      const now = Date.now();
+      const activityId = generateActivityId('twitch-api', `${stream.user_name}/${stream.game_name}`);
+      const contentTimestamp = (storedTwitch && storedTwitch.id === activityId && storedTwitch.contentTimestamp)
+        ? storedTwitch.contentTimestamp
+        : now;
+
       return {
-        id: generateActivityId('twitch-api', `${stream.user_name}/${stream.game_name}`),
+        id: activityId,
         service: 'twitch-api',
         content: stream.title || stream.game_name || 'Twitch Stream',
         url: `https://twitch.tv/${stream.user_name}`,
         state: 'playing',
-        timestamp: Date.now(),
-        freshness_timestamp: Date.now(),
+        timestamp: now,
+        contentTimestamp: contentTimestamp,
+        freshness_timestamp: now,
         is_fresh: true,
         metadata: {
           title: stream.title,
