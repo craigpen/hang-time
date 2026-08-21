@@ -60,9 +60,16 @@ hang-time/
 │   │   ├── game-library.ts            # GameLibraryManager: Steam sync & Kind-10003 Nostr events
 │   │   ├── metadata-fetcher.ts        # MetadataFetcher: Steam API metadata queue & cache
 │   │   ├── overlay-ui.ts              # OverlayUI: in-page overlay rendering (Host vs Guest modes)
+│   │   ├── providers/                 # Modular video platform adapters
+│   │   │   ├── types.ts               # VideoProvider interface
+│   │   │   ├── youtube.ts             # YouTubeProvider
+│   │   │   ├── netflix.ts             # NetflixProvider
+│   │   │   ├── twitch.ts              # TwitchProvider
+│   │   │   ├── generic.ts             # GenericVideoProvider (HTML5 fallback)
+│   │   │   └── registry.ts            # VideoProviderRegistry (URL resolver)
 │   │   └── services/                  # Platform detection services
 │   │       ├── activity-detector.ts   # Detection orchestrator across all services
-│   │       ├── tab-monitor.ts         # YouTube / Netflix / Generic video tab monitor
+│   │       ├── tabs.ts                # Tab detection service for active browser video tabs
 │   │       ├── spotify.ts             # Spotify Web API poller & OAuth
 │   │       ├── twitch.ts              # Twitch Helix API poller & OAuth
 │   │       └── steam.ts               # Steam Web API poller

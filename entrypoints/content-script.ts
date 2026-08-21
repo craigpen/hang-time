@@ -7,6 +7,7 @@
 
 import { generateActivityId } from '../src/modules/activity-utils';
 import { OverlayUI } from '../src/modules/overlay-ui';
+import { VideoProviderRegistry, VideoProvider } from '../src/modules/providers';
 
 // ============================================================================
 // LIFECYCLE MANAGEMENT - Simple, top-level flag and cleanup event
@@ -53,15 +54,17 @@ let overlayHasBeenShown = false; // Track if overlay was shown once (to avoid hi
 
 class GenericVideoTracker {
   private activeVideoElement: HTMLVideoElement | null = null;
+  private activeProvider: VideoProvider | null = null;
+  private providerRegistry: VideoProviderRegistry = new VideoProviderRegistry();
   private pollingInterval: number | null = null;
   private domObserver: MutationObserver | null = null;
   private eventListeners: Map<string, (evt: Event) => void> = new Map();
   private lastReportedTime: number = 0;
   private lastReportTimestamp: number = 0;
   private videoSearchTimeout: number | null = null;
-  private cachedNetflixTitle: string | null = null;
   private currentActivityId: string | null = null;
   private currentActivityContentTimestamp: number | null = null;
+
   constructor() {}
 
   init(): void {
@@ -97,37 +100,15 @@ class GenericVideoTracker {
   }
 
   private _findAndHookVideo(): void {
-    const videoElements = Array.from(document.querySelectorAll('video'));
+    const currentUrl = new URL(window.location.href);
+    const provider = this.providerRegistry.getProvider(currentUrl);
 
-    if (videoElements.length === 0) {
+    // If on an unwatchable URL (e.g. search/directory), skip hooking
+    if (!provider.isValidWatchUrl(currentUrl)) {
       return;
     }
 
-    const visibleVideos = videoElements.filter((v) => v.offsetWidth > 0 && v.offsetHeight > 0);
-
-    // Filter for main content: not known ads AND not in ad containers
-    const mainContentVideos = visibleVideos.filter((v) => {
-      // Skip small videos (likely ads or widgets, not main content)
-      if (v.offsetWidth < 640 || v.offsetHeight < 360) return false;
-
-      // Skip if duration is known to be short (ad indicator)
-      if (v.duration > 0 && v.duration < 60) return false;
-
-      // Skip if in ad container (class or parent class indicates ad)
-      if (v.className.toLowerCase().includes('ad')) return false;
-      let parent = v.parentElement;
-      for (let i = 0; i < 5 && parent; i++) {
-        if (parent.className.toLowerCase().includes('ad')) return false;
-        parent = parent.parentElement;
-      }
-      return true;
-    });
-
-    // Priority order:
-    // 1. Main content video (visible, passed ad filters)
-    // 2. Fallback to any visible video (duration might not be loaded yet)
-    // 3. Fallback to first video (worst case)
-    const currentVideo = mainContentVideos[0] || visibleVideos[0] || videoElements[0];
+    const currentVideo = provider.findVideoElement();
 
     if (!currentVideo || currentVideo === this.activeVideoElement) {
       return;
@@ -135,23 +116,17 @@ class GenericVideoTracker {
 
     if (this.activeVideoElement) {
       this._removeVideoListeners();
-      this.cachedNetflixTitle = null;
+      this.activeProvider?.onVideoUnmounted?.();
     }
 
     this.activeVideoElement = currentVideo;
-    console.log('[ContentScript] 🎬 Video element detected and hooked');
+    this.activeProvider = provider;
+    this.activeProvider.onVideoHooked?.(currentVideo);
+    console.log(`[ContentScript] 🎬 Video hooked with provider: ${provider.serviceName}`);
 
     // Generate activity ID to check if this is a new video
     const url = window.location.href;
-    let service: 'youtube-tab' | 'netflix-tab' | 'twitch-tab' | 'video-tab' = 'video-tab';
-    const domain = window.location.hostname;
-    if (domain.includes('youtube.com') || domain.includes('youtu.be')) {
-      service = 'youtube-tab';
-    } else if (domain.includes('netflix.com')) {
-      service = 'netflix-tab';
-    } else if (domain.includes('twitch.tv')) {
-      service = 'twitch-tab';
-    }
+    const service = provider.serviceName;
     const newActivityId = generateActivityId(service, url);
 
     // If this is a new activity, get or create the content timestamp from StorageManager
@@ -160,7 +135,6 @@ class GenericVideoTracker {
       this.currentActivityContentTimestamp = undefined; // Wait for response or timeout
 
       // Request existing contentTimestamp from background's StorageManager (primary memory storage)
-      // This persists across page reloads in the same tab
       const requestTime = Date.now();
       if (port) {
         port.postMessage({
@@ -247,10 +221,8 @@ class GenericVideoTracker {
 
   private _onVideoEmptied(): void {
     this._removeVideoListeners();
+    this.activeProvider?.onVideoUnmounted?.();
     this.activeVideoElement = null;
-    this.cachedNetflixTitle = null;
-    // Don't clear currentActivityId or contentTimestamp - they persist if we re-hook the same video
-    // (emptied fires during seeking/buffering, not just when video actually closes)
     console.log('[TimestampMigration:ContentTimestamp] Video emptied, searching for video again');
     setTimeout(() => this._findAndHookVideo(), 100);
   }
@@ -267,8 +239,15 @@ class GenericVideoTracker {
       return;
     }
 
-    const title = this._getVideoTitle();
-    const favicon = this._getFavicon();
+    const currentUrl = new URL(window.location.href);
+    const provider = this.activeProvider || this.providerRegistry.getProvider(currentUrl);
+
+    if (!provider.isValidWatchUrl(currentUrl)) {
+      return;
+    }
+
+    const title = provider.extractTitle(this.activeVideoElement);
+    const favicon = (provider.getFavicon ? provider.getFavicon() : null) || this._getFavicon();
     const domain = window.location.hostname;
     const url = window.location.href;
     const duration = Math.floor(this.activeVideoElement.duration || 0);
@@ -291,28 +270,7 @@ class GenericVideoTracker {
     this.lastReportTimestamp = now;
     this.lastReportedTime = currentTime;
 
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      if (!url.includes('watch?v=')) {
-        return;
-      }
-    }
-
-    if (url.includes('twitch.tv')) {
-      const pathname = new URL(url).pathname;
-      if (pathname === '/' || pathname === '' || pathname.startsWith('/search') || pathname.startsWith('/directory')) {
-        return;
-      }
-    }
-
-    let service: 'youtube-tab' | 'netflix-tab' | 'twitch-tab' | 'video-tab' = 'video-tab';
-    if (domain.includes('youtube.com') || domain.includes('youtu.be')) {
-      service = 'youtube-tab';
-    } else if (domain.includes('netflix.com')) {
-      service = 'netflix-tab';
-    } else if (domain.includes('twitch.tv')) {
-      service = 'twitch-tab';
-    }
-
+    const service = provider.serviceName;
     const activityId = generateActivityId(service, url);
 
     // Use stored contentTimestamp if this is the same activity, otherwise set it
@@ -363,172 +321,6 @@ class GenericVideoTracker {
     }
   }
 
-  private _getVideoTitle(): string {
-    if (window.location.hostname.includes('netflix.com')) {
-      if (this.cachedNetflixTitle) {
-        return this.cachedNetflixTitle;
-      }
-      const title = this._getNetflixTitle();
-      if (title) {
-        this.cachedNetflixTitle = title;
-        return title;
-      }
-      return 'Netflix Video';
-    }
-
-    let title = document.title;
-
-    title = title
-      .replace(/ - YouTube$/, '')
-      .replace(/ \| Netflix$/, '')
-      .replace(/ on Twitch$/, '')
-      .replace(/^▶ /, '');
-
-    return title.trim() || 'Video';
-  }
-
-  private _getNetflixTitle(): string | null {
-    try {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const title = this._tryExtractNetflixTitle();
-        if (title) return title;
-      }
-      return null;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  private _tryExtractNetflixTitle(): string | null {
-    // Priority 1: data-uia='video-title' (most reliable, used by player UI)
-    const titleElements = document.querySelectorAll("[data-uia='video-title']");
-    for (const titleElement of titleElements) {
-      const title = this._parseNetflixTitleText(titleElement.textContent?.trim() || '');
-      if (title && this._isValidNetflixTitle(title)) {
-        return title;
-      }
-    }
-
-    // Priority 2: Player title area (look for heading in player controls)
-    const playerTitles = document.querySelectorAll("[data-uia='player-title'], [class*='player-title'], h2[role='heading']");
-    for (const elem of playerTitles) {
-      const text = elem.textContent?.trim();
-      if (text && this._isValidNetflixTitle(text)) {
-        return text;
-      }
-    }
-
-    // Priority 3: h2 tags (but skip obvious UI sections by checking parent context)
-    const h2Elements = document.querySelectorAll('h2');
-    for (const h2 of h2Elements) {
-      const text = h2.textContent?.trim();
-      if (!text) continue;
-
-      // Skip if in browse/menu context
-      const parent = h2.closest('[class*="browse"], [class*="menu"], [data-uia*="menu"]');
-      if (parent) continue;
-
-      if (this._isValidNetflixTitle(text)) {
-        return text;
-      }
-    }
-
-    return null;
-  }
-
-  private _parseNetflixTitleText(fullText: string): string | null {
-    if (!fullText) return null;
-
-    // Split on common metadata separators
-    const parts = fullText.split(/\s+(?=Rated|Audio|Subtitles|CC|Closed|Available|IMDb|\d+%)/i);
-    if (!parts[0]) return null;
-    let title = parts[0].trim();
-
-    // Skip if starts with metadata
-    if (/^Rated|^PG|^R$|^NC-17|^G$|^TV-|^\d+%|^IMDb|^Audio|^Subtitles|^CC|^Closed|^Available/i.test(title)) {
-      return null;
-    }
-
-    // Extract episode if present (e.g., "S1:E1" or "Season 1 Episode 1")
-    const episodeMatch = title.match(/\s*([SE]\d+(?:E\d+)?)\s*/i);
-    const episode = episodeMatch ? episodeMatch[1] : null;
-
-    if (episode && episodeMatch?.index !== undefined) {
-      title = title.substring(0, episodeMatch.index).trim();
-    }
-
-    // Remove duplicate words at end (Netflix sometimes repeats first word)
-    const titleWords = title.split(/\s+/);
-    if (titleWords.length > 1 && titleWords[0]) {
-      const firstWord = titleWords[0].toLowerCase();
-      while (titleWords.length > 1) {
-        const lastWord = titleWords[titleWords.length - 1];
-        if (!lastWord || lastWord.toLowerCase() !== firstWord) break;
-        titleWords.pop();
-      }
-      title = titleWords.join(' ');
-    }
-
-    title = title.trim();
-
-    if (title && title.length > 2) {
-      return episode ? `${title} ${episode}` : title;
-    }
-
-    return null;
-  }
-
-  private _isValidNetflixTitle(title: string | null | undefined): boolean {
-    if (!title || typeof title !== 'string') return false;
-    if (title.length < 2 || title.length > 200) return false;
-
-    const lower = title.toLowerCase();
-
-    if (title.includes('•')) return false;
-    if (title.includes('invited you to')) return false;
-    if (/[\x00-\x1F\x7F]/.test(title)) return false;
-
-    if (lower.includes('error') || lower.includes('failed')) return false;
-
-    if (
-      title === 'Netflix' ||
-      title === 'Loading' ||
-      title === '' ||
-      lower === 'play' ||
-      lower === 'pause' ||
-      lower === 'skip' ||
-      lower === 'replay' ||
-      lower === 'your next watch' ||
-      lower === 'top 10' ||
-      lower === 'new & hot' ||
-      lower === 'trending now'
-    ) {
-      return false;
-    }
-
-    if (
-      lower.includes('audio description') ||
-      lower.includes('closed captions') ||
-      lower.includes('subtitles') ||
-      lower.includes('cc available') ||
-      lower.includes('dubbed') ||
-      lower.includes('original audio') ||
-      lower.includes('volume') ||
-      lower.includes('fullscreen') ||
-      lower.includes('settings') ||
-      lower.includes('next episode') ||
-      lower.includes('previous episode') ||
-      lower.includes('privacy') ||
-      lower.includes('preference') ||
-      lower.includes('modal') ||
-      lower.includes('dialog')
-    ) {
-      return false;
-    }
-
-    return true;
-  }
-
   private _getFavicon(): string {
     const selectors = [
       'link[rel="icon"][type="image/png"]',
@@ -562,7 +354,7 @@ class GenericVideoTracker {
       // If a newer script took over, this instance is dead
       if ((window as any).hangTimeScriptActive !== INSTANCE_ID) return false;
       return true;
-    } catch (e) {
+    } catch {
       // Any error accessing chrome = context is invalid
       return false;
     }
@@ -588,6 +380,7 @@ class GenericVideoTracker {
     }
 
     this._removeVideoListeners();
+    this.activeProvider?.onVideoUnmounted?.();
     this.activeVideoElement = null;
 
     console.log('[ContentScript] ✅ Cleanup complete');
