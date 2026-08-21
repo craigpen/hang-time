@@ -1478,6 +1478,7 @@ chrome.runtime.onConnect.addListener((port) => {
             }
 
             // Try to read stored session. If none exists, bootstrap by detecting current co-watchers
+            const friendManager = getFriendManager();
             let coWatchSession = await detector.getCurrentCoWatchSession();
 
             if (!coWatchSession) {
@@ -1517,9 +1518,6 @@ chrome.runtime.onConnect.addListener((port) => {
             }
 
             console.log('[Background] GET_OVERLAY_STATE: Found session with members:', coWatchSession.members.length, 'activity_id:', coWatchSession.activity_id);
-
-            // Get co-watcher data (same as CO_WATCH_UPDATE builds)
-            const friendManager = getFriendManager();
 
             // Build overlay state (parallel to CO_WATCH_UPDATE logic)
             let hostName = '';
