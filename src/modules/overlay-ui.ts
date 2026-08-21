@@ -707,7 +707,17 @@ export class OverlayUI {
     const slider = document.getElementById('opacity-slider') as HTMLInputElement;
     if (!slider) return;
 
+    slider.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+    });
+
     slider.addEventListener('input', (e) => {
+      const value = (e.target as HTMLInputElement).value;
+      this._state.opacity = parseInt(value);
+      this.updateOpacity();
+    });
+
+    slider.addEventListener('change', (e) => {
       const value = (e.target as HTMLInputElement).value;
       this._state.opacity = parseInt(value);
       this.updateOpacity();
@@ -832,6 +842,11 @@ export class OverlayUI {
       const header = this.container.querySelector('.overlay-header') as HTMLElement;
       if (header) {
         header.addEventListener('mousedown', (e: MouseEvent) => {
+          const target = e.target as HTMLElement;
+          // Don't drag if clicking interactive controls (inputs, sliders, buttons, links, etc.)
+          if (target && target.closest('input, button, a, textarea, #resize-handle, .join-button, #progress-sync-button')) {
+            return;
+          }
           this.isDragging = true;
           this.dragStartX = e.clientX;
           this.dragStartY = e.clientY;
