@@ -1386,6 +1386,7 @@ export class OverlayUI {
     this.renderHeader();
     this.renderHostRow();
     this.renderGuestRow();
+    this.renderGuestMarkers();
     this.renderMessages();
   }
 

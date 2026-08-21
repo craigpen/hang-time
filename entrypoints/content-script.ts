@@ -176,6 +176,10 @@ class GenericVideoTracker {
       }
     };
     const emptiedHandler = () => this._onVideoEmptied();
+    const seekedHandler = () => {
+      this._updateLocalOverlayProgress();
+      this._sendPlaybackUpdate();
+    };
     let lastTimeUpdate = 0;
     const timeupdateHandler = () => {
       const now = Date.now();
@@ -188,6 +192,7 @@ class GenericVideoTracker {
     this.activeVideoElement.addEventListener('play', playHandler);
     this.activeVideoElement.addEventListener('pause', pauseHandler);
     this.activeVideoElement.addEventListener('emptied', emptiedHandler);
+    this.activeVideoElement.addEventListener('seeked', seekedHandler);
     this.activeVideoElement.addEventListener('timeupdate', timeupdateHandler);
 
     // Track all listeners for cleanup
@@ -208,6 +213,11 @@ class GenericVideoTracker {
     });
     trackedEventListeners.push({
       element: this.activeVideoElement,
+      eventName: 'seeked',
+      handler: seekedHandler,
+    });
+    trackedEventListeners.push({
+      element: this.activeVideoElement,
       eventName: 'timeupdate',
       handler: timeupdateHandler,
     });
@@ -215,6 +225,7 @@ class GenericVideoTracker {
     this.eventListeners.set('play', playHandler);
     this.eventListeners.set('pause', pauseHandler);
     this.eventListeners.set('emptied', emptiedHandler);
+    this.eventListeners.set('seeked', seekedHandler);
     this.eventListeners.set('timeupdate', timeupdateHandler);
 
     this._updateLocalOverlayProgress();
