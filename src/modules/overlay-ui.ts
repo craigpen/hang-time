@@ -1353,6 +1353,10 @@ export class OverlayUI {
       this.userId = newState.user_uuid;
     }
 
+    // Check if this is only a playback progress update (avoids expensive DOM re-renders of chat/participants)
+    const progressOnlyKeys = new Set(['user_progress', 'host_progress', 'host_progress_timestamp', 'host_state', 'guest_progress', 'guest_progress_timestamp']);
+    const isProgressOnly = Object.keys(newState).length > 0 && Object.keys(newState).every(k => progressOnlyKeys.has(k));
+
     // Preserve local client state (pinned, opacity, visible) if not explicitly overridden by incoming payload
     const preservedPinned = this._state.pinned;
     const preservedOpacity = this._state.opacity;
@@ -1369,6 +1373,9 @@ export class OverlayUI {
     // If co-watch session ended, hide the overlay
     if (this._state.session_members.length === 0) {
       this.hide();
+    } else if (isProgressOnly) {
+      // Lightweight progress update: only update progress bar elements without tearing down/re-rendering list DOM
+      this.renderHeader();
     } else {
       this.render();
     }
@@ -1876,19 +1883,27 @@ export class OverlayUI {
    */
   private renderGuestMarkers(): void {
     const container = document.getElementById('guest-markers-container');
-    if (!container || !this._state.watching_together) return;
+    if (!container) return;
 
-    container.innerHTML = '';
+    if (!this._state.is_user_host || !this._state.watching_together) {
+      if (container.innerHTML !== '') {
+        container.innerHTML = '';
+      }
+      return;
+    }
+
+    const hostUuid = this.getHostUuid();
+    let markersHtml = '';
 
     for (const uuid of this._state.watching_together) {
-      if (uuid === this.userId) continue;
+      if (uuid === this.userId || uuid === hostUuid) continue;
 
       const color = this.getParticipantColor(uuid);
-      const marker = document.createElement('div');
-      marker.className = 'guest-marker';
-      marker.style.background = color;
-      marker.id = `guest-marker-${uuid}`;
-      container.appendChild(marker);
+      markersHtml += `<div class="guest-marker" id="guest-marker-${uuid}" style="background: ${color};"></div>`;
+    }
+
+    if (container.innerHTML !== markersHtml) {
+      container.innerHTML = markersHtml;
     }
 
     this.updateGuestMarkers();
@@ -1898,7 +1913,7 @@ export class OverlayUI {
    * Update positions of guest markers based on their progress (called from CO_WATCH_UPDATE handler)
    */
   private updateGuestMarkers(): void {
-    if (!this._state.guest_progress || !this._state.watching_together || !this._state.host_duration || this._state.host_duration <= 0) {
+    if (!this._state.is_user_host || !this._state.guest_progress || !this._state.watching_together || !this._state.host_duration || this._state.host_duration <= 0) {
       return;
     }
 
