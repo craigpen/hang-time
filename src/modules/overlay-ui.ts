@@ -706,15 +706,34 @@ export class OverlayUI {
   }
 
   /**
-   * Restore overlay size from storage
+   * Restore overlay size, opacity, and pinned state from storage
    */
   private restoreSizeFromStorage(): void {
     if (!this.container) return;
     storageManager.getUserProfile().then((userProfile) => {
-      if (userProfile && userProfile.overlay_size && this.container) {
-        const { width, height } = userProfile.overlay_size;
-        this.container.style.width = width + 'px';
-        this.container.style.maxHeight = height + 'px';
+      if (userProfile && this.container) {
+        if (userProfile.overlay_size) {
+          const { width, height } = userProfile.overlay_size;
+          this.container.style.width = width + 'px';
+          this.container.style.maxHeight = height + 'px';
+        }
+        if (userProfile.overlay_opacity !== undefined) {
+          this._state.opacity = userProfile.overlay_opacity;
+          const slider = this.container.querySelector('#opacity-slider') as HTMLInputElement;
+          if (slider) slider.value = userProfile.overlay_opacity.toString();
+          this.updateOpacity();
+        }
+        if (userProfile.overlay_pinned !== undefined) {
+          this._state.pinned = userProfile.overlay_pinned;
+          const pinButton = this.container.querySelector('#pin-button');
+          if (pinButton) {
+            if (this._state.pinned) {
+              pinButton.classList.add('pinned');
+            } else {
+              pinButton.classList.remove('pinned');
+            }
+          }
+        }
       }
     }).catch(console.error);
   }
@@ -723,14 +742,31 @@ export class OverlayUI {
    * Setup opacity slider
    */
   private setupOpacitySlider(): void {
-    const slider = document.getElementById('opacity-slider') as HTMLInputElement;
+    const slider = this.container?.querySelector('#opacity-slider') as HTMLInputElement;
     if (!slider) return;
+
+    slider.value = this._state.opacity.toString();
 
     slider.addEventListener('mousedown', (e) => {
       e.stopPropagation();
     });
 
-    slider.addEventListener('input', (_e) => {
+    slider.addEventListener('input', (e) => {
+      const val = parseInt((e.target as HTMLInputElement).value, 10);
+      this._state.opacity = val;
+      this.updateOpacity();
+    });
+
+    slider.addEventListener('change', (e) => {
+      const val = parseInt((e.target as HTMLInputElement).value, 10);
+      this._state.opacity = val;
+      this.updateOpacity();
+      storageManager.getUserProfile().then((profile) => {
+        if (profile) {
+          profile.overlay_opacity = val;
+          storageManager.setUserProfile(profile).catch(console.error);
+        }
+      }).catch(console.error);
     });
 
     this.updateOpacity();
@@ -756,7 +792,7 @@ export class OverlayUI {
     }
     this._eventListenersSetup = true;
 
-    // Discovery listener - only show overlay if there's an active co-watch session
+    // Discovery listener - show overlay and cancel any fade-out if mouse is over overlay area
     if (!this.initialMouseMoveListener && this.container) {
       this.initialMouseMoveListener = (e: MouseEvent) => {
         if (!this.container) return;
@@ -765,16 +801,26 @@ export class OverlayUI {
         const isOverlay = e.clientX >= rect.left && e.clientX <= rect.right &&
                          e.clientY >= rect.top && e.clientY <= rect.bottom;
 
-        // Only show on hover if there's an active co-watch session (2+ members)
-        if (isOverlay && this._state.session_members?.length >= 2) {
-          if (this.container.classList.contains('hidden') || this.container.classList.contains('fading-out')) {
-            this.show();
+        if (isOverlay) {
+          // Cancel any pending fade-out or hide timers whenever mouse is inside overlay
+          if (this.hideTimer) {
+            clearTimeout(this.hideTimer);
+            this.hideTimer = null;
+          }
+          if (this.fadeTimeoutId) {
+            clearTimeout(this.fadeTimeoutId);
+            this.fadeTimeoutId = null;
+          }
+          // Only show on hover if there's an active co-watch session (2+ members)
+          if (this._state.session_members?.length >= 2) {
+            if (this.container.classList.contains('hidden') || this.container.classList.contains('fading-out')) {
+              this.show();
+            }
           }
         }
       };
       document.addEventListener('mousemove', this.initialMouseMoveListener);
     }
-
 
     // Delay hover listeners to avoid catching synthetic mouseenter events during initialization
     window.setTimeout(() => {
@@ -792,6 +838,20 @@ export class OverlayUI {
         }
         // Only show on hover if there's an active co-watch session (2+ members)
         if (this._state.session_members?.length >= 2) {
+          this.show();
+        }
+      });
+
+      this.container.addEventListener('mousemove', (_e) => {
+        if (this.hideTimer) {
+          clearTimeout(this.hideTimer);
+          this.hideTimer = null;
+        }
+        if (this.fadeTimeoutId) {
+          clearTimeout(this.fadeTimeoutId);
+          this.fadeTimeoutId = null;
+        }
+        if (this.container?.classList.contains('fading-out')) {
           this.show();
         }
       });
@@ -883,13 +943,13 @@ export class OverlayUI {
     }
 
     // Pin button
-    const pinButton = document.getElementById('pin-button');
+    const pinButton = this.container?.querySelector('#pin-button');
     if (pinButton) {
       pinButton.addEventListener('click', () => this.togglePin());
     }
 
     // Discord button
-    const discordButton = document.getElementById('discord-button');
+    const discordButton = this.container?.querySelector('#discord-button') as HTMLElement;
     if (discordButton) {
       // Set Discord icon using chrome.runtime.getURL for proper extension URL
       try {
@@ -902,7 +962,7 @@ export class OverlayUI {
     }
 
     // Sync button (for non-hosts only)
-    const syncButton = document.getElementById('progress-sync-button');
+    const syncButton = this.container?.querySelector('#progress-sync-button');
     if (syncButton) {
       syncButton.addEventListener('click', () => this.onSyncClick());
     }
@@ -923,8 +983,8 @@ export class OverlayUI {
     }
 
     // Message input and send button
-    const messageInput = document.getElementById('message-input') as HTMLTextAreaElement;
-    const sendButton = document.getElementById('send-button');
+    const messageInput = this.container?.querySelector('#message-input') as HTMLTextAreaElement;
+    const sendButton = this.container?.querySelector('#send-button');
 
     console.debug('[OverlayUI] Setup message handlers - input:', !!messageInput, 'button:', !!sendButton);
 
@@ -1117,10 +1177,12 @@ export class OverlayUI {
   }
 
   /**
-   * Hide overlay
+   * Hide overlay (only if not pinned, unless force is true)
    */
-  hide(): void {
+  hide(force = false): void {
     if (!this.container) return;
+    if (this._state.pinned && !force) return;
+
     if (this.hideTimer) {
       clearTimeout(this.hideTimer);
       this.hideTimer = null;
@@ -1159,6 +1221,10 @@ export class OverlayUI {
 
       // Hide after fade completes (3 seconds)
       this.fadeTimeoutId = window.setTimeout(() => {
+        if (!this.container || this._state.pinned) {
+          if (this.container) this.container.classList.remove('fading-out');
+          return;
+        }
         this.hide();
         this.fadeTimeoutId = null;
         this.hideTimer = null;
@@ -1173,7 +1239,7 @@ export class OverlayUI {
    */
   togglePin(): void {
     this._state.pinned = !this._state.pinned;
-    const button = document.getElementById('pin-button');
+    const button = this.container?.querySelector('#pin-button');
     if (button) {
       if (this._state.pinned) {
         button.classList.add('pinned');
@@ -1184,10 +1250,18 @@ export class OverlayUI {
     if (this._state.pinned) {
       if (this.hideTimer) clearTimeout(this.hideTimer);
       if (this.fadeTimeoutId) clearTimeout(this.fadeTimeoutId);
+      this.hideTimer = null;
+      this.fadeTimeoutId = null;
       this.show();
     } else {
       this.startFadeOut();
     }
+    storageManager.getUserProfile().then((profile) => {
+      if (profile) {
+        profile.overlay_pinned = this._state.pinned;
+        storageManager.setUserProfile(profile).catch(console.error);
+      }
+    }).catch(console.error);
     console.debug('[OverlayUI] Pin toggled:', this._state.pinned);
   }
 
@@ -1263,7 +1337,18 @@ export class OverlayUI {
       this.userId = newState.user_uuid;
     }
 
-    this._state = { ...this._state, ...newState };
+    // Preserve local client state (pinned, opacity, visible) if not explicitly overridden by incoming payload
+    const preservedPinned = this._state.pinned;
+    const preservedOpacity = this._state.opacity;
+    const preservedVisible = this._state.visible;
+
+    this._state = {
+      ...this._state,
+      ...newState,
+      pinned: newState.pinned !== undefined ? newState.pinned : preservedPinned,
+      opacity: newState.opacity !== undefined ? newState.opacity : preservedOpacity,
+      visible: newState.visible !== undefined ? newState.visible : preservedVisible,
+    };
 
     // If co-watch session ended, hide the overlay
     if (this._state.session_members.length === 0) {

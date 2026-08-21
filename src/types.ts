@@ -52,6 +52,8 @@ export interface UserProfile {
   dnd_enabled?: boolean; // Do Not Disturb mode (bypasses co-watching and alerts)
   game_discovery_enabled?: boolean; // Game library discovery enabled
   overlay_size?: { width: number; height: number }; // Persisted floating overlay dimensions
+  overlay_opacity?: number; // Persisted overlay opacity (10-100)
+  overlay_pinned?: boolean; // Persisted overlay pinned state
   publisher_config?: {
     enabled: boolean; // Global publishing on/off
     rate_ms: number; // Publishing interval in milliseconds (default 12000)
