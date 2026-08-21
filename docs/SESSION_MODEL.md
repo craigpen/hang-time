@@ -97,9 +97,15 @@ The in-page overlay (`#hang-time-overlay`) renders inside an isolated container 
 ### 4.1 Mode A: Host Mode (`watching_together >= 2`)
 Active when 2 or more participants are on the exact same video:
 - **Host Chip & Title**: Displays current host badge and video name.
-- **Synchronized Progress Bar**: Shows local progress, guest position pins (if host), or the host position arrow marker (if guest).
-- **Control Buttons**: Sync Playback (`🕐`), Discord Voice link, Chat toggle (`💬`), and Leave (`✕`).
-- **In-Overlay Chat**: Displays incoming/outgoing encrypted session messages.
+- **Synchronized Progress Bar**:
+  - **Host View**: Green progress fill tracks host video progress. Multi-guest colored vertical pins (`.guest-marker`) show each connected guest's real-time position with interpolation.
+  - **Guest View**:
+    - The green progress fill (`#progress-bar-fill`) and time display (`#progress-time-display`) reflect the **Host's position**, continuously interpolated by a 1-second animation loop even when the guest's local player is paused.
+    - **Local Position Marker (`#user-position-marker`)**: Always visible 3px vertical bar colored with the user's participant color, marking the local guest's playback position.
+    - **Divergence Arrow (`#progress-bar-marker`) & Gap Line (`#gap-indicator`)**: Appear with hysteresis when the distance to the host exceeds 6 seconds (`gap > 6s`) and hide when within 4 seconds (`gap < 4s`). The arrow sits adjacent to the vertical position bar, pointing right (`arrow-right`) if the user is behind the host or left (`arrow-left`) if ahead.
+    - **Sync Button (`#progress-sync-button` / `↺`)**: Visible for guests; clicking immediately seeks the local video element to the host's extrapolated position.
+- **Control Buttons**: Sync Playback (`↺`), Discord Voice link, Chat toggle (`💬`), and Leave (`✕`).
+- **In-Overlay Chat**: Displays incoming/outgoing encrypted session messages with sender attendee chips.
 
 ### 4.2 Mode B: Guest / Divergence Mode (`watching_together < 2`)
 Active when session members are browsing different media:

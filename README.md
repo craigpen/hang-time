@@ -55,9 +55,12 @@ npm run build:all
 
 The extension bundles will be generated in `dist/chrome-mv3/` and `dist/firefox-mv3/`.
 
-### Running Tests
+### Running Verification
 ```bash
-# Run unit & integration test suite (290+ tests)
+# Run type check
+npm run type-check
+
+# Run unit & integration test suite (310+ tests)
 npm run test:run
 
 # Run interactive watch mode
