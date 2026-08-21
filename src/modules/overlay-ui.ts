@@ -503,21 +503,21 @@ export class OverlayUI {
           transform: scale(1.05);
         }
 
-        .hang-time-chat-container {
+        #hang-time-chat-container {
           flex: 1;
           overflow-y: auto;
           padding: 8px 10px;
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 4px;
         }
 
         .chat-message {
           display: flex;
           flex-direction: column;
-          gap: 2px;
-          font-size: 12px;
-          line-height: 1.4;
+          gap: 1px;
+          font-size: 11.5px;
+          line-height: 1.35;
           max-width: 85%;
         }
 
@@ -532,24 +532,24 @@ export class OverlayUI {
         }
 
         .message-content {
-          padding: 6px 10px;
-          border-radius: 12px;
+          padding: 3px 8px;
+          border-radius: 9px;
           word-wrap: break-word;
-          font-size: 12px;
+          font-size: 11.5px;
           flex: 0 1 auto;
         }
 
         .message-friend .message-content {
           background: rgba(255, 255, 255, 0.08);
           color: rgba(255, 255, 255, 0.95);
-          border-bottom-left-radius: 4px;
+          border-bottom-left-radius: 3px;
         }
 
         .message-user .message-content {
           background: rgba(244, 63, 94, 0.25);
           border: 1px solid rgba(244, 63, 94, 0.35);
           color: white;
-          border-bottom-right-radius: 4px;
+          border-bottom-right-radius: 3px;
         }
 
         .message-input-container {
@@ -1412,7 +1412,7 @@ export class OverlayUI {
           // Show host position marker
           if (hostPositionMarkerEl) {
             hostPositionMarkerEl.style.left = hostPercent + '%';
-            hostPositionMarkerEl.style.background = this.getParticipantColor(this.getHostUuid());
+            hostPositionMarkerEl.style.background = this.getParticipantColor(this.userId);
             hostPositionMarkerEl.style.display = 'block';
           }
 
