@@ -40,24 +40,26 @@
         <button class="tab-button active" data-tab="friends-tab">Friends</button>
         <button class="tab-button" data-tab="games-tab">Games</button>
       </div>
-      <div class="tab-actions" id="friends-tab-actions">
-        <button id="show-inactive-btn" class="btn-icon-small btn-toggle-inactive" title="Toggle offline friends">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-            <circle cx="12" cy="12" r="3"></circle>
-          </svg>
-        </button>
-        <button id="add-friend-btn" class="btn-icon-small btn-add-friend" title="Add a friend">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-        </button>
-      </div>
     </div>
 
     <!-- Friends List Tab -->
     <div id="friends-tab" class="tab-content active">
+      <div class="friends-header" id="friends-tab-actions">
+        <div class="friends-header-actions">
+          <button id="show-inactive-btn" class="btn-icon-small btn-toggle-inactive" title="Toggle offline friends">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+          <button id="add-friend-btn" class="btn-icon-small btn-add-friend" title="Add a friend">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
       <!-- Friends populated by JS (includes "My Activity" first, header, then friends) -->
       <div id="friends-list" class="friends-list"></div>
       <!-- No friends placeholder -->
