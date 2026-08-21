@@ -86,14 +86,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 8px 12px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
 }
 
 .popup-header h1 {
-  font-size: 1.05em;
+  font-size: 1em;
   margin: 0;
   color: var(--accent-primary);
 }
@@ -1313,37 +1313,46 @@ body.settings-open .popup-container {
 }
 
 .activity-items {
-  padding: 8px 0;
+  padding: 4px 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .activity-item-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-  font-size: 0.95em;
+  gap: 6px;
+  padding: 3px 6px;
+  margin: 0 -6px;
+  border-radius: 4px;
+  font-size: 0.88em;
   color: var(--text-secondary);
   position: relative;
+  transition: background-color 0.15s ease, color 0.15s ease;
   --progress-percent: 0%;
+}
+
+.activity-item-row:hover {
+  background-color: var(--bg-hover, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary);
 }
 
 .activity-item-row::after {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 0;
-  width: var(--progress-percent);
+  left: 6px;
+  width: calc(var(--progress-percent) * (100% - 12px) / 100);
   height: 2px;
   background-color: rgba(76, 175, 80, 0.7);
   transition: width 0.2s ease;
+  border-radius: 1px;
 }
 
 .activity-badge {
-  font-size: 1.2em;
-  min-width: 20px;
+  font-size: 1.1em;
+  min-width: 18px;
   text-align: center;
   flex-shrink: 0;
 }
@@ -1361,13 +1370,29 @@ body.settings-open .popup-container {
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+  font-size: 0.95em;
+}
+
+.activity-item-favicon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.activity-item-favicon img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
 }
 
 .activity-state-icon {
   flex-shrink: 0;
-  min-width: 20px;
-  width: 20px;
-  height: 20px;
+  min-width: 16px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1377,13 +1402,13 @@ body.settings-open .popup-container {
   padding: 0 !important;
   margin: 0 !important;
   user-select: none;
-  font-size: 1.6em;
+  font-size: 1.1em;
   line-height: 1;
 }
 
 .state-icon-svg {
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
 }
 
@@ -1423,11 +1448,11 @@ body.settings-open .popup-container {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 16px;
-  padding: 4px 6px;
+  font-size: 14px;
+  padding: 3px 5px;
   border-radius: 4px;
   transition: background-color 0.2s, color 0.2s;
-  color: #666;
+  color: #8898b8;
   line-height: 1;
   display: flex;
   align-items: center;
@@ -1436,18 +1461,13 @@ body.settings-open .popup-container {
 
 @media (prefers-color-scheme: dark) {
   .activity-action-btn {
-    color: #aaa;
+    color: #8898b8;
   }
 }
 
 .activity-action-btn:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-}
-
-@media (prefers-color-scheme: dark) {
-  .activity-action-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-  }
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
 }
 
 .activity-action-join:hover {
@@ -1662,7 +1682,7 @@ body.settings-open .popup-container {
 }
 
 .friend-item.user-item {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-primary);
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -1671,12 +1691,12 @@ body.settings-open .popup-container {
 }
 
 .friend-item.pending {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-primary);
   opacity: 0.85;
 }
 
 .friend-item.pending-friend-item {
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-primary);
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -1686,33 +1706,33 @@ body.settings-open .popup-container {
 }
 
 .pending-message-container {
-  padding: 8px 14px;
-  background-color: var(--bg-tertiary);
+  padding: 4px 12px 6px 24px;
+  background-color: transparent;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .pending-message {
   color: var(--text-secondary);
-  font-size: 0.9em;
-  line-height: 1.4;
+  font-size: 0.85em;
+  line-height: 1.3;
 }
 
 .pending-buttons {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-start;
 }
 
 .btn-accept-friend,
 .btn-decline-friend {
-  padding: 6px 12px;
+  padding: 4px 10px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  background-color: var(--bg-primary);
+  background-color: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: 0.85em;
+  font-size: 0.8em;
   cursor: pointer;
   transition: all 0.2s;
   font-weight: 500;
@@ -1733,23 +1753,24 @@ body.settings-open .popup-container {
 .friend-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: 6px;
+  padding: 6px 12px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.15s ease;
   user-select: none;
 }
 
 .friend-header:hover {
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-hover, rgba(255, 255, 255, 0.04));
 }
 
 .friend-caret {
   flex-shrink: 0;
-  font-size: 0.8em;
-  width: 16px;
+  font-size: 0.7em;
+  width: 14px;
   text-align: center;
-  transition: transform 0.2s;
+  color: var(--text-tertiary);
+  transition: transform 0.2s ease;
 }
 
 .friend-item.expanded .friend-caret {
@@ -1758,7 +1779,8 @@ body.settings-open .popup-container {
 
 .friend-name {
   flex: 1;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 0.9em;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -1767,35 +1789,35 @@ body.settings-open .popup-container {
 
 .friend-status {
   flex-shrink: 0;
-  font-size: 0.75em;
+  font-size: 0.7em;
   color: var(--text-tertiary);
-  padding: 2px 6px;
-  background-color: var(--bg-tertiary);
-  border-radius: 2px;
+  padding: 1px 6px;
+  background-color: var(--bg-secondary);
+  border-radius: 3px;
   white-space: nowrap;
 }
 
 .friend-status.last-seen {
   color: #f39c12;
-  background-color: rgba(243, 156, 18, 0.2);
+  background-color: rgba(243, 156, 18, 0.15);
 }
 
 .friend-header-buttons {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   align-items: center;
   margin-left: auto;
-  margin-right: 8px;
+  margin-right: 6px;
 }
 
 .btn-friend-action {
-  padding: 4px 6px;
-  font-size: 0.9em;
+  padding: 2px 4px;
+  font-size: 0.85em;
   background: none;
   border: none;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: color 0.2s;
+  transition: color 0.15s;
   font-family: inherit;
 }
 
@@ -1809,9 +1831,9 @@ body.settings-open .popup-container {
 
 .friend-activities {
   display: none;
-  padding: 8px 14px;
-  background-color: var(--bg-tertiary);
-  gap: 4px;
+  padding: 2px 12px 6px 24px;
+  background-color: transparent;
+  gap: 2px;
   flex-direction: column;
   width: 100%;
   min-width: 0;
@@ -1824,9 +1846,9 @@ body.settings-open .popup-container {
 .activity-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 0.9em;
-  padding: 4px 0;
+  gap: 6px;
+  font-size: 0.85em;
+  padding: 3px 0;
   color: var(--text-secondary);
   width: 100%;
   overflow: hidden;
@@ -1994,13 +2016,13 @@ body.settings-open .popup-container {
 
 .tab-button {
   flex: 1;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border: none;
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
   font-weight: 500;
-  font-size: 0.9em;
+  font-size: 0.88em;
   transition: all 0.2s;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
