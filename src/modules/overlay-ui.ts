@@ -793,10 +793,13 @@ export class OverlayUI {
     }
     this._eventListenersSetup = true;
 
-    // Discovery listener - show overlay and cancel any fade-out if mouse is over overlay area or top-right zone
+    // Discovery listener - show overlay if there is an active session (2+ members) or if pinned
     if (!this.initialMouseMoveListener && this.container) {
       this.initialMouseMoveListener = (e: MouseEvent) => {
         if (!this.container) return;
+
+        const hasSession = (this._state.session_members?.length || 0) >= 2;
+        if (!hasSession && !this._state.pinned) return;
 
         const rect = this.container.getBoundingClientRect();
         const isInsideOverlay = rect && rect.width > 0 && rect.height > 0 &&
@@ -814,13 +817,6 @@ export class OverlayUI {
           if (this.fadeTimeoutId) {
             clearTimeout(this.fadeTimeoutId);
             this.fadeTimeoutId = null;
-          }
-
-          // Proactively request latest overlay state from background if members not populated
-          if ((this._state.session_members?.length || 0) < 2 && this.port) {
-            try {
-              this.port.postMessage({ type: 'GET_OVERLAY_STATE' });
-            } catch (e) {}
           }
 
           // Show on hover whenever mouse enters overlay or top-right discovery zone
@@ -846,7 +842,10 @@ export class OverlayUI {
           clearTimeout(this.fadeTimeoutId);
           this.fadeTimeoutId = null;
         }
-        this.show();
+        const hasSession = (this._state.session_members?.length || 0) >= 2;
+        if (hasSession || this._state.pinned) {
+          this.show();
+        }
       });
 
       this.container.addEventListener('mousemove', (_e) => {
