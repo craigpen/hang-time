@@ -165,17 +165,23 @@ class GenericVideoTracker {
       }, 500);
     }
 
-    const playHandler = () => this._sendPlaybackUpdate();
+    const playHandler = () => {
+      this._updateLocalOverlayProgress();
+      this._sendPlaybackUpdate();
+    };
     const pauseHandler = () => {
+      this._updateLocalOverlayProgress();
       if (!document.hidden) {
         this._sendPlaybackUpdate();
       }
     };
     const emptiedHandler = () => this._onVideoEmptied();
+    const timeupdateHandler = () => this._updateLocalOverlayProgress();
 
     this.activeVideoElement.addEventListener('play', playHandler);
     this.activeVideoElement.addEventListener('pause', pauseHandler);
     this.activeVideoElement.addEventListener('emptied', emptiedHandler);
+    this.activeVideoElement.addEventListener('timeupdate', timeupdateHandler);
 
     // Track all listeners for cleanup
     trackedEventListeners.push({
@@ -193,11 +199,18 @@ class GenericVideoTracker {
       eventName: 'emptied',
       handler: emptiedHandler,
     });
+    trackedEventListeners.push({
+      element: this.activeVideoElement,
+      eventName: 'timeupdate',
+      handler: timeupdateHandler,
+    });
 
     this.eventListeners.set('play', playHandler);
     this.eventListeners.set('pause', pauseHandler);
     this.eventListeners.set('emptied', emptiedHandler);
+    this.eventListeners.set('timeupdate', timeupdateHandler);
 
+    this._updateLocalOverlayProgress();
     this._sendPlaybackUpdate();
 
     if (this.pollingInterval) {
@@ -237,6 +250,27 @@ class GenericVideoTracker {
     this.activeVideoElement = null;
     console.log('[TimestampMigration:ContentTimestamp] Video emptied, searching for video again');
     setTimeout(() => this._findAndHookVideo(), 100);
+  }
+
+  private _updateLocalOverlayProgress(): void {
+    if (!overlayUI || !this.activeVideoElement) return;
+    const currentTime = Math.floor(this.activeVideoElement.currentTime || 0);
+    const duration = Math.floor(this.activeVideoElement.duration || 0);
+    const isPaused = this.activeVideoElement.paused;
+
+    if (overlayUI.state.is_user_host) {
+      overlayUI.setState({
+        user_progress: currentTime,
+        host_progress: currentTime,
+        host_progress_timestamp: Date.now(),
+        host_duration: duration > 0 ? duration : overlayUI.state.host_duration,
+        host_state: isPaused ? 'paused' : 'playing',
+      });
+    } else {
+      overlayUI.setState({
+        user_progress: currentTime,
+      });
+    }
   }
 
   private _sendPlaybackUpdate(): void {

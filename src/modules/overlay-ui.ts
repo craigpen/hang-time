@@ -1398,15 +1398,22 @@ export class OverlayUI {
     const stateIndicator = document.getElementById('host-state-indicator') as HTMLElement;
     const timeDisplayEl = document.getElementById('progress-time-display') as HTMLElement;
 
+    // Calculate current host progress (extrapolated if playing and not local host)
+    let currentHostProgress = this._state.host_progress;
+    if (!this._state.is_user_host && this._state.host_state === 'playing' && this._state.host_progress_timestamp && this._state.host_progress !== undefined) {
+      const elapsedSinceHostMeasure = (Date.now() - this._state.host_progress_timestamp) / 1000;
+      currentHostProgress = Math.min(this._state.host_progress + elapsedSinceHostMeasure, this._state.host_duration || (this._state.host_progress + elapsedSinceHostMeasure));
+    }
+
     // Update time display
     if (timeDisplayEl) {
-      if (this._state.host_progress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
-        const cur = this.formatTime(this._state.host_progress);
+      if (currentHostProgress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
+        const cur = this.formatTime(currentHostProgress);
         const dur = this.formatTime(this._state.host_duration);
         timeDisplayEl.textContent = `${cur} / ${dur}`;
         timeDisplayEl.style.display = 'inline';
-      } else if (this._state.host_progress !== undefined) {
-        timeDisplayEl.textContent = this.formatTime(this._state.host_progress);
+      } else if (currentHostProgress !== undefined) {
+        timeDisplayEl.textContent = this.formatTime(currentHostProgress);
         timeDisplayEl.style.display = 'inline';
       } else {
         timeDisplayEl.style.display = 'none';
@@ -1426,9 +1433,9 @@ export class OverlayUI {
       }
     }
 
-    if (fillEl && this._state.host_progress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
+    if (fillEl && currentHostProgress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
       // Simple calculation: progress / duration * 100
-      const hostPercent = Math.min((this._state.host_progress / this._state.host_duration) * 100, 100);
+      const hostPercent = Math.min((currentHostProgress / this._state.host_duration) * 100, 100);
       fillEl.style.width = hostPercent + '%';
 
       // Position host marker at host's current position
