@@ -10,6 +10,8 @@ export interface OverlayState {
   pinned: boolean;
   opacity: number; // 0-100
   host_nickname?: string;
+  host_uuid?: string; // UUID of the host
+  user_uuid?: string; // UUID of the current local user
   session_members: string[]; // all persistent session members (for divergence display)
   watching_together: string[]; // people on same activity (for mode A/B detection, progress markers)
   messages: Array<{
@@ -83,6 +85,16 @@ export class OverlayUI {
   }
 
   /**
+   * Update the user ID without recreating the overlay DOM
+   */
+  setUserId(userId: string): void {
+    if (userId && userId !== this.userId) {
+      this.userId = userId;
+      this.render();
+    }
+  }
+
+  /**
    * Set the port for sending messages to background
    */
   setPort(port: chrome.runtime.Port): void {
@@ -113,6 +125,10 @@ export class OverlayUI {
    */
   private createOverlayContainer(): void {
     if (this.container) return;
+
+    // Clean up any existing overlay element left in DOM from prior/orphaned scripts
+    const existingOverlays = document.querySelectorAll('#hang-time-overlay');
+    existingOverlays.forEach((el) => el.remove());
 
     this.container = document.createElement('div');
     this.container.id = 'hang-time-overlay';
@@ -994,9 +1010,17 @@ export class OverlayUI {
   }
 
   /**
-   * Find the host's UUID by matching their nickname in the nicknameMap
+   * Find the host's UUID:
+   * 1. Check explicit host_uuid from session state
+   * 2. If is_user_host is true, return this.userId
+   * 3. Look up by nickname in nicknameMap
+   * 4. Fallback to first non-self watching member or first member
    */
   private getHostUuid(): string | undefined {
+    if (this._state.host_uuid) {
+      return this._state.host_uuid;
+    }
+
     if (this._state.is_user_host) {
       return this.userId;
     }
@@ -1008,7 +1032,10 @@ export class OverlayUI {
       }
     }
 
-    return undefined;
+    // Fallback: first non-self member in watching_together or first member
+    const watching = this._state.watching_together || [];
+    const nonSelf = watching.find((id) => id !== this.userId && id !== 'unknown');
+    return nonSelf || watching[0];
   }
 
   /**
@@ -1229,6 +1256,11 @@ export class OverlayUI {
     // Track when user_progress is updated for extrapolation
     if (newState.user_progress !== undefined) {
       this.lastUserProgressUpdate = Date.now();
+    }
+
+    // Update userId if provided in state
+    if (newState.user_uuid && newState.user_uuid !== this.userId && newState.user_uuid !== 'unknown') {
+      this.userId = newState.user_uuid;
     }
 
     this._state = { ...this._state, ...newState };

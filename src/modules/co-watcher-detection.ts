@@ -154,14 +154,17 @@ export class CoWatcherDetector {
       const now = Date.now();
       for (const coWatcher of coWatchers) {
         let activity;
+        let lastSeen: number | undefined;
         if (coWatcher.friend_uuid === null) {
           activity = userActivity;
+          lastSeen = userActivity?.metadata?.progress_measured_at || userActivity?.freshness_timestamp || userActivity?.timestamp;
         } else {
           const friend = friends.find(f => f.uuid === coWatcher.friend_uuid);
           activity = friend ? Object.values(friend.current_activities || {}).find(a => a?.id === matchedActivityId) : undefined;
+          lastSeen = activity?.metadata?.progress_measured_at || activity?.freshness_timestamp || friend?.last_seen || activity?.timestamp;
         }
 
-        const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
+        const lastMeasuredAt = lastSeen || activity?.timestamp;
         if (!lastMeasuredAt || (now - lastMeasuredAt) >= ACTIVITY_FRESHNESS_MS) {
           console.debug('[CoWatcher] Activity too stale, blocking session creation:', {
             activity_id: matchedActivityId,

@@ -1265,6 +1265,8 @@ function _startCoWatcherDetectionCycle(): void {
               data: {
                 activity_id: coWatchSession.activity_id,
                 host_nickname: hostName,
+                host_uuid: coWatchSession.host_friend_uuid === 'self' ? selfUuid : coWatchSession.host_friend_uuid,
+                user_uuid: selfUuid,
                 watching_together: watchingTogether,
                 session_members: coWatchSession.members, // Persistent session members
                 host_progress: hostPosition,
@@ -1656,32 +1658,26 @@ chrome.runtime.onConnect.addListener((port) => {
             }
 
             // Return full state for unified content script overlay
-            // Use current URL from the querying tab for content comparison
-            const tabCurrentUrl = (tabId !== undefined && tabId !== -1)
-              ? (await chrome.tabs.get(tabId).catch(() => null))?.url
-              : undefined;
-
             port.postMessage({
               type: 'OVERLAY_STATE',
               data: {
-                is_co_watching: true,
-                is_host: coWatchSession.host_friend_uuid === 'self',
-                host_name: hostName,
-                host_state: hostState,
-                host_position: hostPosition,
-                host_position_timestamp: hostPositionTimestamp,
-                video_duration: videoDuration,
-                user_position: userPosition,
-                members: coWatchSession.members,
-                watching_together: watchingTogether,
-                guest_progress: guestProgress,
-                recent_messages: recentMessages,
-                session_id: coWatchSession.activity_id,
+                activity_id: coWatchSession.activity_id,
+                host_nickname: hostName,
+                host_uuid: coWatchSession.host_friend_uuid === 'self' ? selfUuid : coWatchSession.host_friend_uuid,
                 user_uuid: selfUuid,
-                nicknames: nicknameMap,
+                watching_together: watchingTogether,
+                session_members: coWatchSession.members, // Persistent session members
+                host_progress: hostPosition,
+                host_progress_timestamp: hostPositionTimestamp,
+                host_state: hostState,
+                host_duration: videoDuration,
+                user_progress: userPosition,
+                guest_progress: guestProgress,
+                host_activity_freshness_timestamp: hostActivityFreshness,
+                is_user_host: coWatchSession.host_friend_uuid === 'self',
+                messages: recentMessages,
+                nicknameMap: nicknameMap,
                 co_watcher_activities: coWatcherActivities,
-                current_url: tabCurrentUrl,
-                host_activity_freshness: hostActivityFreshness,
               },
             });
 
@@ -1691,24 +1687,21 @@ chrome.runtime.onConnect.addListener((port) => {
             port.postMessage({
               type: 'OVERLAY_STATE',
               data: {
-                is_co_watching: false,
-                is_host: false,
-                host_name: '',
-                host_state: 'unknown',
-                host_position: 0,
-                host_position_timestamp: Date.now(),
-                video_duration: 0,
-                user_position: 0,
-                members: [],
+                activity_id: undefined,
+                host_nickname: '',
                 watching_together: [],
+                session_members: [],
+                host_progress: 0,
+                host_progress_timestamp: Date.now(),
+                host_state: 'unknown',
+                host_duration: 0,
+                user_progress: 0,
                 guest_progress: {},
-                recent_messages: [],
-                session_id: '',
-                user_uuid: undefined,
-                nicknames: {},
+                host_activity_freshness_timestamp: undefined,
+                is_user_host: false,
+                messages: [],
+                nicknameMap: {},
                 co_watcher_activities: {},
-                current_url: undefined,
-                host_activity_freshness: undefined,
               },
             });
           }

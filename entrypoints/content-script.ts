@@ -18,11 +18,8 @@ const INSTANCE_ID = Math.random().toString(36).slice(2, 9);
 
 console.log(`[ContentScript] 🆕 New instance spawned: ${INSTANCE_ID}`);
 
-// If an older instance is running, signal it to destroy itself
-if ((window as any).hangTimeScriptActive) {
-  console.log(`[ContentScript] 🔄 Orphaned instance detected (${(window as any).hangTimeScriptActive}), triggering cleanup...`);
-  window.dispatchEvent(new CustomEvent(CLEANUP_EVENT));
-}
+// Signal any existing older instance to destroy itself across worlds
+document.dispatchEvent(new CustomEvent(CLEANUP_EVENT));
 
 // Mark THIS instance as the active one (new owner)
 (window as any).hangTimeScriptActive = INSTANCE_ID;
@@ -525,14 +522,7 @@ function establishConnection(): void {
           // Store user ID for overlay
           userId = message.data;
           if (overlayUI) {
-            // Recreate overlay with correct user ID
-            overlayUI.destroy();
-            overlayUI = new OverlayUI(userId);
-            overlayUI.init();
-            // Re-attach port after recreation
-            if (port) {
-              overlayUI.setPort(port);
-            }
+            overlayUI.setUserId(userId);
           }
           console.debug('[ContentScript] Received user ID:', userId);
           break;
@@ -550,27 +540,6 @@ function establishConnection(): void {
           }
           // Update overlay with co-watch data
           if (message.data) {
-            // On first show only: check if host friend's data is fresh enough
-            // This prevents showing incorrect host during reload when friend's contentTimestamp is stale
-            if (!overlayHasBeenShown && !message.data.is_user_host) {
-              const FRIEND_FRESHNESS_THRESHOLD_MS = 13000; // 13 seconds (allow Nostr cycle to complete)
-              const hostFreshnessTimestamp = message.data.host_activity_freshness_timestamp;
-              if (hostFreshnessTimestamp) {
-                const hostActivityAge = Date.now() - hostFreshnessTimestamp;
-                if (hostActivityAge > FRIEND_FRESHNESS_THRESHOLD_MS) {
-                  console.debug(`[ContentScript] Host friend data too stale (${hostActivityAge}ms > ${FRIEND_FRESHNESS_THRESHOLD_MS}ms), waiting for fresh Nostr update...`);
-                  return; // Don't show overlay yet
-                }
-              }
-            }
-
-            // Mark overlay as shown once we pass freshness check
-            const isFirstShow = !overlayHasBeenShown;
-            if (isFirstShow) {
-              overlayHasBeenShown = true;
-              console.debug('[ContentScript] Overlay will be shown for first time');
-            }
-
             // Merge messages instead of replacing - preserve locally added messages
             const incomingMessages = message.data.messages || [];
             const currentMessages = overlayUI.state.messages || [];
@@ -648,7 +617,11 @@ function establishConnection(): void {
             console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE MERGED:', mergedMessages.length, mergedMessages.map((m: any) => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
 
             overlayUI.setState(stateUpdate);
-            if (isFirstShow && (stateUpdate.session_members?.length || 0) >= 2) {
+            if ((stateUpdate.session_members?.length || 0) === 0) {
+              overlayHasBeenShown = false;
+            } else if (!overlayHasBeenShown && (stateUpdate.session_members?.length || 0) >= 2) {
+              overlayHasBeenShown = true;
+              console.debug('[ContentScript] Showing overlay for first time from CO_WATCH_UPDATE');
               overlayUI.show();
               if (!overlayUI.state.pinned) {
                 overlayUI.startFadeOut();
@@ -693,10 +666,30 @@ function establishConnection(): void {
 
         case 'OVERLAY_STATE':
           // Response to GET_OVERLAY_STATE request with current co-watch state
-          if (!overlayUI) return;
+          if (!overlayUI) {
+            console.log('[ContentScript] OVERLAY_STATE triggered lazy overlay initialization');
+            overlayUI = new OverlayUI(userId || 'unknown');
+            overlayUI.init();
+            if (port) {
+              overlayUI.setPort(port);
+            }
+          }
           if (message.data) {
             console.debug('[ContentScript] Received OVERLAY_STATE with', message.data.messages?.length || 0, 'messages');
+            if (message.data.nicknameMap) {
+              overlayUI.setNicknameMap(message.data.nicknameMap);
+            }
             overlayUI.setState(message.data);
+            if ((message.data.session_members?.length || 0) === 0) {
+              overlayHasBeenShown = false;
+            } else if (!overlayHasBeenShown && (message.data.session_members?.length || 0) >= 2) {
+              overlayHasBeenShown = true;
+              console.debug('[ContentScript] Showing overlay from OVERLAY_STATE');
+              overlayUI.show();
+              if (!overlayUI.state.pinned) {
+                overlayUI.startFadeOut();
+              }
+            }
           }
           break;
       }
@@ -794,7 +787,7 @@ function performCleanup(): void {
   trackedEventListeners.length = 0;
 
   // Unregister self-destruct listener
-  window.removeEventListener(CLEANUP_EVENT, performCleanup);
+  document.removeEventListener(CLEANUP_EVENT, performCleanup);
 
   console.log('[ContentScript] ✅ Self-destruct complete, orphaned instance terminated');
 }
@@ -804,7 +797,7 @@ function performCleanup(): void {
 // ============================================================================
 
 // Register cleanup listener FIRST so old instances can clean up when signaled
-window.addEventListener(CLEANUP_EVENT, performCleanup);
+document.addEventListener(CLEANUP_EVENT, performCleanup);
 
 // Initialize with a brief delay to give old instance time to cleanup
 setTimeout(() => {
