@@ -80,6 +80,7 @@ npm run test
 - [Session Model Specification](docs/SESSION_MODEL.md): Persistent sessions, divergence handling, overlay modes, and DND behavior.
 - [Game Discovery Specification](docs/GAME_DISCOVERY.md): Steam library sync, Nostr kind-10003 events, and metadata caching.
 - [Gaming Expansion Roadmap](docs/GAMING_EXPANSION_ROADMAP.md): Multi-storefront PC aggregation (GOG/Xbox), 1-click launching, emulation, and Nostr LFG beacons.
+- [Browser Platforms Roadmap](docs/BROWSER_PLATFORMS_ROADMAP.md): Zero-OAuth in-tab media providers (Anime, Streaming, YouTube Music, SoundCloud, Web Spotify).
 - [Content Script Lifecycle](docs/MV3_CONTENT_SCRIPT_LIFECYCLE.md): DOM management, port teardown, and `INSTANCE_ID` cleanup patterns.
 - [Rate Limiting & Queueing](docs/RATE_LIMITING.md): Priority queue architecture, relay dispatch, and burst handling.
 - [Session Testing Guide](docs/SESSION_TESTING_GUIDE.md): Dual-browser manual testing and verification workflows.
