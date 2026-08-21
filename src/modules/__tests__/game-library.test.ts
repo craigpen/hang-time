@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GameLibraryManager, initializeGameLibraryManager } from '../game-library';
-import { STORAGE_KEYS } from '../../types';
+import { STORAGE_KEYS, OwnedGame, NostrEvent } from '../../types';
 
 describe('GameLibraryManager', () => {
   let gameLibraryManager: GameLibraryManager;
@@ -62,9 +62,9 @@ describe('GameLibraryManager', () => {
       const games = await gameLibraryManager.fetchMyGameLibrary();
 
       expect(games).toHaveLength(3);
-      expect(games[0].appId).toBe(570);
-      expect(games[1].appId).toBe(730);
-      expect(games[2].appId).toBe(440);
+      expect(games[0]!.appId).toBe(570);
+      expect(games[1]!.appId).toBe(730);
+      expect(games[2]!.appId).toBe(440);
       expect(mockStorageManager.set).toHaveBeenCalledWith(
         STORAGE_KEYS.MY_GAME_LIBRARY,
         expect.objectContaining({
@@ -157,7 +157,7 @@ describe('GameLibraryManager', () => {
       const games = await gameLibraryManager.getMyGameLibrary();
 
       expect(games).toHaveLength(1);
-      expect(games[0].appId).toBe(730);
+      expect(games[0]!.appId).toBe(730);
       expect(mockStorageManager.set).toHaveBeenCalled();
     });
 
@@ -180,7 +180,7 @@ describe('GameLibraryManager', () => {
       const games = await gameLibraryManager.getMyGameLibrary();
 
       expect(games).toHaveLength(1);
-      expect(games[0].appId).toBe(570);
+      expect(games[0]!.appId).toBe(570);
     });
 
     it('should return empty array on error', async () => {
@@ -435,7 +435,7 @@ describe('GameLibraryManager', () => {
 
       const games = await gameLibraryManager.getMyGameLibrary();
 
-      expect(games[0].appId).toBe(730);
+      expect(games[0]!.appId).toBe(730);
       expect(mockStorageManager.set).toHaveBeenCalled();
     });
   });
@@ -523,7 +523,7 @@ describe('GameLibraryManager', () => {
 
         mockStorageManager.get.mockResolvedValueOnce(cachedData);
 
-        await gameLibraryManager.publishMyGameLibrary();
+        await gameLibraryManager.publishGameLibrary();
 
         expect(mockRelayPool.publish).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -543,7 +543,7 @@ describe('GameLibraryManager', () => {
         gameLibraryManagerNoDeps['relayPool'] = null;
         gameLibraryManagerNoDeps['identityManager'] = null;
 
-        await gameLibraryManagerNoDeps.publishMyGameLibrary();
+        await gameLibraryManagerNoDeps.publishGameLibrary();
 
         expect(mockRelayPool.publish).not.toHaveBeenCalled();
       });
@@ -551,7 +551,7 @@ describe('GameLibraryManager', () => {
       it('should skip publication if no cached game library', async () => {
         mockStorageManager.get.mockResolvedValueOnce(null);
 
-        await gameLibraryManager.publishMyGameLibrary();
+        await gameLibraryManager.publishGameLibrary();
 
         expect(mockRelayPool.publish).not.toHaveBeenCalled();
       });
@@ -565,7 +565,7 @@ describe('GameLibraryManager', () => {
 
         mockRelayPool.publish.mockRejectedValueOnce(new Error('Relay error'));
 
-        await expect(gameLibraryManager.publishMyGameLibrary()).rejects.toThrow('Relay error');
+        await expect(gameLibraryManager.publishGameLibrary()).rejects.toThrow('Relay error');
       });
     });
 
@@ -1077,7 +1077,7 @@ describe('GameLibraryManager', () => {
 
       const result2 = await gameLibraryManager.getMyGameLibrary();
       expect(result2).toHaveLength(1);
-      expect(result2[0].appId).toBe(570);
+      expect(result2[0]!.appId).toBe(570);
     });
 
     it('should handle partial Steam API response', async () => {

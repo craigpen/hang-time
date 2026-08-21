@@ -6,7 +6,7 @@
  */
 
 import { generateActivityId } from '../src/modules/activity-utils';
-import { OverlayUI } from '../src/modules/overlay-ui';
+import { OverlayUI, OverlayState } from '../src/modules/overlay-ui';
 import { VideoProviderRegistry, VideoProvider } from '../src/modules/providers';
 
 // ============================================================================
@@ -40,7 +40,7 @@ let port: chrome.runtime.Port | null = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const INITIAL_BACKOFF_MS = 500;
-let reconnectTimeoutId: number | null = null;
+let reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
 let tracker: GenericVideoTracker | null = null;
 
 // Overlay UI state
@@ -56,14 +56,14 @@ class GenericVideoTracker {
   private activeVideoElement: HTMLVideoElement | null = null;
   private activeProvider: VideoProvider | null = null;
   private providerRegistry: VideoProviderRegistry = new VideoProviderRegistry();
-  private pollingInterval: number | null = null;
+  private pollingInterval: ReturnType<typeof setInterval> | null = null;
   private domObserver: MutationObserver | null = null;
   private eventListeners: Map<string, (evt: Event) => void> = new Map();
   private lastReportedTime: number = 0;
   private lastReportTimestamp: number = 0;
-  private videoSearchTimeout: number | null = null;
-  private currentActivityId: string | null = null;
-  private currentActivityContentTimestamp: number | null = null;
+  private videoSearchTimeout: ReturnType<typeof setTimeout> | null = null;
+  public currentActivityId: string | null = null;
+  public currentActivityContentTimestamp: number | null = null;
 
   constructor() {}
 
@@ -144,7 +144,7 @@ class GenericVideoTracker {
         // Ignore sessionStorage restrictions
       }
 
-      this.currentActivityContentTimestamp = cachedTs; // Set cached if available, otherwise wait for response or timeout
+      this.currentActivityContentTimestamp = cachedTs ?? null; // Set cached if available, otherwise wait for response or timeout
 
       // Request existing contentTimestamp from background's StorageManager (primary memory storage)
       const requestTime = Date.now();
@@ -505,10 +505,10 @@ function establishConnection(): void {
       switch (message.type) {
         case 'ACTIVITY_CONTENT_TIMESTAMP':
           // Background returned stored contentTimestamp for this activity
-          if (message.data?.activityId === tracker?.['currentActivityId']) {
+          if (tracker && message.data?.activityId === tracker.currentActivityId) {
             const stored = message.data?.contentTimestamp;
             if (stored) {
-              tracker['currentActivityContentTimestamp'] = stored;
+              tracker.currentActivityContentTimestamp = stored;
               try {
                 sessionStorage.setItem(`hang_time_content_ts_${message.data.activityId}`, stored.toString());
               } catch (e) {}
@@ -517,7 +517,7 @@ function establishConnection(): void {
               console.log(`[TimestampMigration] RESPONSE for activity ${message.data.activityId}: not found in storage`);
             }
           } else {
-            console.log(`[TimestampMigration] RESPONSE for activity ${message.data?.activityId}: mismatch with current=${tracker?.['currentActivityId']}`);
+            console.log(`[TimestampMigration] RESPONSE for activity ${message.data?.activityId}: mismatch with current=${tracker?.currentActivityId}`);
           }
           break;
 
@@ -643,9 +643,9 @@ function establishConnection(): void {
             }
 
             // DEBUG: Log raw storage state
-            console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE INCOMING:', incomingMessages.length, incomingMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
-            console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE CURRENT UI:', currentMessages.length, currentMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
-            console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE MERGED:', mergedMessages.length, mergedMessages.map(m => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
+            console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE INCOMING:', incomingMessages.length, incomingMessages.map((m: any) => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
+            console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE CURRENT UI:', currentMessages.length, currentMessages.map((m: any) => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
+            console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE MERGED:', mergedMessages.length, mergedMessages.map((m: any) => ({ sender: m.sender, content: m.content?.substring(0, 20) })));
 
             overlayUI.setState(stateUpdate);
             if (isFirstShow && (stateUpdate.session_members?.length || 0) >= 2) {
@@ -663,7 +663,7 @@ function establishConnection(): void {
           if (message.data) {
             const newPosition = message.data.position + message.data.elapsed;
             overlayUI.setState({
-              user_position: newPosition,
+              user_progress: newPosition,
             });
             console.debug('[ContentScript] Sync complete, updated position to:', newPosition);
           }
@@ -686,8 +686,7 @@ function establishConnection(): void {
           // Update overlay with current activity info
           if (message.data) {
             overlayUI.setState({
-              video_title: message.data.title,
-              user_position: message.data.position,
+              user_progress: message.data.position,
             });
           }
           break;

@@ -2,7 +2,7 @@
 
 ## Mandatory Invariants
 1. **Commit and Push on Every Set of Changes**:
-   - Always run verification (`npm run test:run` and `npm run build:all`).
+   - Always run verification (`npm run type-check`, `npm run test:run`, and `npm run build:all`).
    - Stage, commit with clear messages, and push to the remote branch with each set of changes.
    - Do not leave working directory dirty or unpushed commits behind.
 2. **Follow Architectural Invariants**:

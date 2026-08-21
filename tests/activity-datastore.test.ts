@@ -169,6 +169,7 @@ describe('Activity Validation', () => {
       content: 'Test Video',
       state: 'playing',
       timestamp: Date.now(),
+      contentTimestamp: Date.now(),
     };
 
     it('accepts valid activity', () => {
@@ -185,6 +186,7 @@ describe('Activity Validation', () => {
       expect(() => validateActivity({ ...validActivity, id: '' })).toThrow(ValidationError);
       expect(() => validateActivity({ ...validActivity, service: '' })).toThrow(ValidationError);
       expect(() => validateActivity({ ...validActivity, state: '' })).toThrow(ValidationError);
+      expect(() => validateActivity({ ...validActivity, contentTimestamp: undefined })).toThrow(ValidationError);
     });
 
     it('validates and sanitizes content', () => {
@@ -331,6 +333,7 @@ describe('ActivityDatastore', () => {
         content: 'Test Video',
         state: 'playing',
         timestamp: Date.now(),
+        contentTimestamp: Date.now(),
         provenance: 'LOCAL_TAB' as const,
       };
 
@@ -349,6 +352,7 @@ describe('ActivityDatastore', () => {
         content: '• Contaminated',
         state: 'playing',
         timestamp: Date.now(),
+        contentTimestamp: Date.now(),
       };
 
       await expect(datastore.createActivity(activity)).rejects.toThrow(ValidationError);
@@ -361,6 +365,7 @@ describe('ActivityDatastore', () => {
         content: '  Test Video  ',
         state: 'playing',
         timestamp: Date.now(),
+        contentTimestamp: Date.now(),
       };
 
       const result = await datastore.createActivity(activity);
@@ -377,6 +382,7 @@ describe('ActivityDatastore', () => {
         content: 'Test Video',
         state: 'playing',
         timestamp: Date.now(),
+        contentTimestamp: Date.now(),
         metadata: {
           progress: 30,
           duration: 120,
@@ -428,6 +434,7 @@ describe('ActivityDatastore', () => {
         content: 'Test Video',
         state: 'playing',
         timestamp: Date.now(),
+        contentTimestamp: Date.now(),
       });
     });
 
@@ -451,6 +458,7 @@ describe('ActivityDatastore', () => {
         content: 'Video 1',
         state: 'playing',
         timestamp: Date.now(),
+        contentTimestamp: Date.now(),
       });
       await datastore.createActivity({
         id: 'spotify-1',
@@ -458,6 +466,7 @@ describe('ActivityDatastore', () => {
         content: 'Track 1',
         state: 'playing',
         timestamp: Date.now(),
+        contentTimestamp: Date.now(),
       });
     });
 
@@ -487,6 +496,7 @@ describe('ActivityDatastore', () => {
         content: 'Valid Video',
         state: 'playing',
         timestamp: Date.now(),
+        contentTimestamp: Date.now(),
         url: 'https://youtube.com/watch?v=test',
       });
     });
@@ -510,6 +520,7 @@ describe('ActivityDatastore', () => {
           state: 'playing',
           audio: 'off',
           timestamp: Date.now(),
+          contentTimestamp: Date.now(),
           metadata: {},
         },
       };
@@ -542,6 +553,7 @@ describe('ActivityDatastore', () => {
         content: 'Test Video',
         state: 'playing',
         timestamp: Date.now(),
+        contentTimestamp: Date.now(),
       });
 
       const summary = await datastore.getSummary();

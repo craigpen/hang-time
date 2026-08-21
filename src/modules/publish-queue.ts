@@ -8,7 +8,7 @@
 
 import { finalizeEvent } from 'nostr-tools';
 import { NostrEvent } from '../types';
-import { RelayPool, type PublishResults } from './nostr';
+import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
 import type { ActivityPublisher } from './publisher';
@@ -182,14 +182,13 @@ export class PublishQueue {
     try {
       const secretKey = await this.identityManager.getSecretKey();
       const created_at = Math.floor(Date.now() / 1000);
-
       // Re-finalize the event with fresh timestamp
       const refreshedEvent = finalizeEvent({
         kind: event.kind,
         tags: event.tags,
         content: event.content,
         created_at,
-      }, this.hexToBytes(secretKey)) as NostrEvent;
+      }, this.hexToBytes(secretKey)) as unknown as NostrEvent;
 
       return refreshedEvent;
     } catch (error) {
@@ -206,17 +205,16 @@ export class PublishQueue {
   }
 
   /**
-   * Main publish cycle - determines what to publish based on priority
+   * Publish the next eligible event in priority order
    */
   private async _publishCycle(): Promise<void> {
-    try {
-      // Prevent concurrent publishes (replaceable events rely on monotonic timestamps)
-      if (this.isPublishing) {
-        console.debug('[PublishQueue] Already publishing, skipping cycle');
-        return;
-      }
+    if (this.isPublishing) {
+      console.debug('[PublishQueue] Already publishing, skipping cycle');
+      return;
+    }
 
-      // Check if publishing is enabled globally
+    try {
+      // Check if publishing is globally enabled in profile
       const profile = await this.storageManager.getUserProfile();
       if (profile?.publisher_config && !profile.publisher_config.enabled) {
         console.debug('[PublishQueue] Publishing is disabled, skipping cycle');
@@ -228,14 +226,14 @@ export class PublishQueue {
       let eventToPublish: NostrEvent | null = null;
 
       // Priority 0: Immediate (sync requests/responses - highest priority)
-      if (this.immediateQueue.length > 0) {
+      if (this.immediateQueue.length > 0 && this.immediateQueue[0]) {
         const pending = this.immediateQueue[0];
         eventToPublish = pending.event;
         console.log(`[PublishQueue] Publishing priority 0 (immediate): ${pending.type}`);
         this.lastEventReplacedActivity = false;
       }
       // Priority 1: User actions (friend requests, invites, messages)
-      else if (this.userActionQueue.length > 0) {
+      else if (this.userActionQueue.length > 0 && this.userActionQueue[0]) {
         const pending = this.userActionQueue[0];
         eventToPublish = pending.event;
         console.log(`[PublishQueue] [MESSAGE_FLOW] Publishing priority 1: ${pending.type}`);
@@ -270,19 +268,18 @@ export class PublishQueue {
           console.log(`[PublishQueue] [MESSAGE_FLOW] ✅ Published to relays: success=${results.overall_success}`);
 
           // Handle immediate queue (sync requests/responses)
-          if (this.immediateQueue.length > 0) {
+          if (this.immediateQueue.length > 0 && this.immediateQueue[0]) {
             const pending = this.immediateQueue[0];
             // Immediate messages are fire-and-forget after relay acceptance
             if (results.overall_success) {
               this.immediateQueue.shift();
               console.debug(`[PublishQueue] ✅ Successfully published ${pending.type} (immediate), removed from queue`);
               await this._persistQueue();
-              return;
             }
             // If publish failed, keep in queue for retry
           }
           // Check if this is a handshake message (invite/friend_request) and if any relay accepted it
-          else if (this.userActionQueue.length > 0) {
+          else if (this.userActionQueue.length > 0 && this.userActionQueue[0]) {
             const pending = this.userActionQueue[0];
             const isHandshake = pending.type === 'invite' || pending.type === 'friend_request';
 
@@ -305,27 +302,27 @@ export class PublishQueue {
                 // Handshake accepted by at least one relay, remove from queue
                 this.userActionQueue.shift();
                 await this._persistQueue();
-                return;
+              } else {
+                // If no relay accepted, fall through to error handling (increment retry)
+                throw new Error('No relays accepted the handshake');
               }
+            } else {
+              // For non-handshake or if no relay accepted, treat as success and remove
+              this.userActionQueue.shift();
+              console.debug(`[PublishQueue] ✅ Successfully published ${pending.type}, removed from queue`);
+              await this._persistQueue();
             }
-
-            // For non-handshake or if no relay accepted, treat as success and remove
-            this.userActionQueue.shift();
-            console.debug(`[PublishQueue] ✅ Successfully published ${pending.type}, removed from queue`);
-            await this._persistQueue();
           }
         } catch (error) {
           // Publish failed, retry with backoff
-          if (this.immediateQueue.length > 0) {
+          if (this.immediateQueue.length > 0 && this.immediateQueue[0]) {
             const pending = this.immediateQueue[0];
             pending.retryCount++;
             pending.lastRetryAt = Date.now();
             console.warn(`[PublishQueue] Immediate ${pending.type} failed, retrying... (attempt ${pending.retryCount})`);
             await this._persistQueue();
-          } else if (this.userActionQueue.length > 0) {
+          } else if (this.userActionQueue.length > 0 && this.userActionQueue[0]) {
             const pending = this.userActionQueue[0];
-            const isHandshake = pending.type === 'invite' || pending.type === 'friend_request';
-
             pending.retryCount++;
 
             if (pending.retryCount >= this.MAX_RETRIES) {

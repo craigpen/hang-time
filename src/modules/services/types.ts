@@ -2,9 +2,9 @@
  * Hang Time - Service Module Types & Interfaces
  */
 
-import { Activity, IServiceModule } from '../../types';
+import { Activity } from '../../types';
 
-export interface IServiceModule extends IServiceModule {
+export interface IServiceModule {
   // Inherited from types.ts - all services must implement this interface
   isEnabled(): Promise<boolean>;
   getCurrentActivity(): Promise<Activity | null>;

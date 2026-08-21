@@ -3,7 +3,7 @@
  * Handles opening/joining friend's activity
  */
 
-import { Activity, Friend } from '../types';
+import { Activity } from '../types';
 import { StorageManager } from './storage';
 import { selectDiscordServer } from './activity-utils';
 
@@ -118,9 +118,9 @@ export class JoinHandler {
   /**
    * Prompt user to open Discord for voice coordination
    */
-  private async _promptDiscord(friendName: string): Promise<void> {
+  private async _promptDiscord(friendId: string): Promise<void> {
     try {
-      const friend = await this.storage.getFriend(friendName);
+      const friend = await this.storage.getFriend(friendId);
       if (!friend) {
         console.debug('[JoinHandler] Friend not found for Discord prompt');
         return;
@@ -132,21 +132,71 @@ export class JoinHandler {
         return;
       }
 
-      // Get friend's Discord info from stored profile (keyed by pubkey)
-      const friendProfile = await this.storage.getFriendProfile(friend.pubkey);
-      const friendDiscordInfo = friendProfile?.discord_link;
+      // Check friend's discord_info (might be cached)
+      let discordInfo = friend.discord_info;
+      let friendName = friend.local_name;
 
-      // Determine which Discord to use: friend's first, then user's, or other friends in alpha order
-      const discordInfo = selectDiscordServer(friendDiscordInfo, [
-        { identifier: profile.uuid, discord_info: profile.discord_info },
-      ]);
+      // If not in friend record, check friend_profiles cache (where kind 0 profile data is stored)
+      if (!discordInfo && friend.pubkey) {
+        const cachedProfile = await this.storage.getFriendProfile(friend.pubkey);
+        if (cachedProfile?.discord_link) {
+          discordInfo = cachedProfile.discord_link;
+          console.debug('[JoinHandler] Found Discord info in friend_profiles cache:', discordInfo);
+        }
+      }
 
       if (!discordInfo) {
-        console.debug('[JoinHandler] No Discord server configured for coordination');
         return;
       }
 
-      const discordUrl = this._parseDiscordInfo(discordInfo);
+      // Format Discord URL: validate it's a discord.gg or discord.com invite link
+      let discordUrl: string | null = null;
+      if (discordInfo.startsWith('https://discord.gg/') || discordInfo.startsWith('https://discord.com/invite/')) {
+        discordUrl = discordInfo;
+      } else if (discordInfo.startsWith('discord.gg/')) {
+        discordUrl = `https://${discordInfo}`;
+      } else {
+        console.debug('[JoinHandler] Invalid Discord invite URL format:', discordInfo);
+        return;
+      }
+
+      // If friend is in a co-watch session, prefer host's server
+      if (profile.current_co_watch_session) {
+        const session = profile.current_co_watch_session;
+        // Collect all potential Discord servers from session members
+        const candidateServers: Array<{ pubkey: string; discord_link?: string }> = [];
+
+        // Add self
+        if (profile.discord_info) {
+          candidateServers.push({ pubkey: profile.pubkey, discord_link: profile.discord_info });
+        }
+
+        // Add friends in session
+        const allFriends = await this.storage.getFriends();
+        for (const uuid of session.co_watchers) {
+          const f = allFriends.find(fr => fr.uuid === uuid);
+          if (f?.discord_info) {
+            candidateServers.push({ pubkey: f.pubkey, discord_link: f.discord_info });
+          } else if (f?.pubkey) {
+            const cached = await this.storage.getFriendProfile(f.pubkey);
+            if (cached?.discord_link) {
+              candidateServers.push({ pubkey: f.pubkey, discord_link: cached.discord_link });
+            }
+          }
+        }
+
+        // Use deterministic server selection
+        const hostFriend = allFriends.find(fr => fr.uuid === session.host_friend_uuid);
+        const hostPubkey = hostFriend ? hostFriend.pubkey : (session.host_friend_uuid === profile.uuid ? profile.pubkey : '');
+        const hostServer = candidateServers.find(s => s.pubkey === hostPubkey)?.discord_link;
+        const otherServers = candidateServers.filter(s => s.pubkey !== hostPubkey).map(s => ({ identifier: s.pubkey, discord_info: s.discord_link }));
+        const selected = selectDiscordServer(hostServer, otherServers);
+
+        if (selected) {
+          discordUrl = selected;
+          friendName = session.host_friend_uuid === profile.uuid ? 'your session' : (hostFriend?.local_name || 'the host');
+        }
+      }
 
       if (discordUrl) {
         // Create notification
@@ -160,7 +210,7 @@ export class JoinHandler {
         });
 
         // Listen for button clicks
-        chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+        chrome.notifications.onButtonClicked.addListener((_notificationId, buttonIndex) => {
           if (buttonIndex === 0 && discordUrl) {
             chrome.tabs.create({ url: discordUrl, active: true });
           }
@@ -169,21 +219,6 @@ export class JoinHandler {
     } catch (error) {
       console.debug('[JoinHandler] Discord prompt failed:', error);
     }
-  }
-
-  private _parseDiscordInfo(info: string): string | null {
-    // Check if it's already a URL
-    if (info.startsWith('http')) {
-      return info;
-    }
-
-    // Check if it's a Discord server ID or invite code
-    if (info.includes('discord.gg/')) {
-      return `https://${info}`;
-    }
-
-    // Return null for username-only format (would need API to convert)
-    return null;
   }
 }
 

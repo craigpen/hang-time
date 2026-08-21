@@ -114,7 +114,7 @@ export class StorageManager {
       // Load stored session ID (unnamespaced bootstrap key for instance isolation)
       const bootstrapData = await chrome.storage.local.get(['hang_time_session_id']);
       if (bootstrapData['hang_time_session_id']) {
-        this.sessionId = bootstrapData['hang_time_session_id'];
+        this.sessionId = String(bootstrapData['hang_time_session_id']);
         console.debug('[Storage] Session ID loaded from bootstrap key:', this.sessionId);
         // Signal that sessionId is ready (from previous session)
         this.resolveSessionId();
@@ -180,11 +180,12 @@ export class StorageManager {
       for (let i = 0; i < staticKeys.length; i++) {
         const originalKey = staticKeys[i];
         const prefixedKey = prefixedKeys[i];
+        if (!originalKey || !prefixedKey) continue;
 
         // Check prefixed key first, then unnamespaced as fallback
-        if (dataToLoad.hasOwnProperty(prefixedKey) && dataToLoad[prefixedKey] !== undefined) {
+        if (Object.prototype.hasOwnProperty.call(dataToLoad, prefixedKey) && dataToLoad[prefixedKey] !== undefined) {
           this.cache.set(originalKey, dataToLoad[prefixedKey]);
-        } else if (dataToLoad.hasOwnProperty(originalKey) && dataToLoad[originalKey] !== undefined) {
+        } else if (Object.prototype.hasOwnProperty.call(dataToLoad, originalKey) && dataToLoad[originalKey] !== undefined) {
           this.cache.set(originalKey, dataToLoad[originalKey]);
         }
       }
@@ -343,16 +344,17 @@ export class StorageManager {
    * 2. Key is not a static key that should be pre-loaded
    * Either way, returning default is correct behavior.
    */
+  async get<T>(key: string): Promise<T | undefined>;
+  async get<T>(key: string, defaultValue: T): Promise<T>;
   async get<T>(key: string, defaultValue?: T): Promise<T | undefined> {
     try {
       if (this.cache.has(key)) {
-        return this.cache.get(key) ?? defaultValue;
+        return (this.cache.get(key) as T) ?? defaultValue;
       }
-      // Cache miss - return default, don't fallback to storage
       return defaultValue;
     } catch (error) {
       console.error(`[Storage] Failed to get ${key}:`, error);
-      throw new StorageError(`Failed to get ${key}`, { key, error });
+      return defaultValue;
     }
   }
 
@@ -574,16 +576,18 @@ export class StorageManager {
       updated_at: Date.now(),
     });
 
-    if (!history.activities) history.activities = [];
-    history.activities.push(activity);
+    if (history) {
+      if (!history.activities) history.activities = [];
+      history.activities.push(activity);
 
-    // Keep only last 100 activities
-    if (history.activities.length > 100) {
-      history.activities = history.activities.slice(-100);
+      // Keep only last 100 activities
+      if (history.activities.length > 100) {
+        history.activities = history.activities.slice(-100);
+      }
+
+      history.updated_at = Date.now();
+      await this.set(key, history);
     }
-
-    history.updated_at = Date.now();
-    await this.set(key, history);
   }
 
   // ============================================================================
@@ -827,7 +831,7 @@ export class StorageManager {
     for (let i = 0; i < keys.length; i++) {
       const originalKey = keys[i];
       const prefixedKey = prefixedKeys[i];
-      if (data.hasOwnProperty(prefixedKey)) {
+      if (originalKey && prefixedKey && Object.prototype.hasOwnProperty.call(data, prefixedKey)) {
         this.cache.set(originalKey, data[prefixedKey]);
       }
     }
@@ -903,7 +907,7 @@ export class StorageManager {
    */
   async getNotifiedInviteIds(): Promise<Map<string, number>> {
     const stored = await this.get<Record<string, number>>(STORAGE_KEYS.NOTIFIED_INVITE_IDS, {});
-    return new Map(Object.entries(stored));
+    return new Map(Object.entries(stored || {}));
   }
 
   /**

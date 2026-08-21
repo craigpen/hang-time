@@ -103,30 +103,38 @@ describe('Integration Tests', () => {
       const now = Date.now();
 
       const activeFriend: Friend = {
-        id: '1',
-        identifier: 'Active123',
+        uuid: '1',
+        pubkey: 'pk1',
         local_name: 'Alice',
         added_at: now,
         last_seen: now,
         muted: false,
+        state: 'active',
         hidden_services: [],
         current_activities: {
-          spotify: {
+          'spotify-api': {
+            id: 'spotify-1',
             service: 'spotify-api',
             content: 'Song',
             timestamp: now,
+            contentTimestamp: now,
+            freshness_timestamp: now,
+            is_fresh: true,
+            state: 'playing',
+            provenance: 'LOCAL_SPOTIFY',
             metadata: {},
           },
         },
       };
 
       const idleFriend: Friend = {
-        id: '2',
-        identifier: 'Idle456',
+        uuid: '2',
+        pubkey: 'pk2',
         local_name: 'Bob',
         added_at: now,
         last_seen: now,
         muted: false,
+        state: 'active',
         hidden_services: [],
         current_activities: {},
       };
@@ -136,7 +144,7 @@ describe('Integration Tests', () => {
       const activeFriends = await friendManager.getActiveFriends();
 
       expect(activeFriends).toHaveLength(1);
-      expect(activeFriends[0].id).toBe('1');
+      expect(activeFriends[0]!.uuid).toBe('1');
     });
 
     it('should exclude muted friends from active list', async () => {
@@ -144,18 +152,25 @@ describe('Integration Tests', () => {
       const now = Date.now();
 
       const activeFriend: Friend = {
-        id: '1',
-        identifier: 'Active123',
+        uuid: '1',
+        pubkey: 'pk1',
         local_name: 'Alice',
         added_at: now,
         last_seen: now,
         muted: true, // Muted
+        state: 'active',
         hidden_services: [],
         current_activities: {
-          spotify: {
+          'spotify-api': {
+            id: 'spotify-1',
             service: 'spotify-api',
             content: 'Song',
             timestamp: now,
+            contentTimestamp: now,
+            freshness_timestamp: now,
+            is_fresh: true,
+            state: 'playing',
+            provenance: 'LOCAL_SPOTIFY',
             metadata: {},
           },
         },
@@ -173,7 +188,7 @@ describe('Integration Tests', () => {
     it('should handle complete message send and receive cycle', async () => {
       const messagingManager = new MessagingManager(mockRelayPool, mockIdentity, mockStorage);
       const now = Date.now();
-      const { generateSecretKey, getPublicKey, bytesToHex, nip44 } = await import('nostr-tools');
+      const { generateSecretKey, getPublicKey, nip44 } = await import('nostr-tools');
 
       const mySk = generateSecretKey();
       const mySkHex = Array.from(mySk).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -197,15 +212,22 @@ describe('Integration Tests', () => {
         added_at: now,
         last_seen: now,
         muted: false,
+        state: 'active',
         hidden_services: [],
         current_activities: {},
       };
 
       const activity: Activity = {
         id: 'act1',
-        service: 'steam',
+        service: 'steam-api',
         content: 'Playing Portal 2',
         timestamp: now,
+        contentTimestamp: now,
+        freshness_timestamp: now,
+        is_fresh: true,
+        state: 'playing',
+        provenance: 'LOCAL_STEAM',
+        metadata: {},
       };
 
       // Step 2: Send chat message
@@ -267,16 +289,17 @@ describe('Integration Tests', () => {
         added_at: now,
         last_seen: now,
         muted: false,
+        state: 'active',
         hidden_services: [],
         current_activities: {},
       };
 
       mockStorage.getFriend.mockResolvedValueOnce(friend);
 
-      await friendManager.hideServiceFromFriend('1', 'spotify');
+      await friendManager.hideServiceFromFriend('1', 'spotify-api');
 
       expect(mockStorage.updateFriend).toHaveBeenCalledWith('1', {
-        hidden_services: ['spotify'],
+        hidden_services: ['spotify-api'],
       });
     });
 
@@ -285,18 +308,20 @@ describe('Integration Tests', () => {
       const now = Date.now();
 
       const friend: Friend = {
-        id: '1',
-        identifier: 'Friend123',
+        uuid: '1',
+        pubkey: 'pk1',
         local_name: 'Alice',
         added_at: now,
         last_seen: now,
         muted: false,
-        hidden_services: ['spotify'],
+        state: 'active',
+        hidden_services: ['spotify-api'],
+        current_activities: {},
       };
 
       mockStorage.getFriend.mockResolvedValueOnce(friend);
 
-      await friendManager.showServiceToFriend('1', 'spotify');
+      await friendManager.showServiceToFriend('1', 'spotify-api');
 
       expect(mockStorage.updateFriend).toHaveBeenCalledWith('1', {
         hidden_services: [],
@@ -316,6 +341,7 @@ describe('Integration Tests', () => {
         added_at: now,
         last_seen: now,
         muted: false,
+        state: 'active',
         hidden_services: [],
         current_activities: {},
       };
@@ -327,7 +353,11 @@ describe('Integration Tests', () => {
         service: 'spotify-api',
         content: 'Song 1',
         timestamp: now,
+        contentTimestamp: now,
         freshness_timestamp: now,
+        is_fresh: true,
+        state: 'playing',
+        provenance: 'LOCAL_SPOTIFY',
         metadata: {},
       };
 
@@ -336,7 +366,11 @@ describe('Integration Tests', () => {
         service: 'youtube-tab',
         content: 'Video 1',
         timestamp: now + 5000,
+        contentTimestamp: now + 5000,
         freshness_timestamp: now + 5000,
+        is_fresh: true,
+        state: 'playing',
+        provenance: 'LOCAL_TAB',
         metadata: {},
       };
 
@@ -383,6 +417,7 @@ describe('Integration Tests', () => {
         added_at: now,
         last_seen: now,
         muted: false,
+        state: 'active',
         hidden_services: [],
         current_activities: {},
       };

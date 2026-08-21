@@ -108,7 +108,7 @@ function showError(message: string): void {
     errorDiv.textContent = message;
     errorDiv.style.display = 'block';
   }
-  const spinner = document.querySelector('.spinner');
+  const spinner = document.querySelector<HTMLElement>('.spinner');
   if (spinner) {
     spinner.style.display = 'none';
   }

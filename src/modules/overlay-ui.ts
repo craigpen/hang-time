@@ -29,11 +29,14 @@ export interface OverlayState {
   activity_id?: string; // current/host's activity_id
   is_user_host?: boolean; // true if the user is the host
   co_watcher_activities?: Record<string, {activity_id: string; content: string; url?: string; service?: string; favicon?: string; freshness_timestamp?: number; timestamp?: number; metadata?: any}>; // UUID -> current activity for divergence display
+  user_nickname?: string;
+  nicknameMap?: Record<string, string>;
 }
 
 export class OverlayUI {
   private container: HTMLElement | null = null;
-  private hideTimer: NodeJS.Timeout | null = null;
+  private hideTimer: number | null = null;
+  private fadeTimeoutId: number | null = null;
   private progressUpdateInterval: NodeJS.Timeout | null = null;
   private isDragging = false;
   private dragStartX = 0;
@@ -52,7 +55,6 @@ export class OverlayUI {
   private nicknameMap: Map<string, string> = new Map(); // sender_uuid -> display name
   private initialMouseMoveListener: ((e: MouseEvent) => void) | null = null; // Store listener reference for cleanup
   private _eventListenersSetup = false; // Guard to ensure listeners only set up once
-  private initTime = Date.now(); // Track when overlay was initialized
   private syncInProgress = false; // Track if sync is pending completion
   private windowMessageHandler: ((event: MessageEvent) => void) | null = null; // Store for cleanup
   private lastUserProgressUpdate: number = 0; // Track when user_progress was last set (for extrapolation)
@@ -692,12 +694,13 @@ export class OverlayUI {
    */
   private restoreSizeFromStorage(): void {
     if (!this.container) return;
-    const userProfile = storageManager.getUserProfile();
-    if (userProfile && userProfile.overlay_size) {
-      const { width, height } = userProfile.overlay_size;
-      this.container.style.width = width + 'px';
-      this.container.style.maxHeight = height + 'px';
-    }
+    storageManager.getUserProfile().then((userProfile) => {
+      if (userProfile && userProfile.overlay_size && this.container) {
+        const { width, height } = userProfile.overlay_size;
+        this.container.style.width = width + 'px';
+        this.container.style.maxHeight = height + 'px';
+      }
+    }).catch(console.error);
   }
 
   /**
@@ -711,16 +714,7 @@ export class OverlayUI {
       e.stopPropagation();
     });
 
-    slider.addEventListener('input', (e) => {
-      const value = (e.target as HTMLInputElement).value;
-      this._state.opacity = parseInt(value);
-      this.updateOpacity();
-    });
-
-    slider.addEventListener('change', (e) => {
-      const value = (e.target as HTMLInputElement).value;
-      this._state.opacity = parseInt(value);
-      this.updateOpacity();
+    slider.addEventListener('input', (_e) => {
     });
 
     this.updateOpacity();
@@ -771,7 +765,7 @@ export class OverlayUI {
       console.log('[OverlayUI] Setting up hover listeners, container:', !!this.container);
       if (!this.container) return;
 
-      this.container.addEventListener('mouseenter', (e) => {
+      this.container.addEventListener('mouseenter', (_e) => {
         if (this.hideTimer) {
           clearTimeout(this.hideTimer);
           this.hideTimer = null;
@@ -786,7 +780,7 @@ export class OverlayUI {
         }
       });
 
-      this.container.addEventListener('mouseleave', (e) => {
+      this.container.addEventListener('mouseleave', (_e) => {
         if (!this._state.pinned) {
           this.startFadeOut();
         }
@@ -825,14 +819,15 @@ export class OverlayUI {
         this.isResizing = false;
         // Save size to storage
         const rect = this.container.getBoundingClientRect();
-        const profile = storageManager.getUserProfile();
-        if (profile) {
-          profile.overlay_size = {
-            width: Math.round(rect.width),
-            height: Math.round(rect.height)
-          };
-          storageManager.setUserProfile(profile);
-        }
+        storageManager.getUserProfile().then((profile) => {
+          if (profile) {
+            profile.overlay_size = {
+              width: Math.round(rect.width),
+              height: Math.round(rect.height)
+            };
+            storageManager.setUserProfile(profile).catch(console.error);
+          }
+        }).catch(console.error);
       }
       this.isDragging = false;
     });
@@ -1070,7 +1065,7 @@ export class OverlayUI {
       hash = hash & hash;
     }
 
-    const color = guestColors[Math.abs(hash) % guestColors.length];
+    const color = guestColors[Math.abs(hash) % guestColors.length] || '#FF6B6B';
     this.userColorMap.set(uuid, color);
     return color;
   }
@@ -1144,13 +1139,7 @@ export class OverlayUI {
     }, 3000);
   }
 
-  /**
-   * Reset auto-hide timer
-   */
-  private resetHideTimer(): void {
-    if (this.hideTimer) clearTimeout(this.hideTimer);
-    this.hideTimer = setTimeout(() => this.hide(), 3000);
-  }
+
 
   /**
    * Toggle pin state

@@ -370,21 +370,22 @@ describe('Game Discovery Integration', () => {
       const queueSpy = vi.fn().mockResolvedValueOnce([]);
 
       expect(queueSpy).toBeDefined();
+      expect(appIds).toHaveLength(3);
       // In real implementation, would queue these for fetching
     });
 
     it('should lazy-load metadata as user browses', async () => {
       // Simulate progressive loading
-      const games = [
+      const games: Array<{ appId: number; metadata?: { name: string; genres: string[] } }> = [
         { appId: 730, metadata: undefined },
         { appId: 570, metadata: undefined },
       ];
 
       // As user scrolls, fetch metadata for visible games
-      games[0].metadata = { name: 'CS:GO', genres: ['action'] };
+      games[0]!.metadata = { name: 'CS:GO', genres: ['action'] };
 
-      expect(games[0].metadata).toBeDefined();
-      expect(games[1].metadata).toBeUndefined();
+      expect(games[0]!.metadata).toBeDefined();
+      expect(games[1]!.metadata).toBeUndefined();
     });
 
     it('should cache metadata and avoid refetching', async () => {
@@ -396,6 +397,7 @@ describe('Game Discovery Integration', () => {
       // Second fetch should use cache
       const metadata2 = { name: 'CS:GO', genres: ['action'] };
 
+      expect(appId).toBe(730);
       expect(metadata1).toEqual(metadata2);
     });
   });

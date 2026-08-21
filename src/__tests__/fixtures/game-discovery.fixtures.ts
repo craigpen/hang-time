@@ -311,27 +311,39 @@ export const NOSTR_EVENT_EMPTY_APP_IDS: NostrEvent = {
 // ============================================================================
 
 export const FRIEND_1: Friend = {
-  identifier: 'TenaciousTiger42',
+  uuid: 'TenaciousTiger42',
+  local_name: 'TenaciousTiger42',
   pubkey: 'friend1_pubkey_abc123def456',
-  addedAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
-  hiddenServices: [],
+  added_at: Date.now() - 30 * 24 * 60 * 60 * 1000,
+  last_seen: Date.now(),
+  hidden_services: [],
+  current_activities: {},
   muted: false,
+  state: 'active',
 };
 
 export const FRIEND_2: Friend = {
-  identifier: 'LumiousLlama88',
+  uuid: 'LumiousLlama88',
+  local_name: 'LumiousLlama88',
   pubkey: 'friend2_pubkey_xyz789abc123',
-  addedAt: Date.now() - 14 * 24 * 60 * 60 * 1000,
-  hiddenServices: [],
+  added_at: Date.now() - 14 * 24 * 60 * 60 * 1000,
+  last_seen: Date.now(),
+  hidden_services: [],
+  current_activities: {},
   muted: false,
+  state: 'active',
 };
 
 export const FRIEND_3: Friend = {
-  identifier: 'QuixoticQuokka77',
+  uuid: 'QuixoticQuokka77',
+  local_name: 'QuixoticQuokka77',
   pubkey: 'friend3_pubkey_large_lib',
-  addedAt: Date.now() - 7 * 24 * 60 * 60 * 1000,
-  hiddenServices: [],
+  added_at: Date.now() - 7 * 24 * 60 * 60 * 1000,
+  last_seen: Date.now(),
+  hidden_services: [],
+  current_activities: {},
   muted: false,
+  state: 'active',
 };
 
 export const FRIENDS_LIST: Friend[] = [FRIEND_1, FRIEND_2, FRIEND_3];
@@ -531,11 +543,15 @@ export function generateFriendsList(count: number): Friend[] {
   const animals = ['Tiger', 'Llama', 'Quokka', 'Penguin', 'Dolphin'];
 
   return Array.from({ length: count }, (_, i) => ({
-    identifier: `${adjectives[i % adjectives.length]}${animals[i % animals.length]}${Math.floor(Math.random() * 100)}`,
+    uuid: `${adjectives[i % adjectives.length]}${animals[i % animals.length]}${Math.floor(Math.random() * 100)}`,
+    local_name: `${adjectives[i % adjectives.length]}${animals[i % animals.length]}${Math.floor(Math.random() * 100)}`,
     pubkey: `pubkey_${i}_${Math.random().toString(36).substring(7)}`,
-    addedAt: Date.now() - (i + 1) * 7 * 24 * 60 * 60 * 1000,
-    hiddenServices: [],
+    added_at: Date.now() - (i + 1) * 7 * 24 * 60 * 60 * 1000,
+    last_seen: Date.now(),
+    hidden_services: [],
+    current_activities: {},
     muted: false,
+    state: 'active' as const,
   }));
 }
 
@@ -545,7 +561,7 @@ export function generateFriendsList(count: number): Friend[] {
 export function createMockFriendLibrariesStorage(friends: Friend[]): Record<string, any> {
   const result: Record<string, any> = {};
 
-  friends.forEach((friend, index) => {
+  friends.forEach((friend) => {
     const libSize = Math.floor(Math.random() * 100) + 10;
     result[friend.pubkey] = {
       pubkey: friend.pubkey,

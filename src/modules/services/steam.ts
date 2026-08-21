@@ -10,8 +10,6 @@ import { generateActivityId } from '../activity-utils';
 export class SteamService implements IServiceModule {
   private static readonly API_BASE = 'https://api.steampowered.com';
   private static readonly CACHE_TTL_MS = 30000; // 30 second cache to reduce API calls
-  private lastActivityTime: number = 0;
-  private lastActivity: Activity | null = null;
   private cachedResult: Activity | null = null;
   private cacheTimestamp: number = 0;
 
@@ -20,7 +18,7 @@ export class SteamService implements IServiceModule {
   async isEnabled(): Promise<boolean> {
     const profile = await this.storage.getUserProfile();
     if (!profile) return false;
-    return profile.services_enabled['steam-api'] && profile.steam_config?.enabled;
+    return Boolean(profile.services_enabled['steam-api'] && profile.steam_config?.enabled);
   }
 
   async getCurrentActivity(): Promise<Activity | null> {
@@ -70,7 +68,7 @@ export class SteamService implements IServiceModule {
     return '';
   }
 
-  async handleAuthCallback(code: string): Promise<void> {
+  async handleAuthCallback(_code: string): Promise<void> {
     // No OAuth callback to handle
   }
 
@@ -161,7 +159,6 @@ export class SteamService implements IServiceModule {
         content: gameName,
         url: steamUrl,
         state: 'playing',
-        audio: 'on',
         timestamp: Date.now(),
         freshness_timestamp: Date.now(),
         is_fresh: true,

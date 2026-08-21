@@ -4,7 +4,7 @@
  */
 
 import { finalizeEvent } from 'nostr-tools';
-import { OwnedGame, STORAGE_KEYS, NostrEvent, NostrError } from '../types';
+import { OwnedGame, STORAGE_KEYS, NostrEvent } from '../types';
 import { StorageManager } from './storage';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
@@ -303,9 +303,14 @@ export class GameLibraryManager {
   }
 
   /**
-   * Publish user's game library as a Nostr kind 1 event
+   * Publish user's game library to Nostr (NIP-33 parameterized replaceable event)
+   * Kind: 30078 (app-specific data)
+   * 'd' tag: 'game-library'
+   * Content: compressed JSON list of appIds
+   *
+   * Rate limited: only publishes at most once per 24 hours
    */
-  async publishMyGameLibrary(): Promise<void> {
+  async publishGameLibrary(): Promise<void> {
     try {
       if (!this.relayPool || !this.identityManager) {
         console.warn('[GameLibrary] Nostr dependencies not initialized, skipping publication');
@@ -314,8 +319,7 @@ export class GameLibraryManager {
 
       console.debug('[GameLibrary] Publishing my game library to Nostr');
 
-      // Get user's pubkey and secret key
-      const pubkey = await this.identityManager.getPubkey();
+      // Get user's secret key
       const secretKey = await this.identityManager.getSecretKey();
 
       // Get cached game library
@@ -349,7 +353,7 @@ export class GameLibraryManager {
         ],
         content,
         created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
-      }, hexToBytes(secretKey)) as NostrEvent;
+      }, hexToBytes(secretKey)) as unknown as NostrEvent;
 
       console.debug(`[GameLibrary] Marking game library as due (${appIds.length} games)`);
 

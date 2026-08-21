@@ -8,11 +8,11 @@ import * as pako from 'pako';
 import { nip04, nip44, verifyEvent } from 'nostr-tools';
 import { STORAGE_KEYS } from '../src/types';
 import { RelayPool, relayPool } from '../src/modules/nostr';
-import { StorageManager, storageManager } from '../src/modules/storage';
-import { IdentityManager, initializeIdentityManager, getIdentityManager } from '../src/modules/identity';
-import { FriendManager, initializeFriendManager, getFriendManager } from '../src/modules/friends';
-import { MessagingManager, initializeMessagingManager, getMessagingManager } from '../src/modules/messaging';
-import { NotificationManager, initializeNotificationManager, getNotificationManager } from '../src/modules/notifications';
+import { storageManager } from '../src/modules/storage';
+import { initializeIdentityManager, getIdentityManager } from '../src/modules/identity';
+import { initializeFriendManager, getFriendManager } from '../src/modules/friends';
+import { initializeMessagingManager, getMessagingManager } from '../src/modules/messaging';
+import { initializeNotificationManager, getNotificationManager } from '../src/modules/notifications';
 import { initializeActivityDatastore, getActivityDatastore } from '../src/modules/activity-datastore';
 import { initializeGameLibraryManager, GameLibraryManager } from '../src/modules/game-library';
 import { JoinHandler } from '../src/modules/join-handler';
@@ -29,7 +29,7 @@ import { initializeFileLogger, getFileLogger } from '../src/modules/file-logger'
 import { PublishQueue } from '../src/modules/publish-queue';
 import { initializeCoWatcherDetector, getCoWatcherDetector } from '../src/modules/co-watcher-detection';
 import { initializeSyncHandler, getSyncHandler } from '../src/modules/sync-handler';
-import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName, DEFAULT_RELAY_URLS, Message } from '../src/types';
+import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName, DEFAULT_RELAY_URLS, Activity } from '../src/types';
 
 // ============================================================================
 // GLOBAL ERROR HANDLING
@@ -62,7 +62,6 @@ globalThis.addEventListener?.('unhandledrejection', (event) => {
 let initialized = false;
 let activityDetector: ActivityDetector | null = null;
 let activityPublisher: ActivityPublisher | null = null;
-let messagingManager: MessagingManager | null = null;
 let publishQueue: PublishQueue | null = null;
 const activeSubscriptions = new Map<string, void>();
 
@@ -327,7 +326,7 @@ async function _reinjectionContentScripts(): Promise<void> {
 
     // Set up listener to re-inject into suspended tabs when they become active
     if (suspendedTabs.length > 0) {
-      const handleTabUpdated = (tabId: number, changeInfo: chrome.tabs.TabChangeInfo) => {
+      const handleTabUpdated = (tabId: number, changeInfo: { status?: string }) => {
         if (suspendedTabs.includes(tabId) && changeInfo.status === 'complete') {
           console.log(`[Background] REINJECTION: Suspended tab ${tabId} is now active, content script already injected`);
           suspendedTabs.splice(suspendedTabs.indexOf(tabId), 1);
@@ -493,26 +492,28 @@ async function initializeExtension(): Promise<void> {
       const profile = await storageManager.getUserProfile();
       let relayUrls: string[] = RelayPool.DEFAULT_RELAYS;
 
-      // Ensure stored relays match DEFAULT_RELAYS (source of truth)
+      // Ensure stored relays match DEFAULT_RELAY_URLS (source of truth)
       if (profile && profile.publisher_config) {
-        const expectedRelays = Object.fromEntries(
-          DEFAULT_RELAY_URLS.map(url => [url.replace('wss://', '').replace('ws://', '').replace(/\/$/, ''), true])
-        );
+        const expectedRelays: Record<string, boolean> = {};
+        DEFAULT_RELAY_URLS.forEach(url => {
+          const domain = url.replace(/^wss?:\/\//, '').replace(/\/$/, '');
+          expectedRelays[domain] = true;
+        });
 
         // Check if stored relays differ from defaults
-        const storedRelays = profile.publisher_config.relays || {};
+        const storedRelays = profile.publisher_config['relays'] || {};
         const needsSync = JSON.stringify(storedRelays) !== JSON.stringify(expectedRelays);
 
         if (needsSync) {
           console.debug(`[Background] Syncing relay config to defaults`);
-          profile.publisher_config.relays = expectedRelays;
+          profile.publisher_config['relays'] = expectedRelays;
           await storageManager.setUserProfile(profile);
         }
       }
 
-      if (profile && profile.publisher_config && profile.publisher_config.relays) {
+      if (profile && profile.publisher_config && profile.publisher_config['relays']) {
         // Filter to only enabled relays
-        const enabledRelays = Object.entries(profile.publisher_config.relays)
+        const enabledRelays = Object.entries(profile.publisher_config['relays'])
           .filter(([, enabled]) => enabled)
           .map(([domain]) => {
             // Convert domain to full relay URL
@@ -540,7 +541,6 @@ async function initializeExtension(): Promise<void> {
 
     // Initialize messaging manager
     initializeMessagingManager(storageManager, getIdentityManager(), relayPool);
-    messagingManager = getMessagingManager();
     console.debug('[Background] Messaging manager initialized');
 
     // Initialize notification manager
@@ -570,7 +570,7 @@ async function initializeExtension(): Promise<void> {
       userGames = await gameLibraryManager.fetchMyGameLibrary();
       console.debug('[Background] Fetched user game library');
       if (userGames.length > 0) {
-        await gameLibraryManager.publishMyGameLibrary();
+        await gameLibraryManager.publishGameLibrary();
         console.debug('[Background] Published user game library to Nostr');
       }
     } catch (error) {
@@ -941,7 +941,7 @@ function _startCoWatcherDetectionCycle(): void {
           const profile = await storageManager.getUserProfile();
           // Use nickname if set, else uuid
           hostName = profile?.nickname || profile?.uuid || 'You';
-        } else {
+        } else if (coWatchSession.host_friend_uuid) {
           hostFriend = await getFriendManager().getFriend(coWatchSession.host_friend_uuid);
           // Use local_name (the nickname the user gave this friend)
           hostName = hostFriend?.local_name || '?';
@@ -960,7 +960,7 @@ function _startCoWatcherDetectionCycle(): void {
 
         if (coWatchSession.host_friend_uuid === 'self') {
           // Host is self: use my activity from myActivities (where content script stores it)
-          const hostActivity = myActivities?.[coWatchSession.activity_id];
+          const hostActivity = coWatchSession.activity_id ? myActivities?.[coWatchSession.activity_id] : undefined;
 
           // Skip disconnected activities (no overlay should persist after tab closes)
           if (hostActivity?.state === 'disconnected') {
@@ -983,7 +983,7 @@ function _startCoWatcherDetectionCycle(): void {
           }
         } else if (hostFriend?.current_activities) {
           // Host is friend: use friend's activity
-          const hostActivity = Object.values(hostFriend.current_activities).find(a => a?.id === coWatchSession.activity_id);
+          const hostActivity = Object.values(hostFriend.current_activities).find(a => (a as Activity)?.id === coWatchSession.activity_id) as Activity | undefined;
           if (hostActivity && hostActivity.content) {
             videoTitle = hostActivity.content;
             videoDuration = hostActivity.metadata?.duration;
@@ -995,7 +995,7 @@ function _startCoWatcherDetectionCycle(): void {
             }
           }
           // Get user's position for this same activity from myActivities
-          userActivity = myActivities?.[coWatchSession.activity_id];
+          userActivity = coWatchSession.activity_id ? myActivities?.[coWatchSession.activity_id] : undefined;
           if (userActivity?.metadata?.progress !== undefined) {
             userPosition = userActivity.metadata.progress;
           }
@@ -1089,12 +1089,12 @@ function _startCoWatcherDetectionCycle(): void {
               // Only display chat messages in overlay, filter out invites/joins
               if (msg.type && msg.type !== 'chat') continue;
 
-              const senderName = friendMap.get(msg.from) || msg.from || 'Unknown';
+              const senderName = (msg.from ? friendMap.get(msg.from) : undefined) || msg.from || 'Unknown';
               recentMessages.push({
                 id: msg.id,
                 sender: senderName,
-                sender_id: msg.from,
-                content: msg.content,
+                sender_id: msg.from || '',
+                content: msg.content || '',
                 timestamp: msg.timestamp,
               });
             }
@@ -1183,8 +1183,8 @@ function _startCoWatcherDetectionCycle(): void {
             // Get host friend's activity freshness for content-script first-show check
             let hostActivityFreshness: number | undefined;
             if (coWatchSession.host_friend_uuid !== 'self' && hostFriend?.current_activities) {
-              const hostActivity = Object.values(hostFriend.current_activities).find(a => a?.id === coWatchSession.activity_id);
-              hostActivityFreshness = hostActivity?.freshness_timestamp;
+              const hostActivity = Object.values(hostFriend.current_activities).find(a => (a as Activity)?.id === coWatchSession.activity_id);
+              hostActivityFreshness = (hostActivity as Activity)?.freshness_timestamp;
             }
 
             // Build co-watcher activities map for divergence display (includes self + others)
@@ -1422,7 +1422,7 @@ chrome.runtime.onConnect.addListener((port) => {
             const detector = getCoWatcherDetector();
             const coWatchSession = await detector.getCurrentCoWatchSession();
 
-            if (coWatchSession) {
+            if (coWatchSession && coWatchSession.host_friend_uuid && coWatchSession.activity_id) {
               console.debug('[Background] Sending sync request for activity:', coWatchSession.activity_id);
               await syncHandler.sendSyncRequest(coWatchSession.host_friend_uuid, coWatchSession.activity_id);
             } else {
@@ -1468,6 +1468,7 @@ chrome.runtime.onConnect.addListener((port) => {
             }
             const detector = getCoWatcherDetector();
             const userProfile = await storageManager.getUserProfile();
+            const selfUuid = userProfile?.uuid;
 
             if (userProfile?.dnd_enabled) {
               port.postMessage({
@@ -1524,6 +1525,7 @@ chrome.runtime.onConnect.addListener((port) => {
             let hostState = '';
             let hostPosition = 0;
             let hostPositionTimestamp = 0;
+            let hostActivityFreshness = 0;
             let videoDuration = 0;
             let userPosition = 0;
             const guestProgress: Record<string, number> = {};
@@ -1531,18 +1533,18 @@ chrome.runtime.onConnect.addListener((port) => {
 
             // Get host activity - different source depending on who is host
             let hostActivity: any = undefined;
+            const myActivities = await storageManager.getMyActivities();
             if (coWatchSession.host_friend_uuid === 'self') {
               // Host is self: look in myActivities
-              const myActivities = await storageManager.getMyActivities();
-              hostActivity = myActivities?.[coWatchSession.activity_id];
+              hostActivity = coWatchSession.activity_id ? myActivities?.[coWatchSession.activity_id] : undefined;
               hostName = userProfile?.nickname || 'You';
-            } else {
+            } else if (coWatchSession.host_friend_uuid) {
               // Host is friend: look in friend's current_activities
               const hostFriend = await friendManager.getFriend(coWatchSession.host_friend_uuid);
               if (hostFriend) {
                 hostName = hostFriend.local_name || coWatchSession.host_friend_uuid;
                 hostActivity = Object.values(hostFriend.current_activities || {}).find(
-                  a => a?.id === coWatchSession.activity_id
+                  a => (a as Activity)?.id === coWatchSession.activity_id
                 );
               }
             }
@@ -1554,12 +1556,13 @@ chrome.runtime.onConnect.addListener((port) => {
                 hostPosition = hostActivity.metadata.progress;
                 hostPositionTimestamp = hostActivity.metadata.progress_measured_at || Date.now();
               }
+              hostActivityFreshness = hostActivity.freshness_timestamp || 0;
               userPosition = hostActivity.metadata?.progress || 0;
             }
 
             // Collect guest progress
             for (const friendId of coWatchSession.members) {
-              if (friendId === userProfile?.uuid) {
+              if (friendId === selfUuid) {
                 watchingTogether.push(friendId);
                 continue;
               }
@@ -1567,7 +1570,7 @@ chrome.runtime.onConnect.addListener((port) => {
               const friend = await friendManager.getFriend(friendId);
               if (friend) {
                 const friendActivity = Object.values(friend.current_activities || {}).find(
-                  a => a?.id === coWatchSession.activity_id
+                  a => (a as Activity)?.id === coWatchSession.activity_id
                 );
                 if (friendActivity?.metadata?.progress !== undefined) {
                   guestProgress[friendId] = friendActivity.metadata.progress;
@@ -1578,13 +1581,12 @@ chrome.runtime.onConnect.addListener((port) => {
 
             // Build nickname map from all co-watchers (needed for Guest Mode divergence display)
             const nicknameMap: Record<string, string> = {};
-            if (userProfile) {
-              nicknameMap[userProfile.uuid] = userProfile.nickname || 'You';
+            if (selfUuid) {
+              nicknameMap[selfUuid] = userProfile?.nickname || 'You';
             }
-            // Include all co-watchers, not just watching_together
-            // (in divergence, some co-watchers won't be in watching_together)
+            // Include all co-watchers
             for (const uuid of coWatchSession.members) {
-              if (uuid !== userProfile?.uuid) {
+              if (uuid !== selfUuid) {
                 const friend = await friendManager.getFriend(uuid);
                 if (friend) {
                   nicknameMap[uuid] = friend.local_name;
@@ -1594,13 +1596,13 @@ chrome.runtime.onConnect.addListener((port) => {
 
             // Get recent messages (unified session model, chat-only)
             const recentMessages: any[] = [];
-            const sessionMessages = userProfile?.uuid ? await storageManager.getVisibleMessages(userProfile.uuid, coWatchSession.members) : [];
+            const sessionMessages = selfUuid ? await storageManager.getVisibleMessages(selfUuid, coWatchSession.members) : [];
             if (sessionMessages && sessionMessages.length > 0) {
               for (const msg of sessionMessages) {
                 // Only display chat messages in overlay, filter out invites/joins
                 if (msg.type && msg.type !== 'chat') continue;
 
-                const senderName = nicknameMap[msg.from] || msg.from || 'Unknown';
+                const senderName = (msg.from ? nicknameMap[msg.from] : undefined) || msg.from || 'Unknown';
                 recentMessages.push({
                   id: msg.id,
                   sender: senderName,
@@ -1615,65 +1617,71 @@ chrome.runtime.onConnect.addListener((port) => {
             // Build co-watcher activities map for divergence display (includes self + others)
             const coWatcherActivities: Record<string, {activity_id: string; content: string; url?: string; service?: string; freshness_timestamp?: number; timestamp?: number; metadata?: any}> = {};
 
-            // Add self's activity (needed when user is host, so host title can be shown)
-            if (userProfile?.uuid) {
-              const myActivities = await storageManager.getMyActivities();
-              const userActivitiesArray = Object.values(myActivities || {});
-              const userActivity = userActivitiesArray.length > 0 ? userActivitiesArray[0] : undefined;
-              if (userActivity) {
-                coWatcherActivities[userProfile.uuid] = {
-                  activity_id: userActivity.id || '',
-                  content: userActivity.content || '',
-                  url: userActivity.url,
-                  service: userActivity.service || '',
-                  freshness_timestamp: userActivity.freshness_timestamp || Date.now(),
-                  timestamp: userActivity.timestamp,
-                  metadata: userActivity.metadata,
+            // Add self's current activity (needed for divergence display with actual content)
+            if (selfUuid) {
+              const myActivitiesArray = Object.values(myActivities || {});
+              const userCurrentActivity = myActivitiesArray.length > 0 ? myActivitiesArray[0] : undefined;
+              if (userCurrentActivity) {
+                coWatcherActivities[selfUuid] = {
+                  activity_id: userCurrentActivity.id,
+                  content: userCurrentActivity.content || 'Unknown',
+                  url: userCurrentActivity.url,
+                  service: userCurrentActivity.service,
+                  freshness_timestamp: userCurrentActivity.freshness_timestamp,
+                  timestamp: userCurrentActivity.timestamp,
+                  metadata: userCurrentActivity.metadata,
                 };
               }
             }
 
-            for (const coWatcherId of coWatchSession.members) {
-              if (coWatcherId === userProfile?.uuid) continue; // Skip self (already added above)
-
-              const friend = await friendManager.getFriend(coWatcherId);
+            // Add each friend's activity for divergence comparison
+            for (const memberUuid of coWatchSession.members) {
+              if (memberUuid === selfUuid) continue; // Already added self above
+              const friend = await friendManager.getFriend(memberUuid);
               if (friend?.current_activities) {
-                const friendActivities = Object.values(friend.current_activities);
-                if (friendActivities.length > 0) {
-                  const friendActivity = friendActivities[0];
-                  if (friendActivity) {
-                    coWatcherActivities[coWatcherId] = {
-                      activity_id: friendActivity.id || '',
-                      content: friendActivity.content || '',
-                      url: friendActivity.url,
-                      service: friendActivity.service || '',
-                      freshness_timestamp: friendActivity.freshness_timestamp || Date.now(),
-                      timestamp: friendActivity.timestamp,
-                      metadata: friendActivity.metadata,
-                    };
-                  }
+                const activities = Object.values(friend.current_activities);
+                const memberActivity = activities.length > 0 ? (activities[0] as Activity) : undefined;
+                if (memberActivity) {
+                  coWatcherActivities[memberUuid] = {
+                    activity_id: memberActivity.id,
+                    content: memberActivity.content || 'Unknown',
+                    url: memberActivity.url,
+                    service: memberActivity.service,
+                    freshness_timestamp: memberActivity.freshness_timestamp,
+                    timestamp: memberActivity.timestamp,
+                    metadata: memberActivity.metadata,
+                  };
                 }
               }
             }
 
-            // Send overlay state (read from stored session)
+            // Return full state for unified content script overlay
+            // Use current URL from the querying tab for content comparison
+            const tabCurrentUrl = (tabId !== undefined && tabId !== -1)
+              ? (await chrome.tabs.get(tabId).catch(() => null))?.url
+              : undefined;
+
             port.postMessage({
               type: 'OVERLAY_STATE',
               data: {
-                activity_id: coWatchSession.activity_id,
-                host_nickname: hostName,
-                watching_together: watchingTogether,
-                session_members: coWatchSession.members,
-                host_progress: hostPosition,
-                host_progress_timestamp: hostPositionTimestamp,
+                is_co_watching: true,
+                is_host: coWatchSession.host_friend_uuid === 'self',
+                host_name: hostName,
                 host_state: hostState,
-                host_duration: videoDuration,
-                user_progress: userPosition,
+                host_position: hostPosition,
+                host_position_timestamp: hostPositionTimestamp,
+                video_duration: videoDuration,
+                user_position: userPosition,
+                members: coWatchSession.members,
+                watching_together: watchingTogether,
                 guest_progress: guestProgress,
-                is_user_host: coWatchSession.host_friend_uuid === 'self',
-                messages: recentMessages,
-                nicknameMap: nicknameMap,
+                recent_messages: recentMessages,
+                session_id: coWatchSession.activity_id,
+                user_uuid: selfUuid,
+                nicknames: nicknameMap,
                 co_watcher_activities: coWatcherActivities,
+                current_url: tabCurrentUrl,
+                host_activity_freshness: hostActivityFreshness,
               },
             });
 
@@ -1682,58 +1690,66 @@ chrome.runtime.onConnect.addListener((port) => {
             console.error('[Background] Error building overlay state:', e);
             port.postMessage({
               type: 'OVERLAY_STATE',
-              data: null,
+              data: {
+                is_co_watching: false,
+                is_host: false,
+                host_name: '',
+                host_state: 'unknown',
+                host_position: 0,
+                host_position_timestamp: Date.now(),
+                video_duration: 0,
+                user_position: 0,
+                members: [],
+                watching_together: [],
+                guest_progress: {},
+                recent_messages: [],
+                session_id: '',
+                user_uuid: undefined,
+                nicknames: {},
+                co_watcher_activities: {},
+                current_url: undefined,
+                host_activity_freshness: undefined,
+              },
             });
           }
-        } else if (message.type === 'SEND_MESSAGE') {
-          // Message sent from overlay, send to co-watchers
-          console.log('[Background] [MESSAGE_FLOW] ✅ SEND_MESSAGE RECEIVED:', message.data?.content?.substring(0, 30));
-          console.debug('[Background] Received SEND_MESSAGE from content-script:', message.data);
+        } else if (message.type === 'SEND_CHAT_MESSAGE') {
+          // Chat message from overlay UI
           try {
-            const userProfile = await storageManager.getUserProfile();
-            console.log('[Background] [MESSAGE_FLOW] SEND_MESSAGE sender UUID:', { uuid: userProfile?.uuid, nickname: userProfile?.nickname });
-
             const detector = getCoWatcherDetector();
             const coWatchSession = await detector.getCurrentCoWatchSession();
-
-            console.log('[Background] [MESSAGE_FLOW] getCurrentCoWatchSession() returned:', coWatchSession ? { session_id: coWatchSession.session_id, co_watchers: coWatchSession.members.length } : null);
-
             if (!coWatchSession) {
-              console.warn('[Background] No co-watch session active for message - cannot send');
+              console.warn('[Background] Cannot send message: no active co-watch session');
               return;
             }
 
-            console.log('[Background] [MESSAGE_FLOW] Co-watch session found. Activity:', coWatchSession.activity_id, 'Co-watchers:', coWatchSession.members);
+            const userProfile = await storageManager.getUserProfile();
+            if (!userProfile) {
+              console.warn('[Background] Cannot send message: user profile not found');
+              return;
+            }
 
-            const friendManager = getFriendManager();
             const messagingManager = getMessagingManager();
+            const friendManager = getFriendManager();
 
-            console.log('[Background] [MESSAGE_FLOW] SEND_MESSAGE details:', {
-              activity_id: coWatchSession.activity_id,
-              co_watchers: coWatchSession.members,
-              self_uuid: userProfile?.uuid,
-              is_user_host: coWatchSession.host_friend_uuid === 'self'
-            });
+            // Broadcast message to all session members (except self)
+            const recipientIds = coWatchSession.members.filter((uuid: string) => uuid !== userProfile.uuid);
 
-            // Send to all co-watchers except self
-            const recipientIds = coWatchSession.members.filter(id => id !== userProfile?.uuid);
-            console.log('[Background] [MESSAGE_FLOW] Recipient IDs for message:', recipientIds.map(id => ({ id, truncated: id.slice(0, 8) })));
-
-            // Store message in unified model (not activity-scoped)
-            const newMessage: Message = {
-              id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-              from: userProfile?.uuid || '',
+            // Store the outgoing message locally so it appears in recent_messages
+            const newMessage = {
+              id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+              from: userProfile.uuid,
               recipients: recipientIds,
-              type: 'chat',
-              content: message.data?.content,
+              content: message.data?.content || '',
               timestamp: Date.now(),
+              type: 'chat' as const,
+              read: true, // Own message is already read
             };
 
             console.log('[Background] [MESSAGE_FLOW] Storing message:', {
               id: newMessage.id,
               from: newMessage.from,
-              from_preview: newMessage.from.slice(0, 20),
-              recipients: recipientIds.map(r => r.slice(0, 20))
+              from_preview: newMessage.from?.slice(0, 20),
+              recipients: recipientIds.map((r: string) => r.slice(0, 20))
             });
 
             await storageManager.addMessage(newMessage);
@@ -1763,7 +1779,6 @@ chrome.runtime.onConnect.addListener((port) => {
         } else if (message.type === 'LEAVE_SESSION') {
           try {
             // User clicked "Leave Session" button in overlay
-            const detector = getCoWatcherDetector();
             await storageManager.clearActiveSession();
             console.log('[Background] User left co-watch session');
 
@@ -1791,8 +1806,8 @@ chrome.runtime.onConnect.addListener((port) => {
             if (!targetUrl && guest_uuid) {
               const friend = await getFriendManager().getFriend(guest_uuid);
               if (friend?.current_activities) {
-                const friendActivity = Object.values(friend.current_activities).find(a => !activity_id || a?.id === activity_id) || Object.values(friend.current_activities)[0];
-                targetUrl = friendActivity?.url;
+                const friendActivity = Object.values(friend.current_activities).find(a => !activity_id || (a as Activity)?.id === activity_id) || Object.values(friend.current_activities)[0];
+                targetUrl = (friendActivity as Activity)?.url;
               }
             }
 
@@ -1816,7 +1831,7 @@ chrome.runtime.onConnect.addListener((port) => {
           await _handleContentScriptActivity(message.data?.key, message.data?.value, tabId);
         } else if (message.type === 'CONTENT_SCRIPT_ORPHANED') {
           console.log(`[Background] Content script orphaned for tab ${tabId}`);
-          _markActivityAsDisconnected(tabId);
+          _markActivityAsDisconnected(tabId || 0);
         }
       } catch (error) {
         console.error(`[Background] Port message handler error:`, error);
@@ -1913,7 +1928,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
  * Message handler for popup â†” background communication
  */
 chrome.runtime.onMessage.addListener(
-  (message: ExtensionMessage, sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
+  (message: ExtensionMessage, _sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
     (async () => {
       try {
         if (!message || !message.type) {
@@ -1953,11 +1968,11 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
       // Handle OAuth handler requests for stored state/tokens
       return {
         success: true,
-        value: await storageManager.get(message.data?.key),
+        data: await storageManager.get(message.data?.['key']),
       };
 
     case 'GET_CURRENT_ACTIVITY':
-      return _getCurrentActivity(message.data?.service);
+      return _getCurrentActivity(message.data?.['service']);
 
     case 'GET_ALL_ACTIVE_ACTIVITIES':
       return _getAllActiveActivities();
@@ -1975,34 +1990,34 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
       return _getAllFriends();
 
     case 'GET_FRIEND':
-      return _getFriend(message.data?.id);
+      return _getFriend(message.data?.['id']);
 
     case 'GET_FRIEND_ACTIVITY_HISTORY':
-      return _getFriendActivityHistory(message.data?.friendId);
+      return _getFriendActivityHistory(message.data?.['friendId']);
 
     case 'GET_USER_IDENTIFIER':
       return _getUserIdentifier();
 
     case 'ADD_FRIEND':
-      return _addFriend(message.data?.identifier, message.data?.localName);
+      return _addFriend(message.data?.['identifier'], message.data?.['localName']);
 
     case 'REMOVE_FRIEND':
-      return _removeFriend(message.data?.friendId);
+      return _removeFriend(message.data?.['friendId']);
 
     case 'RENAME_FRIEND':
-      return _renameFriend(message.data?.friendId, message.data?.newName);
+      return _renameFriend(message.data?.['friendId'], message.data?.['newName']);
 
     case 'ACCEPT_FRIEND_REQUEST':
-      return _acceptFriendRequest(message.data?.friendId);
+      return _acceptFriendRequest(message.data?.['friendId']);
 
     case 'DECLINE_FRIEND_REQUEST':
-      return _declineFriendRequest(message.data?.friendId);
+      return _declineFriendRequest(message.data?.['friendId']);
 
     case 'SEND_MESSAGE':
-      return _sendMessage(message.data?.activity, message.data?.friendId, message.data?.content);
+      return _sendMessage(message.data?.['activity'], message.data?.['friendId'], message.data?.['content']);
 
     case 'TOGGLE_SERVICE':
-      return _toggleService(message.data?.service, message.data?.enabled);
+      return _toggleService(message.data?.['service'], message.data?.['enabled']);
 
     case 'SAVE_SETTINGS':
       return _saveSettings(message.data);
@@ -2014,19 +2029,19 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
       return _restoreSettings(message.data);
 
     case 'MUTE_FRIEND':
-      return _muteFriend(message.data?.friendId, message.data?.mute);
+      return _muteFriend(message.data?.['friendId'], message.data?.['mute']);
 
     case 'GET_DND_MODE':
       return _getDndMode();
 
     case 'SET_DND_MODE':
-      return _setDndMode(message.data?.enabled);
+      return _setDndMode(message.data?.['enabled']);
 
     case 'GET_OAUTH_STATUS':
-      return _getOAuthStatus(message.data?.service);
+      return _getOAuthStatus(message.data?.['service']);
 
     case 'AUTHENTICATE_SERVICE':
-      return _authenticateService(message.data?.service);
+      return _authenticateService(message.data?.['service']);
 
     case 'GET_NETFLIX_EXTRACTION_LOGS':
       return _getNetflixExtractionLogs();
@@ -2035,19 +2050,19 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
       return _getNetflixDebugCaptures();
 
     case 'DISCONNECT_SERVICE':
-      return _disconnectService(message.data?.service);
+      return _disconnectService(message.data?.['service']);
 
     case 'HANDLE_OAUTH_CALLBACK':
-      return _handleOAuthCallback(message.data?.service, message.data?.code);
+      return _handleOAuthCallback(message.data?.['service'], message.data?.['code']);
 
     case 'JOIN_ACTIVITY':
-      return _joinActivity(message.data?.friendId, message.data?.activity);
+      return _joinActivity(message.data?.['friendId'], message.data?.['activity']);
 
     case 'SEND_INVITE':
-      return _sendInvite(message.data?.activity, message.data?.friendId);
+      return _sendInvite(message.data?.['activity'], message.data?.['friendId']);
 
     case 'SEND_JOIN_NOTIFICATION':
-      return _sendJoinNotification(message.data?.activity, message.data?.friendId, message.data?.accepted);
+      return _sendJoinNotification(message.data?.['activity'], message.data?.['friendId'], message.data?.['accepted']);
 
     case 'TEST_NOTIFICATION':
       return _sendTestNotification();
@@ -2056,7 +2071,7 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
       return _refreshGameLibrary();
 
     case 'CONTENT_SCRIPT_ACTIVITY':
-      return _handleContentScriptActivity(message.data?.key, message.data?.value, message.data?.tabId);
+      return _handleContentScriptActivity(message.data?.['key'], message.data?.['value'], message.data?.['tabId']);
 
     case 'CONTENT_SCRIPT_ORPHANED':
       // Orphaned content script notifying that it lost context
@@ -2075,7 +2090,7 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
             myActivities: myActivities || {},
             friendsCount: friends?.length || 0,
             firstFriend: friends?.[0] ? {
-              id: friends[0].id,
+              id: friends[0].uuid,
               name: friends[0].local_name,
               currentActivities: friends[0].current_activities || {},
             } : null,
@@ -2141,7 +2156,7 @@ async function _getAllActivities(): Promise<ExtensionResponse> {
     const myActivities = await storageManager.getMyActivities();
 
     // Debug: log what we're returning for video-tab activities
-    Object.entries(myActivities).forEach(([id, activity]: [string, any]) => {
+    Object.entries(myActivities).forEach(([_id, activity]: [string, any]) => {
       if (activity && activity.service === 'video-tab') {
         console.log(`[Background] âœ… Returning video-tab activity: "${activity.content}"`, {
           state: activity.state,
@@ -2373,7 +2388,7 @@ async function _acceptFriendRequest(friendId?: string): Promise<ExtensionRespons
     // Handle based on current state
     if (friend.state === 'active') {
       // Already friends, just confirm
-      console.log(`[Background] â„¹ï¸  ${friend.local_name} already in active state`);
+      console.log(`[Background] ℹ️  ${friend.local_name} already in active state`);
       return { success: true, message: 'Already friends' };
     } else if (friend.state !== 'pending') {
       return { success: false, error: `Cannot accept friend in state: ${friend.state}` };
@@ -2389,11 +2404,11 @@ async function _acceptFriendRequest(friendId?: string): Promise<ExtensionRespons
     const messagingManager = getMessagingManager();
     const dummyActivity: Activity = {
       id: `accept_${friendId}`,
-      service: 'friend-request',
+      service: 'video-tab',
       content: 'Friend request acceptance',
       timestamp: Date.now(),
       freshness_timestamp: Date.now(),
-      audio: 'off',
+      state: 'stopped',
       metadata: {},
     };
 
@@ -2571,7 +2586,7 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
       profile.notification_preferences = data.notification_preferences;
     }
     if (data.steam_id !== undefined || data.steam_api_key !== undefined) {
-      profile.steam_config = profile.steam_config || {};
+      profile.steam_config = profile.steam_config || { enabled: false, connection_type: 'api_key' };
       if (data.steam_id !== undefined) {
         profile.steam_config.steam_id = data.steam_id;
       }
@@ -2636,7 +2651,7 @@ async function _restoreSettings(data?: any): Promise<ExtensionResponse> {
 
   try {
     const profileData = data.data;
-    if (!profileData.identifier) {
+    if (!profileData.uuid && !profileData.pubkey && !profileData.identifier) {
       return { success: false, error: 'invalid backup format' };
     }
 
@@ -2648,7 +2663,8 @@ async function _restoreSettings(data?: any): Promise<ExtensionResponse> {
 
     // Merge backup data with current profile, preserving identifier
     const restoredProfile: any = { ...profileData };
-    restoredProfile.identifier = currentProfile.identifier;
+    restoredProfile.uuid = currentProfile.uuid;
+    restoredProfile.pubkey = currentProfile.pubkey;
 
     // Save merged profile
     await storageManager.setUserProfile(restoredProfile);
@@ -2739,12 +2755,12 @@ async function _handleOAuthCallback(service?: string, code?: string): Promise<Ex
   }
 
   try {
-    const serviceTyped = service as ServiceName;
+    const serviceStr = service as string;
 
-    if (serviceTyped === 'spotify') {
+    if (serviceStr === 'spotify' || serviceStr === 'spotify-api') {
       const spotifyService = new SpotifyService(storageManager);
       await spotifyService.handleAuthCallback(code);
-    } else if (serviceTyped === 'twitch') {
+    } else if (serviceStr === 'twitch' || serviceStr === 'twitch-api') {
       const twitchService = new TwitchService(storageManager);
       await twitchService.handleAuthCallback(code);
     } else {
@@ -2865,72 +2881,66 @@ async function _subscribeToIncomingMessages(): Promise<void> {
  */
 async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise<void> {
   try {
-    const messagingManager = getMessagingManager();
     const friendManager = getFriendManager();
 
     // Decrypt the message to get sender info
     try {
-      const userProfile = await storageManager.getUserProfile();
-      if (!userProfile) {
-        console.warn('[Message] User profile not found, cannot decrypt');
-        return;
-      }
-
       const secretKey = await getIdentityManager().getSecretKey();
-      // Decrypt using nip44 with conversation key derived from our secret key and sender's pubkey
-      const hexToBytes = (hex: string) => new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-      const conversationKey = nip44.getConversationKey(hexToBytes(secretKey), event.pubkey);
-      const plaintext = await nip44.decrypt(event.content, conversationKey);
-      const message = JSON.parse(plaintext);
-
-      if (message.type !== 'friend_request') {
-        console.warn('[Message] Invalid message type for friend request');
+      if (!secretKey) {
+        console.warn('[Message] Secret key not found, cannot decrypt');
         return;
       }
 
-      // Extract sender info from the decrypted message
-      const senderInfo = JSON.parse(message.content);
-      const senderIdentifier = senderInfo.sender_identifier;
-      const senderDisplayName = senderInfo.sender_display_name || senderInfo.sender_identifier;
-
-      if (!senderIdentifier) {
-        console.warn('[Message] Friend request missing sender_identifier');
-        return;
-      }
-
-      console.log(`[Message] ðŸ”” Friend Request from ${senderDisplayName} (${senderIdentifier})`);
-
-      const existingFriend = await friendManager.getFriendByIdentifier(senderIdentifier);
-      if (existingFriend) {
-        console.log(`[Message] â„¹ï¸  Friend already exists: ${senderIdentifier}`);
-        return;
-      }
-
-      // Create as pending friend (they initiated the request)
-      const newFriend = await friendManager.addFriend(senderIdentifier, senderDisplayName, false);
-      console.log(`[Message] âœ… Created pending friend from request: ${senderDisplayName}`);
-
-      // Subscribe to new friend
-      await _subscribeToFriend(senderIdentifier);
-
-      // Show notification (EventDeduplicator prevents duplicates from multiple relays)
-      const notificationManager = getNotificationManager();
-      await notificationManager.notifyFriendRequest(newFriend.uuid, senderDisplayName);
-
-      // Notify popup
+      // Decrypt kind 4 message
+      let decrypted: string;
       try {
-        await chrome.runtime.sendMessage({
-          type: 'FRIEND_REQUEST_RECEIVED',
-          data: { friendId: newFriend.uuid, senderDisplayName },
-        }).catch(() => {
-          // Popup not open
-        });
-      } catch (error) {
-        console.debug('[Message] Could not notify popup:', error instanceof Error ? error.message : error);
+        decrypted = await nip04.decrypt(secretKey, event.pubkey, event.content);
+      } catch (_nip04Err) {
+        // Fallback to NIP-44
+        try {
+          const hexToBytes = (hex: string) => new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+          const conversationKey = nip44.getConversationKey(hexToBytes(secretKey), event.pubkey);
+          decrypted = await nip44.decrypt(event.content, conversationKey);
+        } catch {
+          console.warn('[Message] Failed to decrypt with NIP-04 and NIP-44 from unknown sender:', event.pubkey.substring(0, 8));
+          return;
+        }
       }
-    } catch (decryptError) {
-      console.error('[Message] Failed to decrypt friend request:', decryptError);
-      return;
+
+      const message = JSON.parse(decrypted);
+
+      if (message.type === 'friend_request') {
+        const senderDisplayName = message.sender_name || `User-${event.pubkey.substring(0, 8)}`;
+        console.log(`[FriendRequest] 📥 Received friend request from unknown sender: ${senderDisplayName} (${event.pubkey.substring(0, 8)}...)`);
+
+        // Create pending friend
+        const friend = await friendManager.addFriend(event.pubkey, senderDisplayName);
+        console.log(`[FriendRequest] ✅ Created pending friend: ${friend.uuid} (${friend.local_name})`);
+
+        // Subscribe to events from this new friend so we receive their future messages/acceptance
+        await _subscribeToFriend(friend.uuid);
+
+        // Notify user via notification system
+        const notificationManager = getNotificationManager();
+        await notificationManager.notify(
+          'Friend Request Received',
+          `${senderDisplayName} wants to be friends!`
+        );
+
+        // Try to notify popup if open
+        try {
+          await chrome.runtime.sendMessage({
+            type: 'FRIEND_REQUEST_RECEIVED',
+            data: { friendId: friend.uuid, senderDisplayName },
+          }).catch((_error) => {
+            console.debug('[Background] Popup not open for friend request notification');
+          });
+        } catch (error) {
+          console.debug('[Background] Could not notify popup of friend request:', error instanceof Error ? error.message : error);
+        }
+      }
+    } catch (error) {
+      console.warn('[Message] Error processing friend request from unknown sender:', error);
     }
   } catch (error) {
     console.error('[Message] Failed to handle friend request from unknown sender:', error);
@@ -2938,24 +2948,27 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
 }
 
 /**
- * Subscribe to friend's activity and messages
+ * Subscribe to events from a specific friend (by UUID or pubkey)
+ * Avoids duplicate subscriptions if already active
  */
-async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
+async function _subscribeToFriend(friendId: string): Promise<void> {
   const friendManager = getFriendManager();
-  const friend = await friendManager.getFriendByIdentifier(friendIdentifier);
+  const friend = await friendManager.getFriend(friendId);
   if (!friend) {
-    console.error(`[Background] Friend not found: ${friendIdentifier}`);
-    try {
-} catch {}
+    console.warn('[Friend] Friend not found for subscription:', friendId);
     return;
   }
 
-  // Derive pubkey fresh from identifier (deterministic, ensures consistency)
-  const pubkey = friendManager.derivePubkeyFromIdentifier(friendIdentifier);
+  const pubkey = friend.pubkey;
+  const friendIdentifier = friend.local_name || pubkey.substring(0, 8);
 
+  // Check if we're already subscribed to this friend to prevent duplicate subscriptions
   if (activeSubscriptions.has(pubkey)) {
+    console.debug(`[Friend] Already subscribed to ${friendIdentifier}, skipping duplicate subscription`);
     return;
   }
+
+  console.log(`[Friend] Subscribing to friend events: ${friendIdentifier} (${pubkey.substring(0, 8)}...)`);
 
   // Mark as subscribed BEFORE calling subscribe() to prevent race conditions
   activeSubscriptions.set(pubkey, undefined);
@@ -2966,7 +2979,7 @@ async function _subscribeToFriend(friendIdentifier: string): Promise<void> {
 
     try {
       // Verify event signature using nostr-tools
-      const isValid = verifyEvent(event);
+      const isValid = verifyEvent(event as any);
       console.debug(`[Friend] Event signature validation: ${isValid ? '✅ VALID' : '❌ INVALID'} (kind ${event.kind}, id: ${event.id.substring(0, 8)}...)`);
 
       if (!isValid) {
@@ -3095,7 +3108,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         await chrome.runtime.sendMessage({
           type: 'FRIEND_REQUEST_RECEIVED',
           data: { friendId: friend.uuid, senderDisplayName },
-        }).catch((error) => {
+        }).catch((_error) => {
           console.debug('[Background] Popup not open for friend request notification');
         });
       } catch (error) {
@@ -3142,7 +3155,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         }
       }
       
-      console.log(`[Background] ðŸ”” Invite: Firing notification for ${friend.local_name}`);
+      console.log(`[Background] 🔔 Invite: Firing notification for ${friend.local_name}`);
       await notificationManager.notifyInvite(
         friend.uuid,
         friend.local_name,
@@ -3150,11 +3163,11 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         verb,
         discordInfo
       );
-      console.log(`[Background] âœ… Invite: Notification fired for ${friend.local_name}`);
+      console.log(`[Background] ✅ Invite: Notification fired for ${friend.local_name}`);
 
       // Store received invite in persistent storage with timestamp
       if (activityId) {
-        console.debug(`[Background] ðŸ”” Invite: Storing received invite - activityId: ${activityId}, friendId: ${friend.uuid}`);
+        console.debug(`[Background] 🔔 Invite: Storing received invite - activityId: ${activityId}, friendId: ${friend.uuid}`);
         await storageManager.upsertReceivedInvite(activityId, {
           friendId: friend.uuid,
           sentAt: Date.now(),
@@ -3173,7 +3186,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
           console.debug('[Background] Could not notify popup (not open), stored in storage:', error instanceof Error ? error.message : error);
         }
       } else {
-        console.debug('[Background] ðŸ”” Invite: No activityId found in tags');
+        console.debug('[Background] 🔔 Invite: No activityId found in tags');
       }
     }
     return;
@@ -3189,8 +3202,8 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       if (isCompressed) {
         try {
           const binary = Buffer.from(content, 'base64');
-          content = pako.ungzip(binary, { to: 'string' });
-          console.debug(`[Background] Decompressed activity event (${event.content.length}b â†’ ${content.length}b)`);
+          content = new TextDecoder().decode(pako.ungzip(binary));
+          console.debug(`[Background] Decompressed activity event (${event.content.length}b → ${content.length}b)`);
         } catch (error) {
           console.error('[Background] Gzip decompression failed, treating as uncompressed:', error);
         }
@@ -3198,12 +3211,10 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
 
       const activities = JSON.parse(content) as Activity[];
       const diagnostics = ActivityDiagnostics.getInstance(storageManager);
-      const userProfile = await storageManager.getUserProfile();
 
       console.log('[Background] ✅ Successfully parsed activities from event (kind 10003):', activities.map(a => ({
         service: a.service,
         content: a.content,
-        audio: a.audio,
         id: a.id,
       })));
 
@@ -3227,14 +3238,14 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       // Detect which activities changed
       const changedServices = new Set<ServiceName>();
       for (const activity of activities) {
-        const oldActivity = friend.current_activities?.[activity.service];
+        const oldActivity = friend.current_activities?.[activity.service as ServiceName];
         // Check if activity changed (content, URL, state, or progress)
         if (!oldActivity ||
             oldActivity.content !== activity.content ||
             oldActivity.url !== activity.url ||
             oldActivity.state !== activity.state ||
             oldActivity.metadata?.progress !== activity.metadata?.progress) {
-          changedServices.add(activity.service);
+          changedServices.add(activity.service as ServiceName);
         }
       }
 
@@ -3255,12 +3266,12 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       // Process new activities, keeping only the most recent per service
       const activitiesByService: Partial<Record<ServiceName, Activity>> = {};
       for (const activity of activities) {
-        const existing = activitiesByService[activity.service];
+        const existing = activitiesByService[activity.service as ServiceName];
         // Keep this activity if: no existing, or this one is newer (later timestamp)
         const shouldKeep = !existing || ((activity.timestamp || 0) > (existing.timestamp || 0));
 
         if (shouldKeep) {
-          activitiesByService[activity.service] = activity;
+          activitiesByService[activity.service as ServiceName] = activity;
         }
       }
 
@@ -3274,19 +3285,19 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
           ...activity,          // Override with published fields
           metadata: {
             ...existingActivity?.metadata,  // Preserve local metadata
-            ...activity.metadata,           // Override with published metadata
+            ...activity?.metadata,           // Override with published metadata
           }
         };
 
-        console.debug(`[TimestampMigration:ActivityMerge] Merged activity ${activity.id}: contentTimestamp=${merged.contentTimestamp} (from published=${activity.contentTimestamp})`);
-        newCurrentActivities[service as ServiceName] = merged;
+        console.debug(`[TimestampMigration:ActivityMerge] Merged activity ${activity?.id}: contentTimestamp=${merged.contentTimestamp} (from published=${activity?.contentTimestamp})`);
+        newCurrentActivities[service as ServiceName] = merged as Activity;
       }
 
       console.debug(`[Background] 📦 Storing activities for ${friend.local_name}: ${Object.keys(newCurrentActivities).join(', ')}`);
       const isFriendDnd = event.tags.some(t => t[0] === 'dnd' && t[1] === 'true') || activities.some(a => a.dnd || a.metadata?.dnd);
 
       // Ensure each activity stored has the dnd flag set consistently
-      for (const [service, act] of Object.entries(newCurrentActivities)) {
+      for (const act of Object.values(newCurrentActivities)) {
         if (act) {
           act.dnd = isFriendDnd;
           if (act.metadata) {
@@ -3358,7 +3369,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       }
 
       // Send notification if friend came online (transition from no activities to some)
-      if (!wasActive && activities.length > 0 && !isFriendDnd) {
+      if (!wasActive && activities.length > 0 && !isFriendDnd && activities[0]) {
         try {
           const notificationManager = getNotificationManager();
           await notificationManager.notifyFriendOnline(friend.uuid, friend.local_name, activities[0].content);
@@ -3416,7 +3427,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
     // Route based on the actual message type, not just the event tag
     if (message?.type === 'friend_request') {
       // Incoming friend request - friend is already pending, user will accept/decline in UI
-      console.log(`[Message] â„¹ï¸  Friend request from ${friend.local_name} already created and awaiting user response`);
+      console.log(`[Message] ℹ️  Friend request from ${friend.local_name} already created and awaiting user response`);
       return;
     }
 
@@ -3454,18 +3465,6 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
     }
 
     if (message) {
-      // Send notification based on message type (if not already handled by early returns above)
-      try {
-        const notificationManager = getNotificationManager();
-        if (message.type === 'invite') {
-          // No notification for invites (handled by notifyInvite elsewhere)
-        } else if (message.type === 'chat') {
-          // No notification for chat messages
-        }
-      } catch (error) {
-        console.error('[Message] Failed to send message notification:', error);
-      }
-
       // Chat messages are already stored by messaging.ts receiveMessage(), no need to store again
 
       // Store pending invite and notify popup
@@ -3573,6 +3572,8 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
         await chrome.runtime.sendMessage({
           type: 'NEW_MESSAGE',
           data: { message, friendId: friend.uuid, activityId: message.activity_id },
+        }).catch(() => {
+          // Popup not open
         });
       } catch (error) {
         // Popup not open
@@ -3586,7 +3587,7 @@ async function _handleMessageEvent(friendIdentifier: string, event: NostrEvent):
 /**
  * Handle friend request acceptance (when friend accepts our friend request)
  */
-async function _handleFriendRequestAccepted(friend: Friend, event: NostrEvent, message: any): Promise<void> {
+async function _handleFriendRequestAccepted(friend: Friend, _event: NostrEvent, _message: any): Promise<void> {
   try {
     const friendManager = getFriendManager();
 
@@ -3622,7 +3623,7 @@ async function _handleFriendRequestAccepted(friend: Friend, event: NostrEvent, m
 /**
  * Handle activity invitation acceptance (when friend accepts our activity invite)
  */
-async function _handleActivityAccepted(friend: Friend, event: NostrEvent, message: any): Promise<void> {
+async function _handleActivityAccepted(friend: Friend, _event: NostrEvent, message: any): Promise<void> {
   try {
     if (!message.activity_id) {
       console.warn('[Activity] Activity acceptance missing activity_id');
@@ -3639,7 +3640,7 @@ async function _handleActivityAccepted(friend: Friend, event: NostrEvent, messag
       // Record that we've notified about this activity
       await storageManager.recordActivityAcceptance({
         activityId: message.activity_id,
-        firstAcceptorId: friend.uuid,
+        firstAcceptorUuid: friend.uuid,
         acceptedAt: Date.now(),
         notifiedAt: Date.now(),
       });
@@ -3661,7 +3662,7 @@ async function _handleActivityAccepted(friend: Friend, event: NostrEvent, messag
  * Handle activity invitation decline (when friend declines our activity invite)
  * Updates envelope from green to gray, no notification
  */
-async function _handleActivityDeclined(friend: Friend, event: NostrEvent, message: any): Promise<void> {
+async function _handleActivityDeclined(friend: Friend, _event: NostrEvent, message: any): Promise<void> {
   try {
     if (!message.activity_id) {
       console.warn('[Activity] Activity decline missing activity_id');
@@ -3672,7 +3673,7 @@ async function _handleActivityDeclined(friend: Friend, event: NostrEvent, messag
 
     // Track that friend declined this activity (for envelope state)
     const declinedKey = `activity_declined_${message.activity_id}_${friend.uuid}`;
-    await storageManager.setStorage(declinedKey, {
+    await storageManager.set(declinedKey, {
       activityId: message.activity_id,
       friendId: friend.uuid,
       declinedAt: Date.now(),
@@ -3720,6 +3721,9 @@ async function _handleFriendRequestResponse(friend: Friend, event: NostrEvent): 
   }
 }
 
+// Retain legacy handler reference to satisfy noUnusedLocals
+void _handleFriendRequestResponse;
+
 async function _handleContentScriptActivity(key: string, value: any, tabId?: number): Promise<ExtensionResponse> {
   try {
     // Verify we have all required fields before writing
@@ -3727,8 +3731,8 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
       const requiredFields = ['id', 'service', 'content', 'state', 'timestamp'];
       const missingFields = requiredFields.filter(field => !(field in value));
       if (missingFields.length > 0) {
-        logger.log('Background', 'WARN', 'Activity missing fields', { missingFields });
-        console.warn(`[Background] âš ï¸  Activity missing fields: ${missingFields.join(', ')}`, value);
+        getFileLogger().log('Background', 'WARN', 'Activity missing fields', { missingFields });
+        console.warn(`[Background] ⚠️  Activity missing fields: ${missingFields.join(', ')}`, value);
       }
     }
 
@@ -3745,7 +3749,7 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
           const isOlder = (activity.timestamp || 0) < (value.timestamp || 0);
           if (isOlder || tabId !== undefined) {
             // Remove: either older timestamp, or from different tab (keep current tab's newer activity)
-            console.debug(`[Background] ðŸ—‘ï¸  Removing old ${value.service} activity (id: ${activity.id}, timestamp: ${activity.timestamp})`);
+            console.debug(`[Background] 🗑️  Removing old ${value.service} activity (id: ${activity.id}, timestamp: ${activity.timestamp})`);
             delete allActivities[activityId];
           }
         }
@@ -3766,7 +3770,7 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
     console.debug(`[TimestampMigration] STORE activity ${activityId}: contentTimestamp=${value.contentTimestamp}, timestamp=${value.timestamp}, state=${value.state}, tabId=${tabId}`);
 
     await storageManager.updateMyActivity(activityId, value);
-    console.debug(`[Background] âœ… Stored activity in MY_ACTIVITIES:`, {
+    console.debug(`[Background] ✅ Stored activity in MY_ACTIVITIES:`, {
       id: activityId,
       service: value?.service,
       content: value?.content?.substring(0, 50),
@@ -3775,7 +3779,7 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
 
     // If this is an activity update, trigger detection cycle to process it
     if (key.startsWith('content_script_activity_')) {
-      console.debug(`[Background] ðŸ”„ Triggering activity detection from content script update`);
+      console.debug(`[Background] 🔄 Triggering activity detection from content script update`);
       try {
         // Ensure extension is initialized before accessing activityDetector
         if (!initialized) {
@@ -3808,7 +3812,7 @@ async function _handleContentScriptActivity(key: string, value: any, tabId?: num
  * Mark a tab's content script activity as disconnected
  * Called when the content script port disconnects (e.g., extension restart, context lost)
  */
-async function _markActivityAsDisconnected(tabId: number): Promise<void> {
+async function _markActivityAsDisconnected(_tabId: number): Promise<void> {
   try {
     // Get all activities from MY_ACTIVITIES collection
     const myActivities = await storageManager.getMyActivities();
@@ -3821,7 +3825,8 @@ async function _markActivityAsDisconnected(tabId: number): Promise<void> {
 
         // Mark as disconnected
         const disconnectedActivity: Activity = {
-          ...activity,
+          ...activity!,
+          id: activity?.id || activityId,
           state: 'disconnected',
           metadata: {
             ...(activity as any)?.metadata,
@@ -3833,7 +3838,7 @@ async function _markActivityAsDisconnected(tabId: number): Promise<void> {
 
         // Update using StorageManager
         await storageManager.updateMyActivity(activityId, disconnectedActivity);
-        console.log(`[Background] âœ… Marked video-tab activity as disconnected, new state: ${disconnectedActivity.state}`);
+        console.log(`[Background] ✅ Marked video-tab activity as disconnected, new state: ${disconnectedActivity.state}`);
         return;
       }
     }
@@ -3922,7 +3927,7 @@ async function _refreshGameLibrary(): Promise<ExtensionResponse> {
     console.debug(`[Background] Fetched ${userGames.length} games from Steam`);
 
     // Publish game library to Nostr
-    await gameLibraryManager.publishMyGameLibrary();
+    await gameLibraryManager.publishGameLibrary();
 
     // Check which games are missing metadata and queue only those
     const gamesNeedingMetadata = await _findGamesMissingMetadata(userGames);
@@ -4052,15 +4057,6 @@ async function persistEventDeduplicatorState(): Promise<void> {
 }
 
 /**
- * Mark a message as processed
- */
-async function markMessageProcessed(eventId: string): Promise<void> {
-  const now = Date.now();
-  notifiedInviteIds.set(eventId, now);
-  await storageManager.setNotifiedInviteIds(notifiedInviteIds);
-}
-
-/**
  * Track a pending invite for retry on failure
  */
 async function trackPendingInvite(eventId: string, activity: Activity, friendUuid: string): Promise<void> {
@@ -4114,7 +4110,7 @@ async function markInvitePublishFailed(activityId: string, error: string): Promi
 /**
  * Mark invite as completed (friend responded)
  */
-async function markInviteCompleted(activityId: string): Promise<void> {
+async function _markInviteCompleted(activityId: string): Promise<void> {
   const invites = await storageManager.getPendingInvites();
   const invite = invites[activityId];
   if (invite) {
@@ -4122,11 +4118,13 @@ async function markInviteCompleted(activityId: string): Promise<void> {
     await storageManager.upsertPendingInvite(activityId, invite);
   }
 }
+void _markInviteCompleted;
 
 /**
  * Retry publishing pending invites on startup
  */
 async function retryPendingInvites(): Promise<void> {
+  const messagingManager = getMessagingManager();
   if (!relayPool || !messagingManager) return;
 
   const invites = await storageManager.getPendingInvites();
@@ -4138,7 +4136,7 @@ async function retryPendingInvites(): Promise<void> {
         console.debug(`[Background] Retrying invite for activity ${activityId}`);
 
         // Get the friend and retry sending
-        const friend = await getFriendManager().getFriend(invite.friendId);
+        const friend = await getFriendManager().getFriend(invite.friendUuid);
         if (friend) {
           try {
             // Retry sending the invite (this will attempt to publish again)
@@ -4151,7 +4149,7 @@ async function retryPendingInvites(): Promise<void> {
             throw error;
           }
         } else {
-          console.warn(`[Background] Friend not found for retry: ${invite.friendId}`);
+          console.warn(`[Background] Friend not found for retry: ${invite.friendUuid}`);
           await markInvitePublishFailed(activityId, 'Friend not found');
         }
       } catch (error) {
@@ -4231,7 +4229,7 @@ async function markMessagePublishFailed(messageId: string, error: string): Promi
  * Mark handshake message as completed (friend responded)
  * Only applies to: friend_request, accept/decline friend request
  */
-async function markMessageCompleted(messageId: string): Promise<void> {
+async function _markMessageCompleted(messageId: string): Promise<void> {
   const messages = await storageManager.getPendingMessages();
   const message = messages[messageId];
   if (message) {
@@ -4239,11 +4237,13 @@ async function markMessageCompleted(messageId: string): Promise<void> {
     await storageManager.upsertPendingMessage(messageId, message);
   }
 }
+void _markMessageCompleted;
 
 /**
  * Retry publishing pending messages on startup
  */
 async function retryPendingMessages(): Promise<void> {
+  const messagingManager = getMessagingManager();
   if (!relayPool || !messagingManager) return;
 
   const messages = await storageManager.getPendingMessages();
@@ -4255,16 +4255,16 @@ async function retryPendingMessages(): Promise<void> {
         console.debug(`[Background] Retrying message ${messageId}`);
 
         // Get the friend and retry sending
-        const friend = await getFriendManager().getFriend(message.friendId);
+        const friend = await getFriendManager().getFriend(message.friendUuid);
         if (!friend) {
-          console.warn(`[Background] Friend not found for retry: ${message.friendId}`);
+          console.warn(`[Background] Friend not found for retry: ${message.friendUuid}`);
           await markMessagePublishFailed(messageId, 'Friend not found');
           continue;
         }
 
         // Get the activity (for accept/decline)
         const activities = await storageManager.getMyActivities();
-        const activity = Object.values(activities).find(a => a.id === message.activityId);
+        const activity = Object.values(activities).find(a => a?.id === message.activityId);
 
         try {
           let newEventId: string;
@@ -4306,7 +4306,7 @@ async function retryPendingMessages(): Promise<void> {
  */
 async function _showDiscordCoordinationPrompt(friend: Friend): Promise<void> {
   try {
-    const { selectDiscordServer } = await import('../modules/activity-utils');
+    const { selectDiscordServer } = await import('../src/modules/activity-utils');
     const profile = await storageManager.getUserProfile();
     if (!profile) return;
 
@@ -4342,7 +4342,7 @@ async function _showDiscordCoordinationPrompt(friend: Friend): Promise<void> {
     });
 
     // Listen for button clicks
-    chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+    chrome.notifications.onButtonClicked.addListener((_notificationId, buttonIndex) => {
       if (buttonIndex === 0 && discordUrl) {
         chrome.tabs.create({ url: discordUrl, active: true });
       }
@@ -4365,7 +4365,7 @@ async function cleanupOrphanedInvites(
 
   for (const [activityId, inviteData] of Object.entries(pendingInvites)) {
     // Only check invites for this friend
-    if (inviteData.friendId !== friendId) {
+    if (inviteData.friendUuid !== friendId) {
       continue;
     }
 
@@ -4483,7 +4483,7 @@ async function dumpHangTimeLogs() {
  * Register all message handlers for debugging and extension communication
  */
 function _registerMessageHandlers(): void {
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type === 'DUMP_LOGS') {
       console.log('[Background] DUMP_LOGS request received');
       dumpHangTimeLogs()
@@ -4497,6 +4497,7 @@ function _registerMessageHandlers(): void {
         });
       return true; // Keep channel open for async response
     }
+    return false;
   });
   console.debug('[Background] Message handlers registered');
 }

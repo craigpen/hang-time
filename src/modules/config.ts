@@ -33,7 +33,7 @@ class ConfigManager {
     // Try to load from storage (admin set this up)
     const stored = await this.storage.getOAuthConfig();
     if (stored && Object.keys(stored).length > 0) {
-      this.config = stored as OAuthConfig;
+      this.config = stored as unknown as OAuthConfig;
       return this.config;
     }
 
@@ -85,7 +85,7 @@ class ConfigManager {
    */
   async setConfig(config: OAuthConfig): Promise<void> {
     await this.validateConfig(config);
-    await this.storage.setOAuthConfig(config);
+    await this.storage.setOAuthConfig(config as unknown as Record<string, unknown>);
     this.config = config;
   }
 

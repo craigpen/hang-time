@@ -47,7 +47,6 @@ export class SyncHandler {
         throw new Error('No user profile');
       }
 
-      const pubkey = await this.identityManager.getPubkey();
       const secretKeyHex = await this.identityManager.getSecretKey();
 
       // Create sync_request event (kind 1059 encrypted to host)
@@ -68,7 +67,7 @@ export class SyncHandler {
         ],
         content: messageContent,
         created_at: Math.floor(Date.now() / 1000),
-      }, hexToBytes(secretKeyHex));
+      }, hexToBytes(secretKeyHex)) as unknown as NostrEvent;
 
       // Enqueue as immediate (highest priority)
       if (this.publishQueue) {
@@ -97,13 +96,14 @@ export class SyncHandler {
       }
 
       const profile = await this.storageManager.getUserProfile();
-      if (!profile?.current_activity?.id !== activityId) {
+      const currentActivity = (profile as any)?.current_activity;
+      if (!currentActivity || currentActivity.id !== activityId) {
         console.debug('[SyncHandler] Host not watching this activity:', activityId);
         return;
       }
 
       // Get current playback position
-      const position = profile.current_activity?.metadata?.progress || 0;
+      const position = currentActivity?.metadata?.progress || 0;
 
       await this.sendSyncResponse(fromFriendId, activityId, position);
       console.debug('[SyncHandler] Sync response sent to', friend.local_name);
@@ -140,7 +140,7 @@ export class SyncHandler {
         ],
         content: messageContent,
         created_at: Math.floor(Date.now() / 1000),
-      }, hexToBytes(secretKeyHex));
+      }, hexToBytes(secretKeyHex)) as unknown as NostrEvent;
 
       if (this.publishQueue) {
         await this.publishQueue.enqueueImmediate(event, 'sync_response');
@@ -166,10 +166,9 @@ export class SyncHandler {
       }
 
       // Update friend's activity with fresh position and timestamp
-      const activity = friend.current_activities?.[Object.keys(friend.current_activities).find(key => {
-        const act = friend.current_activities![key as any];
-        return act?.id === activityId;
-      }) || ''];
+      const activity = friend.current_activities
+        ? Object.values(friend.current_activities).find(act => act?.id === activityId)
+        : undefined;
 
       if (!activity) {
         console.debug('[SyncHandler] Activity not found in friend data:', activityId);
@@ -177,7 +176,9 @@ export class SyncHandler {
       }
 
       // Update with fresh position and timestamp
-      activity.metadata.progress = position;
+      if (activity.metadata) {
+        activity.metadata.progress = position;
+      }
       activity.freshness_timestamp = sentAt * 1000; // Convert to milliseconds
 
       await this.storageManager.updateFriend(fromFriendId, {

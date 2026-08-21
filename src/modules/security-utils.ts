@@ -14,7 +14,7 @@ export function generateSecureRandom(length: number = 32): string {
   // Convert to base64 URL-safe
   let result = '';
   for (let i = 0; i < array.length; i++) {
-    result += String.fromCharCode(array[i]);
+    result += String.fromCharCode(array[i] ?? 0);
   }
 
   return btoa(result)
@@ -150,12 +150,12 @@ export function validateOAuthToken(response: any): { valid: boolean; error?: str
 }
 
 /**
- * Sanitize error message for logging
- * Removes sensitive information before logging
+ * Sanitize error message for user display
+ * Strips stack traces, tokens, internal paths, and IDs
  */
-export function sanitizeErrorForLogging(error: any): string {
+export function sanitizeErrorMessage(error: unknown): string {
   if (!error) {
-    return 'Unknown error';
+    return 'An unknown error occurred';
   }
 
   if (typeof error === 'string') {
@@ -165,7 +165,6 @@ export function sanitizeErrorForLogging(error: any): string {
   if (error instanceof Error) {
     // Extract only safe error properties
     const safeMessage = sanitizeString(error.message);
-    const safeStack = sanitizeString(error.stack || '');
 
     return `${error.name}: ${safeMessage}`;
   }
@@ -229,7 +228,7 @@ export function deriveKeypairFromIdentifier(identifier: string): { pubkey: strin
 function _bytesToHex(bytes: Uint8Array): string {
   let hex = '';
   for (let i = 0; i < bytes.length; i++) {
-    const byte = bytes[i].toString(16);
+    const byte = (bytes[i] ?? 0).toString(16);
     hex += byte.length === 1 ? '0' + byte : byte;
   }
   return hex;
@@ -239,6 +238,8 @@ function _bytesToHex(bytes: Uint8Array): string {
  * Safe console logging wrapper
  * Always sanitizes error information
  */
+export const sanitizeErrorForLogging = sanitizeErrorMessage;
+
 export const secureLog = {
   debug: (module: string, message: string, data?: any) => {
     const safe = `[${module}] ${sanitizeString(message)}`;
@@ -252,7 +253,7 @@ export const secureLog = {
   error: (module: string, message: string, error?: any) => {
     const safe = `[${module}] ${sanitizeString(message)}`;
     if (error) {
-      const sanitizedError = sanitizeErrorForLogging(error);
+      const sanitizedError = sanitizeErrorMessage(error);
       console.error(safe, sanitizedError);
     } else {
       console.error(safe);

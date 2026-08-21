@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { StorageManager, STORAGE_KEYS } from '../storage';
+import { StorageManager } from '../storage';
 import { CoWatcherDetector } from '../co-watcher-detection';
 import { FriendManager } from '../friends';
 import { ActivityPublisher } from '../publisher';
@@ -59,8 +59,18 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
   const mockUserProfile: UserProfile = {
     uuid: 'user-uuid-123',
     nickname: 'TestUser',
-    identifier: 'npub1testuser',
+    pubkey: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    secret_key: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+    created_at: 1000,
     dnd_enabled: false,
+    notification_preferences: {
+      friend_online: true,
+      new_message: true,
+      join_suggestion: true,
+    },
+    services_enabled: {
+      'youtube-tab': true,
+    } as any,
   };
 
   const mockUserActivity: Activity = {
@@ -71,6 +81,9 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
     state: 'playing',
     timestamp: 1000,
     contentTimestamp: 1000,
+    freshness_timestamp: 1000,
+    is_fresh: true,
+    provenance: 'LOCAL_TAB',
     metadata: {
       progress: 100,
       duration: 3600,
@@ -79,9 +92,13 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
   };
 
   const mockFriend: Friend = {
-    id: 'friend-1',
     uuid: 'friend-uuid-456',
+    pubkey: 'friend-pubkey-456',
     local_name: 'Alice',
+    added_at: 1000,
+    last_seen: 1000,
+    muted: false,
+    hidden_services: [],
     state: 'active',
     dnd: false,
     current_activities: {
@@ -93,6 +110,9 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
         state: 'playing',
         timestamp: 2000,
         contentTimestamp: 2000,
+        freshness_timestamp: 2000,
+        is_fresh: true,
+        provenance: 'LOCAL_TAB',
         metadata: {
           progress: 100,
           duration: 3600,
@@ -166,7 +186,7 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
         dnd: false,
         current_activities: {
           'youtube-tab': {
-            ...mockFriend.current_activities!['youtube-tab'],
+            ...mockFriend.current_activities['youtube-tab']!,
             dnd: true,
           },
         },
@@ -180,16 +200,19 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
     it('should only include non-DND friends when multiple friends are watching', async () => {
       const nonDndFriend: Friend = {
         ...mockFriend,
-        id: 'friend-1',
         uuid: 'friend-uuid-456',
         local_name: 'Alice',
         dnd: false,
       };
 
       const dndFriend: Friend = {
-        id: 'friend-2',
         uuid: 'friend-uuid-789',
+        pubkey: 'friend-pubkey-789',
         local_name: 'Bob',
+        added_at: 1000,
+        last_seen: 1000,
+        muted: false,
+        hidden_services: [],
         state: 'active',
         dnd: true,
         current_activities: {
@@ -201,6 +224,9 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
             state: 'playing',
             timestamp: 3000,
             contentTimestamp: 3000,
+            freshness_timestamp: 3000,
+            is_fresh: true,
+            provenance: 'LOCAL_TAB',
             metadata: {
               progress: 100,
               duration: 3600,
@@ -221,8 +247,12 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
   });
 
   describe('ActivityPublisher DND Tags & Metadata', () => {
+    const mockRelayPool: any = {
+      publish: vi.fn().mockResolvedValue(undefined),
+    };
+
     it('includes dnd flag in _toPublishableActivity when DND is enabled', () => {
-      const publisher = new ActivityPublisher(storage, new IdentityManager(storage));
+      const publisher = new ActivityPublisher(mockRelayPool, storage, new IdentityManager(storage));
       // Call private method _toPublishableActivity
       const publishable = (publisher as any)._toPublishableActivity(mockUserActivity, true);
 
@@ -231,7 +261,7 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
     });
 
     it('omits or sets dnd: false when DND is disabled', () => {
-      const publisher = new ActivityPublisher(storage, new IdentityManager(storage));
+      const publisher = new ActivityPublisher(mockRelayPool, storage, new IdentityManager(storage));
       const publishable = (publisher as any)._toPublishableActivity(mockUserActivity, false);
 
       expect(publishable.dnd).toBe(false);
@@ -248,7 +278,7 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
         activity_id: 'yt-video-1',
         host_friend_uuid: 'self',
         created_at: Date.now(),
-        last_activity_at: Date.now(),
+        is_active: true,
       });
 
       const session = await storage.getActiveSession();
@@ -273,7 +303,7 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
         activity_id: 'yt-video-1',
         host_friend_uuid: 'self',
         created_at: Date.now(),
-        last_activity_at: Date.now(),
+        is_active: true,
       });
 
       // Alice enters DND, only self remains (< 2)

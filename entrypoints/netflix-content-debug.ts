@@ -32,9 +32,7 @@ function captureSnapshot(state: string): void {
   // Capture all text nodes
   const walker = document.createTreeWalker(
     document.body,
-    NodeFilter.SHOW_TEXT,
-    null,
-    false
+    NodeFilter.SHOW_TEXT
   );
 
   let node;
@@ -116,7 +114,7 @@ window.addEventListener('load', () => {
 captureSnapshot('immediate');
 
 // Listen for manual capture requests
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'CAPTURE_NETFLIX_DEBUG') {
     captureSnapshot(message.data?.state || 'manual');
     sendResponse({ success: true, snapshot: snapshots[snapshots.length - 1] });

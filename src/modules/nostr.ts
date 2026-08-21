@@ -98,8 +98,8 @@ export class RelayConnection implements IRelayConnection {
    */
   private async _fetchRelayInfo(): Promise<void> {
     try {
-      const info = await nip11.fetchRelayInformation(this.url);
-      this.minPowDifficulty = info.min_pow_difficulty ?? 0;
+      const info = await nip11.fetchRelayInformation(this.url) as any;
+      this.minPowDifficulty = info?.min_pow_difficulty ?? 0;
       if (this.minPowDifficulty > 0) {
         const hostname = new URL(this.url).hostname;
         console.log(`[Nostr] Relay ${hostname} requires PoW difficulty: ${this.minPowDifficulty}`);
@@ -414,7 +414,7 @@ export class RelayConnection implements IRelayConnection {
 
           // Calculate exponential backoff with jitter
           const backoffIndex = Math.min(this.rateLimitCount - 1, this.RATE_LIMIT_BACKOFF_MS.length - 1);
-          const baseBackoffMs = this.RATE_LIMIT_BACKOFF_MS[backoffIndex];
+          const baseBackoffMs = this.RATE_LIMIT_BACKOFF_MS[backoffIndex] ?? 2000;
           const jitter = Math.random() * 1000; // Add 0-1s jitter
           const totalBackoffMs = baseBackoffMs + jitter;
 
@@ -513,7 +513,7 @@ export class RelayConnection implements IRelayConnection {
   private _validateEvent(event: NostrEvent): boolean {
     try {
       // Verify event structure, signature, and hash per NIP-01
-      if (!verifyEvent(event)) {
+      if (!verifyEvent(event as any)) {
         return false;
       }
 
@@ -793,7 +793,7 @@ export class RelayPool {
 
         // Build results with per-relay info
         const relayResults: RelayPublishResult[] = relays.map((relay, idx) => {
-          const attempt = relayAttempts[idx];
+          const attempt = relayAttempts[idx] ?? { success: false, latency_ms: 0, error: 'Publish failed' };
           return {
             relay_url: relay.url,
             success: attempt.success,

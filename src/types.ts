@@ -51,10 +51,12 @@ export interface UserProfile {
   };
   dnd_enabled?: boolean; // Do Not Disturb mode (bypasses co-watching and alerts)
   game_discovery_enabled?: boolean; // Game library discovery enabled
+  overlay_size?: { width: number; height: number }; // Persisted floating overlay dimensions
   publisher_config?: {
     enabled: boolean; // Global publishing on/off
     rate_ms: number; // Publishing interval in milliseconds (default 12000)
     low_bandwidth_mode?: boolean; // Enable gzip compression (for capped data)
+    [key: string]: any;
   };
   steam_config?: {
     enabled: boolean;
@@ -114,6 +116,13 @@ export interface OAuthToken {
 export interface OAuthTokens {
   spotify?: OAuthToken;
   twitch?: OAuthToken;
+  steam?: OAuthToken;
+  discord?: OAuthToken;
+  'spotify-api'?: OAuthToken;
+  'twitch-api'?: OAuthToken;
+  'steam-api'?: OAuthToken;
+  'discord-api'?: OAuthToken;
+  [key: string]: OAuthToken | undefined;
 }
 
 // ============================================================================
@@ -161,13 +170,16 @@ export interface Activity {
   content: string; // The title/name of what's playing (single source of truth)
   url?: string; // Direct link to the content
   state?: 'playing' | 'paused' | 'stopped' | 'disconnected'; // Activity state: playing, paused, stopped, or disconnected (content script lost connection)
+  audio?: 'on' | 'off'; // Audio playback state
   timestamp: number; // When activity record was detected/created (metadata timestamp)
   freshness_timestamp: number; // When activity data was last refreshed (for staleness checks in overlay show logic)
   contentTimestamp?: number; // When content actually started being watched (immutable, set once per activity, used for host determination)
   is_fresh?: boolean; // Whether data came from responsive content script (true) or stored/stale data (false)
   dnd?: boolean; // Whether the user/friend who published this activity was in DND mode
+  temporary?: boolean; // Whether the activity is transient (e.g. live polling)
   provenance?: 'LOCAL_TAB' | 'LOCAL_STEAM' | 'LOCAL_SPOTIFY' | 'LOCAL_TWITCH' | 'FRIEND' | 'TEST'; // Source of activity: user's tab, Steam/Spotify/Twitch API, friend's data, or test
   metadata: {
+    title?: string; // Content title
     lastAccessed?: number; // Browser tab's lastAccessed time (for sorting order on remote side)
     progress?: number; // Current playback position (seconds) at time of progress_measured_at
     progress_measured_at?: number; // Unix timestamp when progress was measured (set by content script for accurate sync interpolation)
@@ -179,6 +191,7 @@ export interface Activity {
     disconnected_reason?: string; // Reason why content script disconnected (for state === 'disconnected')
     favicon?: string; // Dynamic favicon URL from content script
     dnd?: boolean; // DND flag in metadata
+    [key: string]: any;
   };
 }
 
@@ -205,7 +218,7 @@ export interface Message {
   sender_identifier?: string; // Deprecated: use from instead
   activity_id?: string; // Deprecated: not used in session model
 
-  type?: 'chat' | 'invite' | 'join_accepted' | 'join_declined'; // Message type
+  type?: 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response' | 'friend_request'; // Message type
   content?: string; // Optional for invite/join messages
   is_outbound?: boolean;
   timestamp: number;
@@ -433,29 +446,47 @@ export const STORAGE_KEYS = {
 // ============================================================================
 
 export type ExtensionMessageType =
+  | 'GET_STORAGE'
   | 'GET_CURRENT_ACTIVITY'
   | 'GET_ALL_ACTIVE_ACTIVITIES'
+  | 'GET_ALL_ACTIVITIES'
   | 'GET_BROWSER_ACTIVITIES'
   | 'GET_ACTIVE_FRIENDS'
   | 'GET_ALL_FRIENDS'
+  | 'GET_FRIEND'
   | 'GET_FRIEND_ACTIVITY_HISTORY'
   | 'GET_USER_IDENTIFIER'
   | 'GET_OAUTH_STATUS'
   | 'ADD_FRIEND'
   | 'REMOVE_FRIEND'
   | 'RENAME_FRIEND'
+  | 'ACCEPT_FRIEND_REQUEST'
+  | 'DECLINE_FRIEND_REQUEST'
   | 'SEND_MESSAGE'
   | 'TOGGLE_SERVICE'
   | 'MUTE_FRIEND'
   | 'UNMUTE_FRIEND'
   | 'SAVE_SETTINGS'
   | 'RESTORE_SETTINGS'
+  | 'GET_DIAGNOSTICS'
+  | 'GET_DND_MODE'
+  | 'SET_DND_MODE'
   | 'AUTHENTICATE_SERVICE'
   | 'DISCONNECT_SERVICE'
   | 'HANDLE_OAUTH_CALLBACK'
+  | 'GET_NETFLIX_EXTRACTION_LOGS'
+  | 'GET_NETFLIX_DEBUG_CAPTURES'
   | 'JOIN_ACTIVITY'
+  | 'SEND_INVITE'
+  | 'SEND_JOIN_NOTIFICATION'
+  | 'TEST_NOTIFICATION'
+  | 'REFRESH_GAME_LIBRARY'
+  | 'CONTENT_SCRIPT_ACTIVITY'
+  | 'CONTENT_SCRIPT_ORPHANED'
+  | 'DEBUG_STORAGE'
   | 'PUBLISH_VIDEO_SYNC'
   | 'ACTIVITY_CHANGED'
+  | 'MY_ACTIVITIES_CHANGED'
   | 'FRIEND_ACTIVITY_UPDATED'
   | 'NEW_MESSAGE'
   | 'FRIEND_CAME_ONLINE'
@@ -470,6 +501,7 @@ export interface ExtensionResponse<T = any> {
   success: boolean;
   data?: T;
   error?: string;
+  message?: string;
 }
 
 // ============================================================================

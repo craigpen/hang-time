@@ -8,6 +8,7 @@ import {
   ServiceName,
   IServiceModule,
   ExtensionMessage,
+  UserProfile,
 } from '../types';
 import { StorageManager } from './storage';
 import { getActivityDatastore } from './activity-datastore';
@@ -63,39 +64,21 @@ export class ActivityDetector {
 
   async detectAndPublish(): Promise<void> {
     try {
-      const allActivities = await this.detectAllActiveActivities();
-
-      if (allActivities.length === 0) {
-        try {
-          const logger = getFileLogger();
-          logger.log('Activity', 'DEBUG', 'No activities detected');
-        } catch {}
-        return;
-      }
-
-      try {
-        const logger = getFileLogger();
-        logger.log('Activity', 'INFO', `Detected ${allActivities.length} activities`, {
-          services: allActivities.map(a => a.service),
-        });
-      } catch {}
-
-      // Validate activities through datastore before storing
       const datastore = getActivityDatastore();
-      const validatedActivities: Activity[] = [];
-      const activitiesByService: Partial<Record<string, any>> = {};
+      const detectedActivities = await this.detectAllActiveActivities();
 
-      for (const activity of allActivities) {
+      // Validate all detected activities through datastore
+      const validatedActivities: Activity[] = [];
+      const activitiesByService: Partial<Record<ServiceName, Activity>> = {};
+
+      for (const activity of detectedActivities) {
         try {
-          // Determine provenance based on service
-          let provenance: 'LOCAL_TAB' | 'LOCAL_STEAM' | 'LOCAL_SPOTIFY' | 'LOCAL_TWITCH' = 'LOCAL_TAB';
-          if (activity.service === 'steam-api') {
-            provenance = 'LOCAL_STEAM';
-          } else if (activity.service === 'spotify-api') {
-            provenance = 'LOCAL_SPOTIFY';
-          } else if (activity.service === 'twitch-api') {
-            provenance = 'LOCAL_TWITCH';
-          }
+          // Map service to provenance type
+          const provenance =
+            activity.service === 'steam-api' ? 'LOCAL_STEAM' :
+            activity.service === 'spotify-api' ? 'LOCAL_SPOTIFY' :
+            activity.service === 'twitch-api' ? 'LOCAL_TWITCH' :
+            'LOCAL_TAB';
 
           // Validate through datastore (createActivity handles create-or-replace)
           const validated = await datastore.createActivity({
@@ -104,7 +87,7 @@ export class ActivityDetector {
           });
           validatedActivities.push(validated);
           activitiesByService[activity.service] = validated;
-          console.debug(`[Activity]   - ${activity.service}: "${activity.content}" (audio: ${activity.audio})`);
+          console.debug(`[Activity]   - ${activity.service}: "${activity.content}"`);
         } catch (error) {
           // Activity failed validation - log and skip it
           console.warn(`[Activity] ⚠️  Validation failed for ${activity.service}:`, error instanceof Error ? error.message : error);
@@ -114,9 +97,12 @@ export class ActivityDetector {
       if (validatedActivities.length === 0) {
         console.debug('[Activity] No activities passed validation');
         // Clean up ghost activities from closed tabs
-        const ghostsRemoved = await datastore.cleanupGhosts();
-        if (ghostsRemoved > 0) {
-          console.debug('[Activity] Cleaned up', ghostsRemoved, 'ghost activities');
+        const ghosts = await datastore.detectGhosts();
+        if (ghosts.length > 0) {
+          for (const g of ghosts) {
+            await datastore.deleteActivity(g.id);
+          }
+          console.debug('[Activity] Cleaned up', ghosts.length, 'ghost activities');
           // Update my_activities after cleanup
           await this._updateMyActivitiesFromDatastore();
         }
@@ -133,7 +119,10 @@ export class ActivityDetector {
         Array.from(newActivityIds).some(id => !lastActivityIds.has(id));
 
       // Clean up ghost activities from closed tabs before updating my_activities
-      await datastore.cleanupGhosts();
+      const ghosts = await datastore.detectGhosts();
+      for (const g of ghosts) {
+        await datastore.deleteActivity(g.id);
+      }
 
       // Clean up stale API activities (from services that are enabled but didn't return anything)
       const profile = await this.storageManager.getUserProfile();
@@ -145,10 +134,13 @@ export class ActivityDetector {
       await this._updateMyActivitiesFromDatastore();
 
       // Store first activity for backwards compatibility
-      await this.storageManager.setCurrentActivity(validatedActivities[0]);
+      const firstValidated = validatedActivities[0];
+      if (firstValidated) {
+        await this.storageManager.setCurrentActivity(firstValidated);
+      }
 
       if (!activityIdsChanged) {
-        // Same activities, only state/audio might have changed (oscillation)
+        // Same activities, only state might have changed (oscillation)
         console.debug('[Activity] ℹ️  Activity IDs unchanged (state-only change, skipping notification)');
         return;
       }
@@ -170,7 +162,7 @@ export class ActivityDetector {
   async detectCurrentActivity(): Promise<Activity | null> {
     const allActivities = await this.detectAllActiveActivities();
     // Return the most recent activity for publishing to Nostr
-    if (allActivities.length > 0) {
+    if (allActivities.length > 0 && allActivities[0]) {
       return allActivities[0];
     }
     // Don't publish idle - just return null to skip publishing
@@ -295,16 +287,8 @@ export class ActivityDetector {
       } catch {}
     }
 
-    // Sort: audio on first, then by last accessed time (for browser tabs) or timestamp (for APIs)
+    // Sort: by last accessed time (for browser tabs) or timestamp (for APIs)
     activities.sort((a, b) => {
-      // Prioritize activities with audio
-      const aAudio = a.audio === 'on' ? 1 : 0;
-      const bAudio = b.audio === 'on' ? 1 : 0;
-      if (aAudio !== bAudio) {
-        return bAudio - aAudio; // on (1) comes before off (0)
-      }
-
-      // Then sort by last accessed time
       const aTime = (a.metadata?.lastAccessed as number) || a.timestamp || 0;
       const bTime = (b.metadata?.lastAccessed as number) || b.timestamp || 0;
       return bTime - aTime;

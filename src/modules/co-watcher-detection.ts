@@ -73,7 +73,6 @@ export class CoWatcherDetector {
 
       // Find matching activity ID across all user and friend activities
       let matchedActivityId: string | null = null;
-      let matchedActivityTimestamp = 0;
 
       for (const userActivity of Object.values(myActivities)) {
         if (!userActivity?.id) continue;
@@ -87,7 +86,6 @@ export class CoWatcherDetector {
             if (friendActivity?.id === userActivity.id) {
               console.log(`[CoWatcher] [MESSAGE_FLOW] ✅ Match found: ${userActivity.service} (${userActivity.id}) with ${friend.local_name}`);
               matchedActivityId = userActivity.id;
-              matchedActivityTimestamp = userActivity.timestamp || Date.now();
               break;
             }
           }
@@ -211,8 +209,8 @@ export class CoWatcherDetector {
           return diff;
         });
         const hostEntry = coWatchers[0];
-        hostFriendUuid = hostEntry.friend_uuid === null ? 'self' : hostEntry.friend_uuid;
-        console.debug(`[TimestampMigration:CoWatcherHost] 👑 Newly elected host: ${hostFriendUuid} with timestamp=${hostEntry.timestamp}`);
+        hostFriendUuid = hostEntry?.friend_uuid === null ? 'self' : (hostEntry?.friend_uuid ?? 'self');
+        console.debug(`[TimestampMigration:CoWatcherHost] 👑 Newly elected host: ${hostFriendUuid} with timestamp=${hostEntry?.timestamp}`);
       }
 
       // Get host's friendly name for logging
@@ -322,7 +320,7 @@ export class CoWatcherDetector {
       } else {
         // Update existing session: append any new co-watchers to persistent members
         // Only add people not already in the session
-        const newCoWatchers = activityCoWatch.co_watchers.filter(uuid => !session.members.includes(uuid));
+        const newCoWatchers = activityCoWatch.co_watchers.filter(uuid => !session!.members.includes(uuid));
         if (newCoWatchers.length > 0) {
           session.members.push(...newCoWatchers);
           console.log('[CoWatcher] Appended new members to session:', { session_id: session.session_id, new_members: newCoWatchers.length, total_members: session.members.length });

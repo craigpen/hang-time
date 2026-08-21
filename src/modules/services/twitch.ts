@@ -110,7 +110,6 @@ export class TwitchService implements IServiceModule {
         content: stream.title || stream.game_name || 'Twitch Stream',
         url: `https://twitch.tv/${stream.user_name}`,
         state: 'playing',
-        audio: 'on',
         timestamp: Date.now(),
         freshness_timestamp: Date.now(),
         is_fresh: true,

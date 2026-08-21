@@ -3,7 +3,7 @@
  * Validation rules and error types for activity data integrity
  */
 
-import { Activity } from '../types';
+import { Activity, ServiceName } from '../types';
 
 export class ValidationError extends Error {
   constructor(
@@ -62,8 +62,8 @@ export function validateContent(content: unknown): string {
 /**
  * Validates that service field is valid
  */
-export function validateService(service: unknown): string {
-  const validServices = [
+export function validateService(service: unknown): ServiceName {
+  const validServices: ServiceName[] = [
     // OAuth-based services
     'spotify-api',
     'twitch-api',
@@ -80,17 +80,17 @@ export function validateService(service: unknown): string {
     throw new ValidationError('service', 'Must be a string', service);
   }
 
-  if (!validServices.includes(service)) {
+  if (!validServices.includes(service as ServiceName)) {
     throw new ValidationError('service', `Must be one of: ${validServices.join(', ')}`, service);
   }
 
-  return service;
+  return service as ServiceName;
 }
 
 /**
  * Validates that state field is valid
  */
-export function validateState(state: unknown): string {
+export function validateState(state: unknown): 'playing' | 'paused' | 'stopped' {
   const validStates = ['playing', 'paused', 'stopped'];
 
   if (typeof state !== 'string') {
@@ -105,7 +105,7 @@ export function validateState(state: unknown): string {
     throw new ValidationError('state', `Must be one of: ${validStates.join(', ')}`, state);
   }
 
-  return state;
+  return state as 'playing' | 'paused' | 'stopped';
 }
 
 /**
@@ -130,9 +130,10 @@ export function validateProgress(progress: unknown, duration?: number): number |
     throw new ValidationError('progress', 'Must be a finite number', progress);
   }
 
-  // For live streams (duration=0 or undefined), don't enforce bounds
+  // If duration is known and positive, progress should not exceed duration
+  // Duration of 0 indicates live stream or unknown length, so no upper bound check
   if (duration !== undefined && duration > 0 && progress > duration) {
-    throw new ValidationError('progress', `Cannot exceed duration (${duration}s)`, progress);
+    throw new ValidationError('progress', `Cannot exceed duration (${duration})`, progress);
   }
 
   return progress;
@@ -140,7 +141,7 @@ export function validateProgress(progress: unknown, duration?: number): number |
 
 /**
  * Validates that duration field is valid if provided
- * Note: Duration can be 0 or undefined for live streams (Twitch, etc)
+ * Returns the validated duration value or undefined if not provided
  */
 export function validateDuration(duration: unknown): number | undefined {
   if (duration === null || duration === undefined) {
@@ -164,11 +165,13 @@ export function validateDuration(duration: unknown): number | undefined {
 }
 
 /**
- * Validates complete activity object
- * Returns a sanitized copy with validated fields
+ * Validates full activity object
+ * Returns clean, validated Activity object
+ * Throws ValidationError if any required field is invalid
  */
-export function validateActivity(data: Partial<Activity> & { provenance?: ActivityProvenance }): ValidatedActivity {
-  // Required fields
+export function validateActivity(
+  data: Partial<Activity> & { provenance?: ActivityProvenance }
+): ValidatedActivity {
   if (!data.id) {
     throw new ValidationError('id', 'Activity ID is required');
   }
@@ -185,7 +188,10 @@ export function validateActivity(data: Partial<Activity> & { provenance?: Activi
     throw new ValidationError('timestamp', 'Timestamp is required');
   }
 
-  // State is required
+  if (!data.contentTimestamp) {
+    throw new ValidationError('contentTimestamp', 'Content timestamp is required');
+  }
+
   if (!data.state) {
     throw new ValidationError('state', 'State is required');
   }
@@ -205,7 +211,7 @@ export function validateActivity(data: Partial<Activity> & { provenance?: Activi
     content: validatedContent,
     url: data.url,
     state: validatedState,
-    audio: data.audio || 'off',
+    audio: data.audio,
     timestamp: data.timestamp,
     contentTimestamp: data.contentTimestamp,
     freshness_timestamp: data.freshness_timestamp || data.timestamp || Date.now(),
@@ -214,7 +220,7 @@ export function validateActivity(data: Partial<Activity> & { provenance?: Activi
       lastAccessed: data.metadata?.lastAccessed,
       progress,
       duration,
-      domain: data.metadata?.domain,
+      domain: data.metadata?.['domain'],
       favicon: data.metadata?.favicon,
       artist: data.metadata?.artist,
       thumbnailUrl: data.metadata?.thumbnailUrl,

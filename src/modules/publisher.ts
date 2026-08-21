@@ -5,16 +5,13 @@
  */
 
 import * as pako from 'pako';
-import { finalizeEvent, getEventHash } from 'nostr-tools';
-import { Activity, NostrEvent, ServiceName, DEFAULT_RELAY_URLS } from '../types';
+import { finalizeEvent } from 'nostr-tools';
+import { Activity, NostrEvent, DEFAULT_RELAY_URLS } from '../types';
 import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
-import { validateActivity, detectCorruption } from './activity-validation';
-import { GameLibraryManager } from './game-library';
+import { detectCorruption } from './activity-validation';
 import type { PublishQueue } from './publish-queue';
-
-const SERVICES_TO_PUBLISH: ServiceName[] = ['spotify-api', 'twitch-api', 'steam-api', 'discord-api', 'youtube-tab', 'netflix-tab', 'twitch-tab', 'video-tab'];
 
 // Helper: Convert hex string to Uint8Array (for nostr-tools finalizeEvent)
 function hexToBytes(hex: string): Uint8Array {
@@ -22,9 +19,6 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 export class ActivityPublisher {
-  private publishCount = 0; // Increments every 12s, 5th publish (index 4) is full refresh
-  private publishRateMs = 12000; // Default: publish every 12 seconds
-  private lastGameLibraryPublishTime = 0; // Track last game library publish
   private publishQueue: PublishQueue | null = null;
 
   static readonly PUBLISH_INTERVAL_MS = 12000; // Default: publish every 12 seconds (5 per 60s)
@@ -44,16 +38,7 @@ export class ActivityPublisher {
     this.publishQueue = queue;
   }
 
-  private async _loadConfig(): Promise<void> {
-    const profile = await this.storageManager.getUserProfile();
-    if (profile?.publisher_config) {
-      this.publishRateMs = profile.publisher_config.rate_ms || 12000;
-    }
-  }
-
   async start(): Promise<void> {
-    await this._loadConfig();
-
     const profile = await this.storageManager.getUserProfile();
     const config = profile?.publisher_config;
 
@@ -63,7 +48,7 @@ export class ActivityPublisher {
     }
 
     console.debug(`[Publisher] Activity publisher started (ready to publish activities on demand via PublishQueue)`);
-    console.debug(`[Publisher] Config: size=${config?.size || 'full'}, scope=${config?.scope || 'updates'}`);
+    console.debug(`[Publisher] Config:`, config);
   }
 
 
@@ -78,8 +63,6 @@ export class ActivityPublisher {
         console.debug('[Publisher] No profile to publish');
         return;
       }
-
-      const pubkey = await this.identityManager.getPubkey();
 
       // Build profile tags
       const tags: Array<[string, string]> = [];
@@ -98,7 +81,7 @@ export class ActivityPublisher {
         tags,
         content: '', // Kind 0 typically has empty content for profile data in tags
         created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
-      }, hexToBytes(secretKeyHex)) as NostrEvent;
+      }, hexToBytes(secretKeyHex)) as unknown as NostrEvent;
 
       // Mark profile as pending in queue
       console.log(`[Publisher] 📤 Profile update (nickname: ${profile.nickname || 'none'}, discord: ${profile.discord_info ? 'yes' : 'no'})`);
@@ -163,7 +146,6 @@ export class ActivityPublisher {
 
       // Publish activities (including empty list on 'all' mode to broadcast idle state)
       await this._publishServices(validActivities, 'all', config);
-      this.publishCount++;
     } catch (error) {
       console.error('[Publisher] Failed to publish activities:', error);
     }
@@ -174,67 +156,41 @@ export class ActivityPublisher {
     mode: 'changed' | 'all' | 'atomic',
     config?: any
   ): Promise<void> {
-    // Activities are keyed by activity ID, not service name
-    // For 'all'/'atomic': filter to only SERVICES_TO_PUBLISH; for 'changed': use all activities
-    const activitiesToPublish: Activity[] = mode === 'all' || mode === 'atomic'
-      ? Object.values(activities).filter((a): a is Activity => !!a && SERVICES_TO_PUBLISH.includes(a.service))
-      : Object.values(activities).filter((a): a is Activity => !!a);
+    try {
+      const activeList = Object.values(activities).filter((a): a is Activity => a !== undefined);
 
-    if (activitiesToPublish.length === 0) {
-      if (mode === 'all') {
-        // When publishing full snapshot ('all'), publish empty bundle to clear stale activities on relays
-        console.debug('[Publisher] Publishing empty activity bundle (idle state)');
-        await this._publishBundledActivities([], 'all', config);
-        return;
-      }
-      console.debug('[Publisher] No activities to publish');
-      return;
-    }
-
-    console.debug('[Publisher] Activities to publish:', activitiesToPublish.map(a => ({ service: a.service })));
-
-    // Publish as individual events (atomic) or bundled (full)
-    if (mode === 'atomic') {
-      // With compression, batch services into groups; without, individual events
-      if (config?.compression) {
-        const batchSize = Math.ceil(activitiesToPublish.length / 2);
-        console.log(`[Publisher] 📦 Compression enabled: batching ${activitiesToPublish.length} services into ${Math.ceil(activitiesToPublish.length / batchSize)} events`);
-        for (let i = 0; i < activitiesToPublish.length; i += batchSize) {
-          const batch = activitiesToPublish.slice(i, i + batchSize);
-          await this._publishBundledActivities(batch, 'compressed', config);
-        }
-      } else {
-        for (const activity of activitiesToPublish) {
+      if (mode === 'changed') {
+        for (const activity of activeList) {
           await this._publishActivity(activity);
         }
+        return;
       }
-    } else {
-      await this._publishBundledActivities(activitiesToPublish, mode, config);
+
+      await this._publishBundled(activeList, mode, config);
+    } catch (error) {
+      console.error('[Publisher] Failed to publish services:', error);
     }
   }
 
-  private async _publishBundledActivities(activities: Activity[], mode: 'changed' | 'all' | 'compressed', config?: any): Promise<void> {
+  private async _publishBundled(
+    activities: Activity[],
+    mode: 'changed' | 'all' | 'atomic' | 'compressed',
+    config?: any
+  ): Promise<void> {
     try {
+      const created_at = Math.floor(Date.now() / 1000);
+      const kind = 10003; // Replaceable: only latest snapshot stored
+
       const profile = await this.storageManager.getUserProfile();
       const isDnd = profile?.dnd_enabled ?? false;
-      const created_at = Math.floor(Date.now() / 1000);
-      const kind = 10003; // Replaceable: only latest activity snapshot stored
 
-      // Create tags
       const tags: Array<[string, string]> = [
-        ['is_activity', 'true'],
-        ['type', 'activity-state'],
-        ['mode', mode === 'compressed' ? 'atomic' : mode],
-        ['count', activities.length.toString()],
+        ['type', 'bundled'],
+        ['count', String(activities.length)],
       ];
 
       if (isDnd) {
         tags.push(['dnd', 'true']);
-      }
-
-      // Add service tags for each activity
-      for (const activity of activities) {
-        tags.push(['service', activity.service]);
       }
 
       // Serialize activities as JSON array with minimized payload (only published fields)
@@ -242,12 +198,10 @@ export class ActivityPublisher {
       let content = JSON.stringify(publishableActivities);
 
       // Apply gzip compression if low_bandwidth_mode is enabled
-      let isCompressed = false;
       if (config?.low_bandwidth_mode) {
         const originalSize = content.length;
         content = await this._compressContent(content);
         const compressedSize = content.length;
-        isCompressed = true;
         console.debug(`[Publisher] Gzip compression: ${originalSize}b → ${compressedSize}b (${((1 - compressedSize / originalSize) * 100).toFixed(1)}% reduction)`);
         tags.push(['compression', 'gzip']);
       }
@@ -259,7 +213,7 @@ export class ActivityPublisher {
         tags,
         content,
         created_at,
-      }, hexToBytes(secretKeyHex)) as NostrEvent;
+      }, hexToBytes(secretKeyHex)) as unknown as NostrEvent;
 
       // Log event details
       const eventJson = JSON.stringify(event);
@@ -304,7 +258,6 @@ export class ActivityPublisher {
         return;
       }
 
-      const pubkey = await this.identityManager.getPubkey();
       const created_at = Math.floor(Date.now() / 1000);
       const kind = 10003; // Replaceable: only latest activity snapshot stored
 
@@ -346,7 +299,7 @@ export class ActivityPublisher {
         tags,
         content,
         created_at,
-      }, hexToBytes(secretKeyHex)) as NostrEvent;
+      }, hexToBytes(secretKeyHex)) as unknown as NostrEvent;
 
       const eventJson = JSON.stringify(event);
       const eventSize = eventJson.length;
@@ -384,7 +337,7 @@ export class ActivityPublisher {
     }
   }
 
-  private async _decompressContent(content: string): Promise<string> {
+  static decompressContent(content: string): string {
     try {
       // Convert base64 back to binary using browser API
       const binaryString = atob(content);
@@ -392,8 +345,8 @@ export class ActivityPublisher {
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
-      const decompressed = pako.ungzip(bytes, { to: 'string' });
-      return decompressed;
+      const decompressedBytes = pako.ungzip(bytes);
+      return new TextDecoder().decode(decompressedBytes);
     } catch (error) {
       console.error('[Publisher] Gzip decompression failed, treating as uncompressed:', error);
       return content;

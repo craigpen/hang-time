@@ -3,8 +3,8 @@
  * Handles sending and receiving encrypted messages via Nostr kind-1059 (NIP-44)
  */
 
-import { finalizeEvent, nip44, utils } from 'nostr-tools';
-import { Activity, NostrEvent, Friend } from '../types';
+import { finalizeEvent, nip44 } from 'nostr-tools';
+import { Activity, NostrEvent, Friend, Message } from '../types';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
 import { StorageManager } from './storage';
@@ -30,7 +30,7 @@ function hexToBytes(hex: string): Uint8Array {
 let instance: MessagingManager | null = null;
 
 export interface ActivityMessage {
-  type: 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response';
+  type: 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response' | 'friend_request';
   activity_id: string;
   service?: string;
   content?: string;
@@ -59,7 +59,7 @@ export class MessagingManager {
    * Send a friend request via encrypted kind-1059 (NIP-44)
    * Returns the event ID for tracking/retry purposes
    */
-  async sendFriendRequest(recipientIdentifier: string, recipientPubkey: string, recipientDisplayName: string): Promise<string> {
+  async sendFriendRequest(_recipientIdentifier: string, recipientPubkey: string, recipientDisplayName: string): Promise<string> {
     return this.sendFriendRequestMessage(recipientPubkey, recipientDisplayName);
   }
 
@@ -141,7 +141,7 @@ export class MessagingManager {
    * Used when adding a friend to notify them (works even if they haven't added us yet)
    * Returns the event ID for tracking/retry purposes
    */
-  async sendFriendRequestMessage(recipientPubkey: string, senderDisplayName: string): Promise<string> {
+  async sendFriendRequestMessage(recipientPubkey: string, _senderDisplayName?: string): Promise<string> {
     try {
       const userProfile = await this.storageManager.getUserProfile();
       if (!userProfile) {
@@ -181,7 +181,7 @@ export class MessagingManager {
         tags,
         content: encryptedContent,
         created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
-      }, hexToBytes(secretKey)) as NostrEvent;
+      }, hexToBytes(secretKey)) as unknown as NostrEvent;
 
       // Queue or publish the event
       console.log(`[Messaging] [MESSAGE_FLOW] 📤 Queuing kind-1059 friend request to ${recipientPubkey.substring(0, 8)}...`);
@@ -212,7 +212,6 @@ export class MessagingManager {
         throw new Error('User profile not found');
       }
 
-      const pubkey = await this.identityManager.getPubkey();
       const secretKey = await this.identityManager.getSecretKey();
 
       // Serialize message to JSON and encrypt using nip44 with recipient's pubkey
@@ -247,7 +246,7 @@ export class MessagingManager {
         tags,
         content: encryptedContent,
         created_at: Math.floor(Date.now() / 1000), // Placeholder, will be refreshed at publish time
-      }, hexToBytes(secretKey)) as NostrEvent;
+      }, hexToBytes(secretKey)) as unknown as NostrEvent;
 
       // Queue or publish the event
       console.log(`[Messaging] [MESSAGE_FLOW] 📤 Queuing kind-1059 ${message.type} to ${recipientFriend.local_name}`, {

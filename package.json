@@ -10,6 +10,7 @@
     "build:all": "npm run build:chrome && npm run build:firefox",
     "test": "vitest",
     "test:run": "vitest run",
+    "type-check": "tsc --noEmit",
     "dev:dual": "node scripts/launch-dual-edge.js",
     "debug:inspect": "node scripts/inspect-browsers.js",
     "zip": "npm run build:all && node scripts/create-zip.js"

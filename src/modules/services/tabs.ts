@@ -77,14 +77,14 @@ export class TabService implements IServiceModule {
     return '';
   }
 
-  async handleAuthCallback(code: string): Promise<void> {
+  async handleAuthCallback(_code: string): Promise<void> {
     // No auth to handle
   }
 
   /**
    * Get the last detected activity
    */
-  getDetectedActivity(service: string): Activity | null {
+  getDetectedActivity(_service?: string): Activity | null {
     return this.detectedActivity;
   }
 }

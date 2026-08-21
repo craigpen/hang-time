@@ -2,7 +2,7 @@
 
 ## Rule
 Whenever completing any set of code changes, fixes, refactorings, or updates:
-1. Verify changes by running tests (`cmd /c npm run test:run`) and build (`cmd /c npm run build:all`).
+1. Verify changes by running type-check (`cmd /c npm run type-check`), tests (`cmd /c npm run test:run`), and build (`cmd /c npm run build:all`).
 2. Stage all modified and new files (`git add .`).
 3. Commit with a concise, descriptive conventional-commit message (`git commit -m "..."`).
 4. Push immediately to the active remote branch (`git push origin <branch>`).

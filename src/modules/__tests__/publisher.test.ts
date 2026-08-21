@@ -60,9 +60,7 @@ describe('ActivityPublisher', () => {
       expect(publishedEvent.content).toBe('[]');
       expect(publishedEvent.tags).toEqual(
         expect.arrayContaining([
-          ['is_activity', 'true'],
-          ['type', 'activity-state'],
-          ['mode', 'all'],
+          ['type', 'bundled'],
           ['count', '0'],
         ])
       );

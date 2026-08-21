@@ -12,7 +12,7 @@ const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const FETCH_TIMEOUT_MS = 5000; // 5 seconds
 const MAX_RETRIES = 3;
 // Conservative: 1 request per 2 seconds to avoid Steam 429 rate limits in production
-const RATE_LIMIT_REQUESTS_PER_SECOND = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test' ? 1000 : 0.5;
+const RATE_LIMIT_REQUESTS_PER_SECOND = typeof process !== 'undefined' && process.env?.['NODE_ENV'] === 'test' ? 1000 : 0.5;
 
 /**
  * Token bucket rate limiter for API requests

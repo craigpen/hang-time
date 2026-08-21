@@ -3,9 +3,9 @@
  * Handles friend list operations and activity tracking
  */
 
-import { Friend, FriendList, Activity } from '../types';
+import { Friend, FriendList, Activity, ServiceName } from '../types';
 import { StorageManager } from './storage';
-import { secureLog, validateFriendName, generateSecureRandom, deriveKeypairFromIdentifier } from './security-utils';
+import { secureLog, validateFriendName, deriveKeypairFromIdentifier } from './security-utils';
 
 export class FriendManager {
   constructor(private storage: StorageManager) {}
@@ -149,7 +149,7 @@ export class FriendManager {
   /**
    * Hide service from friend (don't share that service's activity with them)
    */
-  async hideServiceFromFriend(friendId: string, service: string): Promise<void> {
+  async hideServiceFromFriend(friendId: string, service: ServiceName): Promise<void> {
     const friend = await this.getFriend(friendId);
     if (!friend) {
       throw new Error(`Friend not found: ${friendId}`);
@@ -165,7 +165,7 @@ export class FriendManager {
   /**
    * Show service to friend
    */
-  async showServiceToFriend(friendId: string, service: string): Promise<void> {
+  async showServiceToFriend(friendId: string, service: ServiceName): Promise<void> {
     const friend = await this.getFriend(friendId);
     if (!friend) {
       throw new Error(`Friend not found: ${friendId}`);

@@ -7,8 +7,6 @@ import { Activity, STORAGE_KEYS } from '../types';
 import { StorageManager } from './storage';
 import {
   validateActivity,
-  validateContent,
-  validateState,
   detectCorruption,
   ActivityProvenance,
   ValidatedActivity,
@@ -113,7 +111,7 @@ export class ActivityDatastore {
 
   /**
    * Update an existing activity with validation
-   * Only allows updates to state, progress, and audio
+   * Only allows updates to state and progress
    * Preserves progress unless a new valid value is provided
    */
   async updateActivity(id: string, updates: Partial<Activity>): Promise<ValidatedActivity> {
@@ -170,7 +168,7 @@ export class ActivityDatastore {
    */
   async getActivity(id: string): Promise<Activity | null> {
     const activities = await this.storage.getMyActivities();
-    const activity = activities[id];
+    const activity = activities[id as keyof typeof activities];
 
     if (!activity) {
       return null;
@@ -189,8 +187,33 @@ export class ActivityDatastore {
   }
 
   /**
-   * Get a single activity with corruption details
-   * Returns the activity plus corruption status and issues
+   * Clear activity
+   */
+  async clearActivity(id: string): Promise<void> {
+    console.debug('[ActivityDatastore] Clearing activity:', id);
+    const activities = await this.storage.getMyActivities();
+    delete activities[id as keyof typeof activities];
+    await this.storage.setMyActivities(activities);
+  }
+
+  /**
+   * Check if activity is valid and uncorrupted
+   */
+  async checkIntegrity(id: string): Promise<{ valid: boolean; issues: string[] }> {
+    const activity = await this.getActivity(id);
+    if (!activity) {
+      return { valid: false, issues: ['Activity not found'] };
+    }
+
+    const issues = detectCorruption(activity);
+    return {
+      valid: issues.length === 0,
+      issues,
+    };
+  }
+
+  /**
+   * Get activity with corruption check
    */
   async getActivityWithWarning(id: string): Promise<ActivityWithWarning | null> {
     const activity = await this.getActivity(id);
@@ -211,7 +234,7 @@ export class ActivityDatastore {
    */
   async getAllActivities(): Promise<Activity[]> {
     const activities = await this.storage.getMyActivities();
-    return Object.values(activities);
+    return Object.values(activities).filter((a): a is Activity => !!a);
   }
 
   /**

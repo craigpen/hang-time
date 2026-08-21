@@ -76,8 +76,8 @@ describe('Storage Architecture', () => {
       const keysMatch = content.match(/export const STORAGE_KEYS = \{([^}]+)\}/s);
       expect(keysMatch).toBeTruthy();
 
-      const keysSection = keysMatch![1];
-      const keyCount = (keysSection.match(/:\s*['"`]/g) || []).length;
+      const keysSection = keysMatch ? keysMatch[1] : '';
+      const keyCount = (keysSection?.match(/:\s*['"`]/g) || []).length;
 
       // Should have at least the core keys
       expect(keyCount).toBeGreaterThanOrEqual(10);
