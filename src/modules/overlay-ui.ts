@@ -59,7 +59,6 @@ export class OverlayUI {
   private _eventListenersSetup = false; // Guard to ensure listeners only set up once
   private syncInProgress = false; // Track if sync is pending completion
   private windowMessageHandler: ((event: MessageEvent) => void) | null = null; // Store for cleanup
-  private lastUserProgressUpdate: number = 0; // Track when user_progress was last set (for extrapolation)
   private markersVisible = false; // Track current visibility state for hysteresis
   private _state: OverlayState = {
     visible: false,
@@ -689,6 +688,7 @@ export class OverlayUI {
           this.restoreSizeFromStorage();
           this.setupOpacitySlider();
           this.setupEventListeners();
+          this.startProgressAnimation();
           clearInterval(checkBody);
         }
       }, 50);
@@ -699,6 +699,7 @@ export class OverlayUI {
     this.restoreSizeFromStorage();
     this.setupOpacitySlider();
     this.setupEventListeners();
+    this.startProgressAnimation();
     // Render any state that was set before the overlay was added to DOM
     if (this._state.session_members.length > 0) {
       this.render();
@@ -1319,35 +1320,9 @@ export class OverlayUI {
   }
 
   /**
-   * Get extrapolated user progress between CO_WATCH_UPDATE messages
-   * Prevents arrow from looking "stuck" during playback
-   */
-  private getExtrapolatedUserProgress(): number {
-    if (this._state.user_progress === undefined || this.lastUserProgressUpdate === 0) {
-      return this._state.user_progress || 0;
-    }
-
-    // If host is paused, don't extrapolate
-    if (this._state.host_state !== 'playing') {
-      return this._state.user_progress;
-    }
-
-    // Extrapolate by adding elapsed time since last update
-    const elapsedMs = Date.now() - this.lastUserProgressUpdate;
-    const extrapolatedProgress = this._state.user_progress + (elapsedMs / 1000);
-
-    return Math.min(extrapolatedProgress, this._state.host_duration || extrapolatedProgress);
-  }
-
-  /**
    * Update overlay state and rendering
    */
   setState(newState: Partial<OverlayState>): void {
-    // Track when user_progress is updated for extrapolation
-    if (newState.user_progress !== undefined) {
-      this.lastUserProgressUpdate = Date.now();
-    }
-
     // Update userId if provided in state
     if (newState.user_uuid && newState.user_uuid !== this.userId && newState.user_uuid !== 'unknown') {
       this.userId = newState.user_uuid;
@@ -1408,7 +1383,6 @@ export class OverlayUI {
 
     const fillEl = document.getElementById('progress-bar-fill') as HTMLElement;
     const hostMarkerEl = document.getElementById('progress-bar-host-marker') as HTMLElement;
-    const markerEl = document.getElementById('progress-bar-marker') as HTMLElement;
     const syncBtn = document.getElementById('progress-sync-button') as HTMLElement;
     const stateIndicator = document.getElementById('host-state-indicator') as HTMLElement;
     const timeDisplayEl = document.getElementById('progress-time-display') as HTMLElement;
@@ -1460,134 +1434,76 @@ export class OverlayUI {
       }
     }
 
-    // Show arrow marker only if user is NOT the host, has progress, and gap is > 5 seconds
-    if (markerEl) {
-      console.debug('[OverlayUI] Arrow render check:', {
-        is_user_host: this._state.is_user_host,
-        user_progress: this._state.user_progress,
-        host_progress: this._state.host_progress,
-        host_progress_timestamp: this._state.host_progress_timestamp,
-        host_duration: this._state.host_duration,
-      });
+    // For Guests: Manage user's position marker (always visible), arrow marker (gap > 6s), and horizontal gap line
+    const userPositionMarkerEl = document.getElementById('user-position-marker') as HTMLElement;
+    const markerEl = document.getElementById('progress-bar-marker') as HTMLElement;
+    const gapIndicatorEl = document.getElementById('gap-indicator') as HTMLElement;
 
-      if (!this._state.is_user_host && this._state.user_progress !== undefined && this._state.host_progress !== undefined && this._state.host_progress_timestamp !== undefined && this._state.host_duration && this._state.host_duration > 0) {
-        // Calculate where host actually is now by adding elapsed time since their progress was measured
-        const elapsedSinceHostMeasureMs = Date.now() - this._state.host_progress_timestamp;
-        const hostCurrentPosition = this._state.host_state === 'playing'
-          ? this._state.host_progress + (elapsedSinceHostMeasureMs / 1000)
-          : this._state.host_progress;
+    if (!this._state.is_user_host && this._state.user_progress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
+      const userProgress = this._state.user_progress;
+      const userPercent = Math.min((userProgress / this._state.host_duration) * 100, 100);
+      const userColor = this.getParticipantColor(this.userId);
 
-        // Use extrapolated user progress for smooth arrow movement between updates
-        const extrapolatedUserProgress = this.getExtrapolatedUserProgress();
-        const gap = Math.abs(extrapolatedUserProgress - hostCurrentPosition);
+      // 1. Guest's vertical marker: ALWAYS visible showing position of "You"
+      if (userPositionMarkerEl) {
+        userPositionMarkerEl.style.left = userPercent + '%';
+        userPositionMarkerEl.style.background = userColor;
+        userPositionMarkerEl.style.display = 'block';
+      }
+
+      // 2. Calculate gap against host's current (extrapolated) position
+      if (currentHostProgress !== undefined) {
+        const gap = Math.abs(userProgress - currentHostProgress);
         const SHOW_THRESHOLD = 6; // Show when gap exceeds 6 seconds
         const HIDE_THRESHOLD = 4; // Hide when gap drops below 4 seconds
 
-        console.debug('[OverlayUI] Arrow gap calculation:', {
-          user_progress: this._state.user_progress,
-          host_progress: this._state.host_progress,
-          hostCurrentPosition,
-          elapsedSinceHostMeasureMs: Date.now() - this._state.host_progress_timestamp,
-          gap,
-          markersVisible: this.markersVisible,
-          host_state: this._state.host_state,
-        });
-
         // Hysteresis: show at 6s, hide at 4s, stay in between
-        let shouldShow = this.markersVisible; // Keep current state by default
-        if (gap > SHOW_THRESHOLD) {
-          shouldShow = true;
-        } else if (gap < HIDE_THRESHOLD) {
-          shouldShow = false;
-        }
-
-        if (shouldShow) {
-          const userPercent = Math.min((extrapolatedUserProgress / this._state.host_duration) * 100, 100);
-          markerEl.style.left = userPercent + '%';
-          markerEl.style.background = this.getParticipantColor(this.userId);
-
-          // Arrow points toward host (use current position, not old measurement)
-          markerEl.classList.remove('arrow-left', 'arrow-right');
-          if (extrapolatedUserProgress < hostCurrentPosition) {
-            markerEl.classList.add('arrow-right'); // User behind, arrow points right (toward host ahead)
-            console.debug('[OverlayUI] Arrow RIGHT: user behind', { user: extrapolatedUserProgress, host: hostCurrentPosition });
-          } else if (extrapolatedUserProgress > hostCurrentPosition) {
-            markerEl.classList.add('arrow-left'); // User ahead, arrow points left (toward host behind)
-            console.debug('[OverlayUI] Arrow LEFT: user ahead', { user: extrapolatedUserProgress, host: hostCurrentPosition });
-          }
-
-          markerEl.style.display = 'block';
-          console.debug('[OverlayUI] Arrow SHOWN at', userPercent + '%');
-          this.markersVisible = true;
-        } else {
-          markerEl.style.display = 'none';
-          console.debug('[OverlayUI] Arrow hidden: gap too small');
-          this.markersVisible = false;
-        }
-      } else {
-        markerEl.style.display = 'none';
-        console.debug('[OverlayUI] Arrow hidden: condition not met');
-      }
-    }
-
-    // Show host position marker (vertical line) for guests
-    const hostPositionMarkerEl = document.getElementById('user-position-marker') as HTMLElement;
-    const gapIndicatorEl = document.getElementById('gap-indicator') as HTMLElement;
-
-    if (hostPositionMarkerEl || gapIndicatorEl) {
-      if (!this._state.is_user_host && this._state.host_progress !== undefined && this._state.user_progress !== undefined && this._state.host_progress_timestamp !== undefined && this._state.host_duration && this._state.host_duration > 0) {
-        // Calculate host's current position (same as arrow logic)
-        const elapsedSinceHostMeasureMs = Date.now() - this._state.host_progress_timestamp;
-        const hostCurrentPosition = this._state.host_state === 'playing'
-          ? this._state.host_progress + (elapsedSinceHostMeasureMs / 1000)
-          : this._state.host_progress;
-        // Use extrapolated user progress for smooth marker movement
-        const extrapolatedUserProgress = this.getExtrapolatedUserProgress();
-        const gap = Math.abs(extrapolatedUserProgress - hostCurrentPosition);
-        const SHOW_THRESHOLD = 6;
-        const HIDE_THRESHOLD = 4;
-
-        // Hysteresis: show at 6s, hide at 4s, stay in between (use same state as arrow)
         let shouldShow = this.markersVisible;
         if (gap > SHOW_THRESHOLD) {
           shouldShow = true;
         } else if (gap < HIDE_THRESHOLD) {
           shouldShow = false;
         }
+        this.markersVisible = shouldShow;
 
         if (shouldShow) {
-          const hostPercent = Math.min((hostCurrentPosition / this._state.host_duration) * 100, 100);
-          const userPercent = Math.min((extrapolatedUserProgress / this._state.host_duration) * 100, 100);
+          const hostPercent = Math.min((currentHostProgress / this._state.host_duration) * 100, 100);
 
-          // Show host position marker
-          if (hostPositionMarkerEl) {
-            hostPositionMarkerEl.style.left = hostPercent + '%';
-            hostPositionMarkerEl.style.background = this.getParticipantColor(this.userId);
-            hostPositionMarkerEl.style.display = 'block';
+          // Arrow marker
+          if (markerEl) {
+            markerEl.style.left = userPercent + '%';
+            markerEl.style.background = userColor;
+            markerEl.classList.remove('arrow-left', 'arrow-right');
+            if (userProgress < currentHostProgress) {
+              markerEl.classList.add('arrow-right'); // User behind host, arrow points right towards host
+            } else if (userProgress > currentHostProgress) {
+              markerEl.classList.add('arrow-left'); // User ahead of host, arrow points left towards host
+            }
+            markerEl.style.display = 'block';
           }
 
-          // Show gap indicator line between user and host positions
+          // Horizontal gap indicator line between user and host
           if (gapIndicatorEl) {
             const startPercent = Math.min(userPercent, hostPercent);
             const endPercent = Math.max(userPercent, hostPercent);
             const gapWidth = endPercent - startPercent;
             gapIndicatorEl.style.left = startPercent + '%';
             gapIndicatorEl.style.width = gapWidth + '%';
-            gapIndicatorEl.style.background = this.getParticipantColor(this.userId);
+            gapIndicatorEl.style.background = userColor;
             gapIndicatorEl.style.display = 'block';
           }
-
-          console.debug('[OverlayUI] Host position marker shown at', hostPercent + '%, gap from', userPercent + '%');
         } else {
-          if (hostPositionMarkerEl) hostPositionMarkerEl.style.display = 'none';
+          if (markerEl) markerEl.style.display = 'none';
           if (gapIndicatorEl) gapIndicatorEl.style.display = 'none';
-          console.debug('[OverlayUI] Host/gap markers hidden - gap too small:', gap);
         }
       } else {
-        if (hostPositionMarkerEl) hostPositionMarkerEl.style.display = 'none';
+        if (markerEl) markerEl.style.display = 'none';
         if (gapIndicatorEl) gapIndicatorEl.style.display = 'none';
-        console.debug('[OverlayUI] Host position marker hidden - is_user_host:', this._state.is_user_host);
       }
+    } else {
+      if (userPositionMarkerEl) userPositionMarkerEl.style.display = 'none';
+      if (markerEl) markerEl.style.display = 'none';
+      if (gapIndicatorEl) gapIndicatorEl.style.display = 'none';
     }
 
     // Show sync button only for non-hosts
