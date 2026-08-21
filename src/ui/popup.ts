@@ -1269,11 +1269,20 @@ export class PopupController {
     }
 
     if (isDnd) {
-      button.textContent = '⛔';
+      button.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"></circle>
+          <line x1="5.6" y1="5.6" x2="18.4" y2="18.4"></line>
+        </svg>
+      `;
       button.title = 'Do Not Disturb';
       button.classList.add('dnd-active');
     } else {
-      button.textContent = '🟢';
+      button.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"></circle>
+        </svg>
+      `;
       button.title = 'Available';
       button.classList.remove('dnd-active');
     }
@@ -1299,9 +1308,9 @@ export class PopupController {
           this._updateDndButtonDisplay(dndToggleBtn, newDnd);
 
           if (newDnd) {
-            toastManager.show('⛔ Do Not Disturb');
+            toastManager.show('Do Not Disturb enabled');
           } else {
-            toastManager.show('🟢 Available');
+            toastManager.show('Available mode enabled');
           }
 
           await this.refreshFriends();
@@ -1538,6 +1547,12 @@ export class PopupController {
         const tabContent = document.getElementById(tabId);
         if (tabContent) {
           tabContent.classList.add('active');
+
+          // Toggle visibility of friends tab actions (offline friends / add friend)
+          const friendsActions = document.getElementById('friends-tab-actions');
+          if (friendsActions) {
+            friendsActions.style.display = (tabId === 'friends-tab') ? 'flex' : 'none';
+          }
 
           // If this is the games tab, render it
           if (tabId === 'games-tab' && this.gamesTabController) {

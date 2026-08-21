@@ -125,9 +125,24 @@ body {
   color: var(--text-primary);
 }
 
+.btn-dnd {
+  border-color: var(--border-color);
+  background-color: transparent;
+}
+
+.btn-dnd:hover {
+  background-color: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  border-color: #22c55e;
+}
+
 .btn-dnd.dnd-active {
+  border-color: rgba(239, 68, 68, 0.5);
+  background-color: transparent;
+}
+
+.btn-dnd.dnd-active:hover {
+  background-color: var(--bg-hover, rgba(255, 255, 255, 0.08));
   border-color: #ef4444;
-  background-color: rgba(239, 68, 68, 0.15);
 }
 
 .friend-status.dnd-status {
@@ -2000,23 +2015,24 @@ body.settings-open .popup-container {
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
   flex-shrink: 0;
-  padding-right: 8px;
+  padding: 0 8px 0 0;
 }
 
 .tab-buttons {
   display: flex;
-  flex: 1;
+  gap: 0;
 }
 
 .tab-actions {
   display: flex;
   align-items: center;
   gap: 4px;
+  margin-left: auto;
 }
 
 .tab-button {
-  flex: 1;
-  padding: 8px 12px;
+  flex: initial;
+  padding: 8px 14px;
   border: none;
   background: transparent;
   color: var(--text-tertiary);
@@ -2030,7 +2046,7 @@ body.settings-open .popup-container {
 
 .tab-button:hover {
   color: var(--text-primary);
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-hover, rgba(255, 255, 255, 0.04));
 }
 
 .tab-button.active {
