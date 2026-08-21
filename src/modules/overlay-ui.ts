@@ -793,23 +793,26 @@ export class OverlayUI {
     }
     this._eventListenersSetup = true;
 
-    // Discovery listener - show overlay if there is an active session (2+ members) or if pinned
+    // Discovery listener - wakes overlay on user activity during co-watch session (or if pinned)
     if (!this.initialMouseMoveListener && this.container) {
+      let lastWakeTime = 0;
       this.initialMouseMoveListener = (e: MouseEvent) => {
         if (!this.container) return;
 
         const hasSession = (this._state.session_members?.length || 0) >= 2;
         if (!hasSession && !this._state.pinned) return;
 
-        const rect = this.container.getBoundingClientRect();
-        const isInsideOverlay = rect && rect.width > 0 && rect.height > 0 &&
-                         e.clientX >= rect.left && e.clientX <= rect.right &&
-                         e.clientY >= rect.top && e.clientY <= rect.bottom;
-        // Also allow waking up by hovering near top-right default anchor zone
-        const isDefaultAnchorZone = (e.clientX >= window.innerWidth - 350 && e.clientY <= 250);
+        const now = Date.now();
+        if (now - lastWakeTime < 80) return; // Throttle to avoid excessive execution
+        lastWakeTime = now;
 
-        if (isInsideOverlay || isDefaultAnchorZone) {
-          // Cancel any pending fade-out or hide timers whenever mouse is inside overlay or anchor zone
+        const rect = this.container.getBoundingClientRect();
+        const isDirectlyOverOverlay = rect && rect.width > 0 && rect.height > 0 &&
+          e.clientX >= rect.left && e.clientX <= rect.right &&
+          e.clientY >= rect.top && e.clientY <= rect.bottom;
+
+        if (isDirectlyOverOverlay || this._state.pinned) {
+          // Hovering directly over overlay or pinned: keep fully open, cancel any fade
           if (this.hideTimer) {
             clearTimeout(this.hideTimer);
             this.hideTimer = null;
@@ -818,11 +821,15 @@ export class OverlayUI {
             clearTimeout(this.fadeTimeoutId);
             this.fadeTimeoutId = null;
           }
-
-          // Show on hover whenever mouse enters overlay or top-right discovery zone
           if (this.container.classList.contains('hidden') || this.container.classList.contains('fading-out')) {
             this.show();
           }
+        } else {
+          // Mouse moving on page while co-watching: wake overlay and reset 3s inactivity fade timer
+          if (this.container.classList.contains('hidden') || this.container.classList.contains('fading-out')) {
+            this.show();
+          }
+          this.startFadeOut();
         }
       };
       document.addEventListener('mousemove', this.initialMouseMoveListener);
