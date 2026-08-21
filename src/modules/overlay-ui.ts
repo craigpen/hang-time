@@ -147,7 +147,7 @@ export class OverlayUI {
           border: 1px solid rgba(255, 255, 255, 0.12);
           border-radius: 12px;
           box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
-          z-index: 9999;
+          z-index: 2147483647;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
           color: white;
           display: flex;
@@ -1347,17 +1347,6 @@ export class OverlayUI {
       this.userId = newState.user_uuid;
     }
 
-    // Detect what specific components need re-rendering
-    const messagesChanged = newState.messages !== undefined && newState.messages !== this._state.messages;
-    const structureChanged = (
-      (newState.session_members !== undefined && newState.session_members !== this._state.session_members) ||
-      (newState.watching_together !== undefined && newState.watching_together !== this._state.watching_together) ||
-      (newState.host_nickname !== undefined && newState.host_nickname !== this._state.host_nickname) ||
-      (newState.host_uuid !== undefined && newState.host_uuid !== this._state.host_uuid) ||
-      (newState.is_user_host !== undefined && newState.is_user_host !== this._state.is_user_host) ||
-      (newState.co_watcher_activities !== undefined && newState.co_watcher_activities !== this._state.co_watcher_activities)
-    );
-
     // Preserve local client state (pinned, opacity, visible) if not explicitly overridden by incoming payload
     const preservedPinned = this._state.pinned;
     const preservedOpacity = this._state.opacity;
@@ -1375,18 +1364,7 @@ export class OverlayUI {
     if (this._state.session_members.length === 0) {
       this.hide();
     } else {
-      // Guard: only render if overlay is in DOM
-      if (!this.container || !this.container.parentElement) {
-        return;
-      }
-      if (structureChanged) {
-        this.renderHostRow();
-        this.renderGuestRow();
-      }
-      if (messagesChanged) {
-        this.renderMessages();
-      }
-      this.renderHeader();
+      this.render();
     }
   }
 
@@ -1708,11 +1686,14 @@ export class OverlayUI {
     }
 
     // Build host role row: label + pill + inline title
-    container.innerHTML = `
+    const hostHtml = `
       <span class="overlay-role-label">HOST</span>
       <div class="attendee-chip" style="background: ${hostColor}; flex-shrink: 0;"><span>${hostName}</span></div>
       ${mediaHtml}
     `;
+    if (container.innerHTML !== hostHtml) {
+      container.innerHTML = hostHtml;
+    }
   }
 
   /**
@@ -1766,12 +1747,17 @@ export class OverlayUI {
     }
 
     if (chips.length > 0) {
-      container.innerHTML = `
+      const guestHtml = `
         <span class="overlay-role-label">GUESTS</span>
         <div style="display: flex; gap: 4px; flex-wrap: wrap; align-items: center;">${chips.join('')}</div>
       `;
+      if (container.innerHTML !== guestHtml) {
+        container.innerHTML = guestHtml;
+      }
     } else {
-      container.innerHTML = '';
+      if (container.innerHTML !== '') {
+        container.innerHTML = '';
+      }
     }
   }
 
@@ -1953,14 +1939,20 @@ export class OverlayUI {
     }
 
     if (this._state.messages.length === 0) {
-      container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 12px 0;">No messages yet</div>';
+      const emptyHtml = '<div style="text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 12px 0;">No messages yet</div>';
+      if (container.innerHTML !== emptyHtml) {
+        container.innerHTML = emptyHtml;
+      }
       return;
     }
 
     const validMessages = this._state.messages.filter(msg => msg && msg.content);
 
     if (validMessages.length === 0) {
-      container.innerHTML = '<div style="text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 12px 0;">No messages yet</div>';
+      const emptyHtml = '<div style="text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 12px 0;">No messages yet</div>';
+      if (container.innerHTML !== emptyHtml) {
+        container.innerHTML = emptyHtml;
+      }
       return;
     }
 
@@ -2005,11 +1997,13 @@ export class OverlayUI {
       `;
     }
 
-    container.innerHTML = html;
+    if (container.innerHTML !== html) {
+      container.innerHTML = html;
 
-    // Auto-scroll to bottom
-    if (container.scrollHeight > 0) {
-      container.scrollTop = container.scrollHeight;
+      // Auto-scroll to bottom
+      if (container.scrollHeight > 0) {
+        container.scrollTop = container.scrollHeight;
+      }
     }
   }
 
