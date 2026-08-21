@@ -3081,10 +3081,9 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
 
   // Check for notification events (invites, etc.)
   const isNotificationTag = event.tags.find((t) => t[0] === 'is_notification')?.[1];
-  const isActivityTag = event.tags.find((t) => t[0] === 'is_activity')?.[1];
   const typeTag = event.tags.find((t) => t[0] === 'type')?.[1];
 
-  console.debug(`[Background] Activity event from ${friend.local_name}: is_notification=${isNotificationTag}, type=${typeTag}, tags=${JSON.stringify(event.tags)}`);
+  console.debug(`[Background] Event from ${friend.local_name}: is_notification=${isNotificationTag}, type=${typeTag}, kind=${event.kind}`);
 
   if (isNotificationTag === 'true') {
     // Handle notification event
@@ -3205,7 +3204,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
     return;
   }
 
-  if (event.kind === 10003 || typeTag === 'bundled' || (isActivityTag === 'true' && typeTag === 'activity-state')) {
+  if (event.kind === 10003) {
     // Parse JSON array of activities
     try {
       // Check if event content is compressed
