@@ -490,11 +490,13 @@ function establishConnection(): void {
     reconnectAttempts = 0; // Reset on successful connection
     console.log('[ContentScript] ✅ Connected to background service worker');
 
-    // Send initial ping to keep service worker awake
+    // Send initial requests to keep service worker awake and hydrate overlay state immediately
     try {
       port.postMessage({ type: 'PING' });
+      port.postMessage({ type: 'GET_USER_ID' });
+      port.postMessage({ type: 'GET_OVERLAY_STATE' });
     } catch (e) {
-      // Ignore ping failures
+      // Ignore
     }
 
     // Setup message listeners for overlay updates
@@ -527,11 +529,12 @@ function establishConnection(): void {
           console.debug('[ContentScript] Received user ID:', userId);
           break;
 
+        case 'OVERLAY_STATE':
         case 'CO_WATCH_UPDATE':
-          console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE received with ' + (message.data?.messages?.length || 0) + ' messages');
+          console.log(`[ContentScript] [MESSAGE_FLOW] ${message.type} received with ${(message.data?.messages?.length || 0)} messages`);
           // Initialize overlay on-demand if it doesn't exist yet
           if (!overlayUI) {
-            console.log('[ContentScript] [MESSAGE_FLOW] CO_WATCH_UPDATE triggered lazy overlay initialization');
+            console.log(`[ContentScript] [MESSAGE_FLOW] ${message.type} triggered lazy overlay initialization`);
             overlayUI = new OverlayUI(userId || 'unknown');
             overlayUI.init();
             if (port) {
@@ -661,35 +664,6 @@ function establishConnection(): void {
             overlayUI.setState({
               user_progress: message.data.position,
             });
-          }
-          break;
-
-        case 'OVERLAY_STATE':
-          // Response to GET_OVERLAY_STATE request with current co-watch state
-          if (!overlayUI) {
-            console.log('[ContentScript] OVERLAY_STATE triggered lazy overlay initialization');
-            overlayUI = new OverlayUI(userId || 'unknown');
-            overlayUI.init();
-            if (port) {
-              overlayUI.setPort(port);
-            }
-          }
-          if (message.data) {
-            console.debug('[ContentScript] Received OVERLAY_STATE with', message.data.messages?.length || 0, 'messages');
-            if (message.data.nicknameMap) {
-              overlayUI.setNicknameMap(message.data.nicknameMap);
-            }
-            overlayUI.setState(message.data);
-            if ((message.data.session_members?.length || 0) === 0) {
-              overlayHasBeenShown = false;
-            } else if (!overlayHasBeenShown && (message.data.session_members?.length || 0) >= 2) {
-              overlayHasBeenShown = true;
-              console.debug('[ContentScript] Showing overlay from OVERLAY_STATE');
-              overlayUI.show();
-              if (!overlayUI.state.pinned) {
-                overlayUI.startFadeOut();
-              }
-            }
           }
           break;
       }

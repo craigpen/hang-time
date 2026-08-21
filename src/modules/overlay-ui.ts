@@ -799,7 +799,8 @@ export class OverlayUI {
         if (!this.container) return;
 
         const rect = this.container.getBoundingClientRect();
-        const isInsideOverlay = e.clientX >= rect.left && e.clientX <= rect.right &&
+        const isInsideOverlay = rect && rect.width > 0 && rect.height > 0 &&
+                         e.clientX >= rect.left && e.clientX <= rect.right &&
                          e.clientY >= rect.top && e.clientY <= rect.bottom;
         // Also allow waking up by hovering near top-right default anchor zone
         const isDefaultAnchorZone = (e.clientX >= window.innerWidth - 350 && e.clientY <= 250);
@@ -814,11 +815,17 @@ export class OverlayUI {
             clearTimeout(this.fadeTimeoutId);
             this.fadeTimeoutId = null;
           }
-          // Only show on hover if there's an active co-watch session (2+ members)
-          if (this._state.session_members?.length >= 2) {
-            if (this.container.classList.contains('hidden') || this.container.classList.contains('fading-out')) {
-              this.show();
-            }
+
+          // Proactively request latest overlay state from background if members not populated
+          if ((this._state.session_members?.length || 0) < 2 && this.port) {
+            try {
+              this.port.postMessage({ type: 'GET_OVERLAY_STATE' });
+            } catch (e) {}
+          }
+
+          // Show on hover whenever mouse enters overlay or top-right discovery zone
+          if (this.container.classList.contains('hidden') || this.container.classList.contains('fading-out')) {
+            this.show();
           }
         }
       };
@@ -839,10 +846,7 @@ export class OverlayUI {
           clearTimeout(this.fadeTimeoutId);
           this.fadeTimeoutId = null;
         }
-        // Only show on hover if there's an active co-watch session (2+ members)
-        if (this._state.session_members?.length >= 2) {
-          this.show();
-        }
+        this.show();
       });
 
       this.container.addEventListener('mousemove', (_e) => {
