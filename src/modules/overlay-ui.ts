@@ -900,12 +900,6 @@ export class OverlayUI {
           if (this.container.classList.contains('hidden') || this.container.classList.contains('fading-out')) {
             this.show();
           }
-        } else {
-          // Mouse moving on page while co-watching: wake overlay and reset 3s inactivity fade timer
-          if (this.container.classList.contains('hidden') || this.container.classList.contains('fading-out')) {
-            this.show();
-          }
-          this.startFadeOut();
         }
       };
       document.addEventListener('mousemove', this.initialMouseMoveListener);
