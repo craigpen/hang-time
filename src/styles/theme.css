@@ -5,6 +5,9 @@
 
 :root {
   color-scheme: dark light;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* ============================================================================
@@ -23,8 +26,8 @@
 
   /* Text Colors */
   --text-primary: #e0e6f0;
-  --text-secondary: #8898b8;
-  --text-tertiary: #6b7a94;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #8292ab;
 
   /* Accent Colors */
   --accent-primary: #7eb8f7;
@@ -56,7 +59,7 @@
   --input-bg: #0f1219;
   --input-border: #2a3045;
   --input-focus: #7eb8f7;
-  --input-placeholder: #6b7a94;
+  --input-placeholder: #8292ab;
 }
 
 /* ============================================================================
@@ -76,7 +79,7 @@
     /* Text Colors */
     --text-primary: #0f172a;
     --text-secondary: #475569;
-    --text-tertiary: #94a3b8;
+    --text-tertiary: #64748b;
 
     /* Accent Colors */
     --accent-primary: #1a6fb5;
@@ -108,7 +111,7 @@
     --input-bg: #ffffff;
     --input-border: #cbd5e1;
     --input-focus: #1a6fb5;
-    --input-placeholder: #94a3b8;
+    --input-placeholder: #64748b;
   }
 }
 
@@ -124,7 +127,7 @@
   /* Text Colors */
   --text-primary: #0f172a;
   --text-secondary: #475569;
-  --text-tertiary: #94a3b8;
+  --text-tertiary: #64748b;
 
   /* Accent Colors */
   --accent-primary: #1a6fb5;
@@ -156,7 +159,7 @@
   --input-bg: #ffffff;
   --input-border: #cbd5e1;
   --input-focus: #1a6fb5;
-  --input-placeholder: #94a3b8;
+  --input-placeholder: #64748b;
 }
 
 /* ============================================================================

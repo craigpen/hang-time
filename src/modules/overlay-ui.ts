@@ -146,9 +146,12 @@ export class OverlayUI {
           -webkit-backdrop-filter: blur(16px);
           border: 1px solid rgba(255, 255, 255, 0.12);
           border-radius: 12px;
-          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.14);
           z-index: 2147483647;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility;
           color: white;
           display: flex;
           flex-direction: column;
@@ -235,9 +238,9 @@ export class OverlayUI {
         .overlay-role-label {
           font-size: 10px;
           font-weight: 700;
-          letter-spacing: 0.6px;
+          letter-spacing: 0.8px;
           text-transform: uppercase;
-          color: rgba(255, 255, 255, 0.45);
+          color: rgba(255, 255, 255, 0.65);
           min-width: 44px;
           flex-shrink: 0;
         }
@@ -307,12 +310,14 @@ export class OverlayUI {
           font-size: 10px;
           font-weight: 600;
           font-variant-numeric: tabular-nums;
-          color: rgba(255, 255, 255, 0.6);
+          color: rgba(255, 255, 255, 0.75);
           white-space: nowrap;
           line-height: 22px;
           height: 22px;
+          min-width: 28px;
           display: inline-flex;
           align-items: center;
+          justify-content: flex-end;
         }
 
         #progress-sync-button {
@@ -464,8 +469,8 @@ export class OverlayUI {
         }
 
         .icon-button {
-          width: 20px;
-          height: 20px;
+          width: 22px;
+          height: 22px;
           padding: 0;
           background: transparent;
           border: none;
@@ -482,6 +487,11 @@ export class OverlayUI {
           background: transparent;
           border: none;
           color: white;
+          transform: scale(1.08);
+        }
+
+        .icon-button:active {
+          transform: scale(0.94);
         }
 
         #pin-button {
@@ -564,9 +574,9 @@ export class OverlayUI {
           background: rgba(16, 185, 129, 0.15);
           border: 1px solid rgba(16, 185, 129, 0.3);
           color: #34d399;
-          border-radius: 6px;
-          width: 22px;
-          height: 22px;
+          border-radius: 7px;
+          width: 26px;
+          height: 26px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -580,7 +590,11 @@ export class OverlayUI {
           background: rgba(16, 185, 129, 0.3);
           border-color: rgba(16, 185, 129, 0.6);
           color: #10b981;
-          transform: scale(1.05);
+          transform: scale(1.06);
+        }
+
+        .divergence-join-btn:active {
+          transform: scale(0.95);
         }
 
         #hang-time-chat-container {
