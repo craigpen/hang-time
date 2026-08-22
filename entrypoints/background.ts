@@ -64,6 +64,7 @@ let activityDetector: ActivityDetector | null = null;
 let activityPublisher: ActivityPublisher | null = null;
 let publishQueue: PublishQueue | null = null;
 const activeSubscriptions = new Map<string, void>();
+const latestFriendActivityTimestamps = new Map<string, number>();
 
 // ============================================================================
 // INITIALIZATION
@@ -3213,6 +3214,14 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
   }
 
   if (event.kind === 10003) {
+    // Monotonic timestamp check: Discard any out-of-order or stale events replayed by relays
+    const currentLatest = Math.max(friend.last_event_created_at || 0, latestFriendActivityTimestamps.get(friend.uuid) || 0);
+    if (event.created_at < currentLatest) {
+      console.log(`[Background] ⏳ Discarding stale out-of-order kind-10003 event for ${friend.local_name} (event.created_at: ${event.created_at} < latest: ${currentLatest})`);
+      return;
+    }
+    latestFriendActivityTimestamps.set(friend.uuid, event.created_at);
+
     // Parse JSON array of activities
     try {
       // Check if event content is compressed
@@ -3289,10 +3298,11 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         }
       }
 
-      // Store all activities atomically, merging with existing to preserve local metadata
-      // Only include activities from the published event (removes closed tabs/services)
-      // When multiple activities have same service (e.g. multiple youtube tabs), keep the most recent
-      const newCurrentActivities: Partial<Record<ServiceName, Activity>> = {};
+      // Check if event is a full bundled snapshot or an individual service update
+      const isBundled = event.tags.some(t => t[0] === 'type' && t[1] === 'bundled');
+      const newCurrentActivities: Partial<Record<ServiceName, Activity>> = isBundled
+        ? {}
+        : { ...(friend.current_activities || {}) };
 
       // Process new activities, keeping only the most recent per service
       const activitiesByService: Partial<Record<ServiceName, Activity>> = {};
@@ -3341,6 +3351,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         current_activities: newCurrentActivities,
         dnd: isFriendDnd,
         last_seen: Date.now(),
+        last_event_created_at: event.created_at,
       });
       console.log(`[Background] ✅ Stored ${Object.keys(newCurrentActivities).length} activities for ${friend.local_name} (DND: ${isFriendDnd})`);
 

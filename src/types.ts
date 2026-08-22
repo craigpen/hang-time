@@ -144,6 +144,7 @@ export interface Friend {
   initiated_by_me?: boolean; // true if we sent the friend request, false if they sent it, undefined for active friends
   discord_info?: string; // Discord server invite link for coordination
   dnd?: boolean; // True if friend is currently in Do Not Disturb mode
+  last_event_created_at?: number; // Latest Nostr event created_at timestamp processed for this friend
 }
 
 export interface FriendList extends Array<Friend> {}
