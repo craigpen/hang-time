@@ -27,9 +27,9 @@
   --text-tertiary: #6b7a94;
 
   /* Accent Colors */
-  --accent-primary: #a855f7;
-  --accent-secondary: #9333ea;
-  --accent-hover: #c084fc;
+  --accent-primary: #7eb8f7;
+  --accent-secondary: #5b9cf6;
+  --accent-hover: #8fc5f9;
 
   /* Status Colors */
   --status-success: #10b981;
@@ -55,7 +55,7 @@
   /* Input Colors */
   --input-bg: #0f1219;
   --input-border: #2a3045;
-  --input-focus: #a855f7;
+  --input-focus: #7eb8f7;
   --input-placeholder: #6b7a94;
 }
 
@@ -79,9 +79,9 @@
     --text-tertiary: #94a3b8;
 
     /* Accent Colors */
-    --accent-primary: #9333ea;
-    --accent-secondary: #7e22ce;
-    --accent-hover: #a855f7;
+    --accent-primary: #1a6fb5;
+    --accent-secondary: #0d47a1;
+    --accent-hover: #155a9f;
 
     /* Status Colors */
     --status-success: #059669;
@@ -107,7 +107,7 @@
     /* Input Colors */
     --input-bg: #ffffff;
     --input-border: #cbd5e1;
-    --input-focus: #9333ea;
+    --input-focus: #1a6fb5;
     --input-placeholder: #94a3b8;
   }
 }
@@ -127,9 +127,9 @@
   --text-tertiary: #94a3b8;
 
   /* Accent Colors */
-  --accent-primary: #9333ea;
-  --accent-secondary: #7e22ce;
-  --accent-hover: #a855f7;
+  --accent-primary: #1a6fb5;
+  --accent-secondary: #0d47a1;
+  --accent-hover: #155a9f;
 
   /* Status Colors */
   --status-success: #059669;
@@ -155,7 +155,7 @@
   /* Input Colors */
   --input-bg: #ffffff;
   --input-border: #cbd5e1;
-  --input-focus: #9333ea;
+  --input-focus: #1a6fb5;
   --input-placeholder: #94a3b8;
 }
 
