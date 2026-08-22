@@ -346,7 +346,7 @@ export class GameLibraryManager {
       // Use nostr-tools to create and sign the event
       // Note: created_at will be refreshed by PublishQueue at actual publish time
       const event = finalizeEvent({
-        kind: 10003, // Kind 10003 replaceable activity/game-library event
+        kind: 10004, // Kind 10004 replaceable game-library event (distinct from kind 10003 activity snapshots)
         tags: [
           ['t', 'game-library'],
           ['steam-id', steamId],

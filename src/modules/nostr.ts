@@ -297,7 +297,7 @@ export class RelayConnection implements IRelayConnection {
 
       const filter = {
         authors: [identifier],
-        kinds: [10003], // Activities (replaceable event)
+        kinds: [10003, 10004], // Activities (10003) and Game Libraries (10004)
         // Note: Kind-1059 encrypted messages are handled by a separate subscription with #p filtering
         since,
       };

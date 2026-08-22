@@ -3025,10 +3025,18 @@ async function _subscribeToFriend(friendId: string): Promise<void> {
         }
 
         await _handleMessageEvent(friendIdentifier, event);
+      } else if (event.kind === 10004) {
+        // Kind-10004 replaceable game library - only process if friend is active
+        if (!isPending) {
+          const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
+          await gameLibraryManager.handleGameLibraryEvent(event);
+        } else {
+          console.debug(`[Friend] Skipping kind-10004 from pending friend ${friendIdentifier}`);
+        }
       } else if (event.kind === 10003) {
         // Kind-10003 replaceable activities - only process if friend is active
         if (!isPending) {
-          // Check if this is a game-library event (tag t=game-library)
+          // Check if this is a legacy game-library event (tag t=game-library)
           const isGameLibraryEvent = event.tags.find((t) => t[0] === 't' && t[1] === 'game-library');
 
           if (isGameLibraryEvent) {
@@ -3221,7 +3229,18 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         }
       }
 
-      const activities = JSON.parse(content) as Activity[];
+      const parsedData = JSON.parse(content);
+      if (!Array.isArray(parsedData)) {
+        console.warn('[Background] Expected array of activities in kind 10003, received non-array payload:', parsedData);
+        // Fallback: If payload is a game library event, route to GameLibraryManager
+        if (parsedData && Array.isArray(parsedData.appIds)) {
+          const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
+          await gameLibraryManager.handleGameLibraryEvent(event);
+        }
+        return;
+      }
+
+      const activities = parsedData as Activity[];
       const diagnostics = ActivityDiagnostics.getInstance(storageManager);
 
       console.log('[Background] ✅ Successfully parsed activities from event (kind 10003):', activities.map(a => ({
