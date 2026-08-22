@@ -464,12 +464,11 @@ export class OverlayUI {
         }
 
         .icon-button {
-          width: 22px;
-          height: 22px;
+          width: 20px;
+          height: 20px;
           padding: 0;
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          border-radius: 6px;
+          background: transparent;
+          border: none;
           cursor: pointer;
           display: flex;
           align-items: center;
@@ -480,14 +479,25 @@ export class OverlayUI {
         }
 
         .icon-button:hover {
-          background: rgba(255, 255, 255, 0.12);
-          border-color: rgba(255, 255, 255, 0.3);
+          background: transparent;
+          border: none;
+          color: white;
+        }
+
+        #pin-button {
+          background: transparent;
+          border: none;
+        }
+
+        #pin-button:hover {
+          background: transparent;
+          border: none;
           color: white;
         }
 
         #pin-button.pinned {
-          background: rgba(239, 68, 68, 0.2);
-          border-color: rgba(239, 68, 68, 0.5);
+          background: transparent;
+          border: none;
           color: #ef4444;
         }
 
@@ -505,6 +515,8 @@ export class OverlayUI {
           background-position: center;
           background-repeat: no-repeat;
           font-size: 0;
+          background-color: transparent;
+          border: none;
         }
 
         #discord-button:hover {
