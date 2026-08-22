@@ -43,6 +43,12 @@ All video providers implement the `VideoProvider` interface (`src/modules/provid
 | **Apple TV+** | `tv.apple.com/*/episode/*` | `video.video-tag`, `.video-title` | Web playback player |
 | **Odysee & PeerTube** | `odysee.com/*`, `peertube.*` | HTML5 `<video>`, `.claim-title` | Decentralized video platforms |
 | **Internet Archive** | `archive.org/details/*` | `.jw-video`, `#maincontent h1` | Classic movies & public domain |
+| **Jellyfin** | User-configured server URL | Native `<video>` element, `.itemName` / `.pageTitle` | Self-hosted, no DRM, stable un-hashed selectors |
+| **Plex Web** | `app.plex.tv/*` | `video[data-testid="video-element"]`, `.MetadataPosterTitle-title` | Self-hosted, no DRM |
+
+> **Why these matter**: Self-hosted media servers avoid the DRM/anti-scraping arms race that makes Crunchyroll/Disney+/Max/Prime/Hulu high-maintenance (see note above), and their userbase — people running their own media server specifically to avoid corporate streaming platforms — is an unusually strong philosophical match for a decentralized, privacy-first tool. Worth prioritizing above the DRM-heavy platforms in Phase 1, not just tacking on at the end. Jellyfin's server URL is user-supplied rather than a fixed domain match, unlike every other provider in this table — the matcher needs to account for that.
+
+> **Maintenance note**: Crunchyroll, Disney+, Prime Video, Max, and Hulu use build-hashed/dynamic CSS class names that shift on redeploy, unlike YouTube/Netflix/Twitch's comparatively stable selectors (already proven in production). Expect these five to need selector updates far more often than the "Active" row — sequence them last within Phase 1 and budget for ongoing upkeep rather than treating them as equal-effort to the rest.
 
 ---
 
@@ -123,6 +129,8 @@ Enables study groups and technical cohorts to co-watch lectures and courses toge
 ## 8. Phased Implementation Roadmap
 
 ### Phase 1: High-Volume Video & Anime (Immediate)
+- [ ] Implement `JellyfinProvider` (`src/modules/providers/jellyfin.ts`) — no DRM, stable selectors, strong philosophical fit; do first.
+- [ ] Implement `PlexProvider` (`src/modules/providers/plex.ts`).
 - [ ] Implement `CrunchyrollProvider` (`src/modules/providers/crunchyroll.ts`).
 - [ ] Implement `DisneyPlusProvider` (`src/modules/providers/disneyplus.ts`).
 - [ ] Implement `PrimeVideoProvider` (`src/modules/providers/primevideo.ts`).
