@@ -486,18 +486,18 @@ export class OverlayUI {
         }
 
         #pin-button.pinned {
-          background: rgba(168, 85, 247, 0.2);
-          border-color: rgba(168, 85, 247, 0.5);
-          color: #c084fc;
+          background: rgba(239, 68, 68, 0.2);
+          border-color: rgba(239, 68, 68, 0.5);
+          color: #ef4444;
         }
 
         #pin-button svg {
-          transition: transform 0.2s ease, fill 0.2s ease;
+          transition: fill 0.2s ease, stroke 0.2s ease;
         }
 
         #pin-button.pinned svg {
-          fill: #c084fc;
-          transform: rotate(45deg);
+          fill: #ef4444;
+          stroke: #ef4444;
         }
 
         #discord-button {
