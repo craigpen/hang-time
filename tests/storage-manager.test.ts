@@ -320,4 +320,48 @@ describe('StorageManager - New Methods', () => {
       expect(retrieved[0].metadata.episode).toBe(5);
     });
   });
+
+  // ============================================================================
+  // DECLINED INVITES & DEDUPLICATION
+  // ============================================================================
+
+  describe('Declined Invites & Deduplication', () => {
+    it('marks invite as declined and checks declined status', async () => {
+      expect(await storage.isInviteDeclined('act-factorio')).toBe(false);
+
+      await storage.markInviteDeclined('act-factorio');
+      expect(await storage.isInviteDeclined('act-factorio')).toBe(true);
+
+      const declined = await storage.getDeclinedInvites();
+      expect(declined['act-factorio']).toBeDefined();
+    });
+
+    it('prevents upserting a received invite if it was previously declined', async () => {
+      await storage.markInviteDeclined('act-factorio');
+
+      await storage.upsertReceivedInvite('act-factorio', {
+        friendId: 'friend-uuid-3',
+        sentAt: Date.now(),
+      });
+
+      const received = await storage.getReceivedInvites();
+      expect(received['act-factorio']).toBeUndefined();
+    });
+
+    it('automatically marks invite as declined when removed', async () => {
+      await storage.upsertReceivedInvite('act-steam-game', {
+        friendId: 'friend-uuid-4',
+        sentAt: Date.now(),
+      });
+
+      let received = await storage.getReceivedInvites();
+      expect(received['act-steam-game']).toBeDefined();
+
+      await storage.removeReceivedInvite('act-steam-game');
+      received = await storage.getReceivedInvites();
+      expect(received['act-steam-game']).toBeUndefined();
+
+      expect(await storage.isInviteDeclined('act-steam-game')).toBe(true);
+    });
+  });
 });

@@ -424,6 +424,7 @@ export const STORAGE_KEYS = {
   VIDEO_DATA_METRICS: 'hang_time_video_data_metrics',
   PENDING_INVITES: 'hang_time_pending_invites',
   RECEIVED_INVITES: 'hang_time_received_invites',
+  DECLINED_INVITES: 'hang_time_declined_invites',
   ACTIVITY_DIAGNOSTICS: 'hang_time_diagnostics',
   LOGS_EXPORT: 'hang_time_logs_export',
   PENDING_MESSAGES: 'hang_time_pending_messages',
@@ -466,6 +467,7 @@ export type ExtensionMessageType =
   | 'RENAME_FRIEND'
   | 'ACCEPT_FRIEND_REQUEST'
   | 'DECLINE_FRIEND_REQUEST'
+  | 'DECLINE_INVITE'
   | 'SEND_MESSAGE'
   | 'TOGGLE_SERVICE'
   | 'MUTE_FRIEND'

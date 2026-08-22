@@ -2073,6 +2073,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'SEND_INVITE':
       return _sendInvite(message.data?.['activity'], message.data?.['friendId']);
 
+    case 'DECLINE_INVITE':
+      return _declineInvite(message.data?.['activityId'], message.data?.['friendId'], message.data?.['activity']);
+
     case 'SEND_JOIN_NOTIFICATION':
       return _sendJoinNotification(message.data?.['activity'], message.data?.['friendId'], message.data?.['accepted']);
 
@@ -2860,6 +2863,9 @@ async function _subscribeToIncomingMessages(): Promise<void> {
           return;
         }
 
+        // Persist deduplication state immediately so reloads don't re-process
+        await persistEventDeduplicatorState();
+
         // Check message type tag
         const messageType = event.tags.find((t) => t[0] === 'message_type')?.[1];
 
@@ -3107,6 +3113,8 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       return;
     }
 
+    await persistEventDeduplicatorState();
+
     if (typeTag === 'friend_request') {
       // Friend request notification - prompt user to accept/decline
       const senderDisplayName = event.tags.find((t) => t[0] === 'sender_display_name')?.[1] || friend.local_name;
@@ -3120,7 +3128,7 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
         console.log(`[Background] âœ… Showing friend request notification for ${senderDisplayName}`);
       } else if (friend.state === 'active') {
         // Already friends - just log it
-        console.debug(`[Background] â„¹ï¸  Friend request from ${senderDisplayName}, but already friends (active)`);
+        console.debug(`[Background] â„¹ï¸   Friend request from ${senderDisplayName}, but already friends (active)`);
       }
 
       // Try to notify popup if it's open
@@ -3136,14 +3144,14 @@ async function _handleActivityEvent(friendIdentifier: string, event: NostrEvent)
       }
     } else if (typeTag === 'invite') {
       // First: deduplicate across relays (prevent processing same event twice)
-      const { getEventDeduplicator } = await import('../src/modules/event-deduplicator');
-      const dedup = getEventDeduplicator();
-      const isFirstTime = await dedup.checkAndMark(event.id);
+      const isInviteFirstTime = await dedup.checkAndMark(event.id);
 
-      if (!isFirstTime) {
+      if (!isInviteFirstTime) {
         console.debug(`[Background] Invite ${event.id.substring(0, 8)}... duplicate from relay, skipping`);
         return;
       }
+
+      await persistEventDeduplicatorState();
 
       // EventDeduplicator prevents duplicate processing from multiple relays
       const service = event.tags.find((t) => t[0] === 'service')?.[1] || 'an activity';
@@ -3946,6 +3954,48 @@ async function _sendInvite(activity?: any, friendUuid?: string): Promise<Extensi
     }
 
     return { success: false, error: error instanceof Error ? error.message : 'Failed to send invite' };
+  }
+}
+
+async function _declineInvite(activityId?: string, friendId?: string, activity?: any): Promise<ExtensionResponse> {
+  if (!activityId) {
+    return { success: false, error: 'activityId required' };
+  }
+
+  try {
+    console.debug(`[Background] Declining invite for activity ${activityId} from friend ${friendId || 'unknown'}`);
+    await storageManager.removeReceivedInvite(activityId);
+    await storageManager.markInviteDeclined(activityId);
+
+    // If friendId and activity provided, send a join_declined notification over Nostr
+    if (friendId) {
+      try {
+        const friendManager = getFriendManager();
+        const friend = await friendManager.getFriend(friendId);
+        if (friend) {
+          const messagingManager = getMessagingManager();
+          const activityToDecline: Activity = activity || {
+            id: activityId,
+            service: 'video-tab',
+            content: 'Activity invitation',
+            timestamp: Date.now(),
+            freshness_timestamp: Date.now(),
+            state: 'stopped',
+            metadata: {},
+          };
+          await messagingManager.sendJoinDeclined(activityToDecline, friend);
+          console.debug(`[Background] Sent join_declined notification to friend ${friend.local_name}`);
+        }
+      } catch (err) {
+        console.warn('[Background] Failed to send join_declined over Nostr:', err);
+      }
+    }
+
+    await storageManager.forceSyncNow();
+    return { success: true };
+  } catch (error) {
+    console.error('[Background] Failed to decline invite:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to decline invite' };
   }
 }
 

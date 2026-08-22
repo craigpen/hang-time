@@ -2413,16 +2413,24 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
     declineBtn.className = 'btn-secondary';
     declineBtn.textContent = 'Decline';
     declineBtn.addEventListener('click', async () => {
-      // Decline: revert button to join
+      declineBtn.disabled = true;
+      declineBtn.textContent = 'Declining...';
       if (activity.id) {
         this.pendingInvitesByActivity.delete(activity.id);
-        // Also remove from persistent storage
+        this.pendingInvitesData.delete(activity.id);
         await this.storage.removeReceivedInvite(activity.id);
+        await this.storage.forceSyncNow();
+        try {
+          await chrome.runtime.sendMessage({
+            type: 'DECLINE_INVITE',
+            data: { activityId: activity.id, friendId, activity },
+          });
+        } catch (err) {
+          console.debug('[Popup] Could not notify background of decline:', err);
+        }
         console.debug('[Popup] Declined invite for activity:', activity.id);
       }
       modal.remove();
-      // Wait a tick to ensure storage is synced before reloading
-      await new Promise(resolve => setTimeout(resolve, 50));
       await this.refreshFriends();
     });
 
@@ -2440,14 +2448,13 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       // Clear received invite from memory and storage
       if (activity.id) {
         this.pendingInvitesByActivity.delete(activity.id);
-        // Also remove from persistent storage
+        this.pendingInvitesData.delete(activity.id);
         await this.storage.removeReceivedInvite(activity.id);
+        await this.storage.forceSyncNow();
         console.debug('[Popup] Cleared received invite for activity:', activity.id);
       }
 
       modal.remove();
-      // Wait a tick to ensure storage is synced before reloading
-      await new Promise(resolve => setTimeout(resolve, 50));
       await this.refreshFriends();
     });
 

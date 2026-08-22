@@ -134,6 +134,7 @@ export class StorageManager {
         STORAGE_KEYS.VIDEO_DATA_METRICS,
         STORAGE_KEYS.PENDING_INVITES,
         STORAGE_KEYS.RECEIVED_INVITES,
+        STORAGE_KEYS.DECLINED_INVITES,
         STORAGE_KEYS.ACTIVITY_DIAGNOSTICS,
         STORAGE_KEYS.PENDING_MESSAGES,
         STORAGE_KEYS.NOTIFIED_INVITE_IDS,
@@ -869,21 +870,58 @@ export class StorageManager {
   }
 
   /**
-   * Add or update a received invite
+   * Get declined invites map (activityId -> timestamp)
+   */
+  async getDeclinedInvites(): Promise<Record<string, number>> {
+    return this.get<Record<string, number>>(STORAGE_KEYS.DECLINED_INVITES, {});
+  }
+
+  /**
+   * Mark an invite as declined with timestamp
+   */
+  async markInviteDeclined(activityId: string): Promise<void> {
+    const declined = await this.getDeclinedInvites();
+    declined[activityId] = Date.now();
+    await this.set(STORAGE_KEYS.DECLINED_INVITES, declined);
+  }
+
+  /**
+   * Check if an invite was recently declined (within last 24 hours)
+   */
+  async isInviteDeclined(activityId: string): Promise<boolean> {
+    const declined = await this.getDeclinedInvites();
+    const timestamp = declined[activityId];
+    if (!timestamp) return false;
+    // Expire declined record after 24 hours
+    if (Date.now() - timestamp > 24 * 60 * 60 * 1000) {
+      delete declined[activityId];
+      await this.set(STORAGE_KEYS.DECLINED_INVITES, declined);
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Add or update a received invite (skips if invite was declined)
    */
   async upsertReceivedInvite(activityId: string, invite: any): Promise<void> {
+    if (await this.isInviteDeclined(activityId)) {
+      console.debug(`[Storage] Skipping upsert for declined invite: ${activityId}`);
+      return;
+    }
     const invites = await this.getReceivedInvites();
     invites[activityId] = invite;
     await this.setReceivedInvites(invites);
   }
 
   /**
-   * Remove a received invite
+   * Remove a received invite and mark as declined
    */
   async removeReceivedInvite(activityId: string): Promise<void> {
     const invites = await this.getReceivedInvites();
     delete invites[activityId];
     await this.setReceivedInvites(invites);
+    await this.markInviteDeclined(activityId);
   }
 
   /**
