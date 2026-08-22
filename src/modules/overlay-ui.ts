@@ -215,6 +215,14 @@ export class OverlayUI {
           text-overflow: ellipsis;
           color: rgba(255, 255, 255, 0.95);
           flex: 1;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .overlay-brand-icon {
+          flex-shrink: 0;
+          display: block;
         }
 
         .overlay-role-row {
@@ -651,7 +659,14 @@ export class OverlayUI {
 
       <div class="overlay-header">
         <div class="header-top">
-          <div class="video-title" id="overlay-title">Hang Time</div>
+          <div class="video-title" id="overlay-title">
+            <svg viewBox="0 0 16 16" width="14" height="14" class="overlay-brand-icon">
+              <rect x="0.5" y="0.5" width="4.5" height="15" rx="2.25" fill="#a855f7" />
+              <rect x="11" y="0.5" width="4.5" height="15" rx="2.25" fill="#a855f7" />
+              <polygon points="5,2.5 12,8 5,13.5" fill="#10b981" />
+            </svg>
+            <span id="overlay-title-text">Hang Time</span>
+          </div>
           <div class="icon-buttons">
             <input type="range" min="10" max="100" value="80" class="opacity-slider" id="opacity-slider" title="Overlay opacity">
             <button class="icon-button" id="discord-button" title="Open Discord with host"></button>
@@ -1399,9 +1414,9 @@ export class OverlayUI {
    * Render header (title + progress bar)
    */
   private renderHeader(): void {
-    const titleEl = document.getElementById('overlay-title');
-    if (titleEl && titleEl.textContent !== 'Hang Time') {
-      titleEl.textContent = 'Hang Time';
+    const titleTextEl = document.getElementById('overlay-title-text');
+    if (titleTextEl && titleTextEl.textContent !== 'Hang Time') {
+      titleTextEl.textContent = 'Hang Time';
     }
 
     const fillEl = document.getElementById('progress-bar-fill') as HTMLElement;
