@@ -330,6 +330,32 @@ describe('Session Model & Divergence', () => {
       expect(detected).toBeNull();
     });
 
+    it('does not create co-watch session for non-video activities like steam games', async () => {
+      const now = Date.now();
+      const steamActivityId = 'steam-game-factorio';
+
+      const userSteamActivity = createActivity(steamActivityId, 'steam-api', 'Factorio', now - 60000, 0, now);
+      await storage.setMyActivities({ [steamActivityId]: userSteamActivity });
+
+      const friendBob: Friend = {
+        uuid: 'friend-bob-uuid',
+        pubkey: 'bobpubkey',
+        local_name: 'Bob',
+        added_at: now - 100000,
+        last_seen: now,
+        muted: false,
+        hidden_services: [],
+        state: 'active',
+        current_activities: {
+          'steam-api': createActivity(steamActivityId, 'steam-api', 'Factorio', now - 30000, 0, now),
+        },
+      };
+      await storage.setFriends([friendBob]);
+
+      const detected = await detector.detectCoWatchSession();
+      expect(detected).toBeNull();
+    });
+
     it('createOrUpdateUserSession appends new members without removing existing ones during divergence', async () => {
       const now = Date.now();
 

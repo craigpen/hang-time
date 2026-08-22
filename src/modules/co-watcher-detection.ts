@@ -15,6 +15,14 @@ export interface ActivityCoWatchSession {
   detected_at: number;
 }
 
+// Set of browser media services eligible for synchronized video co-watching
+export const CO_WATCHABLE_SERVICES = new Set<string>([
+  'youtube-tab',
+  'netflix-tab',
+  'twitch-tab',
+  'video-tab',
+]);
+
 export class CoWatcherDetector {
   private detectCallCount = 0;
 
@@ -71,19 +79,19 @@ export class CoWatcherDetector {
         }
       }
 
-      // Find matching activity ID across all user and friend activities
+      // Find matching activity ID across co-watchable video/media services
       let matchedActivityId: string | null = null;
 
       for (const userActivity of Object.values(myActivities)) {
-        if (!userActivity?.id) continue;
+        if (!userActivity?.id || !CO_WATCHABLE_SERVICES.has(userActivity.service)) continue;
 
         for (const friend of friends) {
           if (!friend.current_activities || friend.dnd || friend.muted) continue;
 
           for (const friendActivity of Object.values(friend.current_activities)) {
-            if (friendActivity?.dnd || friendActivity?.metadata?.dnd) continue;
+            if (!friendActivity || friendActivity.dnd || friendActivity.metadata?.dnd || !CO_WATCHABLE_SERVICES.has(friendActivity.service)) continue;
 
-            if (friendActivity?.id === userActivity.id) {
+            if (friendActivity.id === userActivity.id) {
               console.log(`[CoWatcher] [MESSAGE_FLOW] ✅ Match found: ${userActivity.service} (${userActivity.id}) with ${friend.local_name}`);
               matchedActivityId = userActivity.id;
               break;

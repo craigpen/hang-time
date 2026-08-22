@@ -584,6 +584,25 @@ function establishConnection(): void {
         case 'OVERLAY_STATE':
         case 'CO_WATCH_UPDATE':
           console.log(`[ContentScript] [MESSAGE_FLOW] ${message.type} received with ${(message.data?.messages?.length || 0)} messages`);
+          if (!message.data) break;
+
+          const sessionActivityId = message.data.activity_id;
+          const userCurrentActivityId = tracker?.currentActivityId;
+          const sessionMembers = message.data.session_members || [];
+
+          // The overlay is exclusively for active video co-watching on the matching tab
+          const isMatchingTab = Boolean(userCurrentActivityId && sessionActivityId && userCurrentActivityId === sessionActivityId);
+          const isSessionActive = (sessionMembers.length || 0) >= 2;
+
+          if (!isMatchingTab || !isSessionActive) {
+            // Tab does not match the active co-watch session or session is inactive - hide overlay if present
+            if (overlayUI) {
+              overlayUI.hide(true);
+              overlayHasBeenShown = false;
+            }
+            break;
+          }
+
           // Initialize overlay on-demand if it doesn't exist yet
           if (!overlayUI) {
             console.log(`[ContentScript] [MESSAGE_FLOW] ${message.type} triggered lazy overlay initialization`);
@@ -632,18 +651,9 @@ function establishConnection(): void {
               overlayUI.setNicknameMap(nicknameMapObj);
             }
 
-            // Detect if user has diverged to a different activity than the session
-            const sessionActivityId = message.data.activity_id;
-            const userCurrentActivityId = tracker?.currentActivityId;
-            const hasUserDiverged = userCurrentActivityId && userCurrentActivityId !== sessionActivityId;
-
-            // If user diverged, use their current activity as the "primary" activity for display
-            // This ensures all co-watchers show as guests with their activities relative to user's current video
-            const displayActivityId = hasUserDiverged ? userCurrentActivityId : sessionActivityId;
-
             // Only update messages if we received them from backend or have no current messages
             const stateUpdate: Partial<OverlayState> = {
-              activity_id: displayActivityId,
+              activity_id: sessionActivityId,
               host_nickname: message.data.host_nickname,
               watching_together: message.data.watching_together || [],
               session_members: message.data.session_members || [],

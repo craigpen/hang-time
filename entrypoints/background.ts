@@ -27,7 +27,7 @@ import { getActivityVerb, generateActivityId } from '../src/modules/activity-uti
 import { ActivityDiagnostics } from '../src/modules/activity-diagnostics';
 import { initializeFileLogger, getFileLogger } from '../src/modules/file-logger';
 import { PublishQueue } from '../src/modules/publish-queue';
-import { initializeCoWatcherDetector, getCoWatcherDetector } from '../src/modules/co-watcher-detection';
+import { initializeCoWatcherDetector, getCoWatcherDetector, CO_WATCHABLE_SERVICES } from '../src/modules/co-watcher-detection';
 import { initializeSyncHandler, getSyncHandler } from '../src/modules/sync-handler';
 import { Friend, NostrEvent, ExtensionMessage, ExtensionResponse, ServiceName, DEFAULT_RELAY_URLS, Activity } from '../src/types';
 
@@ -844,7 +844,8 @@ function _startCoWatcherDetectionCycle(): void {
           if (memberId === selfUuid) {
             if (!userProfile?.dnd_enabled) {
               const myActivities = await storageManager.getMyActivities();
-              const myAct = Object.values(myActivities || {})[0];
+              const myAct = Object.values(myActivities || {}).find(a => a && a.id === persistentSession?.activity_id) ||
+                            Object.values(myActivities || {}).find(a => a && CO_WATCHABLE_SERVICES.has(a.service));
               const lastMeasuredAt = myAct?.metadata?.progress_measured_at || myAct?.timestamp;
               if (lastMeasuredAt && (Date.now() - lastMeasuredAt) < PURGE_AFTER_MS) {
                 validMembers.push(memberId);
@@ -854,7 +855,8 @@ function _startCoWatcherDetectionCycle(): void {
             const friend = friendMap.get(memberId);
             const isFriendDnd = friend?.dnd || Object.values(friend?.current_activities || {}).some(a => a?.dnd || a?.metadata?.dnd);
             if (friend && !isFriendDnd && !friend.muted) {
-              const friendAct = friend.current_activities ? Object.values(friend.current_activities)[0] : null;
+              const friendAct = Object.values(friend.current_activities || {}).find(a => a && a.id === persistentSession?.activity_id) ||
+                                Object.values(friend.current_activities || {}).find(a => a && CO_WATCHABLE_SERVICES.has(a.service));
               const lastMeasuredAt = friendAct?.metadata?.progress_measured_at || friendAct?.timestamp;
               if (lastMeasuredAt && (Date.now() - lastMeasuredAt) < PURGE_AFTER_MS) {
                 validMembers.push(memberId);
