@@ -1991,7 +1991,14 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
     if (steamToggleVisibility) {
       steamToggleVisibility.addEventListener('click', () => {
         if (steamApiKeyInput) {
-          steamApiKeyInput.type = steamApiKeyInput.type === 'password' ? 'text' : 'password';
+          const isPassword = steamApiKeyInput.type === 'password';
+          steamApiKeyInput.type = isPassword ? 'text' : 'password';
+          const eyeOpen = steamToggleVisibility.querySelector('.eye-open-icon') as HTMLElement;
+          const eyeClosed = steamToggleVisibility.querySelector('.eye-closed-icon') as HTMLElement;
+          if (eyeOpen && eyeClosed) {
+            eyeOpen.style.display = isPassword ? 'none' : 'block';
+            eyeClosed.style.display = isPassword ? 'block' : 'none';
+          }
         }
       });
     }
