@@ -586,23 +586,6 @@ function establishConnection(): void {
           console.log(`[ContentScript] [MESSAGE_FLOW] ${message.type} received with ${(message.data?.messages?.length || 0)} messages`);
           if (!message.data) break;
 
-          const sessionActivityId = message.data.activity_id;
-          const userCurrentActivityId = tracker?.currentActivityId;
-          const sessionMembers = message.data.session_members || [];
-
-          // The overlay is exclusively for active video co-watching on the matching tab
-          const isMatchingTab = Boolean(userCurrentActivityId && sessionActivityId && userCurrentActivityId === sessionActivityId);
-          const isSessionActive = (sessionMembers.length || 0) >= 2;
-
-          if (!isMatchingTab || !isSessionActive) {
-            // Tab does not match the active co-watch session or session is inactive - hide overlay if present
-            if (overlayUI) {
-              overlayUI.hide(true);
-              overlayHasBeenShown = false;
-            }
-            break;
-          }
-
           // Initialize overlay on-demand if it doesn't exist yet
           if (!overlayUI) {
             console.log(`[ContentScript] [MESSAGE_FLOW] ${message.type} triggered lazy overlay initialization`);
@@ -611,6 +594,22 @@ function establishConnection(): void {
             if (port) {
               overlayUI.setPort(port);
             }
+          }
+
+          const sessionActivityId = message.data.activity_id;
+          const userCurrentActivityId = tracker?.currentActivityId;
+          const sessionMembers = message.data.session_members || [];
+
+          // The overlay is for active video co-watching on the matching tab (or persistent if pinned)
+          const isMatchingTab = Boolean(userCurrentActivityId && sessionActivityId && userCurrentActivityId === sessionActivityId);
+          const isSessionActive = (sessionMembers.length || 0) >= 2;
+          const isPinned = overlayUI.state.pinned;
+
+          if (!isPinned && (!isMatchingTab || !isSessionActive)) {
+            // Tab does not match the active co-watch session or session is inactive - hide overlay if not pinned
+            overlayUI.hide();
+            overlayHasBeenShown = false;
+            break;
           }
           // Update overlay with co-watch data
           if (message.data) {

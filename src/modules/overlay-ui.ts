@@ -819,9 +819,11 @@ export class OverlayUI {
           if (pinButton) {
             if (this._state.pinned) {
               pinButton.classList.add('pinned');
+              pinButton.setAttribute('title', 'Unpin overlay');
               this.show();
             } else {
               pinButton.classList.remove('pinned');
+              pinButton.setAttribute('title', 'Pin overlay');
             }
           }
         }
@@ -1343,8 +1345,10 @@ export class OverlayUI {
     if (button) {
       if (this._state.pinned) {
         button.classList.add('pinned');
+        button.setAttribute('title', 'Unpin overlay');
       } else {
         button.classList.remove('pinned');
+        button.setAttribute('title', 'Pin overlay');
       }
     }
     if (this._state.pinned) {
@@ -1359,7 +1363,9 @@ export class OverlayUI {
     storageManager.getUserProfile().then((profile) => {
       if (profile) {
         profile.overlay_pinned = this._state.pinned;
-        storageManager.setUserProfile(profile).catch(console.error);
+        storageManager.setUserProfile(profile).then(() => {
+          storageManager.forceSyncNow().catch(console.error);
+        }).catch(console.error);
       }
     }).catch(console.error);
     console.debug('[OverlayUI] Pin toggled:', this._state.pinned);
@@ -1461,6 +1467,17 @@ export class OverlayUI {
     const titleTextEl = document.getElementById('overlay-title-text');
     if (titleTextEl && titleTextEl.textContent !== 'Hang Time') {
       titleTextEl.textContent = 'Hang Time';
+    }
+
+    const pinBtn = this.container?.querySelector('#pin-button');
+    if (pinBtn) {
+      if (this._state.pinned) {
+        pinBtn.classList.add('pinned');
+        pinBtn.setAttribute('title', 'Unpin overlay');
+      } else {
+        pinBtn.classList.remove('pinned');
+        pinBtn.setAttribute('title', 'Pin overlay');
+      }
     }
 
     const fillEl = document.getElementById('progress-bar-fill') as HTMLElement;
