@@ -476,9 +476,18 @@ export class OverlayUI {
         }
 
         #pin-button.pinned {
-          background: rgba(245, 158, 11, 0.2);
-          border-color: rgba(245, 158, 11, 0.5);
-          color: #fbbf24;
+          background: rgba(168, 85, 247, 0.2);
+          border-color: rgba(168, 85, 247, 0.5);
+          color: #c084fc;
+        }
+
+        #pin-button svg {
+          transition: transform 0.2s ease, fill 0.2s ease;
+        }
+
+        #pin-button.pinned svg {
+          fill: #c084fc;
+          transform: rotate(45deg);
         }
 
         #discord-button {
@@ -670,7 +679,12 @@ export class OverlayUI {
           <div class="icon-buttons">
             <input type="range" min="10" max="100" value="80" class="opacity-slider" id="opacity-slider" title="Overlay opacity">
             <button class="icon-button" id="discord-button" title="Open Discord with host"></button>
-            <button class="icon-button" id="pin-button" title="Pin overlay">📌</button>
+            <button class="icon-button" id="pin-button" title="Pin overlay">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="17" x2="12" y2="22"></line>
+                <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+              </svg>
+            </button>
           </div>
         </div>
 
