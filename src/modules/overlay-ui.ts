@@ -4,6 +4,7 @@
  */
 
 import { storageManager } from './storage.js';
+import { CO_WATCHABLE_SERVICES } from './co-watcher-detection.js';
 
 export interface OverlayState {
   visible: boolean;
@@ -1590,14 +1591,15 @@ export class OverlayUI {
     // Build inline media title & icon
     let mediaHtml = '';
     const activity = this._state.co_watcher_activities?.[hostUuid];
-    if (activity && activity.content) {
+    if (activity && activity.content && activity.service && CO_WATCHABLE_SERVICES.has(activity.service)) {
       const serviceMap: Record<string, string> = {
         'youtube': 'youtube.png',
         'youtube-tab': 'youtube.png',
-        'spotify': 'spotify.png',
         'twitch': 'twitch.png',
+        'twitch-tab': 'twitch.png',
         'netflix': 'netflix.png',
-        'steam': 'steam.png',
+        'netflix-tab': 'netflix.png',
+        'video-tab': 'video.png',
       };
 
       let iconHtml = '';
@@ -1726,7 +1728,7 @@ export class OverlayUI {
 
       const color = this.getParticipantColor(uuid);
       const activity = this._state.co_watcher_activities?.[uuid];
-      const isWatching = activity && activity.activity_id;
+      const isWatching = activity && activity.activity_id && activity.service && CO_WATCHABLE_SERVICES.has(activity.service);
 
       let row: string;
       if (isWatching) {
@@ -1734,10 +1736,11 @@ export class OverlayUI {
         const serviceMap: Record<string, string> = {
           'youtube': 'youtube.png',
           'youtube-tab': 'youtube.png',
-          'spotify': 'spotify.png',
           'twitch': 'twitch.png',
+          'twitch-tab': 'twitch.png',
           'netflix': 'netflix.png',
-          'steam': 'steam.png',
+          'netflix-tab': 'netflix.png',
+          'video-tab': 'video.png',
         };
         let iconHtml = '';
         if (activity.service && serviceMap[activity.service]) {

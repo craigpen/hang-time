@@ -1203,10 +1203,8 @@ function _startCoWatcherDetectionCycle(): void {
             console.log('[Background] [GET_OVERLAY_STATE] selfUuid:', selfUuid);
             console.log('[Background] [GET_OVERLAY_STATE] myActivities keys:', Object.keys(myActivities || {}));
             if (selfUuid) {
-              const myActivitiesArray = Object.values(myActivities || {});
-              console.log('[Background] [GET_OVERLAY_STATE] myActivitiesArray.length:', myActivitiesArray.length);
-              const userCurrentActivity = myActivitiesArray.length > 0 ? myActivitiesArray[0] : undefined;
-              console.log('[Background] [GET_OVERLAY_STATE] userCurrentActivity found:', !!userCurrentActivity, userCurrentActivity ? {id: userCurrentActivity.id, service: userCurrentActivity.service} : 'N/A');
+              const userCurrentActivity = Object.values(myActivities || {}).find(a => a && a.id === coWatchSession.activity_id) ||
+                                          Object.values(myActivities || {}).find(a => a && CO_WATCHABLE_SERVICES.has(a.service));
               if (userCurrentActivity) {
                 coWatcherActivities[selfUuid] = {
                   activity_id: userCurrentActivity.id || '',
@@ -1240,24 +1238,20 @@ function _startCoWatcherDetectionCycle(): void {
               const friend = await friendManager.getFriend(coWatcherId);
               console.log('[Background] [GET_OVERLAY_STATE] After friendManager.getFriend, friend:', !!friend);
               if (friend?.current_activities) {
-                // Get the friend's current activity (they might be on a different one than host)
-                const friendActivities = Object.values(friend.current_activities);
-                console.log('[Background] [GET_OVERLAY_STATE] Friend activities count:', friendActivities.length);
-                if (friendActivities.length > 0) {
-                  const friendActivity = friendActivities[0]; // Most recent/only activity
-                  console.log('[Background] [GET_OVERLAY_STATE] Friend activity found:', !!friendActivity);
-                  if (friendActivity) {
-                    coWatcherActivities[coWatcherId] = {
-                      activity_id: friendActivity.id || '',
-                      content: friendActivity.content || '',
-                      url: friendActivity.url,
-                      service: friendActivity.service || '',
-                      freshness_timestamp: friendActivity.freshness_timestamp || Date.now(),
-                      timestamp: friendActivity.timestamp,
-                      metadata: friendActivity.metadata,
-                    };
-                    console.log('[Background] [GET_OVERLAY_STATE] Added friend to coWatcherActivities:', coWatcherId);
-                  }
+                // Get the friend's co-watchable video activity
+                const friendActivity = Object.values(friend.current_activities).find(a => a && (a as Activity).id === coWatchSession.activity_id) ||
+                                       Object.values(friend.current_activities).find(a => a && CO_WATCHABLE_SERVICES.has((a as Activity).service));
+                if (friendActivity) {
+                  coWatcherActivities[coWatcherId] = {
+                    activity_id: (friendActivity as Activity).id || '',
+                    content: (friendActivity as Activity).content || '',
+                    url: (friendActivity as Activity).url,
+                    service: (friendActivity as Activity).service || '',
+                    freshness_timestamp: (friendActivity as Activity).freshness_timestamp || Date.now(),
+                    timestamp: (friendActivity as Activity).timestamp,
+                    metadata: (friendActivity as Activity).metadata,
+                  };
+                  console.log('[Background] [GET_OVERLAY_STATE] Added friend to coWatcherActivities:', coWatcherId);
                 }
               } else {
                 console.log('[Background] [GET_OVERLAY_STATE] Friend not found or no current_activities:', coWatcherId);
@@ -1645,8 +1639,8 @@ chrome.runtime.onConnect.addListener((port) => {
 
             // Add self's current activity (needed for divergence display with actual content)
             if (selfUuid) {
-              const myActivitiesArray = Object.values(myActivities || {});
-              const userCurrentActivity = myActivitiesArray.length > 0 ? myActivitiesArray[0] : undefined;
+              const userCurrentActivity = Object.values(myActivities || {}).find(a => a && a.id === coWatchSession.activity_id) ||
+                                          Object.values(myActivities || {}).find(a => a && CO_WATCHABLE_SERVICES.has(a.service));
               if (userCurrentActivity) {
                 coWatcherActivities[selfUuid] = {
                   activity_id: userCurrentActivity.id,
@@ -1665,17 +1659,17 @@ chrome.runtime.onConnect.addListener((port) => {
               if (memberUuid === selfUuid) continue; // Already added self above
               const friend = await friendManager.getFriend(memberUuid);
               if (friend?.current_activities) {
-                const activities = Object.values(friend.current_activities);
-                const memberActivity = activities.length > 0 ? (activities[0] as Activity) : undefined;
+                const memberActivity = Object.values(friend.current_activities).find(a => a && (a as Activity).id === coWatchSession.activity_id) ||
+                                       Object.values(friend.current_activities).find(a => a && CO_WATCHABLE_SERVICES.has((a as Activity).service));
                 if (memberActivity) {
                   coWatcherActivities[memberUuid] = {
-                    activity_id: memberActivity.id,
-                    content: memberActivity.content || 'Unknown',
-                    url: memberActivity.url,
-                    service: memberActivity.service,
-                    freshness_timestamp: memberActivity.freshness_timestamp,
-                    timestamp: memberActivity.timestamp,
-                    metadata: memberActivity.metadata,
+                    activity_id: (memberActivity as Activity).id,
+                    content: (memberActivity as Activity).content || 'Unknown',
+                    url: (memberActivity as Activity).url,
+                    service: (memberActivity as Activity).service,
+                    freshness_timestamp: (memberActivity as Activity).freshness_timestamp,
+                    timestamp: (memberActivity as Activity).timestamp,
+                    metadata: (memberActivity as Activity).metadata,
                   };
                 }
               }
