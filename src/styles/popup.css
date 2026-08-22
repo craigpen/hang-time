@@ -621,7 +621,8 @@ body {
   flex-direction: column;
   z-index: 1000;
   overflow: hidden;
-  width: 500px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Hide main popup scrollbar when settings panel is open */
@@ -641,6 +642,8 @@ body.settings-open .popup-container {
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
   flex-shrink: 0;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .settings-panel-header h2 {
@@ -674,6 +677,8 @@ body.settings-open .popup-container {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 12px 14px;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .settings-section {
