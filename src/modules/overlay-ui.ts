@@ -270,17 +270,32 @@ export class OverlayUI {
           align-items: center;
         }
 
+        .progress-bar-controls {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          height: 22px;
+          flex-shrink: 0;
+          box-sizing: border-box;
+        }
+
         .progress-time-display {
           font-size: 10px;
           font-weight: 600;
           font-variant-numeric: tabular-nums;
           color: rgba(255, 255, 255, 0.6);
           white-space: nowrap;
+          line-height: 22px;
+          height: 22px;
+          display: inline-flex;
+          align-items: center;
         }
 
         #progress-sync-button {
           display: none;
-          padding: 2px 6px;
+          padding: 0 6px;
+          height: 18px;
+          line-height: 16px;
           background: rgba(255, 255, 255, 0.12);
           border: 1px solid rgba(255, 255, 255, 0.2);
           color: white;
@@ -289,6 +304,10 @@ export class OverlayUI {
           font-size: 11px;
           white-space: nowrap;
           transition: all 0.2s ease;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          box-sizing: border-box;
         }
 
         #progress-sync-button:hover {
@@ -1372,7 +1391,6 @@ export class OverlayUI {
     }
     this.renderHeader();
     this.renderHostRow();
-    this.renderGuestRow();
     this.renderGuestMarkers();
     this.renderMessages();
   }
@@ -1382,7 +1400,7 @@ export class OverlayUI {
    */
   private renderHeader(): void {
     const titleEl = document.getElementById('overlay-title');
-    if (titleEl) {
+    if (titleEl && titleEl.textContent !== 'Hang Time') {
       titleEl.textContent = 'Hang Time';
     }
 
@@ -1401,41 +1419,53 @@ export class OverlayUI {
 
     // Update time display
     if (timeDisplayEl) {
+      let targetTimeText = '';
       if (currentHostProgress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
         const cur = this.formatTime(currentHostProgress);
         const dur = this.formatTime(this._state.host_duration);
-        timeDisplayEl.textContent = `${cur} / ${dur}`;
-        timeDisplayEl.style.display = 'inline';
+        targetTimeText = `${cur} / ${dur}`;
       } else if (currentHostProgress !== undefined) {
-        timeDisplayEl.textContent = this.formatTime(currentHostProgress);
-        timeDisplayEl.style.display = 'inline';
-      } else {
-        timeDisplayEl.style.display = 'none';
+        targetTimeText = this.formatTime(currentHostProgress);
+      }
+
+      if (timeDisplayEl.textContent !== targetTimeText) {
+        timeDisplayEl.textContent = targetTimeText;
+      }
+      const targetDisplay = targetTimeText ? 'inline-flex' : 'none';
+      if (timeDisplayEl.style.display !== targetDisplay) {
+        timeDisplayEl.style.display = targetDisplay;
       }
     }
 
-    // Update host state indicator
+    // Update host state indicator (guarded to prevent DOM thrashing)
     if (stateIndicator) {
-      stateIndicator.classList.remove('host-state-playing');
-      if (this._state.host_state === 'playing') {
-        stateIndicator.textContent = '▶';
-        stateIndicator.classList.add('host-state-playing');
-      } else if (this._state.host_state === 'paused') {
-        stateIndicator.textContent = '⏸';
-      } else {
-        stateIndicator.textContent = '-';
+      const nextText = this._state.host_state === 'playing' ? '▶' : (this._state.host_state === 'paused' ? '⏸' : '-');
+      const isPlaying = this._state.host_state === 'playing';
+      if (stateIndicator.textContent !== nextText) {
+        stateIndicator.textContent = nextText;
+      }
+      if (stateIndicator.classList.contains('host-state-playing') !== isPlaying) {
+        stateIndicator.classList.toggle('host-state-playing', isPlaying);
       }
     }
 
     if (fillEl && currentHostProgress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
       // Simple calculation: progress / duration * 100
       const hostPercent = Math.min((currentHostProgress / this._state.host_duration) * 100, 100);
-      fillEl.style.width = hostPercent + '%';
+      const widthStr = hostPercent + '%';
+      if (fillEl.style.width !== widthStr) {
+        fillEl.style.width = widthStr;
+      }
 
       // Position host marker at host's current position
       if (hostMarkerEl) {
-        hostMarkerEl.style.left = hostPercent + '%';
-        hostMarkerEl.style.background = this.getParticipantColor(this.getHostUuid());
+        if (hostMarkerEl.style.left !== widthStr) {
+          hostMarkerEl.style.left = widthStr;
+        }
+        const color = this.getParticipantColor(this.getHostUuid());
+        if (hostMarkerEl.style.background !== color) {
+          hostMarkerEl.style.background = color;
+        }
       }
     }
 
@@ -1453,7 +1483,9 @@ export class OverlayUI {
       if (userPositionMarkerEl) {
         userPositionMarkerEl.style.left = userPercent + '%';
         userPositionMarkerEl.style.background = userColor;
-        userPositionMarkerEl.style.display = 'block';
+        if (userPositionMarkerEl.style.display !== 'block') {
+          userPositionMarkerEl.style.display = 'block';
+        }
       }
 
       // 2. Calculate gap against host's current (extrapolated) position
@@ -1484,7 +1516,9 @@ export class OverlayUI {
             } else if (userProgress > currentHostProgress) {
               markerEl.classList.add('arrow-left'); // User ahead of host, arrow points left towards host
             }
-            markerEl.style.display = 'block';
+            if (markerEl.style.display !== 'block') {
+              markerEl.style.display = 'block';
+            }
           }
 
           // Horizontal gap indicator line between user and host
@@ -1495,28 +1529,29 @@ export class OverlayUI {
             gapIndicatorEl.style.left = startPercent + '%';
             gapIndicatorEl.style.width = gapWidth + '%';
             gapIndicatorEl.style.background = userColor;
-            gapIndicatorEl.style.display = 'block';
+            if (gapIndicatorEl.style.display !== 'block') {
+              gapIndicatorEl.style.display = 'block';
+            }
           }
         } else {
-          if (markerEl) markerEl.style.display = 'none';
-          if (gapIndicatorEl) gapIndicatorEl.style.display = 'none';
+          if (markerEl && markerEl.style.display !== 'none') markerEl.style.display = 'none';
+          if (gapIndicatorEl && gapIndicatorEl.style.display !== 'none') gapIndicatorEl.style.display = 'none';
         }
       } else {
-        if (markerEl) markerEl.style.display = 'none';
-        if (gapIndicatorEl) gapIndicatorEl.style.display = 'none';
+        if (markerEl && markerEl.style.display !== 'none') markerEl.style.display = 'none';
+        if (gapIndicatorEl && gapIndicatorEl.style.display !== 'none') gapIndicatorEl.style.display = 'none';
       }
     } else {
-      if (userPositionMarkerEl) userPositionMarkerEl.style.display = 'none';
-      if (markerEl) markerEl.style.display = 'none';
-      if (gapIndicatorEl) gapIndicatorEl.style.display = 'none';
+      if (userPositionMarkerEl && userPositionMarkerEl.style.display !== 'none') userPositionMarkerEl.style.display = 'none';
+      if (markerEl && markerEl.style.display !== 'none') markerEl.style.display = 'none';
+      if (gapIndicatorEl && gapIndicatorEl.style.display !== 'none') gapIndicatorEl.style.display = 'none';
     }
 
-    // Show sync button only for non-hosts
+    // Show sync button only for non-hosts (with stable flex display)
     if (syncBtn) {
-      if (!this._state.is_user_host) {
-        syncBtn.style.display = 'block';
-      } else {
-        syncBtn.style.display = 'none';
+      const targetSyncDisplay = !this._state.is_user_host ? 'inline-flex' : 'none';
+      if (syncBtn.style.display !== targetSyncDisplay) {
+        syncBtn.style.display = targetSyncDisplay;
       }
     }
 
@@ -1866,14 +1901,6 @@ export class OverlayUI {
   }
 
   /**
-   * Simplified guest row rendering (delegated to renderHostRow)
-   */
-  private renderGuestRow(): void {
-    // All logic moved to renderHostRow which handles both modes
-    // This method is called from render() to maintain consistency
-  }
-
-  /**
    * Render chat messages with consecutive message grouping and unified pill styling
    */
   private renderMessages(): void {
@@ -2001,7 +2028,10 @@ export class OverlayUI {
       clearInterval(this.progressUpdateInterval);
     }
     this.progressUpdateInterval = setInterval(() => {
-      this.renderHeader();
+      // Only interpolate progress during active playback
+      if (this._state.host_state === 'playing') {
+        this.renderHeader();
+      }
     }, 1000);
   }
 
