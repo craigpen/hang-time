@@ -863,10 +863,17 @@ async function _getFriendActivityHistory(friendId?: string): Promise<ExtensionRe
 
 async function _getUserIdentifier(): Promise<ExtensionResponse> {
   try {
+    const profile = await storageManager.getUserProfile();
     const identifier = await getIdentityManager().getIdentifier();
-    return { success: true, data: { identifier } };
+    if (profile) {
+      if (!profile.uuid) {
+        profile.uuid = identifier;
+      }
+      return { success: true, data: profile };
+    }
+    return { success: true, data: { uuid: identifier, identifier } };
   } catch (error) {
-    return { success: false, error: 'Failed to get identifier' };
+    return { success: false, error: 'Failed to get user identifier' };
   }
 }
 

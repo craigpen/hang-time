@@ -1678,7 +1678,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       // Load identifier
       const idDisplay = document.getElementById('user-identifier-popup');
       if (idDisplay) {
-        idDisplay.textContent = profile.uuid;
+        idDisplay.textContent = profile.uuid || profile.identifier || '';
       }
 
       // Load nickname
