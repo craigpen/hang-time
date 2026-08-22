@@ -649,7 +649,7 @@ body.settings-open .popup-container {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
   flex-shrink: 0;
@@ -669,18 +669,25 @@ body.settings-open .popup-container {
   align-items: center;
 }
 
-.btn-icon-small {
+.settings-header-buttons .btn-close {
   background: none;
-  border: none;
-  font-size: 0.9em;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
   cursor: pointer;
-  padding: 4px 6px;
-  opacity: 0.6;
-  transition: opacity 0.2s;
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.btn-icon-small:hover {
-  opacity: 1;
+.settings-header-buttons .btn-close:hover {
+  background-color: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .settings-panel-content {
