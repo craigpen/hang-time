@@ -4,7 +4,7 @@
  */
 
 import { Activity } from '../types';
-import { StorageManager } from './storage';
+import { StorageManager, storageManager } from './storage';
 import { selectDiscordServer } from './activity-utils';
 
 export class JoinHandler {
@@ -223,4 +223,6 @@ export class JoinHandler {
 }
 
 // Singleton instance
-export const joinHandler = new JoinHandler(require('./storage').storageManager);
+export const joinHandler = new JoinHandler(storageManager);
+
+
