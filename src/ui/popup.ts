@@ -64,6 +64,7 @@ export class PopupController {
   private storage: StorageManager = new StorageManager();
   private gamesTabController: GamesTabController | null = null;
   private showInactiveFriends: boolean = true;
+  private settingsListenersSetup: boolean = false;
 
   static readonly MY_ACTIVITY_REFRESH_MS = 3000; // Keep "My Activity" responsive
   static readonly FALLBACK_FRIENDS_REFRESH_MS = 15000; // Safety net for missed Nostr messages
@@ -89,6 +90,10 @@ export class PopupController {
       console.error('[Popup] Required DOM elements not found');
       return;
     }
+
+    // Initialize theme
+    const savedTheme = localStorage.getItem('hang-time-theme') || 'auto';
+    this._setTheme(savedTheme);
 
     this._setupEventListeners();
     this._setupTabNavigation();
@@ -1477,40 +1482,8 @@ export class PopupController {
       });
     }
 
-    // Settings panel service toggles
-    document.querySelectorAll('input[data-service]').forEach((toggle) => {
-      if (toggle.id.endsWith('-popup')) {
-        toggle.addEventListener('change', (e: Event) => {
-          if (!(e.target instanceof HTMLInputElement)) return;
-          const service = e.target.dataset['service'];
-          if (service) {
-            this._toggleService(service, e.target.checked);
-          }
-        });
-      }
-    });
-
-    // Settings panel Discord input
-    const discordInput = document.getElementById('discord-info-popup') as HTMLInputElement;
-    if (discordInput) {
-      discordInput.addEventListener('change', () => {
-        this._saveSettingsPanel();
-      });
-    }
-
-    // Settings panel notification checkboxes
-    document.querySelectorAll('input[id*="notif-"][id*="-popup"]').forEach((checkbox) => {
-      checkbox.addEventListener('change', () => {
-        this._saveSettingsPanel();
-      });
-    });
-
-
-    // Copy ID button (in settings panel)
-    const copyIdBtn = document.getElementById('copy-id-popup-btn');
-    if (copyIdBtn) {
-      copyIdBtn.addEventListener('click', () => this._handleCopyId());
-    }
+    // Setup settings panel listeners
+    this._setupSettingsPanelListeners();
 
     // Add friend button
     const addFriendBtn = document.getElementById('add-friend-btn');
@@ -1808,6 +1781,14 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         gameDiscoveryToggle.checked = profile.game_discovery_enabled ?? false;
       }
 
+      // Load appearance / theme setting
+      const theme = profile.theme || localStorage.getItem('hang-time-theme') || 'auto';
+      const themeRadio = document.querySelector(`input[name="theme-popup"][value="${theme}"]`) as HTMLInputElement;
+      if (themeRadio) {
+        themeRadio.checked = true;
+      }
+      this._setTheme(theme);
+
       // Update integration health status (Steam, Spotify, Twitch)
       await this._updateIntegrationHealthDisplays();
 
@@ -1910,21 +1891,13 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
   }
 
   private _setupSettingsPanelListeners(): void {
+    if (this.settingsListenersSetup) return;
+    this.settingsListenersSetup = true;
+
     // Copy identifier button
     const copyBtn = document.getElementById('copy-id-popup-btn');
     if (copyBtn) {
-      copyBtn.addEventListener('click', () => {
-        const text = document.getElementById('user-identifier-popup')?.textContent || '';
-        if (text) {
-          navigator.clipboard.writeText(text).then(() => {
-            const originalText = copyBtn.textContent;
-            copyBtn.textContent = '✓';
-            setTimeout(() => {
-              copyBtn.textContent = originalText;
-            }, 2000);
-          });
-        }
-      });
+      copyBtn.addEventListener('click', () => this._handleCopyId());
     }
 
     // Service integration enable/disable checkboxes
@@ -2015,6 +1988,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         if (!(e.target instanceof HTMLInputElement)) return;
         const theme = e.target.value;
         this._setTheme(theme);
+        this._saveSettingsPanel();
       });
     });
 
@@ -2311,6 +2285,10 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       // Collect game discovery setting
       const gameDiscoveryEnabled = (document.getElementById('game-discovery-enabled-popup') as HTMLInputElement)?.checked ?? false;
 
+      // Collect theme setting
+      const themeRadio = document.querySelector('input[name="theme-popup"]:checked') as HTMLInputElement;
+      const theme = (themeRadio?.value as 'light' | 'dark' | 'auto') || 'auto';
+
       await chrome.runtime.sendMessage({
         type: 'SAVE_SETTINGS',
         data: {
@@ -2330,23 +2308,13 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
             low_bandwidth_mode: lowBandwidthMode,
           },
           game_discovery_enabled: gameDiscoveryEnabled,
+          theme,
         },
       });
 
       console.debug('[Popup] Settings saved');
     } catch (error) {
       console.error('[Popup] Failed to save settings:', error);
-    }
-  }
-
-  private async _toggleService(service: string, enabled: boolean): Promise<void> {
-    try {
-      await chrome.runtime.sendMessage({
-        type: 'TOGGLE_SERVICE',
-        data: { service, enabled },
-      });
-    } catch (error) {
-      console.error('[Popup] Failed to toggle service:', error);
     }
   }
 
@@ -2598,16 +2566,16 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
 
   private _handleCopyId(): void {
     const idDisplay = document.getElementById('user-identifier-popup');
-    if (idDisplay && idDisplay.textContent) {
+    if (idDisplay && idDisplay.textContent && idDisplay.textContent !== 'Loading...') {
       navigator.clipboard.writeText(idDisplay.textContent).then(() => {
         console.debug('[Popup] Identifier copied');
         // Visual feedback
         const copyBtn = document.getElementById('copy-id-popup-btn');
         if (copyBtn) {
-          const originalText = copyBtn.textContent;
-          copyBtn.textContent = '✓ Copied';
+          const originalHtml = copyBtn.innerHTML;
+          copyBtn.textContent = '✓';
           setTimeout(() => {
-            copyBtn.textContent = originalText;
+            copyBtn.innerHTML = originalHtml;
           }, 2000);
         }
       });

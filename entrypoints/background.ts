@@ -2618,6 +2618,9 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
     if (data.game_discovery_enabled !== undefined) {
       profile.game_discovery_enabled = data.game_discovery_enabled;
     }
+    if (data.theme !== undefined) {
+      profile.theme = data.theme;
+    }
 
     console.debug('[Background] Saving settings - steam_config:', profile.steam_config);
 
