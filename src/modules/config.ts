@@ -4,7 +4,7 @@
  * Credentials should be set via environment variables or secure config endpoints
  */
 
-import { StorageManager } from './storage';
+import { StorageManager, storageManager } from './storage';
 
 export interface OAuthConfig {
   spotify: {
@@ -19,7 +19,7 @@ export interface OAuthConfig {
 
 class ConfigManager {
   private config: OAuthConfig | null = null;
-  private storage: StorageManager = new StorageManager();
+  private storage: StorageManager = storageManager;
 
   /**
    * Load configuration from environment or secure source

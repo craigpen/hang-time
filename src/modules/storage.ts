@@ -33,6 +33,7 @@ export class StorageManager {
   private syncTimer: NodeJS.Timeout | null = null;
   private syncScheduled = false;
   private isInitialized = false;
+  private onChangedRegistered = false;
   private sessionId: string = '';
   private sessionIdReady: Promise<void>;
   private resolveSessionId!: () => void;
@@ -243,6 +244,25 @@ export class StorageManager {
 
       this.isInitialized = true;
       console.debug('[Storage] Cache initialized from storage with', this.cache.size, 'keys, session ID:', this.sessionId || '(not set yet)');
+
+      // Listen for external storage changes (e.g. background SW <-> popup synchronization)
+      if (chrome.storage?.onChanged && !this.onChangedRegistered) {
+        chrome.storage.onChanged.addListener((changes, areaName) => {
+          if (areaName !== 'local') return;
+          for (const [key, change] of Object.entries(changes)) {
+            let originalKey = key;
+            if (this.sessionId && key.startsWith(`${this.sessionId}:`)) {
+              originalKey = key.substring(this.sessionId.length + 1);
+            }
+            if (change.newValue !== undefined) {
+              this.cache.set(originalKey, change.newValue);
+            } else {
+              this.cache.delete(originalKey);
+            }
+          }
+        });
+        this.onChangedRegistered = true;
+      }
     } catch (error) {
       console.error('[Storage] Failed to initialize cache:', error);
       // FAIL HARD - don't mark as initialized if loading fails
@@ -314,7 +334,7 @@ export class StorageManager {
       const logs: Record<string, string> = {};
 
       // First check the in-memory cache for unsync'd logs (highest priority)
-      for (const [key, value] of Object.entries(this.cache)) {
+      for (const [key, value] of this.cache.entries()) {
         if (key.startsWith('hang_time_file_logs_')) {
           const profileId = key.replace('hang_time_file_logs_', '');
           logs[profileId] = value as string;
@@ -324,7 +344,7 @@ export class StorageManager {
       // Then check storage for any logs not in cache
       const allData = await chrome.storage.local.get(null);
       for (const [key, value] of Object.entries(allData)) {
-        if (key.startsWith('hang_time_file_logs_') && !(key in this.cache)) {
+        if (key.startsWith('hang_time_file_logs_') && !this.cache.has(key)) {
           const profileId = key.replace('hang_time_file_logs_', '');
           logs[profileId] = value as string;
         }

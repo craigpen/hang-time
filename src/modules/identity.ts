@@ -186,10 +186,14 @@ export class IdentityManager {
 
   /**
    * Verify identifier is valid
+   * Supports 4-word hyphenated identifiers (e.g. word-word-word-word) and legacy alphanumeric IDs
    */
   isValidIdentifier(identifier: string): boolean {
-    // Should be non-empty string, no special chars except numbers
-    return /^[a-zA-Z0-9]+$/.test(identifier) && identifier.length >= 10;
+    if (!identifier || typeof identifier !== 'string' || identifier.length < 10) {
+      return false;
+    }
+    // Allow hyphenated word identifiers or alphanumeric identifiers
+    return /^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$/.test(identifier);
   }
 
   /**

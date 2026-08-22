@@ -57,7 +57,8 @@ export class NIP11Handler {
   async fetchRelayInfo(relayUrl: string): Promise<RelayCapabilities | null> {
     try {
       const domainUrl = new URL(relayUrl);
-      const infoUrl = `https://${domainUrl.hostname}/.well-known/nostr.json`;
+      const httpProtocol = domainUrl.protocol === 'ws:' ? 'http:' : 'https:';
+      const infoUrl = `${httpProtocol}//${domainUrl.host}${domainUrl.pathname}`;
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), NIP11Handler.FETCH_TIMEOUT_MS);
@@ -65,7 +66,7 @@ export class NIP11Handler {
       try {
         const response = await fetch(infoUrl, {
           signal: controller.signal,
-          headers: { 'Accept': 'application/json' },
+          headers: { 'Accept': 'application/nostr+json, application/json' },
         });
 
         clearTimeout(timeout);
@@ -142,10 +143,9 @@ export class NIP11Handler {
     const maxEventSize = limit.max_content_length ?? 262144; // Default 256KB
     const maxSubscriptions = limit.max_subscriptions ?? 20; // Default 20
 
-    // Check if relay lists support for ephemeral NIPs (usually via supported_nips)
-    const supportsEphemeral = (info.supported_nips ?? []).includes(20000) ||
-                              (info.supported_nips ?? []).includes(20001) ||
-                              (info.supported_nips ?? []).length === 0; // Assume yes if no NIP list
+    // Check if relay lists support for standard event kinds (NIP-01 / NIP-16)
+    const supportedNips = info.supported_nips ?? [];
+    const supportsEphemeral = supportedNips.length === 0 || supportedNips.includes(1) || supportedNips.includes(16);
 
     return {
       url: relayUrl,

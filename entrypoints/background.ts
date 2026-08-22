@@ -16,6 +16,7 @@ import { initializeNotificationManager, getNotificationManager } from '../src/mo
 import { initializeActivityDatastore, getActivityDatastore } from '../src/modules/activity-datastore';
 import { initializeGameLibraryManager, GameLibraryManager } from '../src/modules/game-library';
 import { JoinHandler } from '../src/modules/join-handler';
+import { hexToBytes } from '../src/modules/security-utils';
 import { ActivityDetector } from '../src/modules/activity';
 import { ActivityPublisher } from '../src/modules/publisher';
 import { TabService } from '../src/modules/services/tabs';
@@ -2912,7 +2913,6 @@ async function _handleFriendRequestFromUnknownSender(event: NostrEvent): Promise
       } catch (_nip04Err) {
         // Fallback to NIP-44
         try {
-          const hexToBytes = (hex: string) => new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
           const conversationKey = nip44.getConversationKey(hexToBytes(secretKey), event.pubkey);
           decrypted = await nip44.decrypt(event.content, conversationKey);
         } catch {

@@ -12,11 +12,7 @@ import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
 import { detectCorruption } from './activity-validation';
 import type { PublishQueue } from './publish-queue';
-
-// Helper: Convert hex string to Uint8Array (for nostr-tools finalizeEvent)
-function hexToBytes(hex: string): Uint8Array {
-  return new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-}
+import { hexToBytes } from './security-utils';
 
 export class ActivityPublisher {
   private publishQueue: PublishQueue | null = null;

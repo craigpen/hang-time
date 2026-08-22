@@ -79,6 +79,8 @@ describe('IdentityManager', () => {
     it('should validate correct identifier format', () => {
       expect(identityManager.isValidIdentifier('VascillatingMonkey42')).toBe(true);
       expect(identityManager.isValidIdentifier('HappyTiger123')).toBe(true);
+      expect(identityManager.isValidIdentifier('luminous-mountain-penguin-crystal')).toBe(true);
+      expect(identityManager.isValidIdentifier('wandering-river-eagle-lighthouse')).toBe(true);
     });
 
     it('should reject invalid identifier format', () => {

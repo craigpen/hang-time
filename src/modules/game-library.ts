@@ -9,11 +9,7 @@ import { StorageManager } from './storage';
 import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
 import type { PublishQueue } from './publish-queue';
-
-// Helper: Convert hex string to Uint8Array (for nostr-tools finalizeEvent)
-function hexToBytes(hex: string): Uint8Array {
-  return new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-}
+import { hexToBytes } from './security-utils';
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 

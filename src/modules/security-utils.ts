@@ -212,26 +212,42 @@ export function deriveKeypairFromIdentifier(identifier: string): { pubkey: strin
 
   // Use first 32 bytes of SHA-256 hash as secret key
   const secretKeyBytes = new Uint8Array(hash.slice(0, 32));
-  const secretKey = _bytesToHex(secretKeyBytes);
+  const secretKey = bytesToHex(secretKeyBytes);
 
   // Derive Schnorr public key (32 bytes, raw x-coordinate for Nostr)
   const publicKeyBytes = secp.schnorr.getPublicKey(secretKeyBytes);
-  const pubkey = _bytesToHex(publicKeyBytes);
+  const pubkey = bytesToHex(publicKeyBytes);
 
   return { pubkey, secretKey };
 }
 
 /**
  * Convert byte array to hex string
- * Private helper for deriveKeypairFromIdentifier
  */
-function _bytesToHex(bytes: Uint8Array): string {
+export function bytesToHex(bytes: Uint8Array): string {
   let hex = '';
   for (let i = 0; i < bytes.length; i++) {
     const byte = (bytes[i] ?? 0).toString(16);
     hex += byte.length === 1 ? '0' + byte : byte;
   }
   return hex;
+}
+
+/**
+ * Convert hex string to Uint8Array
+ */
+export function hexToBytes(hex: string): Uint8Array {
+  if (!hex || typeof hex !== 'string') {
+    throw new Error(`hexToBytes: Expected hex string, got ${typeof hex}`);
+  }
+  if (hex.length % 2 !== 0) {
+    throw new Error(`hexToBytes: Hex string must have even length, got ${hex.length}`);
+  }
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
 }
 
 /**

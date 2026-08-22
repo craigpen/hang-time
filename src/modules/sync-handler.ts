@@ -10,10 +10,7 @@ import { IdentityManager } from './identity';
 import { FriendManager } from './friends';
 import type { PublishQueue } from './publish-queue';
 import { finalizeEvent } from 'nostr-tools';
-
-function hexToBytes(hex: string): Uint8Array {
-  return new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-}
+import { hexToBytes } from './security-utils';
 
 export class SyncHandler {
   private publishQueue: PublishQueue | null = null;

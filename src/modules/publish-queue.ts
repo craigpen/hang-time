@@ -12,6 +12,7 @@ import { RelayPool } from './nostr';
 import { StorageManager } from './storage';
 import { IdentityManager } from './identity';
 import type { ActivityPublisher } from './publisher';
+import { hexToBytes } from './security-utils';
 
 export interface PendingPublish {
   type: 'invite' | 'friend_request' | 'message' | 'sync_request' | 'sync_response';
@@ -188,20 +189,13 @@ export class PublishQueue {
         tags: event.tags,
         content: event.content,
         created_at,
-      }, this.hexToBytes(secretKey)) as unknown as NostrEvent;
+      }, hexToBytes(secretKey)) as unknown as NostrEvent;
 
       return refreshedEvent;
     } catch (error) {
       console.error('[PublishQueue] ❌ Failed to refresh event timestamp (this.identityManager set:', !!this.identityManager, '):', error instanceof Error ? error.message : error);
       return event;
     }
-  }
-
-  /**
-   * Helper: Convert hex string to Uint8Array (for nostr-tools finalizeEvent)
-   */
-  private hexToBytes(hex: string): Uint8Array {
-    return new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
   }
 
   /**
