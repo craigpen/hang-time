@@ -278,13 +278,29 @@ export class OverlayUI {
           align-items: center;
         }
 
-        .progress-bar-controls {
+        .progress-bar-controls-left {
           display: flex;
           align-items: center;
           gap: 6px;
           height: 22px;
           flex-shrink: 0;
           box-sizing: border-box;
+        }
+
+        .host-state-indicator {
+          font-size: 11px;
+          line-height: 22px;
+          height: 22px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: rgba(255, 255, 255, 0.7);
+          flex-shrink: 0;
+          user-select: none;
+        }
+
+        .host-state-indicator.host-state-playing {
+          color: #10b981;
         }
 
         .progress-time-display {
@@ -380,12 +396,6 @@ export class OverlayUI {
           text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
           transition: all 0.15s ease;
-        }
-
-        .progress-bar-controls {
-          display: flex;
-          align-items: center;
-          gap: 6px;
         }
 
         .guest-markers-container {
@@ -693,9 +703,13 @@ export class OverlayUI {
           <!-- Line 1: Host Row (Includes inline Title) -->
           <div id="host-chip-container" class="overlay-role-row"></div>
 
-          <!-- Line 2: Progress Bar + Time + Sync button -->
+          <!-- Line 2: Left Controls (State + Time) + Progress Bar + Sync button -->
           <div class="watching-together-row" id="watching-together-row">
             <div class="progress-bar-wrapper">
+              <div class="progress-bar-controls-left">
+                <div class="host-state-indicator" id="host-state-indicator">-</div>
+                <span class="progress-time-display" id="progress-time-display">0:00</span>
+              </div>
               <div class="progress-bar-container">
                 <div class="progress-bar-fill" id="progress-bar-fill"></div>
                 <div class="guest-markers-container" id="guest-markers-container"></div>
@@ -703,11 +717,7 @@ export class OverlayUI {
                 <div class="user-position-marker" id="user-position-marker" style="display: none;"></div>
                 <div class="progress-bar-marker" id="progress-bar-marker"></div>
               </div>
-              <div class="progress-bar-controls">
-                <span class="progress-time-display" id="progress-time-display">0:00</span>
-                <div class="host-state-indicator" id="host-state-indicator">-</div>
-                <button id="progress-sync-button" title="Sync to host position">↻</button>
-              </div>
+              <button id="progress-sync-button" title="Sync to host position">↻</button>
             </div>
           </div>
 
