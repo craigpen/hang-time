@@ -1032,6 +1032,19 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
         if (profile.services_enabled['xbox-api'] === undefined) {
           profile.services_enabled['xbox-api'] = true;
         }
+
+        if (!profile.xbox_config.gamertag) {
+          try {
+            const xboxService = new XboxService(storageManager);
+            const accountInfo = await xboxService.verifyApiKey(profile.xbox_config.api_key);
+            if (accountInfo?.gamertag) {
+              profile.xbox_config.gamertag = accountInfo.gamertag;
+              profile.xbox_config.xuid = accountInfo.xuid;
+            }
+          } catch {
+            // ignore
+          }
+        }
       }
     }
     if (data.publisher_config !== undefined) {

@@ -2169,6 +2169,11 @@ export class PopupController {
         this._showSuccess('Xbox connected! Fetching your library...');
         await this._updateIntegrationHealthDisplays();
         await this._updateServiceStatus('xbox-api');
+
+        chrome.runtime.sendMessage({ type: 'REFRESH_GAME_LIBRARY' }).catch(() => {});
+        if (this.gamesTabController) {
+          this.gamesTabController.render().catch(() => {});
+        }
       } else {
         this._showError(response.error || 'Failed to connect to Xbox');
       }

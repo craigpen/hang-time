@@ -167,7 +167,8 @@ export class XboxService implements IServiceModule {
   }
 
   /**
-   * Fetch owned game titles via OpenXBL TitleHub
+  /**
+   * Fetch owned game titles via OpenXBL (tries achievements, titlehub, and title-history endpoints)
    */
   async fetchOwnedTitles(): Promise<OwnedGame[]> {
     const profile = await this.storage.getUserProfile();
@@ -176,48 +177,78 @@ export class XboxService implements IServiceModule {
       return [];
     }
 
-    try {
-      const response = await fetch(`${XboxService.API_BASE}/titlehub/titles`, {
-        headers: {
-          'X-Authorization': apiKey,
-          Accept: 'application/json',
-        },
-      });
+    const candidateEndpoints = [
+      `${XboxService.API_BASE}/achievements`,
+      `${XboxService.API_BASE}/titlehub/titles`,
+      `${XboxService.API_BASE}/player/title-history`,
+      `${XboxService.API_BASE}/titles`,
+    ];
 
-      if (!response.ok) {
-        console.warn(`[Xbox] Titlehub fetch failed with status: ${response.status}`);
-        return [];
-      }
+    for (const endpoint of candidateEndpoints) {
+      try {
+        console.debug(`[Xbox] Fetching titles from: ${endpoint}`);
+        const response = await fetch(endpoint, {
+          headers: {
+            'X-Authorization': apiKey,
+            Accept: 'application/json',
+          },
+        });
 
-      const data = await response.json();
-      const titles: OpenXBLTitle[] = data?.titles || [];
-      const ownedGames: OwnedGame[] = [];
-
-      for (const title of titles) {
-        // Filter out system apps and dashboards
-        if (!title.name || title.type === 'Application' || title.name === 'Home' || title.name === 'Dashboard') {
+        if (!response.ok) {
+          console.debug(`[Xbox] Endpoint ${endpoint} returned status: ${response.status}`);
           continue;
         }
 
-        const titleId = title.titleId || title.modernTitleId || title.productId || String(title.name);
+        const data = await response.json();
+        const rawTitles: any[] = Array.isArray(data)
+          ? data
+          : data?.titles || data?.results || [];
 
-        ownedGames.push({
-          appId: `xbox_${titleId}`,
-          titleId,
-          name: title.name,
-          storefront: 'xbox',
-          platformsOwned: {
-            windows: true,
-            xbox: true,
-          },
-          lastUpdated: Date.now(),
-        });
+        if (!Array.isArray(rawTitles) || rawTitles.length === 0) {
+          console.debug(`[Xbox] Endpoint ${endpoint} returned 0 titles`);
+          continue;
+        }
+
+        const ownedGames: OwnedGame[] = [];
+        const seenIds = new Set<string>();
+
+        for (const title of rawTitles) {
+          const name = title.name || title.titleName;
+          if (!name || title.type === 'Application' || name === 'Home' || name === 'Dashboard') {
+            continue;
+          }
+
+          const rawId = title.titleId || title.id || title.modernTitleId || title.productId || name;
+          const titleId = String(rawId);
+
+          if (seenIds.has(titleId)) {
+            continue;
+          }
+          seenIds.add(titleId);
+
+          ownedGames.push({
+            appId: `xbox_${titleId}`,
+            titleId,
+            name,
+            storefront: 'xbox',
+            platformsOwned: {
+              windows: true,
+              xbox: true,
+            },
+            lastUpdated: Date.now(),
+          });
+        }
+
+        if (ownedGames.length > 0) {
+          console.log(`[Xbox] Successfully fetched ${ownedGames.length} titles from ${endpoint}`);
+          return ownedGames;
+        }
+      } catch (endpointError) {
+        console.warn(`[Xbox] Error querying endpoint ${endpoint}:`, endpointError);
       }
-
-      return ownedGames;
-    } catch (error) {
-      console.error('[Xbox] Error fetching owned titles:', error);
-      return [];
     }
+
+    console.warn('[Xbox] Could not retrieve any titles from OpenXBL endpoints');
+    return [];
   }
 }
