@@ -472,8 +472,10 @@ export class GameLibraryManager {
         return;
       }
 
-      const appIds = (data.appIds as any[]).filter(
-        (id): id is number => typeof id === 'number' && Number.isFinite(id) && id > 0
+      const appIds: (number | string)[] = (data.appIds as any[]).filter(
+        (id): id is number | string =>
+          (typeof id === 'number' && Number.isFinite(id) && id > 0) ||
+          (typeof id === 'string' && id.trim().length > 0)
       );
 
       // Cache friend's game library

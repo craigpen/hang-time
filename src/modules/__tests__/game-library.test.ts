@@ -663,6 +663,36 @@ describe('GameLibraryManager', () => {
         );
       });
 
+      it('should cache multi-storefront game library with both Steam and Xbox titles', async () => {
+        const event: NostrEvent = {
+          id: 'event456',
+          pubkey: 'test3_pubkey',
+          created_at: Math.floor(Date.now() / 1000),
+          kind: 10004,
+          tags: [
+            ['t', 'game-library'],
+            ['steam-id', 'test3_steam'],
+          ],
+          content: JSON.stringify({
+            appIds: [261570, 'xbox_123456', 'xbox_halo_infinite'],
+            count: 3,
+            timestamp: Date.now(),
+          }),
+        };
+
+        await gameLibraryManager.handleGameLibraryEvent(event);
+
+        expect(mockStorageManager.set).toHaveBeenCalledWith(
+          STORAGE_KEYS.FRIEND_GAME_LIBRARIES,
+          expect.objectContaining({
+            test3_pubkey: expect.objectContaining({
+              pubkey: 'test3_pubkey',
+              appIds: [261570, 'xbox_123456', 'xbox_halo_infinite'],
+            }),
+          })
+        );
+      });
+
       it('should ignore events without game-library tag', async () => {
         const event: NostrEvent = {
           id: 'event123',
