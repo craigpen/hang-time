@@ -427,7 +427,7 @@ body {
 
 #friend-submit-btn {
   background-color: var(--accent-primary);
-  color: white;
+  color: var(--text-on-accent, white);
   border: none;
 }
 

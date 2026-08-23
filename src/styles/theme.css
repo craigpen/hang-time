@@ -33,6 +33,7 @@
   --accent-primary: #7eb8f7;
   --accent-secondary: #5b9cf6;
   --accent-hover: #8fc5f9;
+  --text-on-accent: #0f172a;
 
   /* Status Colors */
   --status-success: #10b981;
@@ -45,9 +46,9 @@
   --border-light: #1f2636;
 
   /* Button Colors */
-  --btn-primary-bg: #10b981;
-  --btn-primary-text: #ffffff;
-  --btn-primary-hover: #059669;
+  --btn-primary-bg: var(--accent-primary);
+  --btn-primary-text: var(--text-on-accent);
+  --btn-primary-hover: var(--accent-hover);
   --btn-secondary-bg: #2a3045;
   --btn-secondary-text: #e0e6f0;
   --btn-secondary-hover: #3a4055;
@@ -85,6 +86,7 @@
     --accent-primary: #1a6fb5;
     --accent-secondary: #0d47a1;
     --accent-hover: #155a9f;
+    --text-on-accent: #ffffff;
 
     /* Status Colors */
     --status-success: #059669;
@@ -97,9 +99,9 @@
     --border-light: #f1f5f9;
 
     /* Button Colors */
-    --btn-primary-bg: #059669;
-    --btn-primary-text: #ffffff;
-    --btn-primary-hover: #047857;
+    --btn-primary-bg: var(--accent-primary);
+    --btn-primary-text: var(--text-on-accent);
+    --btn-primary-hover: var(--accent-hover);
     --btn-secondary-bg: #e2e8f0;
     --btn-secondary-text: #0f172a;
     --btn-secondary-hover: #cbd5e1;
@@ -133,6 +135,7 @@
   --accent-primary: #1a6fb5;
   --accent-secondary: #0d47a1;
   --accent-hover: #155a9f;
+  --text-on-accent: #ffffff;
 
   /* Status Colors */
   --status-success: #059669;
@@ -145,9 +148,9 @@
   --border-light: #f1f5f9;
 
   /* Button Colors */
-  --btn-primary-bg: #059669;
-  --btn-primary-text: #ffffff;
-  --btn-primary-hover: #047857;
+  --btn-primary-bg: var(--accent-primary);
+  --btn-primary-text: var(--text-on-accent);
+  --btn-primary-hover: var(--accent-hover);
   --btn-secondary-bg: #e2e8f0;
   --btn-secondary-text: #0f172a;
   --btn-secondary-hover: #cbd5e1;
