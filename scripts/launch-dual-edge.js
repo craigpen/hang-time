@@ -9,7 +9,7 @@
  * Runs completely isolated from your main Edge browser so you never need to close Edge.
  */
 
-import { exec, execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -53,6 +53,27 @@ function copyDirRecursive(src, dest) {
         // ignore locked files
       }
     }
+  }
+}
+
+function removeLockFiles(dir) {
+  if (!fs.existsSync(dir)) return;
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        removeLockFiles(fullPath);
+      } else if (entry.name === 'LOCK' || entry.name.endsWith('.lock')) {
+        try {
+          fs.unlinkSync(fullPath);
+        } catch {
+          // ignore
+        }
+      }
+    }
+  } catch {
+    // ignore
   }
 }
 
@@ -100,10 +121,9 @@ async function main() {
   const dataDirA = path.join(process.env.USERPROFILE || 'C:\\temp', '.hangtime-edge-profile2');
   const dataDirB = path.join(process.env.USERPROFILE || 'C:\\temp', '.hangtime-edge-profile3');
 
-  // Sync extension storage on initial setup or if requested
-  console.log('[Dual Launcher] Initializing isolated test profile data directories...');
-  syncExtensionData(sourceProfile2, dataDirA);
-  syncExtensionData(sourceProfile3, dataDirB);
+  // Clean any stale locks before launching
+  removeLockFiles(dataDirA);
+  removeLockFiles(dataDirB);
 
   console.log(`\n========================================================`);
   console.log(`  Hang Time Dual Browser Test Environment (MS Edge)`);
@@ -113,6 +133,8 @@ async function main() {
   console.log(`  • Extension : ${extensionPath}`);
   console.log(`========================================================\n`);
 
+  const startUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
   const argsA = [
     `--remote-debugging-port=${portA}`,
     '--remote-allow-origins=*',
@@ -121,6 +143,7 @@ async function main() {
     '--no-first-run',
     '--no-default-browser-check',
     '--new-window',
+    startUrl,
   ];
 
   const argsB = [
@@ -131,23 +154,29 @@ async function main() {
     '--no-first-run',
     '--no-default-browser-check',
     '--new-window',
+    startUrl,
   ];
 
-  function launchInstance(args) {
-    const fullCmd = `start "" "${edgePath}" ${args.map((a) => `"${a}"`).join(' ')}`;
-    exec(fullCmd, (err) => {
-      if (err) console.error('[Dual Launcher] Launch warning:', err.message);
-    });
-  }
-
   console.log(`[Dual Launcher] Spawning Instance 1 (Port ${portA})...`);
-  launchInstance(argsA);
+  const procA = spawn(edgePath, argsA, { stdio: 'ignore' });
 
-  // Wait 2s before spawning instance 2 so Instance 1 initializes its directory lock
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  // Wait 1.5s before spawning instance 2 so Instance 1 initializes its directory lock
+  await new Promise((resolve) => setTimeout(resolve, 1500));
 
   console.log(`[Dual Launcher] Spawning Instance 2 (Port ${portB})...`);
-  launchInstance(argsB);
+  const procB = spawn(edgePath, argsB, { stdio: 'ignore' });
+
+  // Clean shutdown handlers
+  process.on('SIGINT', () => {
+    try { procA.kill(); } catch {}
+    try { procB.kill(); } catch {}
+    process.exit(0);
+  });
+  process.on('SIGTERM', () => {
+    try { procA.kill(); } catch {}
+    try { procB.kill(); } catch {}
+    process.exit(0);
+  });
 
   console.log(`\n[Dual Launcher] Waiting for debug endpoints to be ready...`);
 
@@ -168,11 +197,14 @@ async function main() {
   const readyB = await checkPortReady(portB);
 
   if (readyA && readyB) {
-    console.log(`\n✅ Both Edge test instances are ready and listening on ports ${portA} & ${portB}!`);
+    console.log(`\n✅ Both Edge test instances are running and listening on ports ${portA} & ${portB}!`);
   } else {
     console.log(`\n⚠️ Readiness status: Port ${portA}: ${readyA ? 'OK' : 'Waiting'}, Port ${portB}: ${readyB ? 'OK' : 'Waiting'}`);
   }
   console.log(`To inspect live logs or state, run: npm run debug:inspect\n`);
+
+  // Keep parent process alive while children are running
+  await new Promise(() => {});
 }
 
 main().catch((err) => {
