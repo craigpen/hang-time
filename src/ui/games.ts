@@ -476,9 +476,15 @@ export class GamesTabController {
 
       // Filter by modes
       if (this.currentFilters.modes.length > 0 && game.metadata) {
-        const hasMode = this.currentFilters.modes.some((mode) =>
-          game.metadata!.categories.some((c) => c.toLowerCase().includes(mode.toLowerCase()))
-        );
+        const hasMode = this.currentFilters.modes.some((mode) => {
+          if (mode.toLowerCase() === 'crossplay') {
+            return Boolean(game.metadata?.isCrossPlayable) ||
+              game.metadata!.categories.some((c) =>
+                c.toLowerCase().includes('cross-platform') || c.toLowerCase().includes('crossplay')
+              );
+          }
+          return game.metadata!.categories.some((c) => c.toLowerCase().includes(mode.toLowerCase()));
+        });
         if (!hasMode) return false;
       }
 

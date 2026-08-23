@@ -87,6 +87,12 @@
           <button id="games-search-clear" class="games-search-clear" title="Clear search" style="display: none;">×</button>
         </div>
         <div class="games-controls">
+          <button id="filters-button" class="filters-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 6px;">
+              <path d="M6 8 L12 18 L18 8 Z"/>
+            </svg>
+            Filter
+          </button>
           <span class="sort-label">Sort:</span>
           <select id="sort-dropdown" class="sort-dropdown">
             <option value="most-friends">Most friends own it</option>
@@ -94,12 +100,6 @@
             <option value="recent" selected>Most recently played</option>
             <option value="alphabetical">Alphabetical</option>
           </select>
-          <button id="filters-button" class="filters-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 6px;">
-              <path d="M6 8 L12 18 L18 8 Z"/>
-            </svg>
-            Filter
-          </button>
         </div>
         <div id="active-filters" class="filter-chips"></div>
       </div>
@@ -170,6 +170,10 @@
               <label class="checkbox-label">
                 <input type="checkbox" class="mode-filter" value="co-op">
                 <span>Co-op</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" class="mode-filter" value="crossplay">
+                <span>Crossplay</span>
               </label>
               <label class="checkbox-label">
                 <input type="checkbox" class="mode-filter" value="single-player">

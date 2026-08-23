@@ -74,6 +74,10 @@ describe('GamesTabController', () => {
               <input type="checkbox" class="mode-filter" value="co-op">
               <span>Co-op</span>
             </label>
+            <label class="checkbox-label">
+              <input type="checkbox" class="mode-filter" value="crossplay">
+              <span>Crossplay</span>
+            </label>
           </div>
         </div>
         <div class="filters-group">
@@ -426,6 +430,62 @@ describe('GamesTabController', () => {
       expect(results?.innerHTML).toContain('Action Game');
       expect(results?.innerHTML).toContain('RPG Game');
       expect(results?.innerHTML).not.toContain('Puzzle Game');
+    });
+
+    it('should filter by crossplay mode', async () => {
+      const games: OwnedGame[] = [
+        { appId: 1, lastUpdated: Date.now() },
+        { appId: 2, lastUpdated: Date.now() },
+      ];
+      const metadata1: GameMetadata = {
+        appId: 1,
+        name: 'Crossplay Title',
+        genres: ['Action'],
+        categories: ['Cross-Platform Multiplayer'],
+        platforms: { windows: true, mac: false, linux: false },
+        capsuleImageUrl: 'img1.png',
+        storePageUrl: 'https://steam.com/1',
+        lastFetched: Date.now(),
+        isCrossPlayable: true,
+      };
+      const metadata2: GameMetadata = {
+        appId: 2,
+        name: 'Singleplayer Title',
+        genres: ['Action'],
+        categories: ['Single-player'],
+        platforms: { windows: true, mac: false, linux: false },
+        capsuleImageUrl: 'img2.png',
+        storePageUrl: 'https://steam.com/2',
+        lastFetched: Date.now(),
+        isCrossPlayable: false,
+      };
+
+      mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
+      mockMetadataFetcher.getCachedMetadata.mockImplementation((id: number) => {
+        return id === 1 ? Promise.resolve(metadata1) : Promise.resolve(metadata2);
+      });
+
+      global.chrome = {
+        runtime: {
+          sendMessage: vi.fn().mockResolvedValue({
+            success: true,
+            data: [],
+          }),
+        } as any,
+      } as any;
+
+      await controller.render();
+
+      const crossplayCheckbox = document.querySelector('.mode-filter[value="crossplay"]') as HTMLInputElement;
+      if (crossplayCheckbox) crossplayCheckbox.checked = true;
+      const applyBtn = document.getElementById('apply-filters-btn') as HTMLButtonElement;
+      applyBtn?.click();
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const results = document.getElementById('game-results');
+      expect(results?.innerHTML).toContain('Crossplay Title');
+      expect(results?.innerHTML).not.toContain('Singleplayer Title');
     });
   });
 
