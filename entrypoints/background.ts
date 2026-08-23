@@ -1020,6 +1020,14 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
         profile.steam_config.enabled = true;
       }
     }
+    if (data.xbox_gamertag !== undefined || data.xbox_api_key !== undefined) {
+      profile.xbox_config = profile.xbox_config || { enabled: false };
+      if (data.xbox_gamertag !== undefined) profile.xbox_config.gamertag = data.xbox_gamertag;
+      if (data.xbox_api_key !== undefined) profile.xbox_config.api_key = data.xbox_api_key;
+      if (profile.xbox_config.api_key) {
+        profile.xbox_config.enabled = true;
+      }
+    }
     if (data.publisher_config !== undefined) {
       profile.publisher_config = { ...(profile.publisher_config || {}), ...data.publisher_config };
     }
@@ -1032,7 +1040,9 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
       publishQueue.setPublishInterval(data.publisher_config.rate_ms);
     }
 
-    if ((data.steam_id !== undefined || data.steam_api_key !== undefined) && profile.steam_config?.steam_id && profile.steam_config?.api_key) {
+    const hasSteamConfigured = Boolean(profile.steam_config?.steam_id && profile.steam_config?.api_key);
+    const hasXboxConfigured = Boolean(profile.xbox_config?.api_key);
+    if ((data.steam_id !== undefined || data.steam_api_key !== undefined || data.xbox_api_key !== undefined) && (hasSteamConfigured || hasXboxConfigured)) {
       _refreshGameLibrary().catch(() => {});
     }
 

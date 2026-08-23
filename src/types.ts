@@ -38,6 +38,7 @@ export interface UserProfile {
     'spotify-api': boolean;
     'twitch-api': boolean;
     'steam-api': boolean;
+    'xbox-api'?: boolean;
     'discord-api': boolean;
     'youtube-tab': boolean;
     'netflix-tab': boolean;
@@ -70,6 +71,13 @@ export interface UserProfile {
     steam_username?: string;
     last_verified?: number;
   };
+  xbox_config?: {
+    enabled: boolean;
+    gamertag?: string;
+    api_key?: string;
+    xuid?: string;
+    last_verified?: number;
+  };
   game_discovery?: {
     enabled: boolean;
     last_library_sync: number;
@@ -92,6 +100,7 @@ export interface UserProfile {
     sortBy: 'most-friends' | 'score' | 'recent' | 'alphabetical';
   };
   current_activity?: Activity;
+  activity_diagnostics?: any;
   current_co_watch_session?: {
     activity_id: string;
     host_friend_uuid: string;
@@ -100,7 +109,7 @@ export interface UserProfile {
   } | null;
 }
 
-export type ServiceName = 'spotify-api' | 'twitch-api' | 'steam-api' | 'discord-api'
+export type ServiceName = 'spotify-api' | 'twitch-api' | 'steam-api' | 'xbox-api' | 'discord-api'
   | 'youtube-tab' | 'netflix-tab' | 'twitch-tab' | 'video-tab';
 
 // ============================================================================

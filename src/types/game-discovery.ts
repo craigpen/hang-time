@@ -7,18 +7,24 @@
 // GAME LIBRARY
 // ============================================================================
 
+export type StorefrontType = 'steam' | 'xbox' | 'gog' | 'itch';
+
 /**
  * A game owned by the user on a given platform(s)
  */
 export interface OwnedGame {
-  appId: number;
+  appId: number | string;
+  storefront?: StorefrontType;
+  titleId?: string;
+  name?: string;
   platformsOwned?: {
     windows?: boolean;
     mac?: boolean;
     linux?: boolean;
+    xbox?: boolean;
   };
   lastUpdated: number;
-  rtime_last_played?: number; // Unix timestamp of last play time from Steam API
+  rtime_last_played?: number; // Unix timestamp of last play time from Steam / Xbox API
 }
 
 /**

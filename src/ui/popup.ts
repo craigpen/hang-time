@@ -1703,6 +1703,16 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         steamApiKeyInput.value = profile.steam_config.api_key;
       }
 
+      // Load Xbox configuration
+      const xboxGamertagInput = document.getElementById('xbox-gamertag-popup') as HTMLInputElement;
+      const xboxApiKeyInput = document.getElementById('xbox-api-key-popup') as HTMLInputElement;
+      if (xboxGamertagInput && profile.xbox_config?.gamertag) {
+        xboxGamertagInput.value = profile.xbox_config.gamertag;
+      }
+      if (xboxApiKeyInput && profile.xbox_config?.api_key) {
+        xboxApiKeyInput.value = profile.xbox_config.api_key;
+      }
+
       // Load service toggles for browser tabs
       // STUB: Twitch tab detection disabled for MVP
       const tabServices = ['youtube-tab', 'netflix-tab', 'video-tab']; // 'twitch-tab' disabled - see HTML
@@ -1713,9 +1723,8 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         }
       }
 
-      // Load service toggles for OAuth integrations
-      // STUB: Spotify and Twitch stubs disabled for MVP
-      const oauthServices = ['steam-api', 'discord-api']; // 'spotify-api', 'twitch-api' commented out - disabled
+      // Load service toggles for OAuth / API integrations
+      const oauthServices = ['steam-api', 'xbox-api', 'discord-api'];
       for (const service of oauthServices) {
         const toggle = document.getElementById(`service-${service}-enabled`) as HTMLInputElement;
         if (toggle && profile.services_enabled) {
@@ -1982,6 +1991,38 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       steamConnectBtn.addEventListener('click', () => this._handleSteamConnect());
     }
 
+    // Xbox configuration inputs
+    const xboxGamertagInput = document.getElementById('xbox-gamertag-popup') as HTMLInputElement;
+    const xboxApiKeyInput = document.getElementById('xbox-api-key-popup') as HTMLInputElement;
+    const xboxToggleVisibility = document.getElementById('xbox-toggle-key-visibility') as HTMLButtonElement;
+
+    if (xboxGamertagInput) {
+      xboxGamertagInput.addEventListener('change', () => this._saveSettingsPanel());
+    }
+    if (xboxApiKeyInput) {
+      xboxApiKeyInput.addEventListener('change', () => this._saveSettingsPanel());
+    }
+    if (xboxToggleVisibility) {
+      xboxToggleVisibility.addEventListener('click', () => {
+        if (xboxApiKeyInput) {
+          const isPassword = xboxApiKeyInput.type === 'password';
+          xboxApiKeyInput.type = isPassword ? 'text' : 'password';
+          const eyeOpen = xboxToggleVisibility.querySelector('.eye-open-icon') as HTMLElement;
+          const eyeClosed = xboxToggleVisibility.querySelector('.eye-closed-icon') as HTMLElement;
+          if (eyeOpen && eyeClosed) {
+            eyeOpen.style.display = isPassword ? 'none' : 'block';
+            eyeClosed.style.display = isPassword ? 'block' : 'none';
+          }
+        }
+      });
+    }
+
+    // Xbox Connect button
+    const xboxConnectBtn = document.getElementById('xbox-connect-btn') as HTMLButtonElement;
+    if (xboxConnectBtn) {
+      xboxConnectBtn.addEventListener('click', () => this._handleXboxConnect());
+    }
+
     // Theme selector
     document.querySelectorAll('input[name="theme-popup"]').forEach((radio) => {
       radio.addEventListener('change', (e: Event) => {
@@ -2073,6 +2114,52 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       if (steamConnectBtn) {
         steamConnectBtn.disabled = false;
         steamConnectBtn.textContent = 'Connect to Steam';
+      }
+    }
+  }
+
+  private async _handleXboxConnect(): Promise<void> {
+    const xboxGamertagInput = document.getElementById('xbox-gamertag-popup') as HTMLInputElement;
+    const xboxApiKeyInput = document.getElementById('xbox-api-key-popup') as HTMLInputElement;
+    const xboxConnectBtn = document.getElementById('xbox-connect-btn') as HTMLButtonElement;
+
+    const gamertag = xboxGamertagInput?.value.trim() || '';
+    const apiKey = xboxApiKeyInput?.value.trim() || '';
+
+    // Validate API key is populated
+    if (!apiKey) {
+      this._showError('Please enter your OpenXBL API Key');
+      return;
+    }
+
+    // Disable button and show loading state
+    if (xboxConnectBtn) {
+      xboxConnectBtn.disabled = true;
+      xboxConnectBtn.textContent = 'Connecting...';
+    }
+
+    try {
+      // Send message to background to save and sync Xbox library
+      const response = await chrome.runtime.sendMessage({
+        type: 'SAVE_SETTINGS',
+        data: {
+          xbox_gamertag: gamertag || undefined,
+          xbox_api_key: apiKey,
+        },
+      });
+
+      if (response.success) {
+        this._showSuccess('Xbox connected! Fetching your library...');
+        await this._updateServiceStatus('xbox-api');
+      } else {
+        this._showError(response.error || 'Failed to connect to Xbox');
+      }
+    } catch (error) {
+      this._showError('Error connecting to Xbox: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      if (xboxConnectBtn) {
+        xboxConnectBtn.disabled = false;
+        xboxConnectBtn.textContent = 'Connect to Xbox';
       }
     }
   }
@@ -2220,6 +2307,25 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       } catch (error) {
         console.error('[Popup] Failed to check Steam config:', error);
       }
+    } else if (service === 'xbox-api') {
+      // For Xbox, check if API key is configured
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: 'GET_USER_IDENTIFIER',
+        });
+        const profile = response.data;
+        isConfigured = !!(profile?.xbox_config?.api_key);
+        if (!isConfigured) {
+          statusDiv.textContent = 'Not configured';
+          statusDiv.style.color = 'var(--text-secondary)';
+        } else {
+          statusDiv.textContent = 'Configured, no activity';
+          statusDiv.style.color = 'var(--text-secondary)';
+        }
+        return;
+      } catch (error) {
+        console.error('[Popup] Failed to check Xbox config:', error);
+      }
     } else if (['video-tab'].includes(service)) {
       // Browser tab services with no activity just show "No activity"
       statusDiv.textContent = 'No activity';
@@ -2251,8 +2357,10 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       const discordInput = (document.getElementById('discord-info-popup') as HTMLInputElement)?.value || '';
       const steamIdInput = (document.getElementById('steam-id-popup') as HTMLInputElement)?.value.trim() || '';
       const steamApiKeyInput = (document.getElementById('steam-api-key-popup') as HTMLInputElement)?.value.trim() || '';
+      const xboxGamertagInput = (document.getElementById('xbox-gamertag-popup') as HTMLInputElement)?.value.trim() || '';
+      const xboxApiKeyInput = (document.getElementById('xbox-api-key-popup') as HTMLInputElement)?.value.trim() || '';
 
-      console.debug('[Popup] Saving settings - discord:', discordInput, 'steam-id:', steamIdInput ? 'set' : 'empty', 'steam-key:', steamApiKeyInput ? 'set' : 'empty');
+      console.debug('[Popup] Saving settings - discord:', discordInput, 'steam-id:', steamIdInput ? 'set' : 'empty', 'xbox-key:', xboxApiKeyInput ? 'set' : 'empty');
 
       // Collect service toggles for browser tabs
       // STUB: Twitch tab detection disabled for MVP
@@ -2263,9 +2371,8 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         servicesEnabled[service] = toggle?.checked ?? false;
       }
 
-      // Collect service toggles for OAuth integrations
-      // STUB: Spotify and Twitch stubs disabled for MVP
-      const oauthServices = ['steam-api', 'discord-api']; // 'spotify-api', 'twitch-api' disabled - see HTML comments
+      // Collect service toggles for OAuth / API integrations
+      const oauthServices = ['steam-api', 'xbox-api', 'discord-api'];
       for (const service of oauthServices) {
         const toggle = document.getElementById(`service-${service}-enabled`) as HTMLInputElement;
         servicesEnabled[service] = toggle?.checked ?? false;
@@ -2296,6 +2403,8 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
           discord_info: discordInput,
           steam_id: steamIdInput || undefined,
           steam_api_key: steamApiKeyInput || undefined,
+          xbox_gamertag: xboxGamertagInput || undefined,
+          xbox_api_key: xboxApiKeyInput || undefined,
           services_enabled: servicesEnabled,
           notification_preferences: {
             friend_online: notifFriendOnline,

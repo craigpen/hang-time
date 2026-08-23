@@ -34,7 +34,7 @@ export class GamesTabController {
   private currentSort: GamesUIState['sortBy'] = 'recent';
   private searchQuery: string = '';
   private allFriends: Friend[] = [];
-  private allGameMetadata: Map<number, GameMetadata> = new Map();
+  private allGameMetadata: Map<number | string, GameMetadata> = new Map();
   private loading: boolean = false;
 
   constructor(
@@ -111,21 +111,22 @@ export class GamesTabController {
       // Fetch metadata for all owned games
       await this._fetchAllGameMetadata(myGames);
 
-      // Check if metadata sync is incomplete
+      // Check if metadata sync is incomplete for Steam games
+      const steamGames = myGames.filter(g => typeof g.appId === 'number');
       const metadataCount = this.allGameMetadata.size;
-      const totalCount = myGames.length;
-      const isIncomplete = metadataCount < totalCount;
-      const metadataPercentage = totalCount > 0 ? metadataCount / totalCount : 0;
+      const totalSteamCount = steamGames.length;
+      const isIncomplete = totalSteamCount > 0 && metadataCount < totalSteamCount;
+      const metadataPercentage = totalSteamCount > 0 ? metadataCount / totalSteamCount : 1;
 
-      // If we have very little metadata (less than 10%), keep showing loading state
+      // If we have Steam games and very little metadata (less than 10%), keep showing loading state
       // This prevents showing placeholder cards while background fetcher is still queuing metadata
-      if (metadataPercentage < 0.1 && metadataCount > 0) {
-        this._showSyncStatus(metadataCount, totalCount);
+      if (totalSteamCount > 0 && metadataPercentage < 0.1 && metadataCount > 0) {
+        this._showSyncStatus(metadataCount, totalSteamCount);
         return;
       }
 
-      // If we have no metadata at all, show loading state
-      if (metadataCount === 0) {
+      // If we have Steam games with no metadata at all, show loading state
+      if (totalSteamCount > 0 && metadataCount === 0) {
         this._showLoading();
         return;
       }
@@ -138,7 +139,7 @@ export class GamesTabController {
 
       // Show sync status banner if incomplete
       if (isIncomplete && filteredAndSorted.length > 0) {
-        this._showSyncStatus(metadataCount, totalCount);
+        this._showSyncStatus(metadataCount, totalSteamCount);
       }
 
       // Render result cards
@@ -376,14 +377,16 @@ export class GamesTabController {
     // Only load already-cached metadata; don't try to fetch on-demand
     // Background fetcher handles all fetches at 1.5 games/sec
     for (const game of games) {
-      try {
-        const cached = await this.metadataFetcher.getCachedMetadata(game.appId);
-        if (cached) {
-          this.allGameMetadata.set(game.appId, cached);
+      if (typeof game.appId === 'number') {
+        try {
+          const cached = await this.metadataFetcher.getCachedMetadata(game.appId);
+          if (cached) {
+            this.allGameMetadata.set(game.appId, cached);
+          }
+        } catch (error) {
+          // Silently skip games without cached metadata
+          console.debug(`[Games] No cached metadata for appId ${game.appId}`);
         }
-      } catch (error) {
-        // Silently skip games without cached metadata
-        console.debug(`[Games] No cached metadata for appId ${game.appId}`);
       }
     }
 
@@ -414,7 +417,7 @@ export class GamesTabController {
   /**
    * Private: Get friend names that own a specific game
    */
-  private async _getFreindNamesWithGame(appId: number): Promise<string[]> {
+  private async _getFreindNamesWithGame(appId: number | string): Promise<string[]> {
     const friendNames: string[] = [];
 
     for (const friend of this.allFriends) {
@@ -582,12 +585,16 @@ export class GamesTabController {
     const card = document.createElement('div');
     card.className = 'game-card';
 
+    const isXbox = game.storefront === 'xbox';
+    const platformName = isXbox ? 'Xbox' : 'Steam';
+    const platformIcon = isXbox ? 'public/icons/xbox.png' : 'public/icons/steam.png';
+
     const metadata = game.metadata;
-    const gameName = metadata?.name || `Game ${game.appId}`;
-    const imageUrl = metadata?.capsuleImageUrl || 'public/icons/steam.png';
-    const storeUrl = metadata?.storePageUrl || `https://steampowered.com/app/${game.appId}`;
+    const gameName = metadata?.name || game.name || (isXbox ? `Xbox Title ${game.titleId || game.appId}` : `Game ${game.appId}`);
+    const imageUrl = metadata?.capsuleImageUrl || platformIcon;
+    const storeUrl = metadata?.storePageUrl || (isXbox ? `https://www.xbox.com/games/store/search?q=${encodeURIComponent(gameName)}` : `https://steampowered.com/app/${game.appId}`);
     const score = metadata?.metacriticScore || 0;
-    const genres = metadata?.genres.slice(0, 2).join(', ') || 'Unknown';
+    const genres = metadata?.genres.slice(0, 2).join(', ') || (isXbox ? 'Xbox Game' : 'Unknown');
     const modes = metadata?.categories.slice(0, 2).join(', ') || '';
     const isCrossplay = this._isCrossPlayable(metadata);
 
@@ -604,11 +611,11 @@ export class GamesTabController {
 
     card.innerHTML = `
       <div class="game-card-inner">
-        <img src="${this._escapeHtml(imageUrl)}" alt="${this._escapeHtml(gameName)}" class="game-card-image" onerror="this.src='public/icons/steam.png'">
+        <img src="${this._escapeHtml(imageUrl)}" alt="${this._escapeHtml(gameName)}" class="game-card-image" onerror="this.src='${platformIcon}'">
         <div class="game-card-content">
           <div class="game-card-header">
             <div class="game-title-group">
-              <img src="public/icons/steam.png" alt="Steam" class="game-platform-icon" title="Steam" />
+              <img src="${platformIcon}" alt="${platformName}" class="game-platform-icon" title="${platformName}" />
               <a href="${this._escapeHtml(storeUrl)}" target="_blank" class="game-name" title="${this._escapeHtml(gameName)}">
                 ${this._escapeHtml(gameName)}
               </a>
@@ -633,7 +640,7 @@ export class GamesTabController {
                   <path d="M 2 6 L 12 13 L 22 6"></path>
                 </svg>
               </button>
-              <button class="game-card-launch-btn" title="Launch ${this._escapeHtml(gameName)} on Steam">
+              <button class="game-card-launch-btn" title="Launch ${this._escapeHtml(gameName)} on ${platformName}">
                 <svg viewBox="0 0 24 24" fill="currentColor" class="play-icon">
                   <polygon points="6 4 20 12 6 20 6 4"></polygon>
                 </svg>
@@ -649,7 +656,12 @@ export class GamesTabController {
     if (launchBtn) {
       launchBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        window.location.assign(`steam://run/${game.appId}`);
+        if (isXbox) {
+          const productId = game.titleId || game.appId;
+          window.location.assign(`ms-windows-store://pdp/?ProductId=${productId}`);
+        } else {
+          window.location.assign(`steam://run/${game.appId}`);
+        }
       });
     }
 

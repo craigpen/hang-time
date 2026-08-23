@@ -833,6 +833,38 @@ describe('GamesTabController', () => {
       expect(results?.querySelector('.game-card-launch-btn')).not.toBeNull();
       expect(results?.querySelector('.game-platform-icon')).not.toBeNull();
     });
+
+    it('should render Xbox platform icon and title for Xbox games', async () => {
+      const games: OwnedGame[] = [
+        {
+          appId: 'xbox_123456',
+          titleId: '123456',
+          name: 'Halo Infinite',
+          storefront: 'xbox',
+          lastUpdated: Date.now(),
+        },
+      ];
+
+      mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
+      mockMetadataFetcher.getCachedMetadata.mockResolvedValue(null);
+
+      global.chrome = {
+        runtime: {
+          sendMessage: vi.fn().mockResolvedValue({
+            success: true,
+            data: [],
+          }),
+        } as any,
+      } as any;
+
+      await controller.render();
+
+      const results = document.getElementById('game-results');
+      expect(results?.innerHTML).toContain('Halo Infinite');
+      const platformIcon = results?.querySelector('.game-platform-icon') as HTMLImageElement;
+      expect(platformIcon).not.toBeNull();
+      expect(platformIcon?.src).toContain('xbox.png');
+    });
   });
 
   // Cleanup after each test

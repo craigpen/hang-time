@@ -10,6 +10,7 @@ import { RelayPool } from './nostr';
 import { IdentityManager } from './identity';
 import type { PublishQueue } from './publish-queue';
 import { hexToBytes } from './security-utils';
+import { XboxService } from './services/xbox';
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -18,7 +19,7 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
  */
 interface CachedFriendGameLibrary {
   pubkey: string;
-  appIds: number[];
+  appIds: (number | string)[];
   lastUpdated: number;
 }
 
@@ -64,32 +65,55 @@ export class GameLibraryManager {
   }
 
   /**
-   * Fetch user's owned games from Steam API and cache them
+   * Fetch user's owned games from configured storefronts (Steam, Xbox) and cache them
    */
   async fetchMyGameLibrary(): Promise<OwnedGame[]> {
     try {
-      console.debug('[GameLibrary] Fetching own game library from Steam API');
+      console.debug('[GameLibrary] Fetching own game library from configured storefronts');
 
       const profile = await this.storage.getUserProfile();
-      if (!profile?.steam_config?.steam_id) {
-        console.warn('[GameLibrary] Steam ID not configured');
-        return [];
+      const allGames: OwnedGame[] = [];
+      let lastError: Error | null = null;
+
+      // 1. Fetch Steam games if configured
+      if (profile?.steam_config?.steam_id) {
+        try {
+          const steamGames = await this._fetchFromSteamAPI(profile.steam_config.steam_id);
+          allGames.push(...steamGames);
+        } catch (error) {
+          console.warn('[GameLibrary] Failed to fetch Steam library:', error);
+          lastError = error instanceof Error ? error : new Error(String(error));
+        }
       }
 
-      // Call Steam GetOwnedGames API
-      const games = await this._fetchFromSteamAPI(profile.steam_config.steam_id);
+      // 2. Fetch Xbox games if configured
+      if (profile?.xbox_config?.api_key) {
+        try {
+          const xboxService = new XboxService(this.storage);
+          const xboxGames = await xboxService.fetchOwnedTitles();
+          allGames.push(...xboxGames);
+        } catch (error) {
+          console.warn('[GameLibrary] Failed to fetch Xbox library:', error);
+          lastError = error instanceof Error ? error : new Error(String(error));
+        }
+      }
+
+      if (lastError && allGames.length === 0) {
+        throw lastError;
+      }
 
       // Store in cache with timestamp
       const cacheData = {
-        ownedGames: games,
+        ownedGames: allGames,
         lastFetched: Date.now(),
-        steamId: profile.steam_config.steam_id,
+        steamId: profile?.steam_config?.steam_id,
+        xboxGamertag: profile?.xbox_config?.gamertag,
       };
 
       await this.storage.set(STORAGE_KEYS.MY_GAME_LIBRARY, cacheData);
-      console.debug(`[GameLibrary] Cached ${games.length} owned games`);
+      console.debug(`[GameLibrary] Cached ${allGames.length} owned games across storefronts`);
 
-      return games;
+      return allGames;
     } catch (error) {
       console.error('[GameLibrary] Failed to fetch game library:', error);
       throw error;
@@ -153,7 +177,7 @@ export class GameLibraryManager {
   /**
    * Cache a friend's game library
    */
-  async cacheFriendGameLibrary(friendPubkey: string, appIds: number[]): Promise<void> {
+  async cacheFriendGameLibrary(friendPubkey: string, appIds: (number | string)[]): Promise<void> {
     try {
       console.debug(`[GameLibrary] Caching ${appIds.length} games for friend:`, friendPubkey);
 
@@ -237,7 +261,7 @@ export class GameLibraryManager {
   /**
    * Calculate intersection of two app ID arrays
    */
-  private calculateCommonAppIds(myIds: number[], friendIds: number[]): number[] {
+  private calculateCommonAppIds(myIds: (number | string)[], friendIds: (number | string)[]): (number | string)[] {
     const friendSet = new Set(friendIds);
     return myIds.filter(id => friendSet.has(id));
   }
@@ -281,6 +305,7 @@ export class GameLibraryManager {
       // Convert Steam API response to OwnedGame[]
       const games: OwnedGame[] = data.response.games.map((game: any) => ({
         appId: game.appid,
+        storefront: 'steam' as const,
         platformsOwned: {
           windows: true, // Steam API doesn't provide platform info, assume Windows
           mac: false,
