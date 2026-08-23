@@ -32,6 +32,7 @@ export class GamesTabController {
     playtime: 'all',
   };
   private currentSort: GamesUIState['sortBy'] = 'recent';
+  private searchQuery: string = '';
   private allFriends: Friend[] = [];
   private allGameMetadata: Map<number, GameMetadata> = new Map();
   private loading: boolean = false;
@@ -208,6 +209,29 @@ export class GamesTabController {
     const applyButton = document.getElementById('apply-filters-btn');
     const clearButton = document.getElementById('clear-filters-btn');
     const sortDropdown = document.getElementById('sort-dropdown') as HTMLSelectElement;
+    const searchInput = document.getElementById('games-search-input') as HTMLInputElement | null;
+    const searchClearBtn = document.getElementById('games-search-clear') as HTMLButtonElement | null;
+
+    // Search input listener
+    if (searchInput) {
+      searchInput.addEventListener('input', async () => {
+        this.searchQuery = searchInput.value.trim();
+        if (searchClearBtn) {
+          searchClearBtn.style.display = this.searchQuery ? 'block' : 'none';
+        }
+        await this.render();
+      });
+    }
+
+    // Search clear listener
+    if (searchClearBtn && searchInput) {
+      searchClearBtn.addEventListener('click', async () => {
+        searchInput.value = '';
+        this.searchQuery = '';
+        searchClearBtn.style.display = 'none';
+        await this.render();
+      });
+    }
 
     // Toggle filter panel
     if (filtersButton && filtersPanel) {
@@ -424,6 +448,15 @@ export class GamesTabController {
    */
   private _filterGames(games: EnrichedGame[]): EnrichedGame[] {
     return games.filter((game) => {
+      // Filter by search query if set
+      if (this.searchQuery) {
+        const query = this.searchQuery.toLowerCase();
+        const name = (game.metadata?.name || String(game.appId)).toLowerCase();
+        if (!name.includes(query)) {
+          return false;
+        }
+      }
+
       // If any filters are active, require metadata to be present
       const hasActiveFilters = this.currentFilters.genres.length > 0 ||
                                this.currentFilters.modes.length > 0 ||
@@ -544,6 +577,8 @@ export class GamesTabController {
             <a href="${this._escapeHtml(storeUrl)}" target="_blank" class="game-name">
               ${this._escapeHtml(gameName)}
             </a>
+            <img src="public/icons/steam.png" alt="Steam" class="game-platform-icon" title="Steam" />
+            ${metadata?.isCrossPlayable ? `<span class="platform-badge crossplay-badge" title="Crossplay Supported">Crossplay</span>` : ''}
             ${score > 0 ? `<span class="game-score">⭐ ${score}/100</span>` : ''}
           </div>
           <div class="game-genres">
@@ -554,17 +589,33 @@ export class GamesTabController {
             <span class="friends-list">${this._escapeHtml(friendNamesText)}</span>
           </div>
         </div>
-        <button class="game-card-invite-btn ${hasInvitableFriends ? '' : 'disabled'}" title="${hasInvitableFriends ? 'Invite friends to play' : 'No friends own this game'}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
-            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
-            <path d="M 2 6 L 12 13 L 22 6"></path>
-          </svg>
-        </button>
+        <div class="game-card-actions">
+          <button class="game-card-launch-btn" title="Launch ${this._escapeHtml(gameName)} on Steam">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="play-icon">
+              <polygon points="6 4 20 12 6 20 6 4"></polygon>
+            </svg>
+          </button>
+          <button class="game-card-invite-btn ${hasInvitableFriends ? '' : 'disabled'}" title="${hasInvitableFriends ? 'Invite friends to play' : 'No friends own this game'}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
+              <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+              <path d="M 2 6 L 12 13 L 22 6"></path>
+            </svg>
+          </button>
+        </div>
       </div>
     `;
 
+    // Add event listener for launch button
+    const launchBtn = card.querySelector('.game-card-launch-btn') as HTMLButtonElement | null;
+    if (launchBtn) {
+      launchBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.location.assign(`steam://run/${game.appId}`);
+      });
+    }
+
     // Add event listener for invite button
-    const inviteBtn = card.querySelector('.game-card-invite-btn') as HTMLButtonElement;
+    const inviteBtn = card.querySelector('.game-card-invite-btn') as HTMLButtonElement | null;
     if (inviteBtn && hasInvitableFriends) {
       inviteBtn.addEventListener('click', async (e) => {
         e.stopPropagation();

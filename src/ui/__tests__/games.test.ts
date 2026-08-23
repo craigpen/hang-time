@@ -32,6 +32,8 @@ describe('GamesTabController', () => {
     const header = document.createElement('div');
     header.className = 'games-header';
     header.innerHTML = `
+      <input type="text" id="games-search-input" placeholder="Search games..." class="games-search-input" />
+      <button id="games-search-clear" class="games-search-clear" style="display: none;">×</button>
       <button id="filters-button" class="filters-btn">🔽 Filters</button>
       <div id="active-filters" class="filter-chips"></div>
       <select id="sort-dropdown" class="sort-dropdown">
@@ -675,6 +677,101 @@ describe('GamesTabController', () => {
       await controller.refresh();
 
       expect(mockGameLibraryManager.getMyGameLibrary).toHaveBeenCalled();
+    });
+  });
+
+  describe('search and launch actions', () => {
+    beforeEach(async () => {
+      mockStorage.getUserProfile.mockResolvedValue({
+        games_ui_state: {
+          filters: { genres: [], modes: [], playtime: 'all' },
+          sortBy: 'alphabetical',
+        },
+      });
+      await controller.init();
+    });
+
+    it('should filter games by search query', async () => {
+      const games: OwnedGame[] = [
+        { appId: 1, lastUpdated: Date.now() },
+        { appId: 2, lastUpdated: Date.now() },
+      ];
+      const metadata1: GameMetadata = {
+        appId: 1,
+        name: 'Factorio',
+        genres: ['Strategy'],
+        categories: ['Co-op'],
+        platforms: { windows: true, mac: true, linux: true },
+        capsuleImageUrl: 'factorio.png',
+        storePageUrl: 'https://steam.com/1',
+        lastFetched: Date.now(),
+      };
+      const metadata2: GameMetadata = {
+        appId: 2,
+        name: 'Terraria',
+        genres: ['Adventure'],
+        categories: ['Multi-player'],
+        platforms: { windows: true, mac: true, linux: true },
+        capsuleImageUrl: 'terraria.png',
+        storePageUrl: 'https://steam.com/2',
+        lastFetched: Date.now(),
+      };
+
+      mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
+      mockMetadataFetcher.getCachedMetadata.mockImplementation((id: number) => {
+        return id === 1 ? Promise.resolve(metadata1) : Promise.resolve(metadata2);
+      });
+
+      global.chrome = {
+        runtime: {
+          sendMessage: vi.fn().mockResolvedValue({
+            success: true,
+            data: [],
+          }),
+        } as any,
+      } as any;
+
+      const searchInput = document.getElementById('games-search-input') as HTMLInputElement;
+      searchInput.value = 'Factor';
+      searchInput.dispatchEvent(new Event('input'));
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const results = document.getElementById('game-results');
+      expect(results?.innerHTML).toContain('Factorio');
+      expect(results?.innerHTML).not.toContain('Terraria');
+    });
+
+    it('should render launch button and platform icon on game cards', async () => {
+      const games: OwnedGame[] = [{ appId: 1, lastUpdated: Date.now() }];
+      const metadata: GameMetadata = {
+        appId: 1,
+        name: 'Factorio',
+        genres: ['Strategy'],
+        categories: ['Co-op'],
+        platforms: { windows: true, mac: true, linux: true },
+        capsuleImageUrl: 'factorio.png',
+        storePageUrl: 'https://steam.com/1',
+        lastFetched: Date.now(),
+      };
+
+      mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
+      mockMetadataFetcher.getCachedMetadata.mockResolvedValue(metadata);
+
+      global.chrome = {
+        runtime: {
+          sendMessage: vi.fn().mockResolvedValue({
+            success: true,
+            data: [],
+          }),
+        } as any,
+      } as any;
+
+      await controller.render();
+
+      const results = document.getElementById('game-results');
+      expect(results?.querySelector('.game-card-launch-btn')).not.toBeNull();
+      expect(results?.querySelector('.game-platform-icon')).not.toBeNull();
     });
   });
 
