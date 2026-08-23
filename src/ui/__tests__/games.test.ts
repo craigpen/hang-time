@@ -865,6 +865,51 @@ describe('GamesTabController', () => {
       expect(platformIcon).not.toBeNull();
       expect(platformIcon?.src).toContain('xbox.png');
     });
+
+    it('should render Xbox game with RAWG metadata including Metacritic score and crossplay', async () => {
+      const games: OwnedGame[] = [
+        {
+          appId: 'xbox_58751',
+          titleId: '58751',
+          name: 'Halo Infinite',
+          storefront: 'xbox',
+          lastUpdated: Date.now(),
+        },
+      ];
+
+      const rawgMeta: GameMetadata = {
+        appId: 'xbox_58751',
+        name: 'Halo Infinite',
+        genres: ['Action', 'Shooter'],
+        categories: ['Multiplayer', 'Cross-Platform Multiplayer'],
+        platforms: { windows: true, xbox: true, mac: false, linux: false },
+        metacriticScore: 87,
+        capsuleImageUrl: 'https://media.rawg.io/halo.jpg',
+        storePageUrl: 'https://rawg.io/games/halo-infinite',
+        lastFetched: Date.now(),
+        isCrossPlayable: true,
+      };
+
+      mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
+      mockMetadataFetcher.getCachedMetadata.mockResolvedValue(rawgMeta);
+
+      global.chrome = {
+        runtime: {
+          sendMessage: vi.fn().mockResolvedValue({
+            success: true,
+            data: [],
+          }),
+        } as any,
+      } as any;
+
+      await controller.render();
+
+      const results = document.getElementById('game-results');
+      expect(results?.innerHTML).toContain('Halo Infinite');
+      expect(results?.innerHTML).toContain('⭐ 87');
+      expect(results?.innerHTML).toContain('Crossplay');
+      expect(results?.innerHTML).toContain('Action, Shooter');
+    });
   });
 
   // Cleanup after each test

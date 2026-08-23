@@ -111,22 +111,24 @@ export class GamesTabController {
       // Fetch metadata for all owned games
       await this._fetchAllGameMetadata(myGames);
 
-      // Check if metadata sync is incomplete for Steam games
+      // Check if metadata sync is incomplete across owned games
       const steamGames = myGames.filter(g => typeof g.appId === 'number');
-      const metadataCount = this.allGameMetadata.size;
+      const steamMetadataCount = Array.from(this.allGameMetadata.keys()).filter(k => typeof k === 'number').length;
       const totalSteamCount = steamGames.length;
-      const isIncomplete = totalSteamCount > 0 && metadataCount < totalSteamCount;
-      const metadataPercentage = totalSteamCount > 0 ? metadataCount / totalSteamCount : 1;
+      const metadataCount = this.allGameMetadata.size;
+      const totalCount = myGames.length;
+      const isIncomplete = totalCount > 0 && metadataCount < totalCount;
+      const metadataPercentage = totalSteamCount > 0 ? steamMetadataCount / totalSteamCount : 1;
 
       // If we have Steam games and very little metadata (less than 10%), keep showing loading state
       // This prevents showing placeholder cards while background fetcher is still queuing metadata
-      if (totalSteamCount > 0 && metadataPercentage < 0.1 && metadataCount > 0) {
-        this._showSyncStatus(metadataCount, totalSteamCount);
+      if (totalSteamCount > 0 && metadataPercentage < 0.1 && steamMetadataCount > 0) {
+        this._showSyncStatus(metadataCount, totalCount);
         return;
       }
 
       // If we have Steam games with no metadata at all, show loading state
-      if (totalSteamCount > 0 && metadataCount === 0) {
+      if (totalSteamCount > 0 && steamMetadataCount === 0) {
         this._showLoading();
         return;
       }
@@ -139,7 +141,7 @@ export class GamesTabController {
 
       // Show sync status banner if incomplete
       if (isIncomplete && filteredAndSorted.length > 0) {
-        this._showSyncStatus(metadataCount, totalSteamCount);
+        this._showSyncStatus(metadataCount, totalCount);
       }
 
       // Render result cards
@@ -377,16 +379,14 @@ export class GamesTabController {
     // Only load already-cached metadata; don't try to fetch on-demand
     // Background fetcher handles all fetches at 1.5 games/sec
     for (const game of games) {
-      if (typeof game.appId === 'number') {
-        try {
-          const cached = await this.metadataFetcher.getCachedMetadata(game.appId);
-          if (cached) {
-            this.allGameMetadata.set(game.appId, cached);
-          }
-        } catch (error) {
-          // Silently skip games without cached metadata
-          console.debug(`[Games] No cached metadata for appId ${game.appId}`);
+      try {
+        const cached = await this.metadataFetcher.getCachedMetadata(game.appId);
+        if (cached) {
+          this.allGameMetadata.set(game.appId, cached);
         }
+      } catch (error) {
+        // Silently skip games without cached metadata
+        console.debug(`[Games] No cached metadata for appId ${game.appId}`);
       }
     }
 

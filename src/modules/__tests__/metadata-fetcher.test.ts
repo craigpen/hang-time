@@ -17,6 +17,7 @@ describe('MetadataFetcher', () => {
       set: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue(undefined),
       delete: vi.fn().mockResolvedValue(undefined),
+      getUserProfile: vi.fn().mockResolvedValue(null),
     };
 
     // Mock global fetch
@@ -1468,6 +1469,113 @@ describe('MetadataFetcher', () => {
       expect(result?.genres).toHaveLength(3);
       expect(result?.categories).toHaveLength(3);
       expect(result?.metacriticScore).toBe(92);
+      expect(result?.isCrossPlayable).toBe(true);
+    });
+  });
+
+  describe('RAWG API integration for non-Steam titles', () => {
+    it('should fetch and normalize metadata from RAWG for Xbox titles', async () => {
+      const mockRawgResponse = {
+        results: [
+          {
+            id: 58751,
+            slug: 'halo-infinite',
+            name: 'Halo Infinite',
+            metacritic: 87,
+            rating: 4.1,
+            background_image: 'https://media.rawg.io/media/games/halo-infinite.jpg',
+            genres: [{ name: 'Action' }, { name: 'Shooter' }],
+            tags: [
+              { name: 'Multiplayer' },
+              { name: 'Cross-Platform Multiplayer' },
+              { name: 'Sci-fi' },
+            ],
+          },
+        ],
+      };
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValueOnce(mockRawgResponse),
+      });
+
+      const metadata = await metadataFetcher.fetchFromRAWG('Halo Infinite', 'xbox_123456');
+
+      expect(metadata).not.toBeNull();
+      expect(metadata?.appId).toBe('xbox_123456');
+      expect(metadata?.name).toBe('Halo Infinite');
+      expect(metadata?.metacriticScore).toBe(87);
+      expect(metadata?.genres).toEqual(['Action', 'Shooter']);
+      expect(metadata?.categories).toContain('Cross-Platform Multiplayer');
+      expect(metadata?.isCrossPlayable).toBe(true);
+      expect(metadata?.capsuleImageUrl).toBe('https://media.rawg.io/media/games/halo-infinite.jpg');
+      expect(metadata?.storePageUrl).toBe('https://rawg.io/games/halo-infinite');
+    });
+
+    it('should fallback to converted user rating if Metacritic score is missing', async () => {
+      const mockRawgResponse = {
+        results: [
+          {
+            id: 99999,
+            slug: 'indie-gem',
+            name: 'Indie Gem',
+            metacritic: null,
+            rating: 4.5,
+            background_image: 'https://media.rawg.io/media/games/indie.jpg',
+            genres: [{ name: 'Indie' }],
+            tags: [{ name: 'Singleplayer' }],
+          },
+        ],
+      };
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValueOnce(mockRawgResponse),
+      });
+
+      const metadata = await metadataFetcher.fetchFromRAWG('Indie Gem', 'xbox_99999');
+
+      expect(metadata).not.toBeNull();
+      expect(metadata?.metacriticScore).toBe(90); // 4.5 * 20
+      expect(metadata?.isCrossPlayable).toBe(false);
+    });
+
+    it('should route string appIds through RAWG in fetchMetadata', async () => {
+      mockStorage.get.mockImplementation((key: string) => {
+        if (key === STORAGE_KEYS.MY_GAME_LIBRARY) {
+          return Promise.resolve({
+            ownedGames: [
+              { appId: 'xbox_777', name: 'Sea of Thieves', storefront: 'xbox' },
+            ],
+          });
+        }
+        return Promise.resolve(null);
+      });
+
+      const mockRawgResponse = {
+        results: [
+          {
+            id: 777,
+            slug: 'sea-of-thieves',
+            name: 'Sea of Thieves',
+            metacritic: 69,
+            background_image: 'https://media.rawg.io/sot.jpg',
+            genres: [{ name: 'Action' }, { name: 'Adventure' }],
+            tags: [{ name: 'Crossplay' }],
+          },
+        ],
+      };
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValueOnce(mockRawgResponse),
+      });
+
+      const result = await metadataFetcher.fetchMetadata('xbox_777');
+
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('Sea of Thieves');
+      expect(result?.metacriticScore).toBe(69);
       expect(result?.isCrossPlayable).toBe(true);
     });
   });

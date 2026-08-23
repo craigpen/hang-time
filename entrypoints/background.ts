@@ -1272,10 +1272,10 @@ async function _refreshGameLibrary(): Promise<ExtensionResponse> {
   }
 }
 
-async function _findGamesMissingMetadata(games: any[]): Promise<number[]> {
+async function _findGamesMissingMetadata(games: any[]): Promise<(number | string)[]> {
   try {
-    const metadataCache = await storageManager.get<Record<number, any>>(STORAGE_KEYS.GAME_METADATA_CACHE, {});
-    const missing: number[] = [];
+    const metadataCache = await storageManager.get<Record<string | number, any>>(STORAGE_KEYS.GAME_METADATA_CACHE, {});
+    const missing: (number | string)[] = [];
 
     for (const game of games) {
       const meta = metadataCache[game.appId];

@@ -41,10 +41,10 @@ export interface GameLibrary {
 // ============================================================================
 
 /**
- * Enriched metadata for a game from Steam API
+ * Enriched metadata for a game from Steam API or RAWG
  */
 export interface GameMetadata {
-  appId: number;
+  appId: number | string;
   name: string;
   genres: string[];
   categories: string[];
@@ -52,6 +52,7 @@ export interface GameMetadata {
     windows: boolean;
     mac: boolean;
     linux: boolean;
+    xbox?: boolean;
   };
   metacriticScore?: number;
   capsuleImageUrl: string;

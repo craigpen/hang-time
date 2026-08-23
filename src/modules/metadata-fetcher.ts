@@ -55,13 +55,13 @@ class RateLimiter {
 }
 
 /**
- * Manages game metadata fetching and caching from Steam API
+ * Manages game metadata fetching and caching from Steam API and RAWG
  */
 export class MetadataFetcher {
   private static instance: MetadataFetcher;
   private rateLimiter: RateLimiter;
-  private fetchQueue: number[] = [];
-  private failedAppIds: Map<number, number> = new Map();
+  private fetchQueue: (number | string)[] = [];
+  private failedAppIds: Map<number | string, number> = new Map();
   private isProcessing: boolean = false;
   private processingIntervalId: NodeJS.Timeout | null = null;
   private globalRateLimitedUntil: number = 0; // Pause all processing if we hit Steam's limit
@@ -83,7 +83,7 @@ export class MetadataFetcher {
   /**
    * Fetch metadata for a single game, using cache if available and fresh
    */
-  async fetchMetadata(appId: number): Promise<GameMetadata | null> {
+  async fetchMetadata(appId: number | string): Promise<GameMetadata | null> {
     try {
       console.debug(`[Metadata] Fetching metadata for appId: ${appId}`);
 
@@ -94,29 +94,44 @@ export class MetadataFetcher {
         return cached;
       }
 
-      // Fetch from Steam API first
-      const raw = await this.fetchFromSteamAPI(appId);
+      if (typeof appId === 'number') {
+        // Fetch from Steam API first
+        const raw = await this.fetchFromSteamAPI(appId);
 
-      if (!raw || raw.__rateLimited || raw.__timeout || raw.__networkError) {
-        console.warn(`[Metadata] Failed to fetch from Steam API for appId: ${appId}`);
-        return null;
+        if (!raw || raw.__rateLimited || raw.__timeout || raw.__networkError) {
+          console.warn(`[Metadata] Failed to fetch from Steam API for appId: ${appId}`);
+          return null;
+        }
+
+        // Fetch from SteamSpy (best effort)
+        const steamSpyData = await this.fetchFromSteamSpy(appId).catch(() => null);
+
+        // Parse and cache the metadata (with SteamSpy data for review score)
+        const metadata = this.parseAppDetails(raw, appId, steamSpyData);
+        if (!metadata) {
+          console.warn(`[Metadata] Failed to parse app details for appId: ${appId}`);
+          return null;
+        }
+
+        // Store in cache
+        await this.setCachedMetadata(appId, metadata);
+        console.debug(`[Metadata] Cached metadata for appId: ${appId}`);
+
+        return metadata;
+      } else {
+        // Fetch non-Steam titles via RAWG
+        let gameName = String(appId).replace(/^xbox_/, '');
+        try {
+          const myLib = await this.storage.get<any>(STORAGE_KEYS.MY_GAME_LIBRARY);
+          const found = myLib?.ownedGames?.find((g: any) => g.appId === appId);
+          if (found?.name) {
+            gameName = found.name;
+          }
+        } catch {
+          // ignore error
+        }
+        return await this.fetchFromRAWG(gameName, appId);
       }
-
-      // Fetch from SteamSpy (best effort)
-      const steamSpyData = await this.fetchFromSteamSpy(appId).catch(() => null);
-
-      // Parse and cache the metadata (with SteamSpy data for review score)
-      const metadata = this.parseAppDetails(raw, appId, steamSpyData);
-      if (!metadata) {
-        console.warn(`[Metadata] Failed to parse app details for appId: ${appId}`);
-        return null;
-      }
-
-      // Store in cache
-      await this.setCachedMetadata(appId, metadata);
-      console.debug(`[Metadata] Cached metadata for appId: ${appId}`);
-
-      return metadata;
     } catch (error) {
       console.error(`[Metadata] Error fetching metadata for appId ${appId}:`, error);
       return null;
@@ -124,17 +139,112 @@ export class MetadataFetcher {
   }
 
   /**
+   * Fetch game metadata from RAWG.io API
+   */
+  async fetchFromRAWG(gameName: string, targetAppId?: number | string): Promise<GameMetadata | null> {
+    try {
+      console.debug(`[Metadata] Fetching from RAWG for: "${gameName}"`);
+
+      // Clean up game name
+      const cleanName = gameName
+        .replace(/\s*\((Windows|PC|Xbox One|Xbox Series X\/S|Windows Edition)\)/gi, '')
+        .trim();
+
+      let profile: any = null;
+      try {
+        profile = typeof (this.storage as any).getUserProfile === 'function' ? await this.storage.getUserProfile() : null;
+      } catch {
+        profile = null;
+      }
+      const apiKey = profile?.publisher_config?.['rawg_api_key'] || 'c542e67aec3a4340908f9de9e86038af';
+      const url = `https://api.rawg.io/api/games?key=${apiKey}&search=${encodeURIComponent(cleanName)}&search_precise=true&page_size=1`;
+
+      const response = await fetch(url, {
+        headers: { Accept: 'application/json' },
+      });
+
+      if (!response.ok) {
+        console.warn(`[Metadata] RAWG API responded with status ${response.status} for ${gameName}`);
+        return null;
+      }
+
+      const data = await response.json();
+      const item = data?.results?.[0];
+
+      if (!item) {
+        console.debug(`[Metadata] No RAWG results found for "${gameName}"`);
+        return null;
+      }
+
+      // Extract genres
+      const genres: string[] = (item.genres || []).map((g: any) => g.name);
+
+      // Extract categories/tags
+      const categories: string[] = (item.tags || []).map((t: any) => t.name);
+
+      // Extract review score: prefer metacritic (0-100), fallback to rating (0-5) converted to 0-100
+      let metacriticScore: number | undefined;
+      if (typeof item.metacritic === 'number') {
+        metacriticScore = item.metacritic;
+      } else if (typeof item.rating === 'number' && item.rating > 0) {
+        metacriticScore = Math.round(item.rating * 20);
+      }
+
+      // Check crossplay tags
+      const isCrossPlayable = categories.some((c) => {
+        const lower = c.toLowerCase();
+        return (
+          lower.includes('cross-platform multiplayer') ||
+          lower.includes('crossplay') ||
+          lower.includes('cross-play')
+        );
+      });
+
+      const platforms = {
+        windows: true,
+        xbox: true,
+        mac: false,
+        linux: false,
+      };
+
+      const resolvedAppId = targetAppId || `xbox_${item.id || item.slug}`;
+      const storePageUrl = item.slug ? `https://rawg.io/games/${item.slug}` : `https://www.xbox.com/games/store/search?q=${encodeURIComponent(gameName)}`;
+      const capsuleImageUrl = item.background_image || '';
+
+      const metadata: GameMetadata = {
+        appId: resolvedAppId,
+        name: item.name || gameName,
+        genres,
+        categories,
+        platforms,
+        metacriticScore,
+        capsuleImageUrl,
+        storePageUrl,
+        lastFetched: Date.now(),
+        isCrossPlayable,
+      };
+
+      await this.setCachedMetadata(resolvedAppId, metadata);
+      console.debug(`[Metadata] Cached RAWG metadata for ${item.name} (${resolvedAppId})`);
+      return metadata;
+    } catch (error) {
+      console.error(`[Metadata] Error fetching from RAWG for "${gameName}":`, error);
+      return null;
+    }
+  }
+
+  /**
    * Get metadata for a game (shortcut for fetchMetadata)
    */
-  async getMetadata(appId: number): Promise<GameMetadata | null> {
+  async getMetadata(appId: number | string): Promise<GameMetadata | null> {
     return this.fetchMetadata(appId);
   }
 
   /**
    * Batch fetch metadata for multiple games
    */
-  async batchFetchMetadata(appIds: number[]): Promise<Map<number, GameMetadata>> {
-    const result = new Map<number, GameMetadata>();
+  async batchFetchMetadata(appIds: (number | string)[]): Promise<Map<number | string, GameMetadata>> {
+    const result = new Map<number | string, GameMetadata>();
 
     console.debug(`[Metadata] Batch fetching metadata for ${appIds.length} games`);
 
@@ -152,7 +262,7 @@ export class MetadataFetcher {
   /**
    * Schedule app IDs for background refresh with queue and retry logic
    */
-  async scheduleBackgroundRefresh(appIds: number[]): Promise<void> {
+  async scheduleBackgroundRefresh(appIds: (number | string)[]): Promise<void> {
     try {
       console.debug(`[Metadata] Scheduling ${appIds.length} games for background refresh`);
 
@@ -225,77 +335,93 @@ export class MetadataFetcher {
         if (appId === undefined) break;
 
         try {
-          const result = await this.fetchFromSteamAPI(appId);
+          if (typeof appId === 'number') {
+            const result = await this.fetchFromSteamAPI(appId);
 
-          // Handle rate limit response (429)
-          if (result && result.__rateLimited) {
-            // Implement exponential global backoff: start at 30s, increase with each event
-            const globalBackoffMs = Math.min(60000, 30000 * Math.pow(1.5, this.failedAppIds.size));
-            this.globalRateLimitedUntil = Date.now() + globalBackoffMs;
+            // Handle rate limit response (429)
+            if (result && result.__rateLimited) {
+              // Implement exponential global backoff: start at 30s, increase with each event
+              const globalBackoffMs = Math.min(60000, 30000 * Math.pow(1.5, this.failedAppIds.size));
+              this.globalRateLimitedUntil = Date.now() + globalBackoffMs;
 
-            console.warn(
-              `[Metadata] ⚠️  Steam API returned 429 for appId ${appId}, pausing ALL requests for ${Math.round(globalBackoffMs / 1000)}s`
-            );
+              console.warn(
+                `[Metadata] ⚠️  Steam API returned 429 for appId ${appId}, pausing ALL requests for ${Math.round(globalBackoffMs / 1000)}s`
+              );
 
-            // Re-queue this appId at front of queue for later retry
-            const retryCount = this.failedAppIds.get(appId) || 0;
-            if (retryCount < MAX_RETRIES) {
-              this.fetchQueue.unshift(appId); // Put back at front
-              this.failedAppIds.set(appId, retryCount + 1);
-            } else {
-              console.warn(`[Metadata] ⚠️  Max retries exceeded for appId ${appId} (rate limit)`);
-              this.failedAppIds.delete(appId);
+              // Re-queue this appId at front of queue for later retry
+              const retryCount = this.failedAppIds.get(appId) || 0;
+              if (retryCount < MAX_RETRIES) {
+                this.fetchQueue.unshift(appId); // Put back at front
+                this.failedAppIds.set(appId, retryCount + 1);
+              } else {
+                console.warn(`[Metadata] ⚠️  Max retries exceeded for appId ${appId} (rate limit)`);
+                this.failedAppIds.delete(appId);
+              }
+              break; // Stop processing; wait for global backoff to expire
             }
-            break; // Stop processing; wait for global backoff to expire
-          }
 
-          // Handle timeout response
-          if (result && result.__timeout) {
-            const retryCount = this.failedAppIds.get(appId) || 0;
-            if (retryCount < MAX_RETRIES) {
-              const backoffMs = this.calculateBackoff(retryCount);
-              console.debug(`[Metadata] Timeout for appId ${appId}, retrying after ${backoffMs}ms`);
-              setTimeout(() => this.fetchQueue.push(appId), backoffMs);
-              this.failedAppIds.set(appId, retryCount + 1);
-            } else {
-              console.warn(`[Metadata] ⚠️  Max retries exceeded for appId ${appId} (timeout)`);
-              this.failedAppIds.delete(appId);
+            // Handle timeout response
+            if (result && result.__timeout) {
+              const retryCount = this.failedAppIds.get(appId) || 0;
+              if (retryCount < MAX_RETRIES) {
+                const backoffMs = this.calculateBackoff(retryCount);
+                console.debug(`[Metadata] Timeout for appId ${appId}, retrying after ${backoffMs}ms`);
+                setTimeout(() => this.fetchQueue.push(appId), backoffMs);
+                this.failedAppIds.set(appId, retryCount + 1);
+              } else {
+                console.warn(`[Metadata] ⚠️  Max retries exceeded for appId ${appId} (timeout)`);
+                this.failedAppIds.delete(appId);
+              }
+              continue;
             }
-            continue;
-          }
 
-          // Handle network error response
-          if (result && result.__networkError) {
-            const retryCount = this.failedAppIds.get(appId) || 0;
-            if (retryCount < MAX_RETRIES) {
-              const backoffMs = this.calculateBackoff(retryCount);
-              console.debug(`[Metadata] Network error for appId ${appId}, retrying after ${backoffMs}ms`);
-              setTimeout(() => this.fetchQueue.push(appId), backoffMs);
-              this.failedAppIds.set(appId, retryCount + 1);
-            } else {
-              console.warn(`[Metadata] ⚠️  Max retries exceeded for appId ${appId} (network error)`);
-              this.failedAppIds.delete(appId);
+            // Handle network error response
+            if (result && result.__networkError) {
+              const retryCount = this.failedAppIds.get(appId) || 0;
+              if (retryCount < MAX_RETRIES) {
+                const backoffMs = this.calculateBackoff(retryCount);
+                console.debug(`[Metadata] Network error for appId ${appId}, retrying after ${backoffMs}ms`);
+                setTimeout(() => this.fetchQueue.push(appId), backoffMs);
+                this.failedAppIds.set(appId, retryCount + 1);
+              } else {
+                console.warn(`[Metadata] ⚠️  Max retries exceeded for appId ${appId} (network error)`);
+                this.failedAppIds.delete(appId);
+              }
+              continue;
             }
-            continue;
-          }
 
-          // Handle 404 (not found) - don't retry
-          if (result === null) {
-            // Check if this was a 404 or other error
-            // For now, treat null as "not found" and don't retry
-            console.debug(`[Metadata] App ${appId} not found or invalid, skipping retry`);
-            this.failedAppIds.delete(appId);
-            continue;
-          }
+            // Handle 404 (not found) - don't retry
+            if (result === null) {
+              console.debug(`[Metadata] App ${appId} not found or invalid, skipping retry`);
+              this.failedAppIds.delete(appId);
+              continue;
+            }
 
-          // Success - fetch SteamSpy data and parse
-          if (result) {
-            // Fetch SteamSpy data to get review score
-            const steamSpyData = await this.fetchFromSteamSpy(appId);
-            const metadata = this.parseAppDetails(result, appId, steamSpyData);
+            // Success - fetch SteamSpy data and parse
+            if (result) {
+              const steamSpyData = await this.fetchFromSteamSpy(appId);
+              const metadata = this.parseAppDetails(result, appId, steamSpyData);
+              if (metadata) {
+                await this.setCachedMetadata(appId, metadata);
+                console.debug(`[Metadata] ✅ Successfully fetched and cached appId ${appId} in background`);
+                this.failedAppIds.delete(appId);
+              }
+            }
+          } else {
+            // String appId (Xbox / Non-Steam) -> fetch from RAWG
+            let gameName = String(appId).replace(/^xbox_/, '');
+            try {
+              const myLib = await this.storage.get<any>(STORAGE_KEYS.MY_GAME_LIBRARY);
+              const found = myLib?.ownedGames?.find((g: any) => g.appId === appId);
+              if (found?.name) {
+                gameName = found.name;
+              }
+            } catch {
+              // ignore error
+            }
+
+            const metadata = await this.fetchFromRAWG(gameName, appId);
             if (metadata) {
-              await this.setCachedMetadata(appId, metadata);
-              console.debug(`[Metadata] ✅ Successfully fetched and cached appId ${appId} in background`);
               this.failedAppIds.delete(appId);
             }
           }
@@ -559,9 +685,9 @@ export class MetadataFetcher {
   /**
    * Get metadata from cache
    */
-  async getCachedMetadata(appId: number): Promise<GameMetadata | null> {
+  async getCachedMetadata(appId: number | string): Promise<GameMetadata | null> {
     try {
-      const cache = await this.storage.get<Record<number, GameMetadata>>(
+      const cache = await this.storage.get<Record<string | number, GameMetadata>>(
         STORAGE_KEYS.GAME_METADATA_CACHE,
         {}
       );
@@ -580,9 +706,9 @@ export class MetadataFetcher {
   /**
    * Store metadata in cache
    */
-  private async setCachedMetadata(appId: number, metadata: GameMetadata): Promise<void> {
+  private async setCachedMetadata(appId: number | string, metadata: GameMetadata): Promise<void> {
     try {
-      const cache = (await this.storage.get<Record<number, GameMetadata>>(
+      const cache = (await this.storage.get<Record<string | number, GameMetadata>>(
         STORAGE_KEYS.GAME_METADATA_CACHE,
         {}
       )) || {};
@@ -600,7 +726,7 @@ export class MetadataFetcher {
   /**
    * Get current fetch queue (for testing)
    */
-  getFetchQueue(): number[] {
+  getFetchQueue(): (number | string)[] {
     return [...this.fetchQueue];
   }
 
@@ -614,7 +740,7 @@ export class MetadataFetcher {
   /**
    * Get failed appIds and their retry counts (for testing)
    */
-  getFailedAppIds(): Map<number, number> {
+  getFailedAppIds(): Map<number | string, number> {
     return new Map(this.failedAppIds);
   }
 
