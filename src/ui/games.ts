@@ -585,7 +585,7 @@ export class GamesTabController {
             </a>
             <img src="public/icons/steam.png" alt="Steam" class="game-platform-icon" title="Steam" />
             ${metadata?.isCrossPlayable ? `<span class="platform-badge crossplay-badge" title="Crossplay Supported">Crossplay</span>` : ''}
-            ${score > 0 ? `<span class="game-score">⭐ ${score}/100</span>` : ''}
+            ${score > 0 ? `<span class="game-score">⭐ ${score}</span>` : ''}
           </div>
           <div class="game-genres">
             <span>${this._escapeHtml(genres)}${modes ? ' • ' + this._escapeHtml(modes) : ''}</span>
