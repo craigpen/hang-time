@@ -246,7 +246,7 @@
 
         <!-- Your Identity -->
         <div>
-          <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.9em;">Your Identity</label>
+          <label class="form-label">Your Identity</label>
           <p class="help-text">Your unique identifier for publishing activity to friends on Nostr. Share this with friends so they can add you. Generated once on install—cannot be changed.</p>
           <div class="identifier-group">
             <span id="user-identifier-popup" class="identifier-text">Loading...</span>
@@ -261,14 +261,14 @@
 
         <!-- Nickname (Display Name) -->
         <div style="margin-top: 16px;">
-          <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.9em;">Nickname (Optional)</label>
+          <label class="form-label">Nickname (Optional)</label>
           <p class="help-text">Your display name shown to friends in friend requests. If not set, your identity is used instead.</p>
           <input type="text" id="nickname-popup" placeholder="e.g., Craig, Alex, Jamie" class="form-input">
         </div>
 
         <!-- Discord -->
         <div style="margin-top: 16px;">
-          <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.9em;">Discord (Optional)</label>
+          <label class="form-label">Discord (Optional)</label>
           <p class="help-text">Server invite link for voice/chat during co-play. Get from Discord: Right-click server → Invite → Copy invite link</p>
           <input type="text" id="discord-info-popup" placeholder="https://discord.gg/abc123" class="form-input">
         </div>
@@ -280,8 +280,8 @@
 
         <!-- Browser Tabs Detection Subsection -->
         <div style="margin-bottom: 20px;">
-          <h4 style="margin: 0 0 12px 0; font-size: 0.9em; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">Browser Tabs</h4>
-          <p class="help-text" style="margin-bottom: 12px;">Automatically detect when you're watching videos and share with friends</p>
+          <h4 class="settings-subsection-title">Browser Tabs</h4>
+          <p class="help-text">Automatically detect when you're watching videos and share with friends</p>
 
           <label class="checkbox-label">
             <input type="checkbox" id="service-youtube-tab-popup" data-service="youtube-tab" class="service-toggle">
@@ -303,15 +303,15 @@
 
           <!-- URL Ignore List -->
           <div style="margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--border-color);">
-            <label style="display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9em;">Ignore URLs (one per line)</label>
-            <p class="help-text" style="margin-bottom: 8px;">Domains and URL patterns to exclude from activity detection. Use * as a wildcard to match any characters. Matching is case-insensitive and matches any part of the URL.</p>
+            <label class="form-label">Ignore URLs (one per line)</label>
+            <p class="help-text">Domains and URL patterns to exclude from activity detection. Use * as a wildcard to match any characters. Matching is case-insensitive and matches any part of the URL.</p>
             <textarea id="url-ignore-list-popup" placeholder="Examples:&#10;youtube.com/watch?v=*&#10;example.com&#10;*ads*" class="form-input" style="font-family: monospace; font-size: 0.85em; height: 80px; resize: vertical;"></textarea>
           </div>
         </div>
 
         <!-- Service Integrations Subsection -->
         <div>
-          <h4 style="margin: 0 0 12px 0; font-size: 0.9em; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">API Integrations</h4>
+          <h4 class="settings-subsection-title">API Integrations</h4>
 
           <!-- STUB: Spotify integration disabled for MVP. Future development planned for co-listening and playback sync.
           <div class="service-row">
@@ -359,16 +359,16 @@
           <!-- Steam Configuration (Inline) -->
           <div style="margin-top: 12px; margin-left: 36px; padding: 12px; background: var(--bg-secondary); border-radius: 4px;">
             <div style="margin-bottom: 12px;">
-              <label style="display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9em;">Steam ID</label>
-              <p class="help-text" style="margin-bottom: 8px;">Find your 64-bit Steam ID at <a href="https://steamid.xyz" target="_blank" style="color: var(--accent-primary); text-decoration: none;">steamid.xyz</a></p>
-              <input type="text" id="steam-id-popup" placeholder="e.g. 76561198024691357" class="form-input" style="font-size: 0.85em;">
+              <label class="form-label">Steam ID</label>
+              <p class="help-text">Find your 64-bit Steam ID at <a href="https://steamid.xyz" target="_blank">steamid.xyz</a></p>
+              <input type="text" id="steam-id-popup" placeholder="e.g. 76561198024691357" class="form-input">
             </div>
 
             <div>
-              <label style="display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9em;">Web API Key</label>
-              <p class="help-text" style="margin-bottom: 8px;">Get from <a href="https://steamcommunity.com/dev/apikey" target="_blank" style="color: var(--accent-primary); text-decoration: none;">steamcommunity.com/dev/apikey</a></p>
+              <label class="form-label">Web API Key</label>
+              <p class="help-text">Get from <a href="https://steamcommunity.com/dev/apikey" target="_blank">steamcommunity.com/dev/apikey</a></p>
               <div style="display: flex; gap: 6px;">
-                <input type="password" id="steam-api-key-popup" placeholder="Enter your Steam Web API key" class="form-input" style="flex: 1; font-size: 0.85em;">
+                <input type="password" id="steam-api-key-popup" placeholder="Enter your Steam Web API key" class="form-input" style="flex: 1;">
                 <button id="steam-toggle-key-visibility" class="btn-icon-small" title="Toggle visibility" style="flex-shrink: 0;">
                   <svg class="eye-open-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
@@ -383,7 +383,7 @@
                 </button>
               </div>
             </div>
-            <button id="steam-connect-btn" class="btn-primary" style="width: 100%; margin-top: 12px; font-size: 0.9em;">Connect to Steam</button>
+            <button id="steam-connect-btn" class="btn-primary" style="width: 100%; margin-top: 12px;">Connect to Steam</button>
           </div>
 
           <!-- Game Discovery under Steam -->
@@ -425,7 +425,7 @@
         <p class="help-text">Publish your activity and settings to friends via Nostr relays. Disable to stop sharing all services.</p>
 
         <div style="margin-top: 12px;">
-          <label style="display: block; margin-bottom: 8px; font-weight: 500; font-size: 0.9em;">Publish Interval (seconds)</label>
+          <label class="form-label">Publish Interval (seconds)</label>
           <p class="help-text">How often to publish updates (default: 12 seconds). Increasing this may help if you experience rate limiting from Nostr relays. Decreasing this value may cause publish failures due to rate limits.</p>
           <input type="number" id="publisher-rate-popup" min="5" max="120" step="1" placeholder="12" class="form-input" style="width: 80px;">
         </div>
@@ -459,21 +459,21 @@
       <!-- TEST NOTIFICATIONS SECTION -->
       <div class="settings-section">
         <h3>Test Local Notifications</h3>
-        <p class="help-text" style="margin-bottom: 12px;">Click to verify local notifications are working</p>
+        <p class="help-text">Click to verify local notifications are working</p>
         <button id="test-notification-btn" class="btn-backup">Send Test Notification</button>
       </div>
 
       <!-- DEBUG LOGS SECTION -->
       <div class="settings-section">
         <h3>Debug Logs</h3>
-        <p class="help-text" style="margin-bottom: 12px;">Download logs for debugging and troubleshooting issues</p>
+        <p class="help-text">Download logs for debugging and troubleshooting issues</p>
         <button id="debug-logs-btn" class="btn-backup">Download Logs</button>
       </div>
 
       <!-- BACKUP & RESTORE SECTION -->
       <div class="settings-section">
         <h3>Backup & Restore</h3>
-        <p class="help-text" style="margin-bottom: 12px;">Backup and restore your unique identifier and settings. Your unique identifier cannot be recovered if lost. All friend connections would need to be recreated—always keep backups secure.</p>
+        <p class="help-text">Backup and restore your unique identifier and settings. Your unique identifier cannot be recovered if lost. All friend connections would need to be recreated—always keep backups secure.</p>
         <div class="backup-buttons">
           <button id="export-settings-popup-btn" class="btn-backup">Backup</button>
           <button id="import-settings-popup-btn" class="btn-backup">Restore</button>

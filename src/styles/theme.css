@@ -214,7 +214,8 @@ a:hover {
 /* Buttons */
 button {
   font-family: inherit;
-  font-size: 0.95em;
+  font-size: 0.9em;
+  font-weight: 500;
   cursor: pointer;
   border: none;
   border-radius: 4px;
@@ -225,6 +226,7 @@ button {
 .btn-primary {
   background-color: var(--btn-primary-bg);
   color: var(--btn-primary-text);
+  font-weight: 500;
 }
 
 .btn-primary:hover {
@@ -234,6 +236,8 @@ button {
 .btn-secondary {
   background-color: var(--btn-secondary-bg);
   color: var(--btn-secondary-text);
+  border: 1px solid var(--border-color);
+  font-weight: 500;
 }
 
 .btn-secondary:hover {
