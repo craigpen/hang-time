@@ -27,6 +27,7 @@ export class GamesTabController {
   private storage: StorageManager;
   private popupElement: HTMLElement | null = null;
   private currentFilters: GamesUIState['filters'] = {
+    platforms: [],
     genres: [],
     modes: [],
     playtime: 'all',
@@ -175,8 +176,13 @@ export class GamesTabController {
       const saved = profile?.games_ui_state;
 
       if (saved) {
-        this.currentFilters = saved.filters;
-        this.currentSort = saved.sortBy;
+        this.currentFilters = {
+          platforms: saved.filters.platforms || [],
+          genres: saved.filters.genres || [],
+          modes: saved.filters.modes || [],
+          playtime: saved.filters.playtime || 'all',
+        };
+        this.currentSort = saved.sortBy || 'recent';
         console.debug('[Games] Loaded saved state:', { filters: this.currentFilters, sort: this.currentSort });
       }
     } catch (error) {
@@ -279,6 +285,10 @@ export class GamesTabController {
    * Private: Handle apply filters
    */
   private async _handleApplyFilters(): Promise<void> {
+    const platforms = Array.from(
+      document.querySelectorAll('.platform-filter:checked') as NodeListOf<HTMLInputElement>
+    ).map((el) => el.value as 'steam' | 'xbox');
+
     const genres = Array.from(
       document.querySelectorAll('.genre-filter:checked') as NodeListOf<HTMLInputElement>
     ).map((el) => el.value);
@@ -292,7 +302,7 @@ export class GamesTabController {
     ) as HTMLInputElement | null;
     const playtime = (playtimeRadios?.value || 'all') as GamesUIState['filters']['playtime'];
 
-    this.currentFilters = { genres, modes, playtime };
+    this.currentFilters = { platforms, genres, modes, playtime };
     await this._saveSavedState();
     this._updateFilterChips();
     await this.render();
@@ -302,10 +312,10 @@ export class GamesTabController {
    * Private: Handle clear filters
    */
   private async _handleClearFilters(): Promise<void> {
-    this.currentFilters = { genres: [], modes: [], playtime: 'all' };
+    this.currentFilters = { platforms: [], genres: [], modes: [], playtime: 'all' };
 
     // Uncheck all checkboxes and radios
-    document.querySelectorAll('.genre-filter, .mode-filter').forEach((el) => {
+    document.querySelectorAll('.platform-filter, .genre-filter, .mode-filter').forEach((el) => {
       (el as HTMLInputElement).checked = false;
     });
 
@@ -329,16 +339,27 @@ export class GamesTabController {
     chipsContainer.innerHTML = '';
 
     const allFilters = [
-      ...this.currentFilters.genres.map((g) => ({ type: 'genre', value: g })),
-      ...this.currentFilters.modes.map((m) => ({ type: 'mode', value: m })),
-      ...(this.currentFilters.playtime !== 'all' ? [{ type: 'playtime', value: this.currentFilters.playtime }] : []),
+      ...(this.currentFilters.platforms || []).map((p) => ({
+        type: 'platform',
+        label: p === 'steam' ? 'Platform: Steam' : 'Platform: Xbox',
+        value: p,
+      })),
+      ...this.currentFilters.genres.map((g) => ({ type: 'genre', label: g, value: g })),
+      ...this.currentFilters.modes.map((m) => ({ type: 'mode', label: m, value: m })),
+      ...(this.currentFilters.playtime !== 'all'
+        ? [{
+            type: 'playtime',
+            label: this.currentFilters.playtime === 'week' ? 'Played this week' : 'Played this month',
+            value: this.currentFilters.playtime,
+          }]
+        : []),
     ];
 
     for (const filter of allFilters) {
       const chip = document.createElement('div');
       chip.className = 'filter-chip';
       chip.innerHTML = `
-        <span>${this._escapeHtml(filter.value)}</span>
+        <span>${this._escapeHtml(filter.label)}</span>
         <button class="chip-remove" data-filter-type="${filter.type}" data-filter-value="${filter.value}">✕</button>
       `;
 
@@ -354,13 +375,23 @@ export class GamesTabController {
   /**
    * Private: Remove individual filter
    */
-  private async _removeFilter(filterType: 'genre' | 'mode' | 'playtime', value: string): Promise<void> {
-    if (filterType === 'genre') {
+  private async _removeFilter(filterType: 'platform' | 'genre' | 'mode' | 'playtime', value: string): Promise<void> {
+    if (filterType === 'platform') {
+      this.currentFilters.platforms = (this.currentFilters.platforms || []).filter((p) => p !== value);
+      const el = document.querySelector(`.platform-filter[value="${value}"]`) as HTMLInputElement | null;
+      if (el) el.checked = false;
+    } else if (filterType === 'genre') {
       this.currentFilters.genres = this.currentFilters.genres.filter((g) => g !== value);
+      const el = document.querySelector(`.genre-filter[value="${value}"]`) as HTMLInputElement | null;
+      if (el) el.checked = false;
     } else if (filterType === 'mode') {
       this.currentFilters.modes = this.currentFilters.modes.filter((m) => m !== value);
+      const el = document.querySelector(`.mode-filter[value="${value}"]`) as HTMLInputElement | null;
+      if (el) el.checked = false;
     } else if (filterType === 'playtime') {
       this.currentFilters.playtime = 'all';
+      const el = document.querySelector('.playtime-filter[value="all"]') as HTMLInputElement | null;
+      if (el) el.checked = true;
     }
 
     await this._saveSavedState();
@@ -458,6 +489,13 @@ export class GamesTabController {
         if (!name.includes(query)) {
           return false;
         }
+      }
+
+      // Filter by platform
+      if (this.currentFilters.platforms && this.currentFilters.platforms.length > 0) {
+        const gameStorefront = (game.storefront || (typeof game.appId === 'number' ? 'steam' : 'xbox')).toLowerCase();
+        const matchesPlatform = this.currentFilters.platforms.some((p) => p.toLowerCase() === gameStorefront);
+        if (!matchesPlatform) return false;
       }
 
       // If any filters are active, require metadata to be present

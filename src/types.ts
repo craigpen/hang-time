@@ -93,6 +93,7 @@ export interface UserProfile {
   };
   games_ui_state?: {
     filters: {
+      platforms?: ('steam' | 'xbox')[];
       genres: string[];
       modes: string[];
       playtime: 'all' | 'month' | 'week';

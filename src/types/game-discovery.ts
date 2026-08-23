@@ -86,6 +86,7 @@ export interface MetadataFetcherConfig {
  */
 export interface GamesUIState {
   filters: {
+    platforms?: ('steam' | 'xbox')[];
     genres: string[];
     modes: string[];
     playtime: 'all' | 'month' | 'week';

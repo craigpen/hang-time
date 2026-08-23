@@ -51,7 +51,20 @@ describe('GamesTabController', () => {
     filtersPanel.innerHTML = `
       <div class="filters-panel-content">
         <div class="filters-group">
-          <h4>Genres</h4>
+          <h4>Platform</h4>
+          <div class="filters-checkboxes">
+            <label class="checkbox-label">
+              <input type="checkbox" class="platform-filter" value="steam">
+              <span>Steam</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" class="platform-filter" value="xbox">
+              <span>Xbox</span>
+            </label>
+          </div>
+        </div>
+        <div class="filters-group">
+          <h4>Game Mode</h4>
           <div class="filters-checkboxes">
             <label class="checkbox-label">
               <input type="checkbox" class="genre-filter" value="action">
@@ -315,6 +328,66 @@ describe('GamesTabController', () => {
         },
       });
       await controller.init();
+    });
+
+    it('should filter by platform (Steam only and Xbox only)', async () => {
+      const games: OwnedGame[] = [
+        { appId: 101, storefront: 'steam', lastUpdated: Date.now() },
+        { appId: 'xbox_202', storefront: 'xbox', lastUpdated: Date.now() },
+      ];
+
+      const metadataSteam: GameMetadata = {
+        appId: 101,
+        name: 'Steam Title',
+        genres: ['Action'],
+        categories: [],
+        platforms: { windows: true, mac: false, linux: false },
+        metacriticScore: 80,
+        capsuleImageUrl: 'img1.png',
+        storePageUrl: 'https://steam.com/101',
+        lastFetched: Date.now(),
+      };
+
+      const metadataXbox: GameMetadata = {
+        appId: 'xbox_202',
+        name: 'Xbox Title',
+        genres: ['Action'],
+        categories: [],
+        platforms: { windows: true, mac: false, linux: false, xbox: true },
+        metacriticScore: 88,
+        capsuleImageUrl: 'img2.png',
+        storePageUrl: 'https://xbox.com/202',
+        lastFetched: Date.now(),
+      };
+
+      mockGameLibraryManager.getMyGameLibrary.mockResolvedValue(games);
+      mockMetadataFetcher.getCachedMetadata.mockImplementation((appId: any) => {
+        return Promise.resolve(appId === 101 ? metadataSteam : metadataXbox);
+      });
+
+      // 1. Filter by Xbox only
+      const xboxCheckbox = document.querySelector('.platform-filter[value="xbox"]') as HTMLInputElement;
+      if (xboxCheckbox) xboxCheckbox.checked = true;
+
+      const applyBtn = document.getElementById('apply-filters-btn') as HTMLButtonElement;
+      applyBtn?.click();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      let results = document.getElementById('game-results');
+      expect(results?.innerHTML).toContain('Xbox Title');
+      expect(results?.innerHTML).not.toContain('Steam Title');
+
+      // 2. Filter by Steam only
+      if (xboxCheckbox) xboxCheckbox.checked = false;
+      const steamCheckbox = document.querySelector('.platform-filter[value="steam"]') as HTMLInputElement;
+      if (steamCheckbox) steamCheckbox.checked = true;
+
+      applyBtn?.click();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      results = document.getElementById('game-results');
+      expect(results?.innerHTML).toContain('Steam Title');
+      expect(results?.innerHTML).not.toContain('Xbox Title');
     });
 
     it('should filter by genre', async () => {
