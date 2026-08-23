@@ -104,7 +104,7 @@ export class GamesTabController {
       console.debug(`[Games] User owns ${myGames.length} games`);
 
       if (myGames.length === 0) {
-        this._showEmpty('Configure Steam to discover games with friends');
+        this._showEmpty('Configure Steam or Xbox in Settings to discover games with friends');
         return;
       }
 

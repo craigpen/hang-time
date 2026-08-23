@@ -108,6 +108,7 @@ export class GameLibraryManager {
         lastFetched: Date.now(),
         steamId: profile?.steam_config?.steam_id,
         xboxGamertag: profile?.xbox_config?.gamertag,
+        xboxConfigured: Boolean(profile?.xbox_config?.api_key),
       };
 
       await this.storage.set(STORAGE_KEYS.MY_GAME_LIBRARY, cacheData);
@@ -121,19 +122,27 @@ export class GameLibraryManager {
   }
 
   /**
-   * Get user's game library, fetching from Steam if cache is stale
+   * Get user's game library, fetching from storefronts if cache is stale or config changed
    */
   async getMyGameLibrary(): Promise<OwnedGame[]> {
     try {
+      const profile = await this.storage.getUserProfile();
       const cached = await this.storage.get<any>(STORAGE_KEYS.MY_GAME_LIBRARY);
 
-      // Check if cache exists and is fresh
-      if (cached?.ownedGames && !this.isCacheStale(cached.lastFetched)) {
+      const hasSteamConfigured = Boolean(profile?.steam_config?.steam_id && profile?.steam_config?.api_key);
+      const hasXboxConfigured = Boolean(profile?.xbox_config?.api_key);
+
+      const cacheMatchesConfig =
+        (!hasSteamConfigured || cached?.steamId === profile?.steam_config?.steam_id) &&
+        (!hasXboxConfigured || cached?.xboxConfigured);
+
+      // Check if cache exists, is fresh, and matches current storefront configuration
+      if (cached?.ownedGames && cacheMatchesConfig && !this.isCacheStale(cached.lastFetched)) {
         console.debug('[GameLibrary] Returning cached game library');
         return cached.ownedGames;
       }
 
-      // Cache is stale or missing - fetch fresh data
+      // Cache is stale, missing, or storefront configuration changed - fetch fresh data
       return await this.fetchMyGameLibrary();
     } catch (error) {
       console.error('[GameLibrary] Failed to get game library:', error);
