@@ -2463,9 +2463,18 @@ body.settings-open .popup-container {
 .game-card-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   width: 100%;
   min-width: 0;
+}
+
+.game-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
 }
 
 .game-name {
@@ -2477,7 +2486,6 @@ body.settings-open .popup-container {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 140px;
 }
 
 .game-name:hover {
@@ -2485,11 +2493,17 @@ body.settings-open .popup-container {
   text-decoration: underline;
 }
 
+.game-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .game-score {
   font-size: 0.8em;
   color: var(--text-tertiary);
   white-space: nowrap;
-  margin-left: auto;
   flex-shrink: 0;
 }
 
@@ -2505,6 +2519,15 @@ body.settings-open .popup-container {
   color: var(--text-secondary);
 }
 
+.game-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
 .game-friends {
   font-size: 0.78em;
   color: var(--text-secondary);
@@ -2514,6 +2537,8 @@ body.settings-open .popup-container {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
 }
 
 .friends-count {
@@ -2561,17 +2586,17 @@ body.settings-open .popup-container {
 
 .game-card-actions {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 0;
-  margin-left: 2px;
 }
 
 .game-card-launch-btn,
 .game-card-invite-btn {
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
   padding: 0;
   border: none;
   border-radius: 4px;
@@ -2591,8 +2616,8 @@ body.settings-open .popup-container {
 }
 
 .play-icon {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   margin-left: 1px;
 }
 
@@ -2607,8 +2632,8 @@ body.settings-open .popup-container {
 }
 
 .envelope-icon {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
 }
 
 /* Invite Modal */

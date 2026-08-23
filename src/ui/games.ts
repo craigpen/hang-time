@@ -580,33 +580,39 @@ export class GamesTabController {
         <img src="${this._escapeHtml(imageUrl)}" alt="${this._escapeHtml(gameName)}" class="game-card-image" onerror="this.src='public/icons/steam.png'">
         <div class="game-card-content">
           <div class="game-card-header">
-            <a href="${this._escapeHtml(storeUrl)}" target="_blank" class="game-name">
-              ${this._escapeHtml(gameName)}
-            </a>
-            <img src="public/icons/steam.png" alt="Steam" class="game-platform-icon" title="Steam" />
-            ${metadata?.isCrossPlayable ? `<span class="platform-badge crossplay-badge" title="Crossplay Supported">Crossplay</span>` : ''}
-            ${score > 0 ? `<span class="game-score">⭐ ${score}</span>` : ''}
+            <div class="game-title-group">
+              <img src="public/icons/steam.png" alt="Steam" class="game-platform-icon" title="Steam" />
+              <a href="${this._escapeHtml(storeUrl)}" target="_blank" class="game-name" title="${this._escapeHtml(gameName)}">
+                ${this._escapeHtml(gameName)}
+              </a>
+            </div>
+            <div class="game-header-meta">
+              ${metadata?.isCrossPlayable ? `<span class="platform-badge crossplay-badge" title="Crossplay Supported">Crossplay</span>` : ''}
+              ${score > 0 ? `<span class="game-score">⭐ ${score}</span>` : ''}
+            </div>
           </div>
           <div class="game-genres">
             <span>${this._escapeHtml(genres)}${modes ? ' • ' + this._escapeHtml(modes) : ''}</span>
           </div>
-          <div class="game-friends">
-            <span class="friends-count">Owned by:</span>
-            <span class="friends-list">${this._escapeHtml(friendNamesText)}</span>
+          <div class="game-card-footer">
+            <div class="game-friends">
+              <span class="friends-count">Owned by:</span>
+              <span class="friends-list" title="${this._escapeHtml(friendNamesText)}">${this._escapeHtml(friendNamesText)}</span>
+            </div>
+            <div class="game-card-actions">
+              <button class="game-card-invite-btn ${hasInvitableFriends ? '' : 'disabled'}" title="${hasInvitableFriends ? 'Invite friends to play' : 'No friends own this game'}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
+                  <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+                  <path d="M 2 6 L 12 13 L 22 6"></path>
+                </svg>
+              </button>
+              <button class="game-card-launch-btn" title="Launch ${this._escapeHtml(gameName)} on Steam">
+                <svg viewBox="0 0 24 24" fill="currentColor" class="play-icon">
+                  <polygon points="6 4 20 12 6 20 6 4"></polygon>
+                </svg>
+              </button>
+            </div>
           </div>
-        </div>
-        <div class="game-card-actions">
-          <button class="game-card-launch-btn" title="Launch ${this._escapeHtml(gameName)} on Steam">
-            <svg viewBox="0 0 24 24" fill="currentColor" class="play-icon">
-              <polygon points="6 4 20 12 6 20 6 4"></polygon>
-            </svg>
-          </button>
-          <button class="game-card-invite-btn ${hasInvitableFriends ? '' : 'disabled'}" title="${hasInvitableFriends ? 'Invite friends to play' : 'No friends own this game'}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
-              <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
-              <path d="M 2 6 L 12 13 L 22 6"></path>
-            </svg>
-          </button>
         </div>
       </div>
     `;
