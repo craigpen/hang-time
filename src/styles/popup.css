@@ -1097,28 +1097,19 @@ body.settings-open .popup-container {
   margin-bottom: 0.75em;
 }
 
+.backup-buttons .btn-primary,
+.backup-buttons .btn-backup {
+  flex: 1;
+}
+
 .btn-backup {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 14px;
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  cursor: pointer;
+  background-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   font-weight: 500;
-  font-size: 0.9em;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .btn-backup:hover {
-  background-color: var(--bg-secondary);
-  border-color: var(--accent-primary);
-}
-
-.backup-buttons .btn-backup {
-  flex: 1;
+  background-color: var(--btn-primary-hover);
 }
 
 /* ============================================================================
