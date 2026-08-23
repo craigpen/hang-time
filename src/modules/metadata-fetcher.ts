@@ -542,16 +542,18 @@ export class MetadataFetcher {
   }
 
   /**
-   * Check if game is cross-playable (2+ platforms)
+   * Check if game is cross-playable (has Cross-Platform Multiplayer category)
    */
   private isCrossPlayable(metadata: GameMetadata): boolean {
-    const platformCount = [
-      metadata.platforms.windows,
-      metadata.platforms.mac,
-      metadata.platforms.linux,
-    ].filter(Boolean).length;
-
-    return platformCount >= 2;
+    const categories = metadata.categories || [];
+    return categories.some((c) => {
+      const lower = c.toLowerCase();
+      return (
+        lower.includes('cross-platform multiplayer') ||
+        lower.includes('crossplay') ||
+        lower.includes('cross-play')
+      );
+    });
   }
 
   /**

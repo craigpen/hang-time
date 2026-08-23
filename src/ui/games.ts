@@ -476,22 +476,48 @@ export class GamesTabController {
 
       // Filter by modes
       if (this.currentFilters.modes.length > 0 && game.metadata) {
-        const hasMode = this.currentFilters.modes.some((mode) => {
-          if (mode.toLowerCase() === 'crossplay') {
-            return Boolean(game.metadata?.isCrossPlayable) ||
-              game.metadata!.categories.some((c) =>
-                c.toLowerCase().includes('cross-platform') || c.toLowerCase().includes('crossplay')
-              );
+        const categories = game.metadata.categories || [];
+        const hasAllModes = this.currentFilters.modes.every((mode) => {
+          const m = mode.toLowerCase();
+          if (m === 'crossplay') {
+            return this._isCrossPlayable(game.metadata);
           }
-          return game.metadata!.categories.some((c) => c.toLowerCase().includes(mode.toLowerCase()));
+          return categories.some((c) => c.toLowerCase().includes(m));
         });
-        if (!hasMode) return false;
+        if (!hasAllModes) return false;
       }
 
-      // Filter by playtime (based on friend activity - Phase 7)
-      // For now, just allow all
+      // Filter by playtime (based on user's last played time)
+      if (this.currentFilters.playtime !== 'all') {
+        const lastPlayed = game.rtime_last_played ? game.rtime_last_played * 1000 : 0;
+        if (!lastPlayed) return false;
+        const now = Date.now();
+        if (this.currentFilters.playtime === 'week') {
+          const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
+          if (lastPlayed < oneWeekAgo) return false;
+        } else if (this.currentFilters.playtime === 'month') {
+          const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
+          if (lastPlayed < oneMonthAgo) return false;
+        }
+      }
 
       return true;
+    });
+  }
+
+  /**
+   * Private: Check if game metadata contains true cross-platform multiplayer support
+   */
+  private _isCrossPlayable(metadata?: GameMetadata | null): boolean {
+    if (!metadata) return false;
+    const categories = metadata.categories || [];
+    return categories.some((c) => {
+      const lower = c.toLowerCase();
+      return (
+        lower.includes('cross-platform multiplayer') ||
+        lower.includes('crossplay') ||
+        lower.includes('cross-play')
+      );
     });
   }
 
@@ -563,6 +589,7 @@ export class GamesTabController {
     const score = metadata?.metacriticScore || 0;
     const genres = metadata?.genres.slice(0, 2).join(', ') || 'Unknown';
     const modes = metadata?.categories.slice(0, 2).join(', ') || '';
+    const isCrossplay = this._isCrossPlayable(metadata);
 
     const friendNamesText =
       game.friendCount === 0
@@ -587,7 +614,7 @@ export class GamesTabController {
               </a>
             </div>
             <div class="game-header-meta">
-              ${metadata?.isCrossPlayable ? `<span class="platform-badge crossplay-badge" title="Crossplay Supported">Crossplay</span>` : ''}
+              ${isCrossplay ? `<span class="platform-badge crossplay-badge" title="Crossplay Supported">Crossplay</span>` : ''}
               ${score > 0 ? `<span class="game-score">⭐ ${score}</span>` : ''}
             </div>
           </div>

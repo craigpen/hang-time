@@ -338,16 +338,16 @@ describe('MetadataFetcher', () => {
   // ============================================================================
 
   describe('cross-platform detection', () => {
-    it('should mark game as cross-playable with 2+ platforms', async () => {
+    it('should mark game as cross-playable with Cross-Platform Multiplayer category', async () => {
       const mockResponse = {
         261570: {
           success: true,
           data: {
-            name: 'Half-Life 2',
-            genres: [{ description: 'Shooter' }],
-            categories: [{ description: 'Single-player' }],
-            platforms: { windows: true, mac: true, linux: true }, // 3 platforms
-            header_image: 'https://example.com/hl2.jpg',
+            name: 'No Mans Sky',
+            genres: [{ description: 'Action' }],
+            categories: [{ description: 'Cross-Platform Multiplayer' }],
+            platforms: { windows: true, mac: true, linux: false },
+            header_image: 'https://example.com/nms.jpg',
           },
         },
       };
@@ -362,18 +362,17 @@ describe('MetadataFetcher', () => {
       expect(result?.isCrossPlayable).toBe(true);
       expect(result?.platforms.windows).toBe(true);
       expect(result?.platforms.mac).toBe(true);
-      expect(result?.platforms.linux).toBe(true);
     });
 
-    it('should mark game as non-cross-playable with 1 platform', async () => {
+    it('should mark game as non-cross-playable without crossplay category', async () => {
       const mockResponse = {
         444444: {
           success: true,
           data: {
-            name: 'Windows-only Game',
+            name: 'Singleplayer Only Game',
             genres: [{ description: 'Action' }],
             categories: [{ description: 'Single-player' }],
-            platforms: { windows: true, mac: false, linux: false }, // Only Windows
+            platforms: { windows: true, mac: true, linux: true },
             header_image: 'https://example.com/game.jpg',
           },
         },
@@ -389,15 +388,15 @@ describe('MetadataFetcher', () => {
       expect(result?.isCrossPlayable).toBe(false);
     });
 
-    it('should detect Windows+Mac as cross-playable', async () => {
+    it('should detect crossplay when category contains Cross-Play', async () => {
       const mockResponse = {
         555555: {
           success: true,
           data: {
-            name: 'Cross-platform Game',
-            genres: [{ description: 'Puzzle' }],
-            categories: [{ description: 'Single-player' }],
-            platforms: { windows: true, mac: true, linux: false }, // 2 platforms
+            name: 'Cross-Play Arena',
+            genres: [{ description: 'Shooter' }],
+            categories: [{ description: 'Online Cross-Play' }],
+            platforms: { windows: true, mac: false, linux: false },
             header_image: 'https://example.com/game.jpg',
           },
         },
@@ -409,30 +408,6 @@ describe('MetadataFetcher', () => {
       });
 
       const result = await metadataFetcher.fetchMetadata(555555);
-
-      expect(result?.isCrossPlayable).toBe(true);
-    });
-
-    it('should detect Linux+Mac as cross-playable', async () => {
-      const mockResponse = {
-        666666: {
-          success: true,
-          data: {
-            name: 'Unix Game',
-            genres: [{ description: 'Strategy' }],
-            categories: [{ description: 'Single-player' }],
-            platforms: { windows: false, mac: true, linux: true }, // 2 platforms
-            header_image: 'https://example.com/game.jpg',
-          },
-        },
-      };
-
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValueOnce(mockResponse),
-      });
-
-      const result = await metadataFetcher.fetchMetadata(666666);
 
       expect(result?.isCrossPlayable).toBe(true);
     });
@@ -1469,7 +1444,7 @@ describe('MetadataFetcher', () => {
             categories: [
               { description: 'Single-player' },
               { description: 'Multiplayer' },
-              { description: 'Co-op' },
+              { description: 'Cross-Platform Multiplayer' },
             ],
             platforms: { windows: true, mac: true, linux: true },
             metacritic: { score: 92, url: 'https://metacritic.com/game' },
