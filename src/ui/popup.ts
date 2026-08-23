@@ -1616,19 +1616,19 @@ export class PopupController {
     }
   }
 
-private async _updateIntegrationHealthDisplays(): Promise<void> {
+  private async _updateIntegrationHealthDisplays(): Promise<void> {
     try {
       const profile = await this.storage.getUserProfile();
       if (!profile) return;
 
       // STUB: Spotify and Twitch integrations disabled for MVP
       // Future: spotify-api (co-listening), twitch-api (streaming detection)
-      const integrations = ['steam-api', 'discord-api']; // spotify-api, twitch-api commented out - see above
+      const integrations = ['steam-api', 'xbox-api', 'discord-api'];
       for (const service of integrations) {
         const statusEl = document.getElementById(`status-${service}-popup`);
         if (!statusEl) continue;
 
-        const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? false;
+        const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? true;
         if (!isEnabled) {
           statusEl.textContent = 'Disabled';
           statusEl.style.color = '';
@@ -1653,9 +1653,21 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
               statusEl.textContent = `⚠️ Unavailable${personaStr} (${timeStr})`;
               statusEl.style.color = '#ef4444';
             }
+          } else if (profile.steam_config?.steam_id && profile.steam_config?.api_key) {
+            statusEl.textContent = 'Configured, no activity';
+            statusEl.style.color = '#10b981';
           } else {
             statusEl.textContent = 'Not configured';
-            statusEl.style.color = '';
+            statusEl.style.color = 'var(--text-secondary)';
+          }
+        } else if (service === 'xbox-api') {
+          if (profile.xbox_config?.api_key) {
+            const gamertagStr = profile.xbox_config.gamertag ? ` - ${profile.xbox_config.gamertag}` : '';
+            statusEl.textContent = `✅ Connected${gamertagStr}`;
+            statusEl.style.color = '#10b981';
+          } else {
+            statusEl.textContent = 'Not configured';
+            statusEl.style.color = 'var(--text-secondary)';
           }
         }
         // TODO: Add health display for Spotify, Twitch, Discord when implemented
@@ -1727,9 +1739,10 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       const oauthServices = ['steam-api', 'xbox-api', 'discord-api'];
       for (const service of oauthServices) {
         const toggle = document.getElementById(`service-${service}-enabled`) as HTMLInputElement;
-        if (toggle && profile.services_enabled) {
-          toggle.checked = profile.services_enabled[service as keyof typeof profile.services_enabled] ?? false;
-          this.serviceIntegrationEnabled.set(service, toggle.checked);
+        if (toggle) {
+          const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? true;
+          toggle.checked = isEnabled;
+          this.serviceIntegrationEnabled.set(service, isEnabled);
         }
       }
 
@@ -1798,11 +1811,10 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       }
       this._setTheme(theme);
 
-      // Update integration health status (Steam, Spotify, Twitch)
+      // Update Steam & Xbox status after loading
       await this._updateIntegrationHealthDisplays();
-
-      // Update Steam status after loading
-      await this._updateServiceStatus('steam');
+      await this._updateServiceStatus('steam-api');
+      await this._updateServiceStatus('xbox-api');
 
       // Add event listeners for settings panel
       this._setupSettingsPanelListeners();
@@ -2145,11 +2157,17 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
         data: {
           xbox_gamertag: gamertag || undefined,
           xbox_api_key: apiKey,
+          services_enabled: { 'xbox-api': true },
         },
       });
 
       if (response.success) {
+        this.serviceIntegrationEnabled.set('xbox-api', true);
+        const toggle = document.getElementById('service-xbox-api-enabled') as HTMLInputElement;
+        if (toggle) toggle.checked = true;
+
         this._showSuccess('Xbox connected! Fetching your library...');
+        await this._updateIntegrationHealthDisplays();
         await this._updateServiceStatus('xbox-api');
       } else {
         this._showError(response.error || 'Failed to connect to Xbox');
@@ -2320,7 +2338,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
           statusDiv.style.color = 'var(--text-secondary)';
         } else {
           statusDiv.textContent = 'Configured, no activity';
-          statusDiv.style.color = 'var(--text-secondary)';
+          statusDiv.style.color = '#10b981';
         }
         return;
       } catch (error) {
@@ -2607,6 +2625,7 @@ private async _updateIntegrationHealthDisplays(): Promise<void> {
       spotify: 'public/icons/spotify.png',
       twitch: 'public/icons/twitch.png',
       steam: 'public/icons/steam.png',
+      xbox: 'public/icons/xbox.png',
       discord: 'public/icons/discord.png',
     };
     const icon = iconMap[baseService];

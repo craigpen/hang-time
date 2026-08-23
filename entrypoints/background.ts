@@ -18,6 +18,7 @@ import { ActivityDetector } from '../src/modules/activity';
 import { ActivityPublisher } from '../src/modules/publisher';
 import { TabService } from '../src/modules/services/tabs';
 import { SteamService } from '../src/modules/services/steam';
+import { XboxService } from '../src/modules/services/xbox';
 import { SpotifyService } from '../src/modules/services/spotify';
 import { TwitchService } from '../src/modules/services/twitch';
 import { initializeMetadataFetcher, metadataFetcher } from '../src/modules/metadata-fetcher';
@@ -271,6 +272,7 @@ async function initializeExtension(): Promise<void> {
       activityDetector.registerService('spotify-api', new SpotifyService(storageManager));
       activityDetector.registerService('twitch-api', new TwitchService(storageManager));
       activityDetector.registerService('steam-api', new SteamService(storageManager));
+      activityDetector.registerService('xbox-api', new XboxService(storageManager));
       activityDetector.registerService('tabs', new TabService(storageManager));
 
       await activityDetector.start();
@@ -1026,6 +1028,10 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
       if (data.xbox_api_key !== undefined) profile.xbox_config.api_key = data.xbox_api_key;
       if (profile.xbox_config.api_key) {
         profile.xbox_config.enabled = true;
+        profile.services_enabled = profile.services_enabled || {} as any;
+        if (profile.services_enabled['xbox-api'] === undefined) {
+          profile.services_enabled['xbox-api'] = true;
+        }
       }
     }
     if (data.publisher_config !== undefined) {
