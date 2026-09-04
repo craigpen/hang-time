@@ -98,6 +98,7 @@ hang-time/
 │
 ├── docs/                              # Technical Specifications & Guides
 │   ├── ARCHITECTURE.md                # This document
+│   ├── ENHANCEMENT_IDEAS.md           # Prioritized technical expansion & feature roadmap
 │   ├── SESSION_MODEL.md               # Session lifecycle, divergence, DND, overlay modes
 │   ├── GAME_DISCOVERY.md              # Steam game sync, Kind 10003 events, metadata fetching
 │   ├── MV3_CONTENT_SCRIPT_LIFECYCLE.md# Content script DOM & port lifecycle patterns
