@@ -592,97 +592,99 @@ chrome.runtime.onMessage.addListener(
   }
 );
 
+import { AuthRouter, FriendsRouter, ActivityRouter, SettingsRouter } from '../src/modules/routers';
+
 async function _handleMessage(message: ExtensionMessage): Promise<ExtensionResponse> {
   switch (message.type) {
     case 'GET_STORAGE':
       return { success: true, data: await storageManager.get(message.data?.['key']) };
 
     case 'GET_CURRENT_ACTIVITY':
-      return _getCurrentActivity(message.data?.['service']);
+      return ActivityRouter.getCurrentActivity(activityDetector, message.data?.['service']);
 
     case 'GET_ALL_ACTIVE_ACTIVITIES':
-      return _getAllActiveActivities();
+      return ActivityRouter.getAllActiveActivities(activityDetector);
 
     case 'GET_ALL_ACTIVITIES':
-      return _getAllActivities();
+      return ActivityRouter.getAllActivities();
 
     case 'GET_BROWSER_ACTIVITIES':
-      return _getBrowserActivities();
+      return ActivityRouter.getBrowserActivities(activityDetector);
 
     case 'GET_ACTIVE_FRIENDS':
-      return _getActiveFriends();
+      return FriendsRouter.getActiveFriends();
 
     case 'GET_ALL_FRIENDS':
-      return _getAllFriends();
+      return FriendsRouter.getAllFriends();
 
     case 'GET_FRIEND':
-      return _getFriend(message.data?.['id']);
+      return FriendsRouter.getFriend(message.data?.['id']);
 
     case 'GET_FRIEND_ACTIVITY_HISTORY':
-      return _getFriendActivityHistory(message.data?.['friendId']);
+      return FriendsRouter.getFriendActivityHistory(message.data?.['friendId']);
 
     case 'GET_USER_IDENTIFIER':
-      return _getUserIdentifier();
+      return AuthRouter.getUserIdentifier();
 
     case 'ADD_FRIEND':
-      return _addFriend(message.data?.['identifier'], message.data?.['localName']);
+      return FriendsRouter.addFriend(message.data?.['identifier'], message.data?.['localName']);
 
     case 'REMOVE_FRIEND':
-      return _removeFriend(message.data?.['friendId']);
+      return FriendsRouter.removeFriend(message.data?.['friendId']);
 
     case 'RENAME_FRIEND':
-      return _renameFriend(message.data?.['friendId'], message.data?.['newName']);
+      return FriendsRouter.renameFriend(message.data?.['friendId'], message.data?.['newName']);
 
     case 'ACCEPT_FRIEND_REQUEST':
-      return _acceptFriendRequest(message.data?.['friendId']);
+      return FriendsRouter.acceptFriendRequest(message.data?.['friendId']);
 
     case 'DECLINE_FRIEND_REQUEST':
-      return _declineFriendRequest(message.data?.['friendId']);
+      return FriendsRouter.declineFriendRequest(message.data?.['friendId']);
 
     case 'SEND_MESSAGE':
-      return _sendMessage(message.data?.['activity'], message.data?.['friendId'], message.data?.['content']);
+      return FriendsRouter.sendMessage(message.data?.['activity'], message.data?.['friendId'], message.data?.['content']);
 
     case 'TOGGLE_SERVICE':
-      return _toggleService(message.data?.['service'], message.data?.['enabled']);
+      return ActivityRouter.toggleService(message.data?.['service'], message.data?.['enabled']);
 
     case 'SAVE_SETTINGS':
-      return _saveSettings(message.data);
+      return SettingsRouter.saveSettings(message.data, publishQueue, activityPublisher, () => SettingsRouter.refreshGameLibrary());
 
     case 'GET_DIAGNOSTICS':
-      return _getDiagnostics();
+      return SettingsRouter.getDiagnostics();
 
     case 'RESTORE_SETTINGS':
-      return _restoreSettings(message.data);
+      return SettingsRouter.restoreSettings(message.data);
 
     case 'MUTE_FRIEND':
-      return _muteFriend(message.data?.['friendId'], message.data?.['mute']);
+      return FriendsRouter.muteFriend(message.data?.['friendId'], message.data?.['mute']);
 
     case 'GET_DND_MODE':
-      return _getDndMode();
+      return SettingsRouter.getDndMode();
 
     case 'SET_DND_MODE':
-      return _setDndMode(message.data?.['enabled']);
+      return SettingsRouter.setDndMode(message.data?.['enabled'], activityPublisher);
 
     case 'GET_OAUTH_STATUS':
-      return _getOAuthStatus(message.data?.['service']);
+      return AuthRouter.getOAuthStatus(message.data?.['service']);
 
     case 'AUTHENTICATE_SERVICE':
-      return _authenticateService(message.data?.['service']);
+      return AuthRouter.authenticateService(message.data?.['service']);
 
     case 'GET_NETFLIX_EXTRACTION_LOGS':
-      return _getNetflixExtractionLogs();
+      return SettingsRouter.getNetflixExtractionLogs();
 
     case 'GET_NETFLIX_DEBUG_CAPTURES':
-      return _getNetflixDebugCaptures();
+      return SettingsRouter.getNetflixDebugCaptures();
 
     case 'DISCONNECT_SERVICE':
-      return _disconnectService(message.data?.['service']);
+      return AuthRouter.disconnectService(message.data?.['service']);
 
     case 'HANDLE_OAUTH_CALLBACK':
-      return _handleOAuthCallback(message.data?.['service'], message.data?.['code']);
+      return AuthRouter.handleOAuthCallback(message.data?.['service'], message.data?.['code']);
 
     case 'JOIN_ACTIVITY':
-      return _joinActivity(message.data?.['friendId'], message.data?.['activity']);
+      return ActivityRouter.joinActivity(message.data?.['friendId'], message.data?.['activity']);
 
     case 'SEND_INVITE':
       return inviteManager.sendInvite(message.data?.['activity'], message.data?.['friendId']);
@@ -694,10 +696,10 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
       return inviteManager.sendJoinNotification(message.data?.['activity'], message.data?.['friendId'], message.data?.['accepted']);
 
     case 'TEST_NOTIFICATION':
-      return _sendTestNotification();
+      return SettingsRouter.sendTestNotification();
 
     case 'REFRESH_GAME_LIBRARY':
-      return _refreshGameLibrary();
+      return SettingsRouter.refreshGameLibrary();
 
     case 'CONTENT_SCRIPT_ACTIVITY':
       return overlayCoordinator.handleContentScriptActivity(message.data?.['key'], message.data?.['value'], message.data?.['tabId'], async () => {
@@ -711,627 +713,10 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
       return { success: true };
 
     case 'DEBUG_STORAGE':
-      try {
-        const profile = await storageManager.getUserProfile();
-        const myActivities = await storageManager.getMyActivities();
-        const friends = await storageManager.getFriends();
-        return {
-          success: true,
-          data: {
-            currentActivity: profile?.current_activity || null,
-            myActivities: myActivities || {},
-            friendsCount: friends?.length || 0,
-            firstFriend: friends?.[0] ? {
-              id: friends[0].uuid,
-              name: friends[0].local_name,
-              currentActivities: friends[0].current_activities || {},
-            } : null,
-          },
-        };
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : 'Failed to query storage',
-        };
-      }
+      return SettingsRouter.debugStorage();
 
     default:
       return { success: false, error: `Unknown message type: ${message.type}` };
-  }
-}
-
-// ============================================================================
-// DOMAIN DELEGATE HANDLERS
-// ============================================================================
-
-async function _getCurrentActivity(service?: string): Promise<ExtensionResponse> {
-  if (!activityDetector) {
-    return { success: false, error: 'Activity detector not initialized' };
-  }
-  if (service) {
-    try {
-      const serviceModule = activityDetector['services']?.get(service);
-      if (serviceModule) {
-        const activity = await serviceModule.getCurrentActivity();
-        return { success: true, data: activity };
-      }
-      return { success: false, error: `Service not found: ${service}` };
-    } catch (error) {
-      return { success: false, error: `Failed to get ${service} activity` };
-    }
-  }
-  const activity = await activityDetector.detectCurrentActivity();
-  return { success: true, data: activity };
-}
-
-async function _getAllActiveActivities(): Promise<ExtensionResponse> {
-  if (!activityDetector) {
-    return { success: false, error: 'Activity detector not initialized' };
-  }
-  const activities = await activityDetector.detectAllActiveActivities();
-  return { success: true, data: activities };
-}
-
-async function _getAllActivities(): Promise<ExtensionResponse> {
-  try {
-    const myActivities = await storageManager.getMyActivities();
-    const friendManager = getFriendManager();
-    const friends = await friendManager.getAllFriends();
-
-    const friendsData = friends.map((friend) => ({
-      uuid: friend.uuid,
-      local_name: friend.local_name,
-      current_activities: friend.current_activities || {},
-      state: friend.state,
-      dnd: friend.dnd ?? false,
-      muted: friend.muted ?? false,
-      initiated_by_me: friend.initiated_by_me,
-      pubkey: friend.pubkey,
-      last_seen: friend.last_seen,
-    }));
-
-    return {
-      success: true,
-      data: {
-        myActivities,
-        friends: friendsData,
-      },
-    };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to get activities' };
-  }
-}
-
-async function _getBrowserActivities(): Promise<ExtensionResponse> {
-  if (!activityDetector) {
-    return { success: true, data: { 'netflix-tab': null, 'youtube-tab': null, 'twitch-tab': null } };
-  }
-  const tabService = activityDetector.getService('tabs') as any;
-  if (!tabService) {
-    return { success: true, data: { 'netflix-tab': null, 'youtube-tab': null, 'twitch-tab': null } };
-  }
-  await tabService.getCurrentActivity();
-  return {
-    success: true,
-    data: {
-      'netflix-tab': tabService.getDetectedActivity?.('netflix-tab') || null,
-      'youtube-tab': tabService.getDetectedActivity?.('youtube-tab') || null,
-      'twitch-tab': tabService.getDetectedActivity?.('twitch-tab') || null,
-    },
-  };
-}
-
-async function _getActiveFriends(): Promise<ExtensionResponse> {
-  try {
-    const friendManager = getFriendManager();
-    const activeFriends = await friendManager.getActiveFriends();
-    return { success: true, data: activeFriends };
-  } catch (error) {
-    return { success: false, error: 'Failed to get active friends' };
-  }
-}
-
-async function _getAllFriends(): Promise<ExtensionResponse> {
-  try {
-    const friendManager = getFriendManager();
-    const friends = await friendManager.getAllFriends();
-    return { success: true, data: friends };
-  } catch (error) {
-    return { success: false, error: 'Failed to get friends' };
-  }
-}
-
-async function _getFriend(friendId?: string): Promise<ExtensionResponse> {
-  if (!friendId) return { success: false, error: 'Friend ID required' };
-  try {
-    const friendManager = getFriendManager();
-    const friend = await friendManager.getFriend(friendId);
-    if (!friend) return { success: false, error: `Friend not found: ${friendId}` };
-    return { success: true, data: friend };
-  } catch (error) {
-    return { success: false, error: 'Failed to get friend' };
-  }
-}
-
-async function _getFriendActivityHistory(friendId?: string): Promise<ExtensionResponse> {
-  if (!friendId) return { success: false, error: 'Friend ID required' };
-  try {
-    const history = await storageManager.getActivityHistory(friendId);
-    return { success: true, data: history };
-  } catch (error) {
-    return { success: false, error: 'Failed to get history' };
-  }
-}
-
-async function _getUserIdentifier(): Promise<ExtensionResponse> {
-  try {
-    const profile = await storageManager.getUserProfile();
-    const identifier = await getIdentityManager().getIdentifier();
-    if (profile) {
-      if (!profile.uuid) {
-        profile.uuid = identifier;
-      }
-      return { success: true, data: profile };
-    }
-    return { success: true, data: { uuid: identifier, identifier } };
-  } catch (error) {
-    return { success: false, error: 'Failed to get user identifier' };
-  }
-}
-
-async function _addFriend(identifier?: string, localName?: string): Promise<ExtensionResponse> {
-  if (!identifier) return { success: false, error: 'Friend identifier required' };
-  try {
-    const friendManager = getFriendManager();
-    const friend = await friendManager.addFriend(identifier, localName || 'Friend');
-    await nostrSubscriptionManager.subscribeToFriend(friend.uuid);
-
-    try {
-      const messagingManager = getMessagingManager();
-      const userProfile = await storageManager.getUserProfile();
-      const myDisplayName = userProfile?.nickname || (await getIdentityManager().getIdentifier()) || '';
-      const eventId = await messagingManager.sendFriendRequestMessage(friend.pubkey, myDisplayName);
-      await inviteManager.trackPendingMessage(eventId, 'friend_request', friend.uuid, 'friend_request', myDisplayName);
-    } catch (msgError) {
-      console.warn('[Background] Failed to send friend request notification message:', msgError);
-    }
-
-    return { success: true, data: friend };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to add friend' };
-  }
-}
-
-async function _removeFriend(friendId?: string): Promise<ExtensionResponse> {
-  if (!friendId) return { success: false, error: 'Friend ID required' };
-  try {
-    const friendManager = getFriendManager();
-    await friendManager.removeFriend(friendId);
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: 'Failed to remove friend' };
-  }
-}
-
-async function _renameFriend(friendId?: string, newName?: string): Promise<ExtensionResponse> {
-  if (!friendId || !newName) return { success: false, error: 'Friend ID and new name required' };
-  try {
-    const friendManager = getFriendManager();
-    await friendManager.renameFriend(friendId, newName);
-    const updated = await friendManager.getFriend(friendId);
-    return { success: true, data: updated };
-  } catch (error) {
-    return { success: false, error: 'Failed to rename friend' };
-  }
-}
-
-async function _acceptFriendRequest(friendId?: string): Promise<ExtensionResponse> {
-  if (!friendId) return { success: false, error: 'Friend ID required' };
-  try {
-    const friendManager = getFriendManager();
-    const friend = await friendManager.getFriend(friendId);
-    if (!friend) return { success: false, error: 'Friend not found' };
-
-    await friendManager.acceptFriendRequest(friendId);
-    const updated = await friendManager.getFriend(friendId);
-    await nostrSubscriptionManager.subscribeToFriend(friend.uuid);
-
-    try {
-      const messagingManager = getMessagingManager();
-      const syntheticActivity: Activity = {
-        id: `friend-request-${friend.uuid}`,
-        service: 'spotify-api',
-        content: 'Friend Request',
-        timestamp: Date.now(),
-        freshness_timestamp: Date.now(),
-        state: 'stopped',
-        metadata: {},
-      };
-      await messagingManager.sendJoinAccepted(syntheticActivity, friend);
-    } catch (msgError) {
-      console.warn('[Background] Failed to send accept DM to friend:', msgError);
-    }
-
-    return { success: true, data: updated };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to accept friend request' };
-  }
-}
-
-async function _declineFriendRequest(friendId?: string): Promise<ExtensionResponse> {
-  if (!friendId) return { success: false, error: 'Friend ID required' };
-  try {
-    const friendManager = getFriendManager();
-    await friendManager.removeFriend(friendId);
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to decline friend request' };
-  }
-}
-
-async function _sendMessage(activity?: any, friendId?: string, content?: string): Promise<ExtensionResponse> {
-  if (!friendId || !content) return { success: false, error: 'friendId and content required' };
-  try {
-    const friendManager = getFriendManager();
-    const friend = await friendManager.getFriend(friendId);
-    if (!friend) return { success: false, error: `Friend not found: ${friendId}` };
-
-    const messagingManager = getMessagingManager();
-    const eventId = await messagingManager.sendChatMessage(activity || null, friend, content);
-
-    const messageActivityId = activity?.id || 'chat';
-    await inviteManager.trackPendingMessage(eventId, 'chat', friend.uuid, messageActivityId, content);
-
-    return { success: true, data: { eventId } };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to send message' };
-  }
-}
-
-async function _toggleService(service?: string, enabled?: boolean): Promise<ExtensionResponse> {
-  if (!service || enabled === undefined) return { success: false, error: 'Service and enabled required' };
-  try {
-    const profile = await storageManager.getUserProfile();
-    if (!profile) return { success: false, error: 'User profile not found' };
-
-    const serviceTyped = service as keyof typeof profile.services_enabled;
-    profile.services_enabled[serviceTyped] = enabled;
-    await storageManager.setUserProfile(profile);
-
-    return { success: true, data: { service, enabled } };
-  } catch (error) {
-    return { success: false, error: 'Failed to toggle service' };
-  }
-}
-
-async function _saveSettings(data?: any): Promise<ExtensionResponse> {
-  if (!data) return { success: false, error: 'settings data required' };
-  try {
-    const profile = await storageManager.getUserProfile();
-    if (!profile) return { success: false, error: 'user profile not found' };
-
-    if (data.nickname !== undefined) profile.nickname = data.nickname;
-    if (data.discord_info !== undefined) profile.discord_info = data.discord_info;
-    if (data.services_enabled) profile.services_enabled = { ...profile.services_enabled, ...data.services_enabled };
-    if (data.notification_preferences !== undefined) profile.notification_preferences = data.notification_preferences;
-    if (data.steam_id !== undefined || data.steam_api_key !== undefined) {
-      profile.steam_config = profile.steam_config || { enabled: false, connection_type: 'api_key' };
-      if (data.steam_id !== undefined) profile.steam_config.steam_id = data.steam_id;
-      if (data.steam_api_key !== undefined) profile.steam_config.api_key = data.steam_api_key;
-      if (profile.steam_config.steam_id && profile.steam_config.api_key) {
-        profile.steam_config.enabled = true;
-      }
-    }
-    if (data.xbox_gamertag !== undefined || data.xbox_api_key !== undefined) {
-      profile.xbox_config = profile.xbox_config || { enabled: false };
-      if (data.xbox_gamertag !== undefined) profile.xbox_config.gamertag = data.xbox_gamertag;
-      if (data.xbox_api_key !== undefined) profile.xbox_config.api_key = data.xbox_api_key;
-      if (profile.xbox_config.api_key) {
-        profile.xbox_config.enabled = true;
-        profile.services_enabled = profile.services_enabled || {} as any;
-        if (profile.services_enabled['xbox-api'] === undefined) {
-          profile.services_enabled['xbox-api'] = true;
-        }
-
-        if (!profile.xbox_config.gamertag) {
-          try {
-            const xboxService = new XboxService(storageManager);
-            const accountInfo = await xboxService.verifyApiKey(profile.xbox_config.api_key);
-            if (accountInfo?.gamertag) {
-              profile.xbox_config.gamertag = accountInfo.gamertag;
-              profile.xbox_config.xuid = accountInfo.xuid;
-            }
-          } catch {
-            // ignore
-          }
-        }
-      }
-    }
-    if (data.publisher_config !== undefined) {
-      profile.publisher_config = { ...(profile.publisher_config || {}), ...data.publisher_config };
-    }
-    if (data.game_discovery_enabled !== undefined) profile.game_discovery_enabled = data.game_discovery_enabled;
-    if (data.theme !== undefined) profile.theme = data.theme;
-
-    await storageManager.setUserProfile(profile);
-    await storageManager.forceSyncNow();
-
-    if (data.publisher_config?.rate_ms !== undefined && publishQueue) {
-      publishQueue.setPublishInterval(data.publisher_config.rate_ms);
-    }
-
-    const hasSteamConfigured = Boolean(profile.steam_config?.steam_id && profile.steam_config?.api_key);
-    const hasXboxConfigured = Boolean(profile.xbox_config?.api_key);
-    if ((data.steam_id !== undefined || data.steam_api_key !== undefined || data.xbox_api_key !== undefined || data.xbox_gamertag !== undefined) && (hasSteamConfigured || hasXboxConfigured)) {
-      const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
-      gameLibraryManager.invalidateCache().catch(() => {});
-      _refreshGameLibrary().catch(() => {});
-    }
-
-    if (data.nickname !== undefined || data.discord_info !== undefined) {
-      if (activityPublisher) {
-        await activityPublisher.publishProfile().catch(() => {});
-      }
-    }
-
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to save settings' };
-  }
-}
-
-async function _restoreSettings(data?: any): Promise<ExtensionResponse> {
-  if (!data || !data.data) return { success: false, error: 'restore data required' };
-  try {
-    const profileData = data.data;
-    if (!profileData.uuid && !profileData.pubkey && !profileData.identifier) {
-      return { success: false, error: 'invalid backup format' };
-    }
-
-    const currentProfile = await storageManager.getUserProfile();
-    if (!currentProfile) return { success: false, error: 'user profile not found' };
-
-    const restoredProfile: any = { ...profileData };
-    restoredProfile.uuid = currentProfile.uuid;
-    restoredProfile.pubkey = currentProfile.pubkey;
-
-    await storageManager.setUserProfile(restoredProfile);
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to restore settings' };
-  }
-}
-
-async function _getDiagnostics(): Promise<ExtensionResponse> {
-  try {
-    const diagnostics = ActivityDiagnostics.getInstance(storageManager);
-    const summary = await diagnostics.exportDiagnostics();
-    return { success: true, data: summary };
-  } catch (error) {
-    return { success: false, error: 'Failed to get diagnostics' };
-  }
-}
-
-async function _muteFriend(friendId?: string, mute?: boolean): Promise<ExtensionResponse> {
-  if (!friendId || mute === undefined) return { success: false, error: 'friendId and mute required' };
-  try {
-    const friendManager = getFriendManager();
-    if (mute) {
-      await friendManager.muteFriend(friendId);
-    } else {
-      await friendManager.unmuteFriend(friendId);
-    }
-    const updated = await friendManager.getFriend(friendId);
-    return { success: true, data: updated };
-  } catch (error) {
-    return { success: false, error: 'Failed to update mute state' };
-  }
-}
-
-async function _getDndMode(): Promise<ExtensionResponse> {
-  try {
-    const profile = await storageManager.getUserProfile();
-    return { success: true, data: { enabled: profile?.dnd_enabled ?? false } };
-  } catch (error) {
-    return { success: false, error: 'Failed to get DND mode' };
-  }
-}
-
-async function _setDndMode(enabled?: boolean): Promise<ExtensionResponse> {
-  if (enabled === undefined) return { success: false, error: 'enabled required' };
-  try {
-    const profile = await storageManager.getUserProfile();
-    if (!profile) return { success: false, error: 'User profile not found' };
-
-    profile.dnd_enabled = enabled;
-    await storageManager.setUserProfile(profile);
-
-    if (enabled) {
-      await storageManager.clearActiveSession();
-      overlayCoordinator.broadcastToContentScripts({
-        type: 'CO_WATCH_UPDATE',
-        data: {
-          session_members: [],
-          watching_together: [],
-          messages: [],
-          host_nickname: undefined,
-          is_user_host: false,
-          user_nickname: '',
-          co_watcher_activities: {},
-        },
-      });
-      overlayCoordinator.broadcastToContentScripts({ type: 'SESSION_ENDED' });
-    }
-
-    if (activityPublisher) {
-      await activityPublisher.publishActivityIfAllowed().catch(() => {});
-    }
-
-    return { success: true, data: { enabled } };
-  } catch (error) {
-    return { success: false, error: 'Failed to set DND mode' };
-  }
-}
-
-async function _getOAuthStatus(service?: string): Promise<ExtensionResponse> {
-  if (!service) return { success: false, error: 'service required' };
-  try {
-    const serviceTyped = service as ServiceName;
-    let hasToken = false;
-
-    if (serviceTyped === 'spotify-api') {
-      const spotifyService = new SpotifyService(storageManager);
-      hasToken = await spotifyService.hasToken();
-    } else if (serviceTyped === 'twitch-api') {
-      const twitchService = new TwitchService(storageManager);
-      hasToken = await twitchService.hasToken();
-    }
-
-    return { success: true, data: { service, hasToken } };
-  } catch (error) {
-    return { success: false, error: 'Failed to get OAuth status' };
-  }
-}
-
-async function _authenticateService(service?: string): Promise<ExtensionResponse> {
-  if (!service) return { success: false, error: 'service required' };
-  try {
-    const serviceTyped = service as ServiceName;
-    let authUrl: string | null = null;
-
-    if (serviceTyped === 'spotify-api') {
-      const spotifyService = new SpotifyService(storageManager);
-      authUrl = await spotifyService.getAuthUrl();
-    } else if (serviceTyped === 'twitch-api') {
-      const twitchService = new TwitchService(storageManager);
-      authUrl = await twitchService.getAuthUrl();
-    } else {
-      return { success: false, error: `OAuth not supported for ${service}` };
-    }
-
-    return { success: true, data: { authUrl } };
-  } catch (error) {
-    return { success: false, error: 'Failed to get auth URL' };
-  }
-}
-
-async function _disconnectService(service?: string): Promise<ExtensionResponse> {
-  if (!service) return { success: false, error: 'service required' };
-  try {
-    const serviceTyped = service as ServiceName;
-
-    if (serviceTyped === 'spotify-api') {
-      const spotifyService = new SpotifyService(storageManager);
-      await spotifyService.clearToken();
-    } else if (serviceTyped === 'twitch-api') {
-      const twitchService = new TwitchService(storageManager);
-      await twitchService.clearToken();
-    } else {
-      return { success: false, error: `Cannot disconnect from ${service}` };
-    }
-
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: 'Failed to disconnect' };
-  }
-}
-
-async function _handleOAuthCallback(service?: string, code?: string): Promise<ExtensionResponse> {
-  if (!service || !code) return { success: false, error: 'service and code required' };
-  try {
-    const serviceStr = service as string;
-
-    if (serviceStr === 'spotify' || serviceStr === 'spotify-api') {
-      const spotifyService = new SpotifyService(storageManager);
-      await spotifyService.handleAuthCallback(code);
-    } else if (serviceStr === 'twitch' || serviceStr === 'twitch-api') {
-      const twitchService = new TwitchService(storageManager);
-      await twitchService.handleAuthCallback(code);
-    } else {
-      return { success: false, error: `OAuth callback not supported for ${service}` };
-    }
-
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to handle OAuth callback' };
-  }
-}
-
-async function _joinActivity(friendId?: string, activity?: any): Promise<ExtensionResponse> {
-  if (!friendId || !activity) return { success: false, error: 'friendId and activity required' };
-  try {
-    await joinHandler.joinActivity(friendId, activity);
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to join activity' };
-  }
-}
-
-async function _sendTestNotification(): Promise<ExtensionResponse> {
-  try {
-    const notificationManager = getNotificationManager();
-    await notificationManager.notify('Test Notification', 'If you see this, notifications are working!');
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: 'Failed to send test notification' };
-  }
-}
-
-async function _refreshGameLibrary(): Promise<ExtensionResponse> {
-  try {
-    const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
-    const userGames = await gameLibraryManager.fetchMyGameLibrary();
-    await gameLibraryManager.publishGameLibrary();
-
-    const gamesNeedingMetadata = await _findGamesMissingMetadata(userGames);
-    if (gamesNeedingMetadata.length > 0) {
-      await metadataFetcher.scheduleBackgroundRefresh(gamesNeedingMetadata);
-      return { success: true, data: { gamesRefreshed: userGames.length, queuedForMetadata: gamesNeedingMetadata.length } };
-    }
-    return { success: true, data: { gamesRefreshed: userGames.length, queuedForMetadata: 0 } };
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to refresh game library' };
-  }
-}
-
-async function _findGamesMissingMetadata(games: any[]): Promise<(number | string)[]> {
-  try {
-    const metadataCache = await storageManager.get<Record<string | number, any>>(STORAGE_KEYS.GAME_METADATA_CACHE, {});
-    const missing: (number | string)[] = [];
-
-    for (const game of games) {
-      const meta = metadataCache[game.appId];
-      if (!meta || !meta.name) {
-        missing.push(game.appId);
-      } else {
-        const textToCheck = (meta.genres || []).concat(meta.categories || []).concat([meta.name || '']).join(' ');
-        if (/[\u0400-\u04FF]/.test(textToCheck)) {
-          missing.push(game.appId);
-        }
-      }
-    }
-
-    return missing;
-  } catch (error) {
-    return [];
-  }
-}
-
-async function _getNetflixExtractionLogs(): Promise<ExtensionResponse> {
-  try {
-    const logs = await storageManager.get(STORAGE_KEYS.NETFLIX_EXTRACTION_LOGS, []);
-    return { success: true, data: logs };
-  } catch (error) {
-    return { success: false, error: 'Failed to get Netflix logs' };
-  }
-}
-
-async function _getNetflixDebugCaptures(): Promise<ExtensionResponse> {
-  try {
-    const captures = await storageManager.get(STORAGE_KEYS.NETFLIX_DEBUG_CAPTURES, []);
-    return { success: true, data: captures };
-  } catch (error) {
-    return { success: false, error: 'Failed to get Netflix captures' };
   }
 }
 

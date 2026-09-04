@@ -7,11 +7,11 @@
 // WebExtension into Firefox, so the Firefox MV3 build is verified structurally
 // in tests/e2e/06-cross-browser.spec.js rather than by launching it.
 
-const { defineConfig } = require("@playwright/test");
+import { defineConfig } from "@playwright/test";
 
 const CROSS_BROWSER_SPEC = /06-cross-browser\.spec\.js/;
 
-module.exports = defineConfig({
+export default defineConfig({
   testDir: "./tests/e2e",
   testMatch: "**/*.spec.js",
 
