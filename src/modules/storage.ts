@@ -446,12 +446,14 @@ export class StorageManager {
   }
 
   async setUserProfile(profile: UserProfile): Promise<void> {
-    console.debug('[Storage] Saving profile with steam_config:', profile.steam_config?.steam_id ? 'configured' : 'not set');
+    console.debug('[Storage] Saving profile with steam_config:', profile.steam_config?.steam_id ? 'configured' : 'not set', 'xbox_config:', profile.xbox_config?.api_key ? 'configured' : 'not set');
     await this.set(STORAGE_KEYS.USER_PROFILE, profile);
+    await this.forceSyncNow();
   }
 
   async updateUserProfile(updates: Partial<UserProfile>): Promise<void> {
     await this.update(STORAGE_KEYS.USER_PROFILE, updates);
+    await this.forceSyncNow();
   }
 
   async getDndMode(): Promise<boolean> {

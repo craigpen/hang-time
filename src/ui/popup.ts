@@ -1585,6 +1585,10 @@ export class PopupController {
       document.body.classList.add('settings-open');
       // Resize popup to fit settings content
       this._resizePopupToFitSettings();
+      // Always reload freshest saved values into settings panel inputs
+      this._loadSettingsPanel().catch((err) => {
+        console.debug('[Popup] Failed to reload settings panel on open:', err);
+      });
     }
   }
 
@@ -1977,10 +1981,14 @@ export class PopupController {
     const steamToggleVisibility = document.getElementById('steam-toggle-key-visibility') as HTMLButtonElement;
 
     if (steamIdInput) {
+      steamIdInput.addEventListener('input', () => this._saveSettingsPanel());
       steamIdInput.addEventListener('change', () => this._saveSettingsPanel());
+      steamIdInput.addEventListener('blur', () => this._saveSettingsPanel());
     }
     if (steamApiKeyInput) {
+      steamApiKeyInput.addEventListener('input', () => this._saveSettingsPanel());
       steamApiKeyInput.addEventListener('change', () => this._saveSettingsPanel());
+      steamApiKeyInput.addEventListener('blur', () => this._saveSettingsPanel());
     }
     if (steamToggleVisibility) {
       steamToggleVisibility.addEventListener('click', () => {
@@ -2009,10 +2017,14 @@ export class PopupController {
     const xboxToggleVisibility = document.getElementById('xbox-toggle-key-visibility') as HTMLButtonElement;
 
     if (xboxGamertagInput) {
+      xboxGamertagInput.addEventListener('input', () => this._saveSettingsPanel());
       xboxGamertagInput.addEventListener('change', () => this._saveSettingsPanel());
+      xboxGamertagInput.addEventListener('blur', () => this._saveSettingsPanel());
     }
     if (xboxApiKeyInput) {
+      xboxApiKeyInput.addEventListener('input', () => this._saveSettingsPanel());
       xboxApiKeyInput.addEventListener('change', () => this._saveSettingsPanel());
+      xboxApiKeyInput.addEventListener('blur', () => this._saveSettingsPanel());
     }
     if (xboxToggleVisibility) {
       xboxToggleVisibility.addEventListener('click', () => {
@@ -2048,14 +2060,18 @@ export class PopupController {
     // Nickname input changes
     const nicknameInput = document.getElementById('nickname-popup') as HTMLInputElement;
     if (nicknameInput) {
+      nicknameInput.addEventListener('input', () => this._saveSettingsPanel());
       nicknameInput.addEventListener('change', () => this._saveSettingsPanel());
+      nicknameInput.addEventListener('blur', () => this._saveSettingsPanel());
     }
 
     // Discord input changes
     const discordInput = document.getElementById('discord-info-popup') as HTMLInputElement;
 
     if (discordInput) {
+      discordInput.addEventListener('input', () => this._saveSettingsPanel());
       discordInput.addEventListener('change', () => this._saveSettingsPanel());
+      discordInput.addEventListener('blur', () => this._saveSettingsPanel());
     }
 
     // Notification checkboxes

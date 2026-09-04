@@ -10,3 +10,6 @@ dist/
 *.swp
 *.swo
 scripts/test-steam-api.js
+
+# Promotion materials (local only)
+promotion/

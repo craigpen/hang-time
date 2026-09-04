@@ -140,6 +140,66 @@ describe('XboxService', () => {
         storefront: 'xbox',
       });
     });
+
+    it('should handle OpenXBL wrapped content response format with Accept-Language header', async () => {
+      mockStorage.getUserProfile.mockResolvedValue({
+        xbox_config: { api_key: 'test-key' },
+      });
+
+      const mockWrappedResponse = {
+        code: 200,
+        content: {
+          xuid: '2535441274876875',
+          titles: [
+            {
+              id: '558797228',
+              name: 'Rocket League®',
+              type: 'Game',
+              titleHistory: {
+                lastTimePlayed: '2026-08-20T12:00:00Z',
+              },
+            },
+            {
+              id: '687339341',
+              name: 'Brawlhalla',
+              type: 'Game',
+              lastUnlock: '2026-08-19T10:00:00Z',
+            },
+          ],
+        },
+      };
+
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValueOnce(mockWrappedResponse),
+      });
+
+      const games = await xboxService.fetchOwnedTitles();
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Accept-Language': 'en-US,en;q=0.9',
+            'X-Authorization': 'test-key',
+          }),
+        })
+      );
+      expect(games).toHaveLength(2);
+      expect(games[0]!).toMatchObject({
+        appId: 'xbox_558797228',
+        titleId: '558797228',
+        name: 'Rocket League®',
+        storefront: 'xbox',
+      });
+      expect(games[0]!.rtime_last_played).toBeGreaterThan(0);
+      expect(games[1]!).toMatchObject({
+        appId: 'xbox_687339341',
+        titleId: '687339341',
+        name: 'Brawlhalla',
+        storefront: 'xbox',
+      });
+      expect(games[1]!.rtime_last_played).toBeGreaterThan(0);
+    });
   });
 
   describe('getCurrentActivity', () => {

@@ -1054,6 +1054,7 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
     if (data.theme !== undefined) profile.theme = data.theme;
 
     await storageManager.setUserProfile(profile);
+    await storageManager.forceSyncNow();
 
     if (data.publisher_config?.rate_ms !== undefined && publishQueue) {
       publishQueue.setPublishInterval(data.publisher_config.rate_ms);
@@ -1061,7 +1062,9 @@ async function _saveSettings(data?: any): Promise<ExtensionResponse> {
 
     const hasSteamConfigured = Boolean(profile.steam_config?.steam_id && profile.steam_config?.api_key);
     const hasXboxConfigured = Boolean(profile.xbox_config?.api_key);
-    if ((data.steam_id !== undefined || data.steam_api_key !== undefined || data.xbox_api_key !== undefined) && (hasSteamConfigured || hasXboxConfigured)) {
+    if ((data.steam_id !== undefined || data.steam_api_key !== undefined || data.xbox_api_key !== undefined || data.xbox_gamertag !== undefined) && (hasSteamConfigured || hasXboxConfigured)) {
+      const gameLibraryManager = GameLibraryManager.getInstance(storageManager);
+      gameLibraryManager.invalidateCache().catch(() => {});
       _refreshGameLibrary().catch(() => {});
     }
 

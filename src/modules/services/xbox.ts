@@ -69,6 +69,7 @@ export class XboxService implements IServiceModule {
         headers: {
           'X-Authorization': apiKey,
           Accept: 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
         },
       });
 
@@ -78,7 +79,8 @@ export class XboxService implements IServiceModule {
       }
 
       const data = await response.json();
-      const profileUsers = data?.profileUsers?.[0];
+      const payload = data?.content ?? data;
+      const profileUsers = payload?.profileUsers?.[0] || data?.profileUsers?.[0];
       if (!profileUsers) {
         return null;
       }
@@ -117,6 +119,7 @@ export class XboxService implements IServiceModule {
         headers: {
           'X-Authorization': apiKey,
           Accept: 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
         },
       });
 
@@ -124,8 +127,9 @@ export class XboxService implements IServiceModule {
         return null;
       }
 
-      const presenceData = await response.json();
-      const userPresence = Array.isArray(presenceData) ? presenceData[0] : presenceData;
+      const rawData = await response.json();
+      const payload = rawData?.content ?? rawData;
+      const userPresence = Array.isArray(payload) ? payload[0] : (payload?.presence || payload);
 
       if (!userPresence || userPresence.state !== 'Online') {
         this.cachedResult = null;
@@ -167,8 +171,7 @@ export class XboxService implements IServiceModule {
   }
 
   /**
-  /**
-   * Fetch owned game titles via OpenXBL (tries achievements, titlehub, and title-history endpoints)
+   * Fetch owned game titles via OpenXBL (tries achievements, titles, and titlehub endpoints)
    */
   async fetchOwnedTitles(): Promise<OwnedGame[]> {
     const profile = await this.storage.getUserProfile();
@@ -179,9 +182,9 @@ export class XboxService implements IServiceModule {
 
     const candidateEndpoints = [
       `${XboxService.API_BASE}/achievements`,
+      `${XboxService.API_BASE}/titles`,
       `${XboxService.API_BASE}/titlehub/titles`,
       `${XboxService.API_BASE}/player/title-history`,
-      `${XboxService.API_BASE}/titles`,
     ];
 
     for (const endpoint of candidateEndpoints) {
@@ -191,6 +194,7 @@ export class XboxService implements IServiceModule {
           headers: {
             'X-Authorization': apiKey,
             Accept: 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9',
           },
         });
 
@@ -200,9 +204,10 @@ export class XboxService implements IServiceModule {
         }
 
         const data = await response.json();
-        const rawTitles: any[] = Array.isArray(data)
-          ? data
-          : data?.titles || data?.results || [];
+        const payload = data?.content ?? data;
+        const rawTitles: any[] = Array.isArray(payload)
+          ? payload
+          : payload?.titles || payload?.results || data?.titles || data?.results || [];
 
         if (!Array.isArray(rawTitles) || rawTitles.length === 0) {
           console.debug(`[Xbox] Endpoint ${endpoint} returned 0 titles`);
@@ -226,6 +231,12 @@ export class XboxService implements IServiceModule {
           }
           seenIds.add(titleId);
 
+          const lastPlayedSec = title.titleHistory?.lastTimePlayed
+            ? Math.floor(new Date(title.titleHistory.lastTimePlayed).getTime() / 1000)
+            : title.lastUnlock
+            ? Math.floor(new Date(title.lastUnlock).getTime() / 1000)
+            : 0;
+
           ownedGames.push({
             appId: `xbox_${titleId}`,
             titleId,
@@ -235,6 +246,7 @@ export class XboxService implements IServiceModule {
               windows: true,
               xbox: true,
             },
+            rtime_last_played: lastPlayedSec,
             lastUpdated: Date.now(),
           });
         }

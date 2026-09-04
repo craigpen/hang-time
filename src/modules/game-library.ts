@@ -122,6 +122,18 @@ export class GameLibraryManager {
   }
 
   /**
+   * Invalidate cached game library to force fresh fetch next time
+   */
+  async invalidateCache(): Promise<void> {
+    try {
+      await this.storage.delete(STORAGE_KEYS.MY_GAME_LIBRARY);
+      console.debug('[GameLibrary] Cache invalidated');
+    } catch (error) {
+      console.debug('[GameLibrary] Failed to invalidate cache:', error);
+    }
+  }
+
+  /**
    * Get user's game library, fetching from storefronts if cache is stale or config changed
    */
   async getMyGameLibrary(): Promise<OwnedGame[]> {
