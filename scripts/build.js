@@ -37,7 +37,7 @@ const ENTRYPOINTS = {
 };
 
 const STATIC_FILES = [
-  { src: 'manifest.json', dest: 'manifest.json' },
+  { src: 'src/manifest.json', dest: 'manifest.json' },
   { src: 'src/popup.html', dest: 'popup.html' },
   { src: 'src/oauth-handler.html', dest: 'oauth-handler.html' },
   { src: 'src/styles', dest: 'styles' },
