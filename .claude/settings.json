@@ -1,0 +1,51 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npm run build:all",
+            "statusMessage": "Building extension...",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "npm run test:run",
+            "statusMessage": "Running tests...",
+            "timeout": 120
+          },
+          {
+            "type": "agent",
+            "prompt": "Check for new untested code in this change. Look for: (1) new .js/.ts/.tsx files without corresponding test files (.test.js, .test.ts), and (2) new functions, classes, or exports added to existing files. Use git diff to identify what changed. For any new untested code found, write comprehensive vitest tests. Skip only if all new code already has test coverage.",
+            "statusMessage": "Checking for untested code...",
+            "timeout": 300,
+            "model": "claude-opus-5"
+          },
+          {
+            "type": "agent",
+            "prompt": "Analyze the changes in this edit. First, check if you've already refactored this code in a previous hook run during this session by examining git status and recent commits. Only proceed with refactoring if you find NEW duplication patterns that haven't been addressed yet. Look for: duplicated functions, repeated logic blocks, or patterns that could reuse existing utilities. If no NEW duplication is found, or if duplication was already fixed, skip refactoring.",
+            "statusMessage": "Checking for new duplication...",
+            "timeout": 300,
+            "model": "claude-opus-5"
+          },
+          {
+            "type": "agent",
+            "prompt": "Check for missing vitest test coverage for source code changes. (1) Use git diff to find modified/added files in src/ (*.js, *.ts, *.tsx files only). (2) Check src/**/*.test.ts to see which modules are already tested. (3) For any new functions, classes, or exported utilities in the changed src/ code that lack test coverage, write comprehensive vitest tests. Follow the patterns in existing test files (src/modules/__tests__/ directory). Only write tests for actual gaps—skip if coverage already exists and if no src/ files changed. Ensure tests follow the project's test structure and mock patterns.",
+            "statusMessage": "Checking for missing vitest coverage...",
+            "timeout": 300,
+            "model": "claude-opus-5"
+          },
+          {
+            "type": "agent",
+            "prompt": "Identify missing Playwright E2E test coverage for this change. (1) Check which UI flows or extension features were modified (popup UI, settings, overlay, messaging, etc.) using git diff. (2) Review tests/e2e/*.spec.js to see which flows are already tested. (3) For any new user-facing features or interaction patterns in the changed code that lack E2E test coverage, write new Playwright test specs. Add them to the appropriate existing spec file (e.g., 02-popup-ui.spec.js) or create a new one following the pattern of 01-extension-loading.spec.js (using const { test, expect } = require(\"./fixtures\"); and fixtures like popupPage, serviceWorker, ext). Only write tests for actual gaps—skip if coverage already exists. Focus on critical user journeys and interaction points.",
+            "statusMessage": "Checking for missing E2E test coverage...",
+            "timeout": 300,
+            "model": "claude-opus-5"
+          }
+        ]
+      }
+    ]
+  }
+}
