@@ -1,81 +1,44 @@
 /**
  * Hang Time - Popup UI Controller
- * Main extension popup showing active friends
+ * Main extension popup orchestrator coordinating Friends, Games, Messages, and Settings controllers
  */
 
-import { Friend, Activity, STORAGE_KEYS, DEFAULT_RELAY_URLS } from '../types';
+import { Activity, STORAGE_KEYS, UserProfile } from '../types';
 import { StorageManager } from '../modules/storage';
 import { GameLibraryManager } from '../modules/game-library';
 import { MetadataFetcher } from '../modules/metadata-fetcher';
 import { GamesTabController } from './games';
-import { showInviteModal } from './invite-modal-builder';
-
-/**
- * Simple toast notification manager
- */
-class ToastManager {
-  private container: HTMLElement | null = null;
-
-  init(): void {
-    this.container = document.getElementById('toast-container');
-  }
-
-  show(message: string, options?: { duration?: number; onClick?: () => void }): void {
-    if (!this.container) return;
-
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = message;
-
-    if (options?.onClick) {
-      toast.style.cursor = 'pointer';
-      toast.addEventListener('click', options.onClick);
-    }
-
-    this.container.appendChild(toast);
-
-    // Auto-remove after duration
-    const duration = options?.duration || 4000;
-    setTimeout(() => {
-      toast.classList.add('toast-hide');
-      setTimeout(() => toast.remove(), 300);
-    }, duration);
-  }
-}
-
-const toastManager = new ToastManager();
+import { FriendsTabController } from './friends';
+import { SettingsTabController } from './settings';
+import { MessagesTabController } from './messages';
+import { toastManager } from './toast';
 
 export class PopupController {
   private friendsList: HTMLElement | null = null;
   private noFriendsPlaceholder: HTMLElement | null = null;
-  private myActivityInterval: NodeJS.Timeout | null = null; // My Activity only (3 sec)
-  private fallbackFriendsInterval: NodeJS.Timeout | null = null; // Fallback poll for friends (30 sec)
+  private myActivityInterval: NodeJS.Timeout | null = null;
+  private fallbackFriendsInterval: NodeJS.Timeout | null = null;
   private addFriendForm: HTMLElement | null = null;
   private friendIdentifierInput: HTMLInputElement | null = null;
   private friendNicknameInput: HTMLInputElement | null = null;
   private settingsPanel: HTMLElement | null = null;
   private popupContainer: HTMLElement | null = null;
-  private userActivities: Activity[] = [];
-  private expandedFriendsState: Map<string, boolean> = new Map();
-  private serviceIntegrationEnabled: Map<string, boolean> = new Map();
   private refreshPaused: boolean = false;
-  private pendingInvitesByActivity: Map<string, string> = new Map(); // activityId -> friendId with pending invite
-  private pendingInvitesData: Map<string, any> = new Map(); // activityId -> full pending invite data (activity, friendId, etc.)
   private storage: StorageManager = new StorageManager();
-  private gamesTabController: GamesTabController | null = null;
-  private showInactiveFriends: boolean = true;
-  private settingsListenersSetup: boolean = false;
 
-  static readonly MY_ACTIVITY_REFRESH_MS = 3000; // Keep "My Activity" responsive
-  static readonly FALLBACK_FRIENDS_REFRESH_MS = 15000; // Safety net for missed Nostr messages
+  // Tab & Domain Controllers
+  private gamesTabController: GamesTabController | null = null;
+  private friendsTabController: FriendsTabController | null = null;
+  private settingsTabController: SettingsTabController | null = null;
+  private messagesTabController: MessagesTabController = new MessagesTabController();
+
+  static readonly MY_ACTIVITY_REFRESH_MS = 3000;
+  static readonly FALLBACK_FRIENDS_REFRESH_MS = 15000;
 
   async init(): Promise<void> {
     console.debug('[Popup] Initializing...');
 
-    // Initialize toast manager
     toastManager.init();
-
-    // Initialize storage manager (loads cache from secondary storage on startup)
     await this.storage.init();
 
     this.friendsList = document.getElementById('friends-list');
@@ -91,22 +54,45 @@ export class PopupController {
       return;
     }
 
-    // Initialize theme
+    // Initialize domain controllers
+    this.friendsTabController = new FriendsTabController(
+      this.storage,
+      this.messagesTabController,
+      {
+        friendsList: this.friendsList,
+        noFriendsPlaceholder: this.noFriendsPlaceholder,
+        addFriendForm: this.addFriendForm,
+        friendIdentifierInput: this.friendIdentifierInput,
+        friendNicknameInput: this.friendNicknameInput,
+        onResizeNeeded: () => {
+          if (!this.settingsPanel || this.settingsPanel.style.display === 'none') {
+            this.settingsTabController?.resizePopupToFitContent();
+          }
+        },
+      }
+    );
+
+    this.settingsTabController = new SettingsTabController(this.storage, {
+      settingsPanel: this.settingsPanel,
+      popupContainer: this.popupContainer,
+      getGamesTabController: () => this.gamesTabController,
+    });
+
     const savedTheme = localStorage.getItem('hang-time-theme') || 'auto';
-    this._setTheme(savedTheme);
+    this.settingsTabController.setTheme(savedTheme);
 
     this._setupEventListeners();
     this._setupTabNavigation();
     this._setupGamesController();
     this._setupMessageListener();
     this._setupStorageListener();
-    await this._loadPendingInvites();
+
+    await this.friendsTabController.loadPendingInvites();
     await this._loadMyActivity();
     await this.refreshFriends();
-    await this._loadSettingsPanel();
+    await this.settingsTabController.loadSettingsPanel();
 
     // Auto-refresh "My Activity" only (every 3 seconds)
-    // Friends refresh only on Nostr notifications or fallback poll
     this.myActivityInterval = setInterval(() => {
       if (!this.refreshPaused) {
         this._loadMyActivity().catch((error) => {
@@ -115,7 +101,7 @@ export class PopupController {
       }
     }, PopupController.MY_ACTIVITY_REFRESH_MS);
 
-    // Fallback poll for friends in case Nostr messages are missed (every 30 seconds)
+    // Fallback poll for friends
     this.fallbackFriendsInterval = setInterval(() => {
       if (!this.refreshPaused) {
         this.refreshFriends().catch((error) => {
@@ -128,2693 +114,254 @@ export class PopupController {
   }
 
   async refreshFriends(): Promise<void> {
-    try {
-      // Reload pending invites from cache before rendering friends
-      // Cache is primary storage and always has the latest state
-      await this._loadPendingInvites();
-
-      const response = await chrome.runtime.sendMessage({
-        type: 'GET_ALL_ACTIVITIES',
-      });
-
-      console.debug('[Popup] GET_ALL_ACTIVITIES response:', response);
-
-      if (!response.success || !response.data) {
-        this._showError(`Failed to load friends: ${response.error || 'Unknown error'}`);
-        return;
-      }
-
-      const friends = response.data.friends || [];
-      console.debug(`[Popup] Got ${friends.length} friends:`, friends);
-      this._renderFriends(friends);
-    } catch (error) {
-      console.error('[Popup] Refresh error:', error);
-      this._showError('Failed to load friends');
+    if (this.friendsTabController) {
+      await this.friendsTabController.refreshFriends();
     }
   }
 
   async refreshAll(): Promise<void> {
     try {
-      // Refresh My Activity
       await this._loadMyActivity();
-
-      // Refresh Friends list
       await this.refreshFriends();
 
-      // Refresh game library from Steam
       await chrome.runtime.sendMessage({
         type: 'REFRESH_GAME_LIBRARY',
-      }).catch(() => {
-        // Silently ignore if not available (non-critical)
-      });
+      }).catch(() => {});
 
-      // Refresh Games tab if initialized
       if (this.gamesTabController) {
         await this.gamesTabController.refresh().catch((error) => {
           console.debug('[Popup] Games tab refresh skipped/failed:', error);
         });
       }
 
-      // Refresh Settings if panel is open
       if (this.settingsPanel && this.settingsPanel.style.display !== 'none') {
-        await this._loadSettingsPanel();
+        await this.settingsTabController?.loadSettingsPanel();
       }
     } catch (error) {
-      console.error('[Popup] Complete refresh failed:', error);
-      this._showError('Failed to refresh');
-    }
-  }
-
-  private async _renderFriends(friends: Friend[]): Promise<void> {
-    // Don't resize if settings panel is open
-    const shouldResize = !this.settingsPanel || this.settingsPanel.style.display === 'none';
-
-    // Create a map of existing friend elements by ID for targeted updates
-    const existingElements = new Map<string, HTMLElement>();
-    this.friendsList!.querySelectorAll('[data-friend-id]').forEach((el) => {
-      const friendId = (el as HTMLElement).dataset['friendId'];
-      if (friendId) {
-        existingElements.set(friendId, el as HTMLElement);
-      }
-    });
-
-    // Handle "You" (self)
-    let selfElement = existingElements.get('self');
-    const selfExpanded = this.expandedFriendsState.get('self') ?? true;
-    const sortedUserActivities = this._sortActivitiesByType(this.userActivities);
-    if (!selfElement) {
-      // Create new self element
-      selfElement = this._createFriendItem('self', 'You', sortedUserActivities, selfExpanded);
-      selfElement.classList.add('user-item');
-      selfElement.setAttribute('data-friend-id', 'self');
-      this.friendsList!.insertBefore(selfElement, this.friendsList!.firstChild);
-    } else {
-      // Update self element in place
-      this._updateFriendItem(selfElement, 'self', 'You', sortedUserActivities, selfExpanded);
-    }
-    selfElement.classList.toggle('expanded', selfExpanded);
-
-    // Filter friends if showInactiveFriends is false
-    let displayFriends = friends;
-    if (!this.showInactiveFriends && friends) {
-      displayFriends = friends.filter(f => f.state === 'pending' || Object.keys(f.current_activities || {}).length > 0);
-    }
-
-    // Show "no friends" placeholder
-    if (!displayFriends || displayFriends.length === 0) {
-      this.noFriendsPlaceholder!.style.display = 'block';
-      // Remove all existing friend elements (keep only self)
-      existingElements.forEach((element, friendId) => {
-        if (friendId !== 'self') {
-          element.remove();
-        }
-      });
-    } else {
-      this.noFriendsPlaceholder!.style.display = 'none';
-
-      // Sort friends: pending first, then active
-      const pendingFriends = displayFriends.filter(f => f.state === 'pending');
-      const activeFriends = displayFriends.filter(f => f.state === 'active');
-      const sortedFriends = [...pendingFriends, ...activeFriends];
-
-      // Update existing friends and add new ones
-      for (const friend of sortedFriends) {
-        const isExpanded = this.expandedFriendsState.get(friend.uuid) ?? true;
-
-        // Check if this is a pending friend
-        if (friend.state === 'pending') {
-          // Create pending friend element with accept/decline buttons if they initiated
-          let friendElement = existingElements.get(friend.uuid);
-          if (!friendElement) {
-            friendElement = this._createPendingFriendItem(friend.uuid, friend.local_name, friend.initiated_by_me !== false);
-            friendElement.setAttribute('data-friend-id', friend.uuid);
-            this.friendsList!.appendChild(friendElement);
-          } else {
-            // Element exists but state may have changed - if it's currently marked as active, remove it to recreate as pending
-            if (!friendElement.classList.contains('pending')) {
-              friendElement.remove();
-              existingElements.delete(friend.uuid);
-              friendElement = this._createPendingFriendItem(friend.uuid, friend.local_name, friend.initiated_by_me !== false);
-              friendElement.setAttribute('data-friend-id', friend.uuid);
-              this.friendsList!.appendChild(friendElement);
-            }
-          }
-          friendElement.classList.add('pending');
-        } else {
-          // Active friend: show activities
-          const activities = this._sortActivitiesByType(Object.values(friend.current_activities || {}));
-
-          let friendElement = existingElements.get(friend.uuid);
-          if (!friendElement) {
-            // Create new friend element
-            friendElement = this._createFriendItem(friend.uuid, friend.local_name, activities, isExpanded, friend);
-            friendElement.setAttribute('data-friend-id', friend.uuid);
-            this.friendsList!.appendChild(friendElement);
-          } else {
-            // If element was pending and is now active, recreate it
-            if (friendElement.classList.contains('pending')) {
-              friendElement.remove();
-              existingElements.delete(friend.uuid);
-              friendElement = this._createFriendItem(friend.uuid, friend.local_name, activities, isExpanded, friend);
-              friendElement.setAttribute('data-friend-id', friend.uuid);
-              this.friendsList!.appendChild(friendElement);
-            } else {
-              // Update existing friend element in place
-              this._updateFriendItem(friendElement, friend.uuid, friend.local_name, activities, isExpanded, friend);
-            }
-          }
-
-          const isIdle = Object.keys(friend.current_activities || {}).length === 0;
-          friendElement.classList.toggle('idle', isIdle);
-          friendElement.classList.toggle('expanded', isExpanded);
-          friendElement.classList.remove('pending');
-        }
-      }
-
-      // Remove friends that are no longer displayed
-      existingElements.forEach((element, friendId) => {
-        if (friendId !== 'self' && !friends.find((f) => f.uuid === friendId)) {
-          element.remove();
-        }
-      });
-    }
-
-    if (shouldResize) {
-      this._resizePopupToFitContent();
-    }
-  }
-
-  private _updateFriendItem(
-    element: HTMLElement,
-    friendId: string,
-    _name: string,
-    activities: Activity[],
-    _isExpanded: boolean,
-    friend?: Friend
-  ): void {
-    // Update status text if friend info provided
-    if (friend) {
-      const statusSpan = element.querySelector('.friend-status') as HTMLElement;
-      if (statusSpan) {
-        const statusText = this._getStatusText(friend);
-        statusSpan.textContent = statusText;
-        // Add class for "Last seen" styling
-        statusSpan.classList.toggle('last-seen', statusText.includes('Last seen'));
-        statusSpan.classList.toggle('dnd-status', !!friend.dnd);
-      }
-      element.classList.toggle('dnd-friend', !!friend.dnd);
-    }
-
-    // Update the activities container only if content changed
-    const activitiesContainer = element.querySelector('.friend-activities') as HTMLElement;
-    if (activitiesContainer) {
-      // Update activities in place
-      const oldWrappers = Array.from(activitiesContainer.querySelectorAll<HTMLElement>('.activity-item-wrapper'));
-      const oldWrapperMap = new Map<string, HTMLElement>();
-      oldWrappers.forEach((el) => {
-        const activityId = el.dataset['activityId'];
-        if (activityId) oldWrapperMap.set(activityId, el);
-      });
-
-      const newActivityIds = new Set(activities.map((a) => a.id || ''));
-
-      // Remove old activities not in new list
-      oldWrappers.forEach((el) => {
-        const activityId = el.dataset['activityId'];
-        if (activityId && !newActivityIds.has(activityId)) {
-          el.remove();
-          oldWrapperMap.delete(activityId);
-        }
-      });
-
-      // Synchronize each activity in sorted order
-      for (const activity of activities) {
-        const activityId = activity.id || '';
-        let wrapper = oldWrapperMap.get(activityId);
-
-        if (!wrapper) {
-          wrapper = this._createActivityItemWithMessages(activity, friendId);
-          activitiesContainer.appendChild(wrapper);
-        } else {
-          // For existing activities, update progress bar, state icon, content, and join buttons
-          this._updateExistingActivityRow(wrapper, activity, friendId, friend);
-          activitiesContainer.appendChild(wrapper); // Re-orders into sorted position
-        }
-      }
-
-      // Handle idle state
-      if (activities.length === 0) {
-        if (!activitiesContainer.querySelector('.activity-row')) {
-          const idleRow = document.createElement('div');
-          idleRow.className = 'activity-row';
-          idleRow.textContent = 'Idle';
-          activitiesContainer.appendChild(idleRow);
-        }
-      } else {
-        const idleRow = activitiesContainer.querySelector('.activity-row');
-        if (idleRow && idleRow.textContent === 'Idle') {
-          idleRow.remove();
-        }
-      }
-    }
-  }
-
-  private _updateExistingActivityRow(
-    wrapper: HTMLElement,
-    activity: Activity,
-    friendId: string,
-    friend?: Friend
-  ): void {
-    const row = wrapper.querySelector('.activity-item-row') as HTMLElement;
-    if (!row) return;
-
-    // Update progress bar CSS variable and attribute
-    if (activity.metadata?.progress !== undefined && activity.metadata?.duration && activity.metadata.duration > 0) {
-      const progressPercent = Math.min(100, Math.max(0, (activity.metadata.progress / activity.metadata.duration) * 100));
-      row.style.setProperty('--progress-percent', `${progressPercent}%`);
-      row.setAttribute('data-has-progress', 'true');
-    } else {
-      row.removeAttribute('data-has-progress');
-    }
-
-    // Update state icon and content text if state changed
-    const stateIcon = row.querySelector('.activity-state-icon') as HTMLElement;
-    const contentText = row.querySelector('.activity-content-text') as HTMLElement;
-
-    if (stateIcon && activity.state) {
-      // For Steam games, show controller emoji
-      if (activity.service === 'steam-api') {
-        stateIcon.textContent = '🎮';
-        stateIcon.title = 'Playing';
-      } else if (activity.state === 'disconnected') {
-        stateIcon.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" class="state-icon-svg">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="5" y1="19" x2="19" y2="5"></line>
-          </svg>
-        `;
-        stateIcon.title = 'Connection lost - reload tab';
-
-        if (contentText) {
-          contentText.style.opacity = '0.5';
-          contentText.style.textDecoration = 'line-through';
-        }
-      } else {
-        const isDataFresh = activity.is_fresh !== false;
-
-        if (!isDataFresh) {
-          stateIcon.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="#FEF3C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="state-icon-svg">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-            </svg>
-          `;
-          stateIcon.title = 'Content script unavailable (tab may be backgrounded)';
-        } else if (activity.state === 'playing') {
-          stateIcon.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="#4CAF50" stroke="none" class="state-icon-svg">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
-          `;
-          stateIcon.title = 'Playing';
-        } else {
-          stateIcon.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="#9E9E9E" stroke="none" class="state-icon-svg">
-              <rect x="6" y="4" width="4" height="16"></rect>
-              <rect x="14" y="4" width="4" height="16"></rect>
-            </svg>
-          `;
-          stateIcon.title = 'Paused';
-        }
-
-        if (contentText) {
-          contentText.textContent = this._truncateActivityContent(activity.content);
-          contentText.style.fontStyle = 'normal';
-          contentText.style.opacity = '1';
-        }
-      }
-    }
-
-    // Clean up any legacy activity DND badge if present
-    const existingBadge = row.querySelector('.activity-dnd-badge');
-    if (existingBadge) {
-      existingBadge.remove();
-    }
-
-    // Update Join button if friendId !== 'self'
-    const isDnd = friend?.dnd || activity.dnd || activity.metadata?.dnd;
-    const joinBtn = row.querySelector('.activity-action-join') as HTMLElement;
-    if (joinBtn && friendId !== 'self') {
-      if (isDnd) {
-        joinBtn.textContent = '▶';
-        joinBtn.title = 'Friend is in Do Not Disturb mode';
-        joinBtn.classList.add('disabled');
-      } else {
-        joinBtn.classList.remove('disabled');
-        const hasPendingInvite = activity.id ? this.pendingInvitesByActivity.has(activity.id) : false;
-        if (hasPendingInvite) {
-          joinBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon">
-            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
-            <path d="M 2 6 L 12 13 L 22 6"></path>
-          </svg>`;
-          joinBtn.style.color = '#4CAF50';
-          joinBtn.title = 'Accept or decline invite';
-        } else {
-          joinBtn.textContent = '▶';
-          joinBtn.title = 'Join activity';
-          joinBtn.style.color = '';
-        }
-      }
-    }
-  }
-
-  private _getStatusText(friend: Friend): string {
-    if (friend.dnd) {
-      return '⛔ DND';
-    }
-    const daysSinceLastSeen = Math.ceil((Date.now() - friend.last_seen) / (1000 * 60 * 60 * 24));
-
-    // If 30+ days, show "Last seen X days ago"
-    if (daysSinceLastSeen >= 30) {
-      return `Last seen ${daysSinceLastSeen}d ago`;
-    }
-
-    // Otherwise, show Active/Inactive based on current activities
-    const isActive = Object.keys(friend.current_activities || {}).length > 0;
-    return isActive ? 'Active' : 'Inactive';
-  }
-
-  private _createFriendItem(id: string, name: string, activities: Activity[], isExpanded: boolean, friend?: Friend): HTMLElement {
-    const item = document.createElement('div');
-    item.className = 'friend-item';
-    item.dataset['friendId'] = id;
-
-    const isInactive = activities.length === 0;
-    const statusText = friend ? this._getStatusText(friend) : (isInactive ? 'Inactive' : 'Active');
-
-    // Header with caret
-    const header = document.createElement('div');
-    header.className = 'friend-header';
-
-    const caret = document.createElement('span');
-    caret.className = 'friend-caret';
-    caret.textContent = isExpanded ? '▼' : '▶';
-
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'friend-name';
-    nameSpan.textContent = this._escapeHtml(name);
-
-    // Buttons container (right-aligned, before status)
-    const buttonsContainer = document.createElement('div');
-    buttonsContainer.className = 'friend-header-buttons';
-
-    // Only show buttons for actual friends, not for "My Activity" (self)
-    if (id !== 'self') {
-      const editBtn = document.createElement('button');
-      editBtn.className = 'btn-friend-action btn-edit-friend';
-      editBtn.textContent = '✎';
-      editBtn.title = 'Rename friend';
-      editBtn.onclick = (e) => {
-        e.stopPropagation();
-        this._handleEditFriend(id, name);
-      };
-
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'btn-friend-action btn-delete-friend';
-      deleteBtn.textContent = '✕';
-      deleteBtn.title = 'Remove friend';
-      deleteBtn.onclick = (e) => {
-        e.stopPropagation();
-        this._handleDeleteFriend(id, name);
-      };
-
-      buttonsContainer.appendChild(editBtn);
-      buttonsContainer.appendChild(deleteBtn);
-    }
-
-    const statusSpan = document.createElement('span');
-    statusSpan.className = 'friend-status';
-    if (statusText.includes('Last seen')) {
-      statusSpan.classList.add('last-seen');
-    }
-    if (friend?.dnd) {
-      statusSpan.classList.add('dnd-status');
-      item.classList.add('dnd-friend');
-    }
-    statusSpan.textContent = statusText;
-
-    header.appendChild(caret);
-    header.appendChild(nameSpan);
-    header.appendChild(buttonsContainer);
-    header.appendChild(statusSpan);
-    item.appendChild(header);
-
-    // Activities list (collapsed by default, except for user)
-    const activitiesContainer = document.createElement('div');
-    activitiesContainer.className = 'friend-activities';
-    activitiesContainer.style.display = isExpanded ? 'block' : 'none';
-
-    if (activities.length === 0) {
-      const idleRow = document.createElement('div');
-      idleRow.className = 'activity-row';
-      idleRow.textContent = 'Idle';
-      activitiesContainer.appendChild(idleRow);
-    } else {
-      for (const activity of activities) {
-        const activityWrapper = this._createActivityItemWithMessages(activity, id);
-        activitiesContainer.appendChild(activityWrapper);
-      }
-    }
-
-    item.appendChild(activitiesContainer);
-
-    // Toggle expand/collapse on header click (independent for each friend)
-    header.addEventListener('click', () => {
-      const isCurrentlyExpanded = activitiesContainer.style.display !== 'none';
-      if (isCurrentlyExpanded) {
-        activitiesContainer.style.display = 'none';
-        caret.textContent = '▶';
-        item.classList.remove('expanded');
-        this.expandedFriendsState.set(id, false);
-      } else {
-        activitiesContainer.style.display = 'block';
-        caret.textContent = '▼';
-        item.classList.add('expanded');
-        this.expandedFriendsState.set(id, true);
-      }
-      // Only resize if settings panel is not open
-      if (!this.settingsPanel || this.settingsPanel.style.display === 'none') {
-        this._resizePopupToFitContent();
-      }
-    });
-
-    return item;
-  }
-
-  private _createPendingFriendItem(id: string, name: string, initiatedByMe: boolean = true): HTMLElement {
-    const item = document.createElement('div');
-    item.className = 'friend-item pending-friend-item';
-    item.dataset['friendId'] = id;
-
-    // Header
-    const header = document.createElement('div');
-    header.className = 'friend-header';
-
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'friend-name';
-    nameSpan.textContent = this._escapeHtml(name);
-
-    const statusSpan = document.createElement('span');
-    statusSpan.className = 'friend-status pending-status';
-    statusSpan.textContent = 'Pending';
-
-    header.appendChild(nameSpan);
-    header.appendChild(statusSpan);
-    item.appendChild(header);
-
-    // Only show message and buttons if THEY initiated the request (recipient side)
-    if (!initiatedByMe) {
-      const messageContainer = document.createElement('div');
-      messageContainer.className = 'pending-message-container';
-
-      const message = document.createElement('div');
-      message.className = 'pending-message';
-      message.textContent = `${name} added you as a friend`;
-
-      const buttonsContainer = document.createElement('div');
-      buttonsContainer.className = 'pending-buttons';
-
-      const acceptBtn = document.createElement('button');
-      acceptBtn.className = 'btn-accept-friend';
-      acceptBtn.textContent = 'Accept';
-      acceptBtn.onclick = (e) => {
-        e.stopPropagation();
-        this._handleAcceptFriendRequest(id, name);
-      };
-
-      const declineBtn = document.createElement('button');
-      declineBtn.className = 'btn-decline-friend';
-      declineBtn.textContent = 'Decline';
-      declineBtn.onclick = (e) => {
-        e.stopPropagation();
-        this._handleDeclineFriendRequest(id, name);
-      };
-
-      buttonsContainer.appendChild(acceptBtn);
-      buttonsContainer.appendChild(declineBtn);
-
-      messageContainer.appendChild(message);
-      messageContainer.appendChild(buttonsContainer);
-      item.appendChild(messageContainer);
-    }
-
-    return item;
-  }
-
-  /**
-   * Create activity item wrapper with row + message container
-   */
-  private _createActivityItemWithMessages(activity: Activity, friendId?: string): HTMLElement {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'activity-item-wrapper';
-    wrapper.dataset['activityId'] = activity.id || '';
-    console.debug('[Popup] Creating activity item with ID:', activity.id, 'service:', activity.service, 'friend:', friendId);
-
-    // Activity row (with favicon, content, buttons)
-    const row = this._createActivityRow(activity, friendId);
-    wrapper.appendChild(row);
-
-    return wrapper;
-  }
-
-  /**
-   * Load and render messages for an activity
-   * Shows the message container if messages exist
-   */
-
-
-  private _createActivityRow(activity: Activity, friendId?: string): HTMLElement {
-    try {
-      const row = document.createElement('div');
-      row.className = 'activity-item-row';
-
-      // Set progress bar width
-      console.debug('[Popup] Activity metadata:', {
-        service: activity.service,
-        content: activity.content,
-        progress: activity.metadata?.progress,
-        duration: activity.metadata?.duration,
-        hasMetadata: !!activity.metadata,
-      });
-      if (activity.metadata?.progress !== undefined && activity.metadata?.duration && activity.metadata.duration > 0) {
-        const progressPercent = Math.min(100, Math.max(0, (activity.metadata.progress / activity.metadata.duration) * 100));
-        row.style.setProperty('--progress-percent', `${progressPercent}%`);
-        row.setAttribute('data-has-progress', 'true');
-      } else {
-        row.removeAttribute('data-has-progress');
-      }
-
-    // State indicator (on the left) - FIRST
-    if (activity.state) {
-      const stateIcon = document.createElement('div');
-      stateIcon.className = 'activity-state-icon';
-
-      // For Steam games, show controller emoji instead of play/pause states
-      if (activity.service === 'steam-api') {
-        stateIcon.textContent = '🎮';
-        stateIcon.title = 'Playing';
-      } else if (activity.state === 'disconnected') {
-        // Content script disconnected (e.g., after extension restart): show red circle with slash
-        stateIcon.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2" stroke-linecap="round" class="state-icon-svg">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="5" y1="19" x2="19" y2="5"></line>
-          </svg>
-        `;
-        stateIcon.title = 'Connection lost - reload tab';
-      } else {
-        // Check if data is fresh from content script (only for browser tabs)
-        const isDataFresh = activity.is_fresh !== false; // Default to true if not set
-
-        if (!isDataFresh) {
-          // Stale data (content script unresponsive): show moon icon in subtle yellow
-          stateIcon.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="none" stroke="#FEF3C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="state-icon-svg">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-            </svg>
-          `;
-          stateIcon.title = 'Content script unavailable (tab may be backgrounded)';
-        } else if (activity.state === 'playing') {
-          // Fresh playing: green play icon
-          stateIcon.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="#4CAF50" stroke="none" class="state-icon-svg">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
-          `;
-          stateIcon.title = 'Playing';
-        } else {
-          // Fresh paused: gray pause icon
-          stateIcon.innerHTML = `
-            <svg viewBox="0 0 24 24" fill="#9E9E9E" stroke="none" class="state-icon-svg">
-              <rect x="6" y="4" width="4" height="16"></rect>
-              <rect x="14" y="4" width="4" height="16"></rect>
-            </svg>
-          `;
-          stateIcon.title = 'Paused';
-        }
-      }
-
-      row.appendChild(stateIcon);
-    }
-
-    // Favicon (dynamic from site or service icon) - SECOND
-    const faviconDiv = document.createElement('div');
-    faviconDiv.className = 'activity-item-favicon';
-    const img = document.createElement('img');
-
-    // Prefer dynamic favicon from metadata (for video-tab), fallback to static service icon
-    const dynamicFavicon = activity.metadata?.favicon;
-    const faviconUrl = dynamicFavicon ?
-      (dynamicFavicon.startsWith('http') ? dynamicFavicon : `https:${dynamicFavicon}`) :
-      this._getFaviconUrl(activity.service);
-
-    img.src = faviconUrl;
-    img.alt = activity.service;
-    img.style.borderRadius = '4px'; // Round corners for site favicons
-    img.onerror = () => {
-      // Fallback to static icon if dynamic favicon fails
-      img.src = this._getFaviconUrl(activity.service);
-      img.onerror = null; // Prevent infinite loop
-    };
-    faviconDiv.appendChild(img);
-    row.appendChild(faviconDiv);
-
-    // Content text - THIRD
-    const contentText = document.createElement('span');
-    contentText.className = 'activity-content-text';
-    // Show disconnect message if state is disconnected, otherwise show content
-    if (activity.state === 'disconnected') {
-      contentText.textContent = 'Disconnected - reload tab';
-      contentText.style.fontStyle = 'italic';
-      contentText.style.opacity = '0.7';
-    } else {
-      contentText.textContent = this._truncateActivityContent(activity.content);
-    }
-    row.appendChild(contentText);
-
-    const isDnd = activity.dnd || activity.metadata?.dnd;
-
-    // Action buttons container
-    const buttonsDiv = document.createElement('div');
-    buttonsDiv.className = 'activity-actions';
-
-    const isSelfActivity = friendId === 'self';
-    const hasPendingInvite = activity.id && this.pendingInvitesByActivity.has(activity.id);
-    if (!isSelfActivity) {
-      console.log('[Popup] Rendering friend activity:', {
-        service: activity.service,
-        activityId: activity.id,
-        isDnd,
-        hasPendingInvite,
-        pendingInviteMap: Array.from(this.pendingInvitesByActivity.keys()),
-        mapSize: this.pendingInvitesByActivity.size,
-      });
-    }
-
-    // First button - Invite (for self) or Join/Accept (for friends)
-    const firstBtn = document.createElement('button');
-    firstBtn.className = 'activity-action-btn activity-action-join';
-
-    if (isSelfActivity) {
-      // Thin gray envelope for inviting friends
-      firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon" width="14" height="14">
-        <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
-        <path d="M 2 6 L 12 13 L 22 6"></path>
-      </svg>`;
-      firstBtn.style.color = '#999';
-      firstBtn.title = 'Invite friends';
-    } else if (isDnd) {
-      firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="join-icon" width="13" height="13">
-        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-      </svg>`;
-      firstBtn.title = 'Friend is in Do Not Disturb mode';
-      firstBtn.classList.add('disabled');
-    } else if (hasPendingInvite) {
-      // Bold green envelope for accepting invite
-      firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="envelope-icon" width="14" height="14">
-        <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
-        <path d="M 2 6 L 12 13 L 22 6"></path>
-      </svg>`;
-      firstBtn.style.color = '#4CAF50';
-      firstBtn.title = 'Accept or decline invite';
-    } else {
-      // Play arrow for joining normally
-      firstBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="join-icon" width="13" height="13">
-        <polygon points="5 3 19 12 5 21 5 3"></polygon>
-      </svg>`;
-      firstBtn.title = 'Join activity';
-    }
-
-    firstBtn.addEventListener('click', () => {
-      const currentHasPending = activity.id ? this.pendingInvitesByActivity.has(activity.id) : false;
-      console.debug('[Popup] Button clicked:', {
-        service: activity.service,
-        activityId: activity.id,
-        isSelfActivity,
-        isDnd,
-        hasPendingInvite,
-        currentHasPending,
-        mapKeys: Array.from(this.pendingInvitesByActivity.keys()),
-      });
-
-      if (isSelfActivity) {
-        this._inviteToActivity(activity);
-      } else if (isDnd) {
-        toastManager.show('Friend is in Do Not Disturb mode');
-      } else if (currentHasPending) {
-        console.debug('[Popup] Showing accept invite modal for:', friendId);
-        // Use current activity (not stored invite) - stored activity may be stale placeholder from when invite arrived
-        this._showAcceptInviteModal(activity, friendId!);
-      } else {
-        this._joinActivity(activity, friendId);
-      }
-    });
-    buttonsDiv.appendChild(firstBtn);
-
-    row.appendChild(buttonsDiv);
-
-      return row;
-    } catch (error) {
-      console.error('[Popup] Error creating activity row:', error);
-      // Return a minimal row so we don't break the UI
-      const errorRow = document.createElement('div');
-      errorRow.className = 'activity-item-row';
-      const errorText = document.createElement('span');
-      errorText.textContent = `Error: ${activity.content}`;
-      errorRow.appendChild(errorText);
-      return errorRow;
-    }
-  }
-
-
-
-  private async _handleRemoveFriend(friend: Friend): Promise<void> {
-    if (!confirm(`Remove friend "${friend.local_name}"?`)) {
-      return;
-    }
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'REMOVE_FRIEND',
-        data: { friendId: friend.uuid },
-      });
-
-      if (response.success) {
-        console.debug(`[Popup] Removed friend: ${friend.local_name}`);
-        await this.refreshFriends();
-      } else {
-        this._showError(response.error || 'Failed to remove friend');
-      }
-    } catch (error) {
-      console.error('[Popup] Remove friend failed:', error);
-      this._showError('Failed to remove friend');
-    }
-  }
-
-  private _handleDeleteFriend(friendId: string, friendName: string): void {
-    const minimalFriend: Friend = {
-      uuid: friendId,
-      pubkey: '',
-      local_name: friendName,
-      added_at: 0,
-      last_seen: 0,
-      muted: false,
-      hidden_services: [],
-      current_activities: {},
-      state: 'active',
-    };
-    this._handleRemoveFriend(minimalFriend);
-  }
-
-  private _handleEditFriend(friendId: string, currentName: string): void {
-    const newName = prompt('Rename friend:', currentName);
-    if (!newName || newName.trim() === '' || newName === currentName) {
-      return;
-    }
-
-    chrome.runtime.sendMessage({
-      type: 'RENAME_FRIEND',
-      data: { friendId, newName: newName.trim() },
-    }, (response) => {
-      if (response?.success) {
-        console.debug(`[Popup] Renamed friend to: ${newName}`);
-        this.refreshFriends().catch(() => {});
-      } else {
-        this._showError(response?.error || 'Failed to rename friend');
-      }
-    });
-  }
-
-  private _handleAcceptFriendRequest(friendId: string, friendName: string): void {
-    chrome.runtime.sendMessage({
-      type: 'ACCEPT_FRIEND_REQUEST',
-      data: { friendId },
-    }, (response) => {
-      if (response?.success) {
-        console.debug(`[Popup] Accepted friend request from: ${friendName}`);
-        this._showSuccess(`You're now friends with ${friendName}!`);
-        this.refreshFriends().catch(() => {});
-      } else {
-        this._showError(response?.error || 'Failed to accept friend request');
-      }
-    });
-  }
-
-  private _handleDeclineFriendRequest(friendId: string, friendName: string): void {
-    chrome.runtime.sendMessage({
-      type: 'DECLINE_FRIEND_REQUEST',
-      data: { friendId },
-    }, (response) => {
-      if (response?.success) {
-        console.debug(`[Popup] Declined friend request from: ${friendName}`);
-        this._showSuccess(`Declined friend request from ${friendName}`);
-        this.refreshFriends().catch(() => {});
-      } else {
-        this._showError(response?.error || 'Failed to decline friend request');
-      }
-    });
-  }
-
-  private _showMessageModal(friend: Friend, messages: any[], activity?: Activity): void {
-    const modal = document.createElement('div');
-    modal.className = 'message-modal';
-    const headerText = activity ? `${this._escapeHtml(friend.local_name)} (${activity.service})` : this._escapeHtml(friend.local_name);
-    modal.innerHTML = `
-      <div class="message-modal-content">
-        <div class="message-modal-header">
-          <span>${headerText}</span>
-          <button class="btn-close-modal">×</button>
-        </div>
-        <div class="message-list">
-          ${messages.length === 0 ? '<div class="no-messages">No messages yet</div>' : ''}
-          ${messages.map((msg) => `
-            <div class="message ${msg.is_outbound ? 'outbound' : 'inbound'}">
-              <span class="message-content">${this._escapeHtml(msg.content)}</span>
-              <span class="message-time">${this._formatTime(msg.timestamp)}</span>
-            </div>
-          `).join('')}
-        </div>
-        <div class="message-input-area">
-          <input type="text" class="message-input" placeholder="Type a message...">
-          <button class="btn-send-message">Send</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    // Close button handler
-    const closeBtn = modal.querySelector('.btn-close-modal');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
-        modal.remove();
-      });
-    }
-
-    // Send button handler
-    const sendBtn = modal.querySelector('.btn-send-message');
-    const input = modal.querySelector('.message-input') as HTMLInputElement | null;
-    if (sendBtn && input) {
-      sendBtn.addEventListener('click', () => this._sendMessage(friend, input, modal));
-      input.addEventListener('keypress', (e: KeyboardEvent) => {
-        if (e.key === 'Enter') {
-          this._sendMessage(friend, input, modal);
-        }
-      });
-    }
-
-    // Close on backdrop click
-    modal.addEventListener('click', (e: MouseEvent) => {
-      if (e.target === modal) {
-        modal.remove();
-      }
-    });
-  }
-
-  private async _sendMessage(friend: Friend, input: HTMLInputElement, modal: HTMLElement): Promise<void> {
-    const content = input.value.trim();
-    if (!content) return;
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'SEND_MESSAGE',
-        data: { friendId: friend.uuid, content },
-      });
-
-      if (response.success) {
-        input.value = '';
-        console.debug('[Popup] Message sent');
-
-        // Reload messages
-        const messagesResponse = await chrome.runtime.sendMessage({
-          type: 'GET_MESSAGES',
-          data: { friendId: friend.uuid },
-        });
-
-        if (messagesResponse.success) {
-          modal.remove();
-          this._showMessageModal(friend, messagesResponse.data || []);
-        }
-      } else {
-        console.error('[Popup] Failed to send message:', response.error);
-      }
-    } catch (error) {
-      console.error('[Popup] Send message failed:', error);
-    }
-  }
-
-  private _formatTime(timestamp: number): string {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMinutes = Math.floor((now.getTime() - date.getTime()) / 60000);
-
-    if (diffMinutes < 1) return 'now';
-    if (diffMinutes < 60) return `${diffMinutes}m ago`;
-
-    const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
-  }
-
-  private async _loadPendingInvites(): Promise<void> {
-    try {
-      // Read from cache (storage listener keeps it in sync)
-      const receivedInvites = await this.storage.getReceivedInvites();
-      console.log('[Popup] Raw received invites from storage:', receivedInvites);
-      this.pendingInvitesByActivity.clear();
-      this.pendingInvitesData.clear();
-      for (const [activityId, inviteData] of Object.entries(receivedInvites)) {
-        this.pendingInvitesByActivity.set(activityId, inviteData.friendId);
-        this.pendingInvitesData.set(activityId, inviteData);
-      }
-      console.log('[Popup] Loaded received invites - map size:', this.pendingInvitesByActivity.size, 'entries:', Array.from(this.pendingInvitesByActivity.entries()));
-      console.debug('[Popup] Received invite details:', Array.from(this.pendingInvitesData.entries()).map(([id, data]) => ({
-        activityId: id,
-        service: data.activity?.service,
-        friendId: data.friendId,
-      })));
-    } catch (error) {
-      console.error('[Popup] Failed to load received invites:', error);
+      console.error('[Popup] Refresh all failed:', error);
     }
   }
 
   private async _loadMyActivity(): Promise<void> {
     try {
-      // Get all activities from unified storage
       const response = await chrome.runtime.sendMessage({
         type: 'GET_ALL_ACTIVITIES',
       });
 
-      if (!response.success || !response.data) {
-        console.error('[Popup] Failed to get all activities');
-        return;
+      if (response.success && response.data) {
+        const userActivities = (response.data.userActivities || []) as Activity[];
+        this.friendsTabController?.setUserActivities(userActivities);
+        this._renderMyActivity(userActivities);
       }
-
-      // Extract my activities from the unified storage format
-      const myActivitiesMap = response.data.myActivities || {};
-      const activities = Object.values(myActivitiesMap).filter((a) => a) as Activity[];
-      this._renderMyActivity(activities);
     } catch (error) {
       console.error('[Popup] Failed to load my activity:', error);
     }
   }
 
   private _renderMyActivity(activities: Activity[]): void {
-    // Store activities (will be sorted by type in refreshFriends)
-    this.userActivities = activities;
+    const activityDisplay = document.getElementById('my-activity-display');
+    if (!activityDisplay) return;
 
-    console.debug('[Popup] My Activity updated, will be sorted by type in render');
-
-    // Re-render the friends list (including "My Activity" section) with updated activities
-    this.refreshFriends().catch((error) => {
-      console.error('[Popup] Failed to re-render after activity update:', error);
-    });
-  }
-
-
-
-  private _truncateActivityContent(content: string): string {
-    return content.length > 40 ? content.substring(0, 40) + '...' : content;
-  }
-
-  /**
-   * Sort activities by type: videos first, streams second, games last
-   */
-  private _sortActivitiesByType(activities: Activity[]): Activity[] {
-    // Group activities by type category
-    const videos: Activity[] = [];
-    const streams: Activity[] = [];
-    const music: Activity[] = [];
-    const games: Activity[] = [];
-
-    for (const activity of activities) {
-      switch (activity.service) {
-        case 'youtube-tab':
-        case 'netflix-tab':
-        case 'video-tab':
-          videos.push(activity);
-          break;
-        case 'twitch-tab':
-        case 'twitch-api':
-          streams.push(activity);
-          break;
-        case 'spotify-api':
-          music.push(activity);
-          break;
-        case 'steam-api':
-          games.push(activity);
-          break;
-        default:
-          // Other services (discord, etc.) go to games
-          games.push(activity);
-      }
+    if (activities.length === 0) {
+      activityDisplay.textContent = 'Idle';
+      activityDisplay.classList.add('idle');
+      return;
     }
 
-    // Sort each group by timestamp (most recent first)
-    const sortByTimestamp = (a: Activity, b: Activity) => {
-      const aTime = a.timestamp || 0;
-      const bTime = b.timestamp || 0;
-      return bTime - aTime;
-    };
+    const primary = activities[0];
+    if (!primary) {
+      activityDisplay.textContent = 'Idle';
+      activityDisplay.classList.add('idle');
+      return;
+    }
 
-    videos.sort(sortByTimestamp);
-    streams.sort(sortByTimestamp);
-    music.sort(sortByTimestamp);
-    games.sort(sortByTimestamp);
-
-    // Concatenate in priority order: videos → streams → music → games
-    return [...videos, ...streams, ...music, ...games];
+    activityDisplay.classList.remove('idle');
+    const truncated = primary.content.length > 28 ? primary.content.substring(0, 28) + '...' : primary.content;
+    activityDisplay.textContent = `${primary.service}: ${truncated}`;
   }
 
-  private _setupMessageListener(): void {
-    chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
-      if (message.type === 'NEW_MESSAGE') {
-        // Handled via overlay / message components
-      } else if (message.type === 'FRIEND_ACTIVITY_CHANGED') {
-        // Friend's activities changed - refresh immediately
-        this.refreshFriends().catch((error) => {
-          console.error('[Popup] Failed to refresh friends after activity change:', error);
-        });
-      } else if (message.type === 'INVITE_RECEIVED') {
-        // Mark activity as having pending invite
-        const { activityId, friendId } = message.data;
-        if (activityId && friendId) {
-          console.debug('[Popup] Received invite for activity:', activityId, 'from friend:', friendId);
-          this.pendingInvitesByActivity.set(activityId, friendId);
-          console.debug('[Popup] Pending invites map:', Array.from(this.pendingInvitesByActivity.entries()));
-          this.refreshFriends().catch((error) => {
-            console.error('[Popup] Failed to refresh after invite:', error);
-          });
-        }
-      } else if (message.type === 'ACTIVITY_DECLINED') {
-        // Friend declined activity invitation - update envelope state
-        const { activityId, friendId } = message.data;
-        if (activityId && friendId) {
-          console.debug('[Popup] Activity declined for:', activityId, 'from friend:', friendId);
-          // Remove from pending invites and refresh to show gray envelope
-          this.pendingInvitesByActivity.delete(activityId);
-          this.refreshFriends().catch((error) => {
-            console.error('[Popup] Failed to refresh after decline:', error);
-          });
-        }
-      }
-    });
-  }
-
-  private _setupStorageListener(): void {
-    // Listen for changes in storage
-    chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName !== 'local') return;
-
-      // Collect keys that changed (handling namespaced keys e.g. "uuid:key")
-      const changedKeys = Object.keys(changes);
-      const staticKeys = [
-        STORAGE_KEYS.MY_ACTIVITIES,
-        STORAGE_KEYS.FRIENDS_LIST,
-        STORAGE_KEYS.RECEIVED_INVITES,
-        STORAGE_KEYS.USER_PROFILE,
-      ];
-
-      const keysToRefresh = staticKeys.filter(staticKey =>
-        changedKeys.some(k => k === staticKey || k.endsWith(`:${staticKey}`))
+  private _setupGamesController(): void {
+    const gamesContent = document.getElementById('games-content');
+    if (gamesContent) {
+      const gameLibraryManager = GameLibraryManager.getInstance(this.storage);
+      const metadataFetcher = MetadataFetcher.getInstance(this.storage);
+      this.gamesTabController = new GamesTabController(
+        gamesContent,
+        gameLibraryManager,
+        metadataFetcher,
+        this.storage
       );
+      this.gamesTabController.init().catch((error) => {
+        console.error('[Popup] Failed to initialize GamesTabController:', error);
+      });
+    }
+  }
 
-      // Refresh changed keys from storage into cache (keeps cache in sync with background)
-      if (keysToRefresh.length > 0) {
-        console.debug('[Popup] Storage changed, refreshing cache for keys:', keysToRefresh);
-        this.storage.refreshKeysFromStorage(keysToRefresh).then(() => {
-          if (keysToRefresh.includes(STORAGE_KEYS.USER_PROFILE)) {
-            this._updateDndButtonDisplay().catch((error) => {
-              console.error('[Popup] Failed to refresh DND display:', error);
-            });
-          }
-          // Reload affected data
-          if (keysToRefresh.includes(STORAGE_KEYS.MY_ACTIVITIES)) {
-            this._loadMyActivity().catch((error) => {
-              console.error('[Popup] Failed to refresh activities:', error);
-            });
-          }
-          if (keysToRefresh.includes(STORAGE_KEYS.RECEIVED_INVITES)) {
-            this._loadPendingInvites().catch((error) => {
-              console.error('[Popup] Failed to reload received invites:', error);
-            });
-          }
-          // Refresh display for both activity and invite changes
-          this.refreshFriends().catch((error) => {
-            console.error('[Popup] Failed to refresh display after storage change:', error);
-          });
-        }).catch((error) => {
-          console.error('[Popup] Failed to refresh cache from storage:', error);
+  private _setupTabNavigation(): void {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    tabButtons.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const tabName = target.dataset['tab'];
+        if (!tabName) return;
+
+        tabButtons.forEach((b) => b.classList.remove('active'));
+        target.classList.add('active');
+
+        document.querySelectorAll('.tab-content').forEach((content) => {
+          content.classList.remove('active');
         });
-      }
+
+        const activeContent = document.getElementById(`${tabName}-content`);
+        if (activeContent) {
+          activeContent.classList.add('active');
+        }
+
+        if (tabName === 'games' && this.gamesTabController) {
+          this.gamesTabController.render().catch((error) => {
+            console.error('[Popup] Failed to render games tab:', error);
+          });
+        }
+
+        this.settingsTabController?.resizePopupToFitContent();
+      });
     });
   }
 
   private async _updateDndButtonDisplay(btn?: HTMLElement | null, isDnd?: boolean): Promise<void> {
-    const button = btn || document.getElementById('dnd-toggle-btn');
-    if (!button) return;
+    const dndBtn = btn || document.getElementById('dnd-toggle-btn');
+    if (!dndBtn) return;
 
-    if (isDnd === undefined) {
-      const profile = await this.storage.getUserProfile();
-      isDnd = profile?.dnd_enabled ?? false;
+    let dndState = isDnd;
+    if (dndState === undefined) {
+      dndState = await this.storage.getDndMode();
     }
 
-    if (isDnd) {
-      button.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="9"></circle>
-          <line x1="5.6" y1="5.6" x2="18.4" y2="18.4"></line>
-        </svg>
-      `;
-      button.title = 'Do Not Disturb';
-      button.classList.add('dnd-active');
+    if (dndState) {
+      dndBtn.textContent = '⛔ Do Not Disturb';
+      dndBtn.classList.add('active-dnd');
+      dndBtn.title = 'Click to switch to Available';
     } else {
-      button.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="9"></circle>
-        </svg>
-      `;
-      button.title = 'Available';
-      button.classList.remove('dnd-active');
+      dndBtn.textContent = '🟢 Available';
+      dndBtn.classList.remove('active-dnd');
+      dndBtn.title = 'Click to switch to Do Not Disturb';
     }
   }
 
   private _setupEventListeners(): void {
-    // DND toggle button
-    const dndToggleBtn = document.getElementById('dnd-toggle-btn');
-    if (dndToggleBtn) {
-      this._updateDndButtonDisplay(dndToggleBtn);
-
-      dndToggleBtn.addEventListener('click', async () => {
-        try {
-          const currentProfile = await this.storage.getUserProfile();
-          const newDnd = !(currentProfile?.dnd_enabled ?? false);
-
-          await chrome.runtime.sendMessage({
-            type: 'SET_DND_MODE',
-            data: { enabled: newDnd },
-          });
-
-          await this.storage.setDndMode(newDnd);
-          this._updateDndButtonDisplay(dndToggleBtn, newDnd);
-
-          if (newDnd) {
-            toastManager.show('Do Not Disturb enabled');
-          } else {
-            toastManager.show('Available mode enabled');
-          }
-
-          await this.refreshFriends();
-        } catch (error) {
-          console.error('[Popup] Failed to toggle DND mode:', error);
-          this._showError('Failed to toggle DND mode');
-        }
+    const addFriendBtn = document.getElementById('btn-add-friend');
+    if (addFriendBtn) {
+      addFriendBtn.addEventListener('click', () => {
+        this.friendsTabController?.showAddFriendForm();
       });
     }
 
-    // Manual refresh button (both header and settings panel use same function)
-    const refreshBtn = document.getElementById('refresh-friends-btn');
-    if (refreshBtn) {
-      refreshBtn.addEventListener('click', () => {
-        this.refreshAll().catch((error) => {
-          console.error('[Popup] Manual refresh failed:', error);
-        });
+    const cancelAddFriendBtn = document.getElementById('cancel-add-friend');
+    if (cancelAddFriendBtn) {
+      cancelAddFriendBtn.addEventListener('click', () => {
+        this.friendsTabController?.hideAddFriendForm();
       });
     }
 
-    // Debug logs export button
-    const debugLogsBtn = document.getElementById('debug-logs-btn');
-    if (debugLogsBtn) {
-      debugLogsBtn.addEventListener('click', async () => {
-        try {
-          toastManager.show('📋 Preparing logs...', { duration: 2000 });
+    if (this.addFriendForm) {
+      this.addFriendForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        this.friendsTabController?.handleAddFriendSubmit();
+      });
+    }
 
-          // Signal background to prepare logs
-          await chrome.runtime.sendMessage({ type: 'DUMP_LOGS' });
-
-          // Give it a moment to prepare
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          // Retrieve logs from storage
-          const logs = await this.storage.get<Record<string, string>>(
-            STORAGE_KEYS.LOGS_EXPORT,
-            {}
-          );
-
-          if (!logs || Object.keys(logs).length === 0) {
-            toastManager.show('❌ No logs found', { duration: 3000 });
-            return;
-          }
-
-          // Create a SINGLE combined log file with all profiles
-          const combinedLog = Object.entries(logs)
-            .map(([_profileId, logText]) => logText)
-            .join('\n\n' + '='.repeat(80) + '\n\n');
-
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-          const blob = new Blob([combinedLog], { type: 'text/plain' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `hang-time-logs-${timestamp}.txt`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-
-          toastManager.show('✅ Logs exported!', { duration: 3000 });
-        } catch (error) {
-          console.error('[Popup] Failed to export logs:', error);
-          toastManager.show('❌ Failed to export logs', { duration: 3000 });
-        }
+    const showInactiveBtn = document.getElementById('show-inactive-btn');
+    if (showInactiveBtn) {
+      showInactiveBtn.addEventListener('click', () => {
+        this.friendsTabController?.toggleShowInactiveFriends();
       });
     }
 
     const settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
-        this._showSettingsPanel();
+        this.settingsTabController?.showSettingsPanel();
       });
     }
 
-    // Settings panel close button
-    const closeBtn = document.getElementById('settings-close-btn');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
-        this._hideSettingsPanel();
+    const closeSettingsBtn = document.getElementById('close-settings-btn');
+    if (closeSettingsBtn) {
+      closeSettingsBtn.addEventListener('click', () => {
+        this.settingsTabController?.hideSettingsPanel();
       });
     }
 
-    // Close settings on ESC key
-    document.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.settingsPanel && this.settingsPanel.style.display !== 'none') {
-        this._hideSettingsPanel();
+    const dndBtn = document.getElementById('dnd-toggle-btn');
+    if (dndBtn) {
+      this._updateDndButtonDisplay(dndBtn);
+      dndBtn.addEventListener('click', async () => {
+        const currentDnd = await this.storage.getDndMode();
+        const newDnd = !currentDnd;
+        await this.storage.setDndMode(newDnd);
+        await this._updateDndButtonDisplay(dndBtn, newDnd);
+
+        chrome.runtime.sendMessage({
+          type: 'SET_DND_MODE',
+          data: { dnd: newDnd },
+        }).catch((err) => {
+          console.debug('[Popup] Failed to notify background of DND change:', err);
+        });
+
+        toastManager.show(newDnd ? 'Do Not Disturb enabled' : 'Available mode enabled');
+      });
+    }
+
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        this.refreshAll();
+      });
+    }
+  }
+
+  private _setupMessageListener(): void {
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message.type === 'REFRESH_FRIENDS_UI' || message.type === 'ACTIVITY_UPDATED') {
+        this.refreshFriends().catch(() => {});
+        this._loadMyActivity().catch(() => {});
+        sendResponse({ success: true });
+        return true;
       }
+
+      if (message.type === 'INVITE_RECEIVED') {
+        this.friendsTabController?.loadPendingInvites().then(() => {
+          this.refreshFriends();
+        });
+        sendResponse({ success: true });
+        return true;
+      }
+
+      if (message.type === 'DND_MODE_CHANGED') {
+        this._updateDndButtonDisplay(null, message.data?.dnd);
+        sendResponse({ success: true });
+        return true;
+      }
+
+      return false;
     });
-
-    // Close settings on click outside
-    if (this.settingsPanel) {
-      this.settingsPanel.addEventListener('click', (e: Event) => {
-        if (e.target === this.settingsPanel) {
-          this._hideSettingsPanel();
-        }
-      });
-    }
-
-    // Settings panel refresh button (same as header refresh - complete refresh)
-    const settingsRefreshBtn = document.getElementById('settings-refresh-btn');
-    if (settingsRefreshBtn) {
-      settingsRefreshBtn.addEventListener('click', () => {
-        this.refreshAll().catch((error) => {
-          console.error('[Popup] Settings panel refresh failed:', error);
-        });
-      });
-    }
-
-    // Settings panel export button
-    const exportBtn = document.getElementById('export-settings-popup-btn');
-    if (exportBtn) {
-      exportBtn.addEventListener('click', () => this._exportSettingsPopup());
-    }
-
-    // Settings panel import button
-    const importBtn = document.getElementById('import-settings-popup-btn');
-    if (importBtn) {
-      importBtn.addEventListener('click', () => {
-        const fileInput = document.getElementById('import-file-popup-input') as HTMLInputElement;
-        fileInput?.click();
-      });
-    }
-
-    // Settings panel import file input
-    const importFileInput = document.getElementById('import-file-popup-input') as HTMLInputElement;
-    if (importFileInput) {
-      importFileInput.addEventListener('change', (e: Event) => {
-        const files = (e.target as HTMLInputElement).files;
-        if (files && files[0]) {
-          this._importSettingsPopup(files[0]);
-        }
-      });
-    }
-
-    // Test notification button
-    const testNotificationBtn = document.getElementById('test-notification-btn');
-    if (testNotificationBtn) {
-      testNotificationBtn.addEventListener('click', async () => {
-        try {
-          await chrome.runtime.sendMessage({ type: 'TEST_NOTIFICATION' });
-          toastManager.show('Test notification sent!');
-        } catch (error) {
-          console.error('[Popup] Test notification error:', error);
-          toastManager.show('Test notification failed');
-        }
-      });
-    }
-
-    // Setup settings panel listeners
-    this._setupSettingsPanelListeners();
-
-    // Add friend button
-    const addFriendBtn = document.getElementById('add-friend-btn');
-    if (addFriendBtn) {
-      addFriendBtn.addEventListener('click', () => this._showAddFriendForm());
-    }
-
-    // Toggle inactive friends button
-    const showInactiveBtn = document.getElementById('show-inactive-btn');
-    if (showInactiveBtn) {
-      showInactiveBtn.addEventListener('click', () => this._toggleShowInactiveFriends());
-    }
-
-    // Form submit button
-    const submitBtn = document.getElementById('friend-submit-btn');
-    if (submitBtn) {
-      submitBtn.addEventListener('click', () => this._handleAddFriendSubmit());
-    }
-
-    // Form cancel button
-    const cancelBtn = document.getElementById('friend-cancel-btn');
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => this._hideAddFriendForm());
-    }
-
-    // Allow Enter key to submit form
-    if (this.friendNicknameInput) {
-      this.friendNicknameInput.addEventListener('keypress', (e: KeyboardEvent) => {
-        if (e.key === 'Enter') {
-          this._handleAddFriendSubmit();
-        }
-      });
-    }
   }
 
-  private _setupTabNavigation(): void {
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const tabContents = document.querySelectorAll('.tab-content');
-
-    tabButtons.forEach((button) => {
-      button.addEventListener('click', () => {
-        const tabId = button.getAttribute('data-tab');
-        if (!tabId) return;
-
-        // Deactivate all tabs and contents
-        tabButtons.forEach((btn) => btn.classList.remove('active'));
-        tabContents.forEach((content) => content.classList.remove('active'));
-
-        // Activate selected tab
-        button.classList.add('active');
-        const tabContent = document.getElementById(tabId);
-        if (tabContent) {
-          tabContent.classList.add('active');
-
-          // Toggle visibility of friends tab actions (offline friends / add friend)
-          const friendsActions = document.getElementById('friends-tab-actions');
-          if (friendsActions) {
-            friendsActions.style.display = (tabId === 'friends-tab') ? 'flex' : 'none';
-          }
-
-          // If this is the games tab, render it
-          if (tabId === 'games-tab' && this.gamesTabController) {
-            this.gamesTabController.render().catch((error) => {
-              console.error('[Popup] Failed to render games tab:', error);
-            });
-          }
-
-          // Resize popup to fit new content
-          this._resizePopupToFitContent();
-        }
-      });
-    });
-
-    console.debug('[Popup] Tab navigation initialized');
-  }
-
-  private _setupGamesController(): void {
-    try {
-      const popupElement = document.getElementById('popup-container');
-      const storage = this.storage;
-      const gameLibraryManager = GameLibraryManager.getInstance(storage);
-      const metadataFetcher = MetadataFetcher.getInstance(storage);
-
-      this.gamesTabController = new GamesTabController(popupElement, gameLibraryManager, metadataFetcher, storage);
-
-      this.gamesTabController.init().catch((error) => {
-        console.error('[Popup] Failed to initialize games controller:', error);
-      });
-
-      console.debug('[Popup] Games controller initialized');
-    } catch (error) {
-      console.error('[Popup] Error setting up games controller:', error);
-    }
-  }
-
-  private _showSettingsPanel(): void {
-    if (this.settingsPanel) {
-      this.settingsPanel.style.display = 'flex';
-      document.body.classList.add('settings-open');
-      // Resize popup to fit settings content
-      this._resizePopupToFitSettings();
-      // Always reload freshest saved values into settings panel inputs
-      this._loadSettingsPanel().catch((err) => {
-        console.debug('[Popup] Failed to reload settings panel on open:', err);
-      });
-    }
-  }
-
-  private async _hideSettingsPanel(): Promise<void> {
-    await this._saveSettingsPanel();
-    if (this.settingsPanel) {
-      this.settingsPanel.style.display = 'none';
-      document.body.classList.remove('settings-open');
-      // Resize popup back to fit main content
-      this._resizePopupToFitContent();
-    }
-  }
-
-  private _resizePopupToFitSettings(): void {
-    const body = document.body;
-    // Expand popup to show settings panel content comfortably
-    // Settings panel is position: fixed with independent scrolling (overflow-y: auto)
-    body.style.minHeight = '600px';
-    console.debug(`[Popup] Settings panel opened (min height: 600px)`);
-  }
-
-  private _resizePopupToFitContent(): void {
-    const body = document.body;
-    if (this.popupContainer) {
-      // Measure the main popup content height
-      const contentHeight = this.popupContainer.scrollHeight;
-      body.style.minHeight = Math.max(100, contentHeight) + 'px';
-      console.debug(`[Popup] Resized for content: ${contentHeight}px`);
-    }
-  }
-
-  private async _updateIntegrationHealthDisplays(): Promise<void> {
-    try {
-      const profile = await this.storage.getUserProfile();
-      if (!profile) return;
-
-      // STUB: Spotify and Twitch integrations disabled for MVP
-      // Future: spotify-api (co-listening), twitch-api (streaming detection)
-      const integrations = ['steam-api', 'xbox-api', 'discord-api'];
-      for (const service of integrations) {
-        const statusEl = document.getElementById(`status-${service}-popup`);
-        if (!statusEl) continue;
-
-        const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? true;
-        if (!isEnabled) {
-          statusEl.textContent = 'Disabled';
-          statusEl.style.color = '';
-          continue;
-        }
-
-        // For Steam, show health status with personaname if available
-        if (service === 'steam-api') {
-          const health = await this.storage.getIntegrationHealth();
-          const steamHealth = health['steam-api'];
-          if (steamHealth) {
-            const timeSinceLastPing = Date.now() - steamHealth.lastPing;
-            const secondsAgo = Math.floor(timeSinceLastPing / 1000);
-            const minutesAgo = Math.floor(timeSinceLastPing / (60 * 1000));
-            const timeStr = secondsAgo < 60 ? `${secondsAgo}s ago` : `${minutesAgo}m ago`;
-            const personaStr = steamHealth.personaname ? ` - ${steamHealth.personaname}` : '';
-
-            if (steamHealth.alive) {
-              statusEl.textContent = `✅ Active${personaStr} (${timeStr})`;
-              statusEl.style.color = '#10b981';
-            } else {
-              statusEl.textContent = `⚠️ Unavailable${personaStr} (${timeStr})`;
-              statusEl.style.color = '#ef4444';
-            }
-          } else if (profile.steam_config?.steam_id && profile.steam_config?.api_key) {
-            statusEl.textContent = 'Configured, no activity';
-            statusEl.style.color = '#10b981';
-          } else {
-            statusEl.textContent = 'Not configured';
-            statusEl.style.color = 'var(--text-secondary)';
-          }
-        } else if (service === 'xbox-api') {
-          if (profile.xbox_config?.api_key) {
-            const gamertagStr = profile.xbox_config.gamertag ? ` - ${profile.xbox_config.gamertag}` : '';
-            statusEl.textContent = `✅ Connected${gamertagStr}`;
-            statusEl.style.color = '#10b981';
-          } else {
-            statusEl.textContent = 'Not configured';
-            statusEl.style.color = 'var(--text-secondary)';
-          }
-        }
-        // TODO: Add health display for Spotify, Twitch, Discord when implemented
-      }
-    } catch (error) {
-      console.error('[Popup] Failed to update integration health displays:', error);
-    }
-  }
-
-  private async _loadSettingsPanel(): Promise<void> {
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'GET_USER_IDENTIFIER',
-      });
-
-      if (!response.success || !response.data) return;
-
-      const profile = response.data;
-
-      // Load identifier
-      const idDisplay = document.getElementById('user-identifier-popup');
-      if (idDisplay) {
-        idDisplay.textContent = profile.uuid || profile.identifier || '';
-      }
-
-      // Load nickname
-      const nicknameInput = document.getElementById('nickname-popup') as HTMLInputElement;
-      if (nicknameInput && profile.nickname) {
-        nicknameInput.value = profile.nickname;
-      }
-
-      // Load Discord info
-      const discordInput = document.getElementById('discord-info-popup') as HTMLInputElement;
-      if (discordInput && profile.discord_info) {
-        discordInput.value = profile.discord_info;
-      }
-
-      // Load Steam configuration
-      const steamIdInput = document.getElementById('steam-id-popup') as HTMLInputElement;
-      const steamApiKeyInput = document.getElementById('steam-api-key-popup') as HTMLInputElement;
-      if (steamIdInput && profile.steam_config?.steam_id) {
-        steamIdInput.value = profile.steam_config.steam_id;
-      }
-      if (steamApiKeyInput && profile.steam_config?.api_key) {
-        steamApiKeyInput.value = profile.steam_config.api_key;
-      }
-
-      // Load Xbox configuration
-      const xboxGamertagInput = document.getElementById('xbox-gamertag-popup') as HTMLInputElement;
-      const xboxApiKeyInput = document.getElementById('xbox-api-key-popup') as HTMLInputElement;
-      if (xboxGamertagInput && profile.xbox_config?.gamertag) {
-        xboxGamertagInput.value = profile.xbox_config.gamertag;
-      }
-      if (xboxApiKeyInput && profile.xbox_config?.api_key) {
-        xboxApiKeyInput.value = profile.xbox_config.api_key;
-      }
-
-      // Load service toggles for browser tabs
-      // STUB: Twitch tab detection disabled for MVP
-      const tabServices = ['youtube-tab', 'netflix-tab', 'video-tab']; // 'twitch-tab' disabled - see HTML
-      for (const service of tabServices) {
-        const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
-        if (toggle && profile.services_enabled) {
-          toggle.checked = profile.services_enabled[service as keyof typeof profile.services_enabled] ?? false;
-        }
-      }
-
-      // Load service toggles for OAuth / API integrations
-      const oauthServices = ['steam-api', 'xbox-api', 'discord-api'];
-      for (const service of oauthServices) {
-        const toggle = document.getElementById(`service-${service}-enabled`) as HTMLInputElement;
-        if (toggle) {
-          const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? true;
-          toggle.checked = isEnabled;
-          this.serviceIntegrationEnabled.set(service, isEnabled);
-        }
-      }
-
-      // Load notification preferences
-      const notifFriendOnline = document.getElementById('notif-friend-online-popup') as HTMLInputElement;
-      if (notifFriendOnline && profile.notification_preferences) {
-        notifFriendOnline.checked = profile.notification_preferences.friend_online ?? true;
-      }
-
-      const notifNewMessage = document.getElementById('notif-new-message-popup') as HTMLInputElement;
-      if (notifNewMessage && profile.notification_preferences) {
-        notifNewMessage.checked = profile.notification_preferences.new_message ?? true;
-      }
-
-      const notifJoinSuggestion = document.getElementById('notif-join-suggestion-popup') as HTMLInputElement;
-      if (notifJoinSuggestion && profile.notification_preferences) {
-        notifJoinSuggestion.checked = profile.notification_preferences.join_suggestion ?? false;
-      }
-
-      // Load publisher config
-      const pubConfig = profile.publisher_config || {
-        enabled: true,
-        size: 'full',
-        scope: 'updates',
-        rate_ms: 12000,
-        relays: Object.fromEntries(DEFAULT_RELAY_URLS.map(url => [url.replace('wss://', '').replace('ws://', '').replace(/\/$/, ''), true])),
-        retry_backoff_ms: 1000,
-        compression: false,
-        verbose_logging: false,
-        delta_publishing: false,
-      };
-
-      // Load Publisher config
-      const publisherEnabledToggle = document.getElementById('publisher-enabled-popup') as HTMLInputElement;
-      if (publisherEnabledToggle) {
-        publisherEnabledToggle.checked = pubConfig.enabled ?? true;
-      }
-
-      const publisherRateInput = document.getElementById('publisher-rate-popup') as HTMLInputElement;
-      if (publisherRateInput) {
-        // Convert from ms to seconds for display
-        const rateSeconds = Math.round((pubConfig.rate_ms || 12000) / 1000);
-        publisherRateInput.value = rateSeconds.toString();
-      }
-
-      // Load Low Bandwidth Mode toggle
-      const lowBandwidthToggle = document.getElementById('low-bandwidth-mode-popup') as HTMLInputElement;
-      if (lowBandwidthToggle) {
-        lowBandwidthToggle.checked = pubConfig.low_bandwidth_mode ?? false;
-      }
-
-      // Load OAuth status
-      await this._loadOAuthStatusInPanel();
-
-      // Load game discovery setting
-      const gameDiscoveryToggle = document.getElementById('game-discovery-enabled-popup') as HTMLInputElement;
-      if (gameDiscoveryToggle) {
-        gameDiscoveryToggle.checked = profile.game_discovery_enabled ?? false;
-      }
-
-      // Load appearance / theme setting
-      const theme = profile.theme || localStorage.getItem('hang-time-theme') || 'auto';
-      const themeRadio = document.querySelector(`input[name="theme-popup"][value="${theme}"]`) as HTMLInputElement;
-      if (themeRadio) {
-        themeRadio.checked = true;
-      }
-      this._setTheme(theme);
-
-      // Update Steam & Xbox status after loading
-      await this._updateIntegrationHealthDisplays();
-      await this._updateServiceStatus('steam-api');
-      await this._updateServiceStatus('xbox-api');
-
-      // Add event listeners for settings panel
-      this._setupSettingsPanelListeners();
-    } catch (error) {
-      console.error('[Popup] Failed to load settings panel:', error);
-    }
-  }
-
-  private async _loadOAuthStatusInPanel(): Promise<void> {
-    // STUB: Spotify and Twitch OAuth stubs disabled for MVP
-    const oauthServices: string[] = []; // ['spotify-api', 'twitch-api'] - disabled, see above
-    for (const service of oauthServices) {
-      try {
-        console.debug(`[Popup] Loading OAuth status for ${service}`);
-        const response = await chrome.runtime.sendMessage({
-          type: 'GET_OAUTH_STATUS',
-          data: { service },
-        });
-
-        const container = document.getElementById(`${service}-auth-popup-container`);
-        console.debug(`[Popup] Container for ${service}:`, container);
-        if (!container) {
-          console.warn(`[Popup] No container found for ${service}`);
-          continue;
-        }
-
-        container.innerHTML = '';
-        const hasToken = response.success && response.data?.hasToken;
-        const statusText = hasToken ? 'Reconnect' : 'Connect';
-
-        const connectBtn = document.createElement('button');
-        connectBtn.className = 'btn-oauth';
-        connectBtn.textContent = statusText;
-        connectBtn.dataset['service'] = service;
-        console.debug(`[Popup] Created ${service} button:`, connectBtn);
-
-        connectBtn.addEventListener('click', (e) => {
-          console.debug(`[Popup] ${service} button clicked!`, e);
-          this._authenticateServicePopup(service);
-        });
-
-        container.appendChild(connectBtn);
-        console.debug(`[Popup] Appended ${service} button to container`);
-
-        if (hasToken) {
-          const disconnectBtn = document.createElement('button');
-          disconnectBtn.className = 'btn-oauth-secondary';
-          disconnectBtn.textContent = 'Disconnect';
-          disconnectBtn.addEventListener('click', () => this._disconnectServicePopup(service));
-          container.appendChild(disconnectBtn);
-        }
-
-        // Update status display (enable toggle already set from profile)
-        await this._updateServiceStatus(service);
-      } catch (error) {
-        console.error(`[Popup] Failed to load ${service} status:`, error);
-      }
-    }
-  }
-
-  private async _loadBrowserStatusInPanel(): Promise<void> {
-    try {
-      // Get profile for enabled state
-      const profileResponse = await chrome.runtime.sendMessage({
-        type: 'GET_USER_IDENTIFIER',
-      });
-      const profile = profileResponse.success && profileResponse.data ? profileResponse.data : null;
-
-      const response = await chrome.runtime.sendMessage({
-        type: 'GET_BROWSER_ACTIVITIES',
-      });
-
-      const browserActivities = response.success && response.data ? response.data : { 'video-tab': null };
-
-      for (const service of ['video-tab']) {
-        const statusDiv = document.getElementById(`status-${service}-popup`);
-        if (statusDiv && profile) {
-          const isEnabled = profile.services_enabled?.[service as keyof typeof profile.services_enabled] ?? false;
-
-          if (!isEnabled) {
-            statusDiv.textContent = 'Disabled';
-          } else {
-            const activity = browserActivities[service as keyof typeof browserActivities];
-            if (activity) {
-              statusDiv.textContent = this._truncateActivityContent(activity.content);
-            } else {
-              statusDiv.textContent = 'Idle';
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[Popup] Failed to load browser status:', error);
-    }
-  }
-
-  private _setupSettingsPanelListeners(): void {
-    if (this.settingsListenersSetup) return;
-    this.settingsListenersSetup = true;
-
-    // Copy identifier button
-    const copyBtn = document.getElementById('copy-id-popup-btn');
-    if (copyBtn) {
-      copyBtn.addEventListener('click', () => this._handleCopyId());
-    }
-
-    // Service integration enable/disable checkboxes
-    document.querySelectorAll('input.service-enable-toggle').forEach((toggle) => {
-      if (toggle instanceof HTMLInputElement) {
-        toggle.addEventListener('change', () => {
-          const service = toggle.dataset['service'];
-          if (service) {
-            const isEnabled = toggle.checked;
-            this.serviceIntegrationEnabled.set(service, isEnabled);
-            this._saveSettingsPanel();
-            this._updateServiceStatus(service);
-          }
-        });
-      }
-    });
-
-    // Browser tab service toggles (Netflix/YouTube)
-    document.querySelectorAll('input.service-toggle').forEach((toggle) => {
-      if (toggle instanceof HTMLInputElement) {
-        toggle.addEventListener('change', () => {
-          this._saveSettingsPanel();
-          this._loadBrowserStatusInPanel();
-        });
-      }
-    });
-
-    // Game discovery toggle
-    const gameDiscoveryToggle = document.getElementById('game-discovery-enabled-popup') as HTMLInputElement;
-    if (gameDiscoveryToggle) {
-      gameDiscoveryToggle.addEventListener('change', async () => {
-        const wasEnabled = this.storage ? (await this.storage.getUserProfile())?.game_discovery_enabled : false;
-        const nowEnabled = gameDiscoveryToggle.checked;
-
-        await this._saveSettingsPanel();
-
-        // If just enabled, kick off game library refresh immediately
-        if (!wasEnabled && nowEnabled) {
-          console.debug('[Popup] Game discovery enabled - triggering immediate refresh');
-          try {
-            await chrome.runtime.sendMessage({
-              type: 'REFRESH_GAME_LIBRARY',
-            });
-          } catch (error) {
-            console.debug('[Popup] Game library refresh initiated');
-          }
-        } else if (!nowEnabled) {
-          console.debug('[Popup] Game discovery disabled');
-        }
-      });
-    }
-
-    // Steam configuration inputs
-    const steamIdInput = document.getElementById('steam-id-popup') as HTMLInputElement;
-    const steamApiKeyInput = document.getElementById('steam-api-key-popup') as HTMLInputElement;
-    const steamToggleVisibility = document.getElementById('steam-toggle-key-visibility') as HTMLButtonElement;
-
-    if (steamIdInput) {
-      steamIdInput.addEventListener('input', () => this._saveSettingsPanel());
-      steamIdInput.addEventListener('change', () => this._saveSettingsPanel());
-      steamIdInput.addEventListener('blur', () => this._saveSettingsPanel());
-    }
-    if (steamApiKeyInput) {
-      steamApiKeyInput.addEventListener('input', () => this._saveSettingsPanel());
-      steamApiKeyInput.addEventListener('change', () => this._saveSettingsPanel());
-      steamApiKeyInput.addEventListener('blur', () => this._saveSettingsPanel());
-    }
-    if (steamToggleVisibility) {
-      steamToggleVisibility.addEventListener('click', () => {
-        if (steamApiKeyInput) {
-          const isPassword = steamApiKeyInput.type === 'password';
-          steamApiKeyInput.type = isPassword ? 'text' : 'password';
-          const eyeOpen = steamToggleVisibility.querySelector('.eye-open-icon') as HTMLElement;
-          const eyeClosed = steamToggleVisibility.querySelector('.eye-closed-icon') as HTMLElement;
-          if (eyeOpen && eyeClosed) {
-            eyeOpen.style.display = isPassword ? 'none' : 'block';
-            eyeClosed.style.display = isPassword ? 'block' : 'none';
-          }
-        }
-      });
-    }
-
-    // Steam Connect button
-    const steamConnectBtn = document.getElementById('steam-connect-btn') as HTMLButtonElement;
-    if (steamConnectBtn) {
-      steamConnectBtn.addEventListener('click', () => this._handleSteamConnect());
-    }
-
-    // Xbox configuration inputs
-    const xboxGamertagInput = document.getElementById('xbox-gamertag-popup') as HTMLInputElement;
-    const xboxApiKeyInput = document.getElementById('xbox-api-key-popup') as HTMLInputElement;
-    const xboxToggleVisibility = document.getElementById('xbox-toggle-key-visibility') as HTMLButtonElement;
-
-    if (xboxGamertagInput) {
-      xboxGamertagInput.addEventListener('input', () => this._saveSettingsPanel());
-      xboxGamertagInput.addEventListener('change', () => this._saveSettingsPanel());
-      xboxGamertagInput.addEventListener('blur', () => this._saveSettingsPanel());
-    }
-    if (xboxApiKeyInput) {
-      xboxApiKeyInput.addEventListener('input', () => this._saveSettingsPanel());
-      xboxApiKeyInput.addEventListener('change', () => this._saveSettingsPanel());
-      xboxApiKeyInput.addEventListener('blur', () => this._saveSettingsPanel());
-    }
-    if (xboxToggleVisibility) {
-      xboxToggleVisibility.addEventListener('click', () => {
-        if (xboxApiKeyInput) {
-          const isPassword = xboxApiKeyInput.type === 'password';
-          xboxApiKeyInput.type = isPassword ? 'text' : 'password';
-          const eyeOpen = xboxToggleVisibility.querySelector('.eye-open-icon') as HTMLElement;
-          const eyeClosed = xboxToggleVisibility.querySelector('.eye-closed-icon') as HTMLElement;
-          if (eyeOpen && eyeClosed) {
-            eyeOpen.style.display = isPassword ? 'none' : 'block';
-            eyeClosed.style.display = isPassword ? 'block' : 'none';
-          }
-        }
-      });
-    }
-
-    // Xbox Connect button
-    const xboxConnectBtn = document.getElementById('xbox-connect-btn') as HTMLButtonElement;
-    if (xboxConnectBtn) {
-      xboxConnectBtn.addEventListener('click', () => this._handleXboxConnect());
-    }
-
-    // Theme selector
-    document.querySelectorAll('input[name="theme-popup"]').forEach((radio) => {
-      radio.addEventListener('change', (e: Event) => {
-        if (!(e.target instanceof HTMLInputElement)) return;
-        const theme = e.target.value;
-        this._setTheme(theme);
-        this._saveSettingsPanel();
-      });
-    });
-
-    // Nickname input changes
-    const nicknameInput = document.getElementById('nickname-popup') as HTMLInputElement;
-    if (nicknameInput) {
-      nicknameInput.addEventListener('input', () => this._saveSettingsPanel());
-      nicknameInput.addEventListener('change', () => this._saveSettingsPanel());
-      nicknameInput.addEventListener('blur', () => this._saveSettingsPanel());
-    }
-
-    // Discord input changes
-    const discordInput = document.getElementById('discord-info-popup') as HTMLInputElement;
-
-    if (discordInput) {
-      discordInput.addEventListener('input', () => this._saveSettingsPanel());
-      discordInput.addEventListener('change', () => this._saveSettingsPanel());
-      discordInput.addEventListener('blur', () => this._saveSettingsPanel());
-    }
-
-    // Notification checkboxes
-    document.querySelectorAll('input[id*="notif-"][id*="-popup"]').forEach((checkbox) => {
-      checkbox.addEventListener('change', () => this._saveSettingsPanel());
-    });
-
-    // Low Bandwidth Mode toggle
-    // Publisher enabled toggle
-    const publisherEnabledToggle = document.getElementById('publisher-enabled-popup') as HTMLInputElement;
-    if (publisherEnabledToggle) {
-      publisherEnabledToggle.addEventListener('change', () => this._saveSettingsPanel());
-    }
-
-    // Publisher rate input
-    const publisherRateInput = document.getElementById('publisher-rate-popup') as HTMLInputElement;
-    if (publisherRateInput) {
-      publisherRateInput.addEventListener('change', () => this._saveSettingsPanel());
-    }
-
-    const lowBandwidthToggle = document.getElementById('low-bandwidth-mode-popup') as HTMLInputElement;
-    if (lowBandwidthToggle) {
-      lowBandwidthToggle.addEventListener('change', () => this._saveSettingsPanel());
-    }
-  }
-
-  private async _handleSteamConnect(): Promise<void> {
-    const steamIdInput = document.getElementById('steam-id-popup') as HTMLInputElement;
-    const steamApiKeyInput = document.getElementById('steam-api-key-popup') as HTMLInputElement;
-    const steamConnectBtn = document.getElementById('steam-connect-btn') as HTMLButtonElement;
-
-    const steamId = steamIdInput?.value.trim() || '';
-    const apiKey = steamApiKeyInput?.value.trim() || '';
-
-    // Validate both fields are populated
-    if (!steamId || !apiKey) {
-      this._showError('Please enter both Steam ID and Web API Key');
-      return;
-    }
-
-    // Disable button and show loading state
-    if (steamConnectBtn) {
-      steamConnectBtn.disabled = true;
-      steamConnectBtn.textContent = 'Connecting...';
-    }
-
-    try {
-      // Send message to background to save and test the connection
-      const response = await chrome.runtime.sendMessage({
-        type: 'SAVE_SETTINGS',
-        data: {
-          steam_id: steamId,
-          steam_api_key: apiKey,
-        },
-      });
-
-      if (response.success) {
-        this._showSuccess('Steam connected! Fetching your library...');
-        // Update status
-        await this._updateServiceStatus('steam-api');
-      } else {
-        this._showError(response.error || 'Failed to connect to Steam');
-      }
-    } catch (error) {
-      this._showError('Error connecting to Steam: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    } finally {
-      // Re-enable button
-      if (steamConnectBtn) {
-        steamConnectBtn.disabled = false;
-        steamConnectBtn.textContent = 'Connect to Steam';
-      }
-    }
-  }
-
-  private async _handleXboxConnect(): Promise<void> {
-    const xboxGamertagInput = document.getElementById('xbox-gamertag-popup') as HTMLInputElement;
-    const xboxApiKeyInput = document.getElementById('xbox-api-key-popup') as HTMLInputElement;
-    const xboxConnectBtn = document.getElementById('xbox-connect-btn') as HTMLButtonElement;
-
-    const gamertag = xboxGamertagInput?.value.trim() || '';
-    const apiKey = xboxApiKeyInput?.value.trim() || '';
-
-    // Validate API key is populated
-    if (!apiKey) {
-      this._showError('Please enter your OpenXBL API Key');
-      return;
-    }
-
-    // Disable button and show loading state
-    if (xboxConnectBtn) {
-      xboxConnectBtn.disabled = true;
-      xboxConnectBtn.textContent = 'Connecting...';
-    }
-
-    try {
-      // Send message to background to save and sync Xbox library
-      const response = await chrome.runtime.sendMessage({
-        type: 'SAVE_SETTINGS',
-        data: {
-          xbox_gamertag: gamertag || undefined,
-          xbox_api_key: apiKey,
-          services_enabled: { 'xbox-api': true },
-        },
-      });
-
-      if (response.success) {
-        this.serviceIntegrationEnabled.set('xbox-api', true);
-        const toggle = document.getElementById('service-xbox-api-enabled') as HTMLInputElement;
-        if (toggle) toggle.checked = true;
-
-        this._showSuccess('Xbox connected! Fetching your library...');
-        await this._updateIntegrationHealthDisplays();
-        await this._updateServiceStatus('xbox-api');
-
-        chrome.runtime.sendMessage({ type: 'REFRESH_GAME_LIBRARY' }).catch(() => {});
-        if (this.gamesTabController) {
-          this.gamesTabController.render().catch(() => {});
-        }
-      } else {
-        this._showError(response.error || 'Failed to connect to Xbox');
-      }
-    } catch (error) {
-      this._showError('Error connecting to Xbox: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    } finally {
-      if (xboxConnectBtn) {
-        xboxConnectBtn.disabled = false;
-        xboxConnectBtn.textContent = 'Connect to Xbox';
-      }
-    }
-  }
-
-  private async _authenticateServicePopup(service: string): Promise<void> {
-    console.debug(`[Popup] Authenticating ${service}...`);
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'AUTHENTICATE_SERVICE',
-        data: { service },
-      });
-
-      console.debug(`[Popup] Auth response:`, response);
-
-      if (response.success && response.data?.authUrl) {
-        console.debug(`[Popup] Opening auth window for ${service}`);
-        const authWindow = window.open(response.data.authUrl, `${service}-auth`, 'width=500,height=600');
-
-        if (!authWindow) {
-          console.error(`[Popup] Failed to open auth window - popup blocker?`);
-          alert('Popup window blocked. Please allow popups for this extension.');
-          return;
-        }
-
-        const checkInterval = setInterval(() => {
-          if (authWindow?.closed) {
-            clearInterval(checkInterval);
-            console.debug(`[Popup] Auth window closed, reloading status`);
-            setTimeout(() => this._loadOAuthStatusInPanel(), 500);
-          }
-        }, 500);
-      } else {
-        console.error(`[Popup] Auth failed:`, response.error);
-        alert(`Authentication failed: ${response.error}`);
-      }
-    } catch (error) {
-      console.error('[Popup] Authentication failed:', error);
-      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  private async _disconnectServicePopup(service: string): Promise<void> {
-    if (!confirm(`Disconnect from ${service}?`)) return;
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'DISCONNECT_SERVICE',
-        data: { service },
-      });
-
-      if (response.success) {
-        await this._loadOAuthStatusInPanel();
-      }
-    } catch (error) {
-      console.error('[Popup] Disconnect failed:', error);
-    }
-  }
-
-  private _setTheme(theme: string): void {
-    localStorage.setItem('hang-time-theme', theme);
-    const root = document.documentElement;
-    if (theme === 'auto') {
-      root.removeAttribute('data-theme');
-    } else {
-      root.setAttribute('data-theme', theme);
-    }
-  }
-
-
-  private async _updateServiceStatus(service: string): Promise<void> {
-    const isEnabled = this.serviceIntegrationEnabled.get(service) ?? true;
-    const statusDiv = document.getElementById(`status-${service}-popup`);
-    console.debug(`[Popup] _updateServiceStatus(${service}) - statusDiv id: status-${service}-popup, found:`, !!statusDiv);
-    if (!statusDiv) {
-      console.debug(`[Popup] No statusDiv found for ${service}`);
-      return;
-    }
-
-    // Check if not enabled - show "Disabled"
-    if (!isEnabled) {
-      statusDiv.textContent = 'Disabled';
-      return;
-    }
-
-    // Try to get current activity first (works for browser tabs and OAuth services)
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'GET_CURRENT_ACTIVITY',
-        data: { service },
-      });
-
-      if (response.success && response.data) {
-        const activity = response.data as Activity;
-        statusDiv.textContent = this._truncateActivityContent(activity.content);
-        return;
-      }
-    } catch (error) {
-      // Continue to check configuration status
-    }
-
-    // Check integration health status (for Steam and OAuth services)
-    if (service === 'steam-api') {
-      try {
-        const health = await this.storage.getIntegrationHealth();
-        const steamHealth = health['steam-api'];
-        if (steamHealth) {
-          const timeSinceLastPing = Date.now() - steamHealth.lastPing;
-          const secondsAgo = Math.floor(timeSinceLastPing / 1000);
-          const minutesAgo = Math.floor(timeSinceLastPing / (60 * 1000));
-          let timeStr = secondsAgo < 60 ? `${secondsAgo}s ago` : `${minutesAgo}m ago`;
-
-          if (steamHealth.alive) {
-            statusDiv.textContent = `✅ Active (${timeStr})`;
-            statusDiv.style.color = '#10b981';
-          } else {
-            statusDiv.textContent = `⚠️ Unavailable (${timeStr})`;
-            statusDiv.style.color = '#ef4444';
-          }
-          return;
-        }
-      } catch (error) {
-        console.error('[Popup] Failed to check Steam health:', error);
-      }
-    }
-
-    // No current activity - check if service is configured
-    let isConfigured = false;
-
-    if (service === 'steam-api') {
-      // For Steam, check if both ID and API key are configured
-      try {
-        const response = await chrome.runtime.sendMessage({
-          type: 'GET_USER_IDENTIFIER',
-        });
-        const profile = response.data;
-        isConfigured = !!(profile?.steam_config?.steam_id && profile?.steam_config?.api_key);
-        if (!isConfigured) {
-          statusDiv.textContent = 'Not configured';
-          statusDiv.style.color = 'var(--text-secondary)';
-        } else {
-          statusDiv.textContent = 'Configured, no activity';
-          statusDiv.style.color = 'var(--text-secondary)';
-        }
-        return;
-      } catch (error) {
-        console.error('[Popup] Failed to check Steam config:', error);
-      }
-    } else if (service === 'xbox-api') {
-      // For Xbox, check if API key is configured
-      try {
-        const response = await chrome.runtime.sendMessage({
-          type: 'GET_USER_IDENTIFIER',
-        });
-        const profile = response.data;
-        isConfigured = !!(profile?.xbox_config?.api_key);
-        if (!isConfigured) {
-          statusDiv.textContent = 'Not configured';
-          statusDiv.style.color = 'var(--text-secondary)';
-        } else {
-          statusDiv.textContent = 'Configured, no activity';
-          statusDiv.style.color = '#10b981';
-        }
-        return;
-      } catch (error) {
-        console.error('[Popup] Failed to check Xbox config:', error);
-      }
-    } else if (['video-tab'].includes(service)) {
-      // Browser tab services with no activity just show "No activity"
-      statusDiv.textContent = 'No activity';
-      return;
-    } else {
-      // For OAuth services, check if they have a token
-      try {
-        const authResponse = await chrome.runtime.sendMessage({
-          type: 'GET_OAUTH_STATUS',
-          data: { service },
-        });
-        isConfigured = authResponse.success && authResponse.data?.hasToken;
-      } catch (error) {
-        console.error(`[Popup] Failed to check ${service} OAuth status:`, error);
-      }
-    }
-
-    // Show appropriate status message for OAuth services
-    if (!isConfigured) {
-      statusDiv.textContent = 'Not configured';
-    } else {
-      statusDiv.textContent = 'No activity';
-    }
-  }
-
-  private async _saveSettingsPanel(): Promise<void> {
-    try {
-      const nicknameInput = (document.getElementById('nickname-popup') as HTMLInputElement)?.value.trim() || '';
-      const discordInput = (document.getElementById('discord-info-popup') as HTMLInputElement)?.value || '';
-      const steamIdInput = (document.getElementById('steam-id-popup') as HTMLInputElement)?.value.trim() || '';
-      const steamApiKeyInput = (document.getElementById('steam-api-key-popup') as HTMLInputElement)?.value.trim() || '';
-      const xboxGamertagInput = (document.getElementById('xbox-gamertag-popup') as HTMLInputElement)?.value.trim() || '';
-      const xboxApiKeyInput = (document.getElementById('xbox-api-key-popup') as HTMLInputElement)?.value.trim() || '';
-
-      console.debug('[Popup] Saving settings - discord:', discordInput, 'steam-id:', steamIdInput ? 'set' : 'empty', 'xbox-key:', xboxApiKeyInput ? 'set' : 'empty');
-
-      // Collect service toggles for browser tabs
-      // STUB: Twitch tab detection disabled for MVP
-      const servicesEnabled: Record<string, boolean> = {};
-      const tabServices = ['youtube-tab', 'netflix-tab', 'video-tab']; // 'twitch-tab' disabled
-      for (const service of tabServices) {
-        const toggle = document.getElementById(`service-${service}-popup`) as HTMLInputElement;
-        servicesEnabled[service] = toggle?.checked ?? false;
-      }
-
-      // Collect service toggles for OAuth / API integrations
-      const oauthServices = ['steam-api', 'xbox-api', 'discord-api'];
-      for (const service of oauthServices) {
-        const toggle = document.getElementById(`service-${service}-enabled`) as HTMLInputElement;
-        servicesEnabled[service] = toggle?.checked ?? false;
-      }
-
-      // Collect notification preferences
-      const notifFriendOnline = (document.getElementById('notif-friend-online-popup') as HTMLInputElement)?.checked ?? true;
-      const notifNewMessage = (document.getElementById('notif-new-message-popup') as HTMLInputElement)?.checked ?? true;
-      const notifJoinSuggestion = (document.getElementById('notif-join-suggestion-popup') as HTMLInputElement)?.checked ?? false;
-
-      // Collect publisher config
-      const publisherEnabled = (document.getElementById('publisher-enabled-popup') as HTMLInputElement)?.checked ?? true;
-      const publisherRateInput = (document.getElementById('publisher-rate-popup') as HTMLInputElement)?.value || '12';
-      const publisherRateSeconds = Math.max(5, Math.min(120, parseInt(publisherRateInput) || 12));
-      const lowBandwidthMode = (document.getElementById('low-bandwidth-mode-popup') as HTMLInputElement)?.checked ?? false;
-
-      // Collect game discovery setting
-      const gameDiscoveryEnabled = (document.getElementById('game-discovery-enabled-popup') as HTMLInputElement)?.checked ?? false;
-
-      // Collect theme setting
-      const themeRadio = document.querySelector('input[name="theme-popup"]:checked') as HTMLInputElement;
-      const theme = (themeRadio?.value as 'light' | 'dark' | 'auto') || 'auto';
-
-      await chrome.runtime.sendMessage({
-        type: 'SAVE_SETTINGS',
-        data: {
-          nickname: nicknameInput || undefined,
-          discord_info: discordInput,
-          steam_id: steamIdInput || undefined,
-          steam_api_key: steamApiKeyInput || undefined,
-          xbox_gamertag: xboxGamertagInput || undefined,
-          xbox_api_key: xboxApiKeyInput || undefined,
-          services_enabled: servicesEnabled,
-          notification_preferences: {
-            friend_online: notifFriendOnline,
-            new_message: notifNewMessage,
-            join_suggestion: notifJoinSuggestion,
-          },
-          publisher_config: {
-            enabled: publisherEnabled,
-            rate_ms: publisherRateSeconds * 1000,
-            low_bandwidth_mode: lowBandwidthMode,
-          },
-          game_discovery_enabled: gameDiscoveryEnabled,
-          theme,
-        },
-      });
-
-      console.debug('[Popup] Settings saved');
-    } catch (error) {
-      console.error('[Popup] Failed to save settings:', error);
-    }
-  }
-
-  private async _joinActivity(activity: Activity, friendId?: string): Promise<void> {
-    console.debug('[Popup] Joining activity:', activity.service, 'from friend:', friendId);
-    try {
-      // Open the activity (service-specific handler)
-      const response = await chrome.runtime.sendMessage({
-        type: 'JOIN_ACTIVITY',
-        data: { activity, friendId },
-      });
-
-      if (!response.success) {
-        console.error('[Popup] Join failed:', response.error);
-        this._showError(response.error || 'Failed to join activity');
-        return;
-      }
-
-      // Send join_accepted notification to friend who invited
-      if (friendId && friendId !== 'self') {
-        await chrome.runtime.sendMessage({
-          type: 'SEND_JOIN_NOTIFICATION',
-          data: { activity, friendId, accepted: true },
-        });
-      }
-    } catch (error) {
-      console.error('[Popup] Failed to join activity:', error);
-      this._showError('Failed to join activity');
-    }
-  }
-
-  private async _inviteToActivity(activity: Activity): Promise<void> {
-    console.debug('[Popup] Opening invite modal for:', activity.content);
-    try {
-      const friendsResponse = await chrome.runtime.sendMessage({
-        type: 'GET_ALL_ACTIVITIES',
-      });
-
-      if (!friendsResponse.success || !friendsResponse.data) {
-        this._showError('Failed to load friends');
-        return;
-      }
-
-      const friends = (friendsResponse.data.friends || []) as Friend[];
-      const activeFriends = friends.filter((f) => !f.dnd && Object.keys(f.current_activities || {}).length > 0);
-
-      if (activeFriends.length === 0) {
-        this._showError('No active friends to invite');
-        return;
-      }
-
-      await showInviteModal(activeFriends, {
-        title: activity.content,
-        onInvite: (friendIds) => this._sendInvitesToFriends(activity, friendIds),
-      });
-    } catch (error) {
-      console.error('[Popup] Failed to open invite modal:', error);
-      this._showError('Failed to open invite modal');
-    }
-  }
-
-  private _showAcceptInviteModal(activity: Activity, friendId: string): void {
-    console.debug('[Popup] _showAcceptInviteModal called:', {
-      activityId: activity.id,
-      service: activity.service,
-      content: activity.content,
-      friendId,
-    });
-
-    // Create modal overlay
-    const modal = document.createElement('div');
-    modal.className = 'invite-modal-overlay';
-
-    const modalContent = document.createElement('div');
-    modalContent.className = 'invite-modal-content';
-
-    // Header
-    const header = document.createElement('div');
-    header.className = 'invite-modal-header';
-    const title = document.createElement('h3');
-    title.textContent = activity.content;
-    const subtitle = document.createElement('p');
-    subtitle.style.fontSize = '0.9em';
-    subtitle.style.color = 'var(--text-tertiary)';
-    subtitle.style.margin = '0';
-    subtitle.textContent = `Join this ${activity.service} activity?`;
-    header.appendChild(title);
-    header.appendChild(subtitle);
-    modalContent.appendChild(header);
-
-    // Buttons
-    const buttons = document.createElement('div');
-    buttons.className = 'invite-modal-buttons';
-
-    const declineBtn = document.createElement('button');
-    declineBtn.className = 'btn-secondary';
-    declineBtn.textContent = 'Decline';
-    declineBtn.addEventListener('click', async () => {
-      declineBtn.disabled = true;
-      declineBtn.textContent = 'Declining...';
-      if (activity.id) {
-        this.pendingInvitesByActivity.delete(activity.id);
-        this.pendingInvitesData.delete(activity.id);
-        await this.storage.removeReceivedInvite(activity.id);
-        await this.storage.forceSyncNow();
-        try {
-          await chrome.runtime.sendMessage({
-            type: 'DECLINE_INVITE',
-            data: { activityId: activity.id, friendId, activity },
+  private _setupStorageListener(): void {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local') {
+        if (changes[STORAGE_KEYS.RECEIVED_INVITES] || changes[STORAGE_KEYS.USER_PROFILE]) {
+          this.friendsTabController?.loadPendingInvites().then(() => {
+            this.refreshFriends();
           });
-        } catch (err) {
-          console.debug('[Popup] Could not notify background of decline:', err);
+          if (changes[STORAGE_KEYS.USER_PROFILE]) {
+            const newProfile = changes[STORAGE_KEYS.USER_PROFILE]?.newValue as UserProfile | undefined;
+            if (newProfile && typeof newProfile.dnd_enabled === 'boolean') {
+              this._updateDndButtonDisplay(null, newProfile.dnd_enabled);
+            }
+          }
         }
-        console.debug('[Popup] Declined invite for activity:', activity.id);
-      }
-      modal.remove();
-      await this.refreshFriends();
-    });
-
-    const acceptBtn = document.createElement('button');
-    acceptBtn.className = 'btn-primary';
-    acceptBtn.textContent = 'Accept & Join';
-    acceptBtn.addEventListener('click', async () => {
-      acceptBtn.disabled = true;
-      acceptBtn.textContent = 'Opening...';
-
-      // Accept: open activity and mark as joined
-      // Use the current activity from friend (fresh lookup) in case it changed since invite
-      await this._joinActivity(activity, friendId);
-
-      // Clear received invite from memory and storage
-      if (activity.id) {
-        this.pendingInvitesByActivity.delete(activity.id);
-        this.pendingInvitesData.delete(activity.id);
-        await this.storage.removeReceivedInvite(activity.id);
-        await this.storage.forceSyncNow();
-        console.debug('[Popup] Cleared received invite for activity:', activity.id);
-      }
-
-      modal.remove();
-      await this.refreshFriends();
-    });
-
-    buttons.appendChild(declineBtn);
-    buttons.appendChild(acceptBtn);
-    modalContent.appendChild(buttons);
-
-    modal.appendChild(modalContent);
-    document.body.appendChild(modal);
-
-    // Close on backdrop click
-    modal.addEventListener('click', (e: MouseEvent) => {
-      if (e.target === modal) {
-        modal.remove();
       }
     });
-  }
-
-  private async _sendInvitesToFriends(activity: Activity, friendIds: string[]): Promise<void> {
-    try {
-      for (const friendId of friendIds) {
-        await chrome.runtime.sendMessage({
-          type: 'SEND_INVITE',
-          data: { activity, friendId },
-        });
-      }
-      console.debug('[Popup] Sent invites to', friendIds.length, 'friends');
-      const message = `Invited ${friendIds.length} friend${friendIds.length > 1 ? 's' : ''}`;
-      toastManager.show(message);
-    } catch (error) {
-      console.error('[Popup] Failed to send invites:', error);
-      toastManager.show('Failed to send invites');
-    }
-  }
-
-  private _getFaviconUrl(service: string): string {
-    const baseService = service.replace('-api', '').replace('-tab', '');
-    const iconMap: Record<string, string> = {
-      netflix: 'public/icons/netflix.png',
-      youtube: 'public/icons/youtube.png',
-      spotify: 'public/icons/spotify.png',
-      twitch: 'public/icons/twitch.png',
-      steam: 'public/icons/steam.png',
-      xbox: 'public/icons/xbox.png',
-      discord: 'public/icons/discord.png',
-    };
-    const icon = iconMap[baseService];
-    if (!icon) return '';
-    return chrome.runtime.getURL(icon);
-  }
-
-  private async _exportSettingsPopup(): Promise<void> {
-    try {
-      const profileResponse = await chrome.runtime.sendMessage({
-        type: 'GET_USER_IDENTIFIER',
-      });
-
-      const friendsResponse = await chrome.runtime.sendMessage({
-        type: 'GET_ALL_FRIENDS',
-      });
-
-      if (profileResponse.success && profileResponse.data) {
-        const profile = profileResponse.data;
-        const friends = friendsResponse.success ? friendsResponse.data : [];
-
-        const backup = {
-          version: '1.0',
-          exported_at: new Date().toISOString(),
-          data: {
-            ...profile,
-            friends: friends,
-          },
-        };
-
-        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `hang-time-backup-${Date.now()}.json`;
-        link.click();
-        URL.revokeObjectURL(url);
-
-        console.debug('[Popup] Settings backed up (including friends list)');
-      }
-    } catch (error) {
-      console.error('[Popup] Export failed:', error);
-      alert('Failed to export settings');
-    }
-  }
-
-  private async _importSettingsPopup(file: File): Promise<void> {
-    try {
-      const text = await file.text();
-      const backup = JSON.parse(text);
-
-      if (!backup.data || !backup.data.identifier) {
-        alert('Invalid backup file');
-        return;
-      }
-
-      const response = await chrome.runtime.sendMessage({
-        type: 'RESTORE_SETTINGS',
-        data: backup,
-      });
-
-      if (response.success) {
-        alert('Settings imported successfully');
-        await this._loadSettingsPanel();
-      } else {
-        alert('Failed to import settings');
-      }
-    } catch (error) {
-      console.error('[Popup] Import failed:', error);
-      alert('Failed to parse settings file');
-    }
-  }
-
-  private _handleCopyId(): void {
-    const idDisplay = document.getElementById('user-identifier-popup');
-    if (idDisplay && idDisplay.textContent && idDisplay.textContent !== 'Loading...') {
-      navigator.clipboard.writeText(idDisplay.textContent).then(() => {
-        console.debug('[Popup] Identifier copied');
-        // Visual feedback
-        const copyBtn = document.getElementById('copy-id-popup-btn');
-        if (copyBtn) {
-          const originalHtml = copyBtn.innerHTML;
-          copyBtn.textContent = '✓';
-          setTimeout(() => {
-            copyBtn.innerHTML = originalHtml;
-          }, 2000);
-        }
-      });
-    }
-  }
-
-  private _toggleShowInactiveFriends(): void {
-    this.showInactiveFriends = !this.showInactiveFriends;
-    const btn = document.getElementById('show-inactive-btn');
-    if (btn) {
-      btn.classList.toggle('inactive-hidden', !this.showInactiveFriends);
-      btn.title = this.showInactiveFriends ? 'Hide offline friends' : 'Show offline friends';
-      btn.style.opacity = this.showInactiveFriends ? '1' : '0.4';
-    }
-    this.refreshFriends().catch((error) => {
-      console.error('[Popup] Failed to refresh friends:', error);
-    });
-  }
-
-  private _showAddFriendForm(): void {
-    if (this.addFriendForm) {
-      this.addFriendForm.style.display = 'block';
-      if (this.friendIdentifierInput) {
-        this.friendIdentifierInput.focus();
-      }
-    }
-  }
-
-  private _hideAddFriendForm(): void {
-    if (this.addFriendForm) {
-      this.addFriendForm.style.display = 'none';
-    }
-    // Only show empty state if no friends
-    this.refreshFriends().catch((error) => {
-      console.error('[Popup] Refresh failed:', error);
-    });
-  }
-
-  private async _handleAddFriendSubmit(): Promise<void> {
-    const identifier = this.friendIdentifierInput?.value.trim();
-    const localName = this.friendNicknameInput?.value.trim();
-
-    if (!identifier || !localName) {
-      alert('Please fill in both identifier and nickname');
-      return;
-    }
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'ADD_FRIEND',
-        data: { identifier, localName },
-      });
-
-      if (response.success) {
-        console.debug('[Popup] Friend added successfully');
-        // Clear form
-        if (this.friendIdentifierInput) this.friendIdentifierInput.value = '';
-        if (this.friendNicknameInput) this.friendNicknameInput.value = '';
-        this._hideAddFriendForm();
-        await this.refreshFriends();
-      } else {
-        alert(`Failed to add friend: ${response.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('[Popup] Add friend failed:', error);
-      alert('Failed to add friend');
-    }
-  }
-
-
-
-  private _escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  private _showSuccess(message: string): void {
-    toastManager.show(message, { duration: 3000 });
-  }
-
-  private _showError(message: string): void {
-    toastManager.show(message, { duration: 5000 });
   }
 
   destroy(): void {
@@ -2834,7 +381,6 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('[Popup] Fatal error:', error);
   });
 
-  // Clean up on unload
   window.addEventListener('beforeunload', () => {
     controller.destroy();
   });
