@@ -59,7 +59,15 @@ hang-time/
 │   │   ├── co-watcher-detection.ts    # CoWatcherDetector: matching, host election, freshness checks
 │   │   ├── game-library.ts            # GameLibraryManager: Steam sync & Kind-10003 Nostr events
 │   │   ├── metadata-fetcher.ts        # MetadataFetcher: Steam API metadata queue & cache
-│   │   ├── overlay-ui.ts              # OverlayUI: in-page overlay rendering (Host vs Guest modes)
+│   │   ├── overlay-ui.ts              # OverlayUI coordinator class
+│   │   ├── overlay/                   # Modular overlay UI components
+│   │   │   ├── styles.ts              # CSS stylesheet generator & theme definitions
+│   │   │   └── components.ts          # Pure rendering helpers (Host chip, Guest chips, Divergence rows, Chat)
+│   │   ├── routers/                   # Background service worker domain message routers
+│   │   │   ├── auth-router.ts         # User identity & OAuth authentication handlers
+│   │   │   ├── friends-router.ts      # Friend list, status, CRUD & requests handlers
+│   │   │   ├── activity-router.ts     # Activity detection, active session & join handlers
+│   │   │   └── settings-router.ts     # Storage, DND mode, diagnostics & config handlers
 │   │   ├── providers/                 # Modular video platform adapters
 │   │   │   ├── types.ts               # VideoProvider interface
 │   │   │   ├── youtube.ts             # YouTubeProvider
@@ -76,6 +84,10 @@ hang-time/
 │   │
 │   ├── ui/                            # Extension UI Controllers
 │   │   ├── popup.ts                   # PopupController: My Activity, Friends list, DND toggle, Settings
+│   │   ├── friends-tab-controller.ts  # Friends & requests UI controller
+│   │   ├── settings-tab-controller.ts # Services, accounts, relays & options controller
+│   │   ├── messages-tab-controller.ts # Direct messaging & activity history controller
+│   │   ├── toast-service.ts           # Toast notifications service
 │   │   ├── games.ts                   # GamesTabController: Steam games, filters, friend library comparison
 │   │   └── invite-modal-builder.ts    # showInviteModal: shared invite modal for friends & games
 │   │

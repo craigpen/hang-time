@@ -4,7 +4,15 @@
  */
 
 import { storageManager } from './storage.js';
-import { CO_WATCHABLE_SERVICES } from './co-watcher-detection.js';
+import {
+  formatTime,
+  getParticipantColor,
+  getOverlaySkeletonHtml,
+  buildHostChipHtml,
+  buildGuestChipsHtml,
+  buildChooseNextRowsHtml,
+  buildMessagesHtml,
+} from './overlay/index.js';
 
 export interface OverlayState {
   visible: boolean;
@@ -133,640 +141,7 @@ export class OverlayUI {
     this.container = document.createElement('div');
     this.container.id = 'hang-time-overlay';
     this.container.className = 'hidden'; // Start hidden, show only when co-watch detected
-    this.container.innerHTML = `
-      <style id="hang-time-overlay-styles">
-        #hang-time-overlay {
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          width: 320px;
-          max-height: 80vh;
-          background: rgba(15, 23, 42, 0.88);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          border-radius: 12px;
-          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-          z-index: 2147483647;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-          -webkit-font-smoothing: antialiased;
-          -moz-osx-font-smoothing: grayscale;
-          text-rendering: optimizeLegibility;
-          color: white;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-          transition: opacity 0.2s ease, transform 0.2s ease;
-          opacity: var(--overlay-opacity, 0.85);
-          pointer-events: auto;
-        }
-
-        #hang-time-overlay.hidden {
-          opacity: 0 !important;
-          pointer-events: none !important;
-          visibility: hidden !important;
-        }
-
-        #hang-time-overlay.fading-out {
-          transition: opacity 3s ease-out !important;
-          opacity: 0 !important;
-          pointer-events: auto;
-        }
-
-        #resize-handle {
-          position: absolute;
-          bottom: 0;
-          right: 0;
-          width: 18px;
-          height: 18px;
-          cursor: nwse-resize;
-          user-select: none;
-          background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.25) 50%);
-          border-radius: 0 0 12px 0;
-        }
-
-        #resize-handle:hover {
-          background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.5) 50%);
-        }
-
-        .overlay-header {
-          padding: 10px 12px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-          cursor: grab;
-          user-select: none;
-          background: rgba(255, 255, 255, 0.02);
-        }
-
-        .overlay-header:active {
-          cursor: grabbing;
-        }
-
-        .header-top {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 8px;
-        }
-
-        .video-title {
-          font-size: 13px;
-          font-weight: 700;
-          letter-spacing: 0.3px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          color: rgba(255, 255, 255, 0.95);
-          flex: 1;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .overlay-brand-icon {
-          flex-shrink: 0;
-          display: block;
-        }
-
-        .overlay-role-row {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          min-height: 20px;
-        }
-
-        .overlay-role-label {
-          font-size: 10px;
-          font-weight: 700;
-          letter-spacing: 0.8px;
-          text-transform: uppercase;
-          color: rgba(255, 255, 255, 0.65);
-          min-width: 44px;
-          flex-shrink: 0;
-        }
-
-        .video-title-row {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 12px;
-          color: rgba(255, 255, 255, 0.85);
-          font-weight: 500;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .media-title-text {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .progress-bar-wrapper {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-          flex: 1;
-        }
-
-        .progress-bar-container {
-          flex: 1;
-          height: 6px;
-          background: rgba(255, 255, 255, 0.15);
-          border-radius: 3px;
-          overflow: visible;
-          position: relative;
-          display: flex;
-          align-items: center;
-        }
-
-        .progress-bar-controls-left {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          height: 22px;
-          flex-shrink: 0;
-          box-sizing: border-box;
-        }
-
-        .host-state-indicator {
-          font-size: 11px;
-          line-height: 22px;
-          height: 22px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          color: rgba(255, 255, 255, 0.7);
-          flex-shrink: 0;
-          user-select: none;
-        }
-
-        .host-state-indicator.host-state-playing {
-          color: #10b981;
-        }
-
-        .progress-time-display {
-          font-size: 10px;
-          font-weight: 600;
-          font-variant-numeric: tabular-nums;
-          color: rgba(255, 255, 255, 0.75);
-          white-space: nowrap;
-          line-height: 22px;
-          height: 22px;
-          min-width: 28px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: flex-end;
-        }
-
-        #progress-sync-button {
-          display: none;
-          padding: 0 6px;
-          height: 18px;
-          line-height: 16px;
-          background: rgba(255, 255, 255, 0.12);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          color: white;
-          border-radius: 4px;
-          cursor: pointer;
-          font-size: 11px;
-          white-space: nowrap;
-          transition: all 0.2s ease;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          box-sizing: border-box;
-        }
-
-        #progress-sync-button:hover {
-          background: rgba(255, 255, 255, 0.22);
-          border-color: rgba(255, 255, 255, 0.35);
-        }
-
-        .progress-bar-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #10b981, #059669);
-          border-radius: 3px;
-          width: 0%;
-          transition: width 0.1s linear;
-        }
-
-        .progress-bar-marker {
-          position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          left: 0%;
-          width: 10px;
-          height: 12px;
-          background: #f43f5e;
-          transition: left 0.1s linear;
-          user-select: none;
-          pointer-events: none;
-          z-index: 6;
-        }
-
-        .progress-bar-marker.arrow-right {
-          clip-path: polygon(0% 0%, 0% 100%, 100% 50%);
-          margin-left: 3px;
-        }
-
-        .progress-bar-marker.arrow-left {
-          clip-path: polygon(100% 0%, 100% 100%, 0% 50%);
-          margin-left: -13px;
-        }
-
-        .progress-bar-host-marker {
-          position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 3px;
-          height: 16px;
-          background: #10b981;
-          left: 0%;
-          transition: left 0.1s linear;
-          box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
-          pointer-events: none;
-        }
-
-        .attendee-chip {
-          display: inline-flex;
-          align-items: center;
-          padding: 2px 8px;
-          border-radius: 9999px;
-          font-size: 11px;
-          color: white;
-          font-weight: 600;
-          letter-spacing: 0.2px;
-          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-          transition: all 0.15s ease;
-        }
-
-        .guest-markers-container {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          pointer-events: none;
-        }
-
-        .guest-marker {
-          position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 2px;
-          height: 14px;
-          left: 0%;
-          border-radius: 1px;
-          transition: left 0.1s linear;
-        }
-
-        .user-position-marker {
-          position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 3px;
-          height: 16px;
-          background: #f43f5e;
-          border-radius: 1.5px;
-          left: 0%;
-          transition: left 0.1s linear;
-          pointer-events: none;
-          box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
-          z-index: 10;
-        }
-
-        .gap-indicator {
-          position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          height: 2px;
-          background: #f43f5e;
-          left: 0%;
-          transition: left 0.1s linear, width 0.1s linear;
-          pointer-events: none;
-          z-index: 5;
-        }
-
-        .host-state-indicator {
-          min-width: 18px;
-          font-size: 11px;
-          color: rgba(255, 255, 255, 0.6);
-          text-align: center;
-        }
-
-        .host-state-indicator.host-state-playing {
-          color: #10b981;
-        }
-
-        .icon-buttons {
-          display: flex;
-          gap: 6px;
-          align-items: center;
-          flex-shrink: 0;
-        }
-
-        .icon-button {
-          width: 22px;
-          height: 22px;
-          padding: 0;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.2s ease;
-          font-size: 11px;
-          color: rgba(255, 255, 255, 0.7);
-        }
-
-        .icon-button:hover {
-          background: transparent;
-          border: none;
-          color: white;
-          transform: scale(1.08);
-        }
-
-        .icon-button:active {
-          transform: scale(0.94);
-        }
-
-        #pin-button {
-          background: transparent;
-          border: none;
-        }
-
-        #pin-button:hover {
-          background: transparent;
-          border: none;
-          color: white;
-        }
-
-        #pin-button.pinned {
-          background: transparent;
-          border: none;
-          color: #ef4444;
-        }
-
-        #pin-button svg {
-          transition: fill 0.2s ease, stroke 0.2s ease;
-        }
-
-        #pin-button.pinned svg {
-          fill: #ef4444;
-          stroke: #ef4444;
-        }
-
-        #discord-button {
-          background-size: 16px 16px;
-          background-position: center;
-          background-repeat: no-repeat;
-          font-size: 0;
-          background-color: transparent;
-          border: none;
-        }
-
-        #discord-button:hover {
-          opacity: 0.9;
-        }
-
-        .opacity-slider {
-          width: 55px;
-          height: 4px;
-          cursor: pointer;
-          accent-color: #94a3b8;
-          flex-shrink: 0;
-          -webkit-appearance: none;
-          appearance: none;
-          background: rgba(255, 255, 255, 0.2);
-          border-radius: 2px;
-          outline: none;
-        }
-
-        .opacity-slider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-          background: #cbd5e1;
-          cursor: pointer;
-        }
-
-        .opacity-slider::-moz-range-thumb {
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-          background: #cbd5e1;
-          cursor: pointer;
-          border: none;
-        }
-
-        .opacity-slider::-moz-range-track {
-          background: transparent;
-          border: none;
-        }
-
-        .divergence-join-btn {
-          background: rgba(16, 185, 129, 0.15);
-          border: 1px solid rgba(16, 185, 129, 0.3);
-          color: #34d399;
-          border-radius: 7px;
-          width: 26px;
-          height: 26px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: all 0.2s ease;
-          padding: 0;
-          flex-shrink: 0;
-        }
-
-        .divergence-join-btn:hover {
-          background: rgba(16, 185, 129, 0.3);
-          border-color: rgba(16, 185, 129, 0.6);
-          color: #10b981;
-          transform: scale(1.06);
-        }
-
-        .divergence-join-btn:active {
-          transform: scale(0.95);
-        }
-
-        #hang-time-chat-container {
-          flex: 1;
-          overflow-y: auto;
-          padding: 8px 10px;
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .chat-message {
-          display: flex;
-          flex-direction: column;
-          gap: 1px;
-          font-size: 11.5px;
-          line-height: 1.35;
-          max-width: 85%;
-        }
-
-        .chat-message.message-user {
-          align-self: flex-end;
-          align-items: flex-end;
-        }
-
-        .chat-message.message-friend {
-          align-self: flex-start;
-          align-items: flex-start;
-        }
-
-        .message-content {
-          padding: 3px 8px;
-          border-radius: 9px;
-          word-wrap: break-word;
-          font-size: 11.5px;
-          flex: 0 1 auto;
-        }
-
-        .message-friend .message-content {
-          background: rgba(255, 255, 255, 0.08);
-          color: rgba(255, 255, 255, 0.95);
-          border-bottom-left-radius: 3px;
-        }
-
-        .message-user .message-content {
-          background: rgba(244, 63, 94, 0.25);
-          border: 1px solid rgba(244, 63, 94, 0.35);
-          color: white;
-          border-bottom-right-radius: 3px;
-        }
-
-        .message-input-container {
-          padding: 8px 10px;
-          border-top: 1px solid rgba(255, 255, 255, 0.08);
-          display: flex;
-          gap: 6px;
-          align-items: flex-end;
-          background: rgba(255, 255, 255, 0.02);
-        }
-
-        #message-input {
-          flex: 1;
-          min-height: 20px;
-          max-height: 60px;
-          padding: 5px 8px;
-          background: rgba(255, 255, 255, 0.06);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 6px;
-          color: white;
-          font-size: 12px;
-          font-family: inherit;
-          resize: none;
-          outline: none;
-          overflow-y: auto;
-          transition: border-color 0.2s ease, background 0.2s ease;
-        }
-
-        #message-input::placeholder {
-          color: rgba(255, 255, 255, 0.35);
-        }
-
-        #message-input:focus {
-          background: rgba(255, 255, 255, 0.09);
-          border-color: rgba(244, 63, 94, 0.5);
-        }
-
-        #send-button {
-          padding: 4px 8px;
-          background: transparent;
-          border: none;
-          color: rgba(255, 255, 255, 0.5);
-          cursor: pointer;
-          font-size: 14px;
-          transition: color 0.2s, transform 0.1s;
-        }
-
-        #send-button:hover {
-          color: rgba(255, 255, 255, 0.9);
-          transform: translateY(-1px);
-        }
-
-        #send-button:active {
-          color: #34d399;
-          transform: translateY(0);
-        }
-      </style>
-
-      <div class="overlay-header">
-        <div class="header-top">
-          <div class="video-title" id="overlay-title">
-            <svg viewBox="0 0 16 16" width="14" height="14" class="overlay-brand-icon">
-              <rect x="0.5" y="0.5" width="4.5" height="15" rx="2.25" fill="#a855f7" />
-              <rect x="11" y="0.5" width="4.5" height="15" rx="2.25" fill="#a855f7" />
-              <polygon points="5,2.5 12,8 5,13.5" fill="#10b981" />
-            </svg>
-            <span id="overlay-title-text">Hang Time</span>
-          </div>
-          <div class="icon-buttons">
-            <input type="range" min="10" max="100" value="80" class="opacity-slider" id="opacity-slider" title="Overlay opacity">
-            <button class="icon-button" id="discord-button" title="Open Discord with host"></button>
-            <button class="icon-button" id="pin-button" title="Pin overlay">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="17" x2="12" y2="22"></line>
-                <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Mode A: Co-Watching Layout -->
-        <div id="watching-together-section" style="display: flex; flex-direction: column; gap: 6px;">
-          <!-- Line 1: Host Row (Includes inline Title) -->
-          <div id="host-chip-container" class="overlay-role-row"></div>
-
-          <!-- Line 2: Left Controls (State + Time) + Progress Bar + Sync button -->
-          <div class="watching-together-row" id="watching-together-row">
-            <div class="progress-bar-wrapper">
-              <div class="progress-bar-controls-left">
-                <div class="host-state-indicator" id="host-state-indicator">-</div>
-                <span class="progress-time-display" id="progress-time-display">0:00</span>
-              </div>
-              <div class="progress-bar-container">
-                <div class="progress-bar-fill" id="progress-bar-fill"></div>
-                <div class="guest-markers-container" id="guest-markers-container"></div>
-                <div class="gap-indicator" id="gap-indicator" style="display: none;"></div>
-                <div class="user-position-marker" id="user-position-marker" style="display: none;"></div>
-                <div class="progress-bar-marker" id="progress-bar-marker"></div>
-              </div>
-              <button id="progress-sync-button" title="Sync to host position">↻</button>
-            </div>
-          </div>
-
-          <!-- Line 3: Guest chips -->
-          <div id="guest-chips-container" class="overlay-role-row"></div>
-        </div>
-
-        <!-- Mode B: Divergence display (< 2 watching together) -->
-        <div id="guest-rows-container"></div>
-      </div>
-
-
-      <div class="hang-time-chat-container" id="hang-time-chat-container">
-        <div style="text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 12px 0;">No messages yet</div>
-      </div>
-
-      <div class="message-input-container">
-        <textarea id="message-input" placeholder="Send a message..." rows="1"></textarea>
-        <button id="send-button" title="Send message">↑</button>
-      </div>
-
-      <div id="resize-handle" title="Drag to resize"></div>
-    `;
+    this.container.innerHTML = getOverlaySkeletonHtml();
 
     // Wait for document.body if it's not ready yet
     if (!document.body) {
@@ -848,21 +223,15 @@ export class OverlayUI {
       const val = parseInt((e.target as HTMLInputElement).value, 10);
       this._state.opacity = val;
       this.updateOpacity();
-    });
-
-    slider.addEventListener('change', (e) => {
-      const val = parseInt((e.target as HTMLInputElement).value, 10);
-      this._state.opacity = val;
-      this.updateOpacity();
       storageManager.getUserProfile().then((profile) => {
         if (profile) {
           profile.overlay_opacity = val;
-          storageManager.setUserProfile(profile).catch(console.error);
+          storageManager.setUserProfile(profile).then(() => {
+            storageManager.forceSyncNow().catch(console.error);
+          }).catch(console.error);
         }
       }).catch(console.error);
     });
-
-    this.updateOpacity();
   }
 
   /**
@@ -870,13 +239,12 @@ export class OverlayUI {
    */
   private updateOpacity(): void {
     if (!this.container) return;
-    const opacity = this._state.opacity / 100;
-    this.container.style.setProperty('--overlay-opacity', opacity.toString());
-    this.container.style.opacity = '';
+    const opacityValue = (this._state.opacity / 100).toString();
+    this.container.style.setProperty('--overlay-opacity', opacityValue);
   }
 
   /**
-   * Setup global event listeners
+   * Setup interactive event listeners
    */
   private setupEventListeners(): void {
     // Guard: only set up once per overlay instance
@@ -1053,7 +421,6 @@ export class OverlayUI {
     // Discord button
     const discordButton = this.container?.querySelector('#discord-button') as HTMLElement;
     if (discordButton) {
-      // Set Discord icon using chrome.runtime.getURL for proper extension URL
       try {
         const iconUrl = chrome.runtime.getURL('public/icons/discord.png');
         discordButton.style.backgroundImage = `url('${iconUrl}')`;
@@ -1172,11 +539,7 @@ export class OverlayUI {
   }
 
   /**
-   * Find the host's UUID:
-   * 1. Check explicit host_uuid from session state
-   * 2. If is_user_host is true, return this.userId
-   * 3. Look up by nickname in nicknameMap
-   * 4. Fallback to first non-self watching member or first member
+   * Find the host's UUID
    */
   private getHostUuid(): string | undefined {
     if (this._state.host_uuid) {
@@ -1200,63 +563,8 @@ export class OverlayUI {
     return nonSelf || watching[0];
   }
 
-  /**
-   * Format seconds to mm:ss
-   */
-  private formatTime(totalSeconds: number): string {
-    if (!totalSeconds || isNaN(totalSeconds) || totalSeconds < 0) return '0:00';
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = Math.floor(totalSeconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
-
-  /**
-   * Get participant color based on their role:
-   * - Host: always mint / emerald (#10b981)
-   * - Non-host self: vivid coral (#f43f5e)
-   * - Others: fixed mapped pastel color
-   */
-  private getParticipantColor(uuid: string | undefined): string {
-    if (!uuid) {
-      return '#6b7280'; // Gray fallback
-    }
-
-    const hostUuid = this.getHostUuid();
-
-    // Rule 1: Host is always green/emerald
-    if (uuid === hostUuid) {
-      return '#10b981';
-    }
-
-    // Rule 2: Current user (when guest) is vivid coral
-    if (uuid === this.userId) {
-      return '#f43f5e';
-    }
-
-    // Rule 3: Other guests get fixed mapped color
-    if (this.userColorMap.has(uuid)) {
-      return this.userColorMap.get(uuid)!;
-    }
-
-    // Deterministic curated color palette for other guests
-    const guestColors = [
-      '#06b6d4', // cyan
-      '#f59e0b', // amber
-      '#a855f7', // purple
-      '#14b8a6', // teal
-      '#3b82f6', // blue
-      '#fb923c', // orange
-    ];
-
-    let hash = 0;
-    for (let i = 0; i < uuid.length; i++) {
-      hash = ((hash << 5) - hash) + uuid.charCodeAt(i);
-      hash = hash & hash;
-    }
-
-    const color = guestColors[Math.abs(hash) % guestColors.length] || '#FF6B6B';
-    this.userColorMap.set(uuid, color);
-    return color;
+  private getColor(uuid: string | undefined): string {
+    return getParticipantColor(uuid, this.getHostUuid(), this.userId, this.userColorMap);
   }
 
   /**
@@ -1333,8 +641,6 @@ export class OverlayUI {
       }, 3000);
     }, 3000);
   }
-
-
 
   /**
    * Toggle pin state
@@ -1497,11 +803,11 @@ export class OverlayUI {
     if (timeDisplayEl) {
       let targetTimeText = '';
       if (currentHostProgress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
-        const cur = this.formatTime(currentHostProgress);
-        const dur = this.formatTime(this._state.host_duration);
+        const cur = formatTime(currentHostProgress);
+        const dur = formatTime(this._state.host_duration);
         targetTimeText = `${cur} / ${dur}`;
       } else if (currentHostProgress !== undefined) {
-        targetTimeText = this.formatTime(currentHostProgress);
+        targetTimeText = formatTime(currentHostProgress);
       }
 
       if (timeDisplayEl.textContent !== targetTimeText) {
@@ -1538,7 +844,7 @@ export class OverlayUI {
         if (hostMarkerEl.style.left !== widthStr) {
           hostMarkerEl.style.left = widthStr;
         }
-        const color = this.getParticipantColor(this.getHostUuid());
+        const color = this.getColor(this.getHostUuid());
         if (hostMarkerEl.style.background !== color) {
           hostMarkerEl.style.background = color;
         }
@@ -1553,7 +859,7 @@ export class OverlayUI {
     if (!this._state.is_user_host && this._state.user_progress !== undefined && this._state.host_duration && this._state.host_duration > 0) {
       const userProgress = this._state.user_progress;
       const userPercent = Math.min((userProgress / this._state.host_duration) * 100, 100);
-      const userColor = this.getParticipantColor(this.userId);
+      const userColor = this.getColor(this.userId);
 
       // 1. Guest's vertical marker: ALWAYS visible showing position of "You"
       if (userPositionMarkerEl) {
@@ -1660,10 +966,33 @@ export class OverlayUI {
       guestRowsContainer.innerHTML = ''; // Hide divergence rows
 
       // Render host chip + inline media title
-      this.renderHostChip(hostContainer);
+      const hostUuid = this.getHostUuid();
+      if (hostUuid) {
+        const hostHtml = buildHostChipHtml(
+          hostUuid,
+          !!this._state.is_user_host,
+          this._state.host_nickname,
+          this.nicknameMap,
+          this.getColor(hostUuid),
+          this._state.co_watcher_activities?.[hostUuid]
+        );
+        if (hostContainer.innerHTML !== hostHtml) {
+          hostContainer.innerHTML = hostHtml;
+        }
+      }
 
       // Render guest chips
-      this.renderGuestChips(guestContainer);
+      const guestHtml = buildGuestChipsHtml(
+        this._state.session_members || [],
+        this.getHostUuid(),
+        this.userId,
+        this.nicknameMap,
+        (uuid) => this.getColor(uuid),
+        this._state.co_watcher_activities
+      );
+      if (guestContainer.innerHTML !== guestHtml) {
+        guestContainer.innerHTML = guestHtml;
+      }
 
       // Render guest markers if user is host
       if (this._state.is_user_host) {
@@ -1677,237 +1006,25 @@ export class OverlayUI {
       guestContainer.innerHTML = '';
 
       // Render "Choose next:" with guest rows
-      this.renderChooseNextRows(guestRowsContainer);
-    }
-  }
+      const divergenceHtml = buildChooseNextRowsHtml(
+        this._state.session_members || [],
+        this.userId,
+        this.nicknameMap,
+        (uuid) => this.getColor(uuid),
+        this._state.co_watcher_activities
+      );
 
-  /**
-   * MODE A: Render host chip with inline activity title
-   * Host is shown first followed inline by the video title being tracked
-   */
-  private renderHostChip(container: HTMLElement): void {
-    const hostUuid = this.getHostUuid();
-    if (!hostUuid) return;
+      if (guestRowsContainer.innerHTML !== divergenceHtml) {
+        guestRowsContainer.innerHTML = divergenceHtml;
 
-    let hostName: string;
-    if (this._state.is_user_host) {
-      hostName = 'You';
-    } else {
-      hostName = this.nicknameMap.get(hostUuid) || this._state.host_nickname || 'Host';
-    }
-    hostName = this.escapeHtml(hostName);
-
-    const hostColor = this.getParticipantColor(hostUuid);
-
-    // Build inline media title & icon
-    let mediaHtml = '';
-    const activity = this._state.co_watcher_activities?.[hostUuid];
-    if (activity && activity.content && activity.service && CO_WATCHABLE_SERVICES.has(activity.service)) {
-      const serviceMap: Record<string, string> = {
-        'youtube': 'youtube.png',
-        'youtube-tab': 'youtube.png',
-        'twitch': 'twitch.png',
-        'twitch-tab': 'twitch.png',
-        'netflix': 'netflix.png',
-        'netflix-tab': 'netflix.png',
-        'video-tab': 'video.png',
-      };
-
-      let iconHtml = '';
-      if (activity.service && serviceMap[activity.service]) {
-        try {
-          const iconUrl = chrome.runtime.getURL(`public/icons/${serviceMap[activity.service]}`);
-          iconHtml = `<img src="${iconUrl}" style="width: 14px; height: 14px; object-fit: contain; flex-shrink: 0;" alt="">`;
-        } catch (e) {
-          iconHtml = '';
+        // Attach join listeners
+        for (const btn of guestRowsContainer.querySelectorAll('.join-button')) {
+          btn.addEventListener('click', (e) => {
+            const target = (e.target as HTMLElement).closest('.join-button') as HTMLElement;
+            const uuid = target?.getAttribute('data-uuid') || (e.target as HTMLElement).getAttribute('data-uuid');
+            if (uuid) this.handleJoinGuest(uuid);
+          });
         }
-      }
-
-      const title = this.escapeHtml(activity.content);
-      mediaHtml = `
-        <div style="display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; flex: 1;">
-          ${iconHtml}
-          <span class="media-title-text" style="font-size: 11px; color: rgba(255, 255, 255, 0.85); font-weight: 500;" title="${title}">${title}</span>
-        </div>
-      `;
-    }
-
-    // Build host role row: label + pill + inline title
-    const hostHtml = `
-      <span class="overlay-role-label">HOST</span>
-      <div class="attendee-chip" style="background: ${hostColor}; flex-shrink: 0;"><span>${hostName}</span></div>
-      ${mediaHtml}
-    `;
-    if (container.innerHTML !== hostHtml) {
-      container.innerHTML = hostHtml;
-    }
-  }
-
-  /**
-   * MODE A: Render guest chips (everyone except host)
-   * Guests shown on separate row below progress bar
-   */
-  private getActivityFreshnessStyle(uuid: string): { opacity: number } {
-    const activity = this._state.co_watcher_activities?.[uuid];
-    const lastMeasuredAt = activity?.metadata?.progress_measured_at || activity?.timestamp;
-    if (!lastMeasuredAt) {
-      return { opacity: 1 };
-    }
-
-    const DIM_AFTER_MS = 5 * 60 * 1000;      // 5 minutes
-    const timeSinceLastSeen = Date.now() - lastMeasuredAt;
-
-    if (timeSinceLastSeen >= DIM_AFTER_MS) {
-      return { opacity: 0.5 }; // Dimmed after 5 min inactivity
-    }
-    return { opacity: 1 }; // Active
-  }
-
-  private renderGuestChips(container: HTMLElement): void {
-    const allCoWatchers = this._state.session_members || [];
-    const hostUuid = this.getHostUuid();
-    const chips: string[] = [];
-
-    // Sort with self first
-    const sorted = [...allCoWatchers].sort((a, b) => {
-      if (a === this.userId) return -1;
-      if (b === this.userId) return 1;
-      return 0;
-    });
-
-    for (const uuid of sorted) {
-      if (uuid === hostUuid) continue; // Skip host (shown separately)
-
-      const { opacity } = this.getActivityFreshnessStyle(uuid);
-
-      let name: string;
-      if (uuid === this.userId) {
-        name = 'You';
-      } else {
-        name = this.nicknameMap.get(uuid) || '';
-        if (!name) continue; // Skip if no nickname
-        name = this.escapeHtml(name);
-      }
-
-      const color = this.getParticipantColor(uuid);
-      chips.push(`<div class="attendee-chip" style="background: ${color}; opacity: ${opacity};"><span>${name}</span></div>`);
-    }
-
-    if (chips.length > 0) {
-      const guestHtml = `
-        <span class="overlay-role-label">GUESTS</span>
-        <div style="display: flex; gap: 4px; flex-wrap: wrap; align-items: center;">${chips.join('')}</div>
-      `;
-      if (container.innerHTML !== guestHtml) {
-        container.innerHTML = guestHtml;
-      }
-    } else {
-      if (container.innerHTML !== '') {
-        container.innerHTML = '';
-      }
-    }
-  }
-
-  /**
-   * MODE B: Render "Choose next:" section with guest rows
-   */
-  private renderChooseNextRows(container: HTMLElement): void {
-    const sessionMembers = this._state.session_members || [];
-    const rows: string[] = [];
-
-    // Add label (matching test expectation "Choose next:")
-    rows.push('<div class="overlay-role-label" style="margin-bottom: 8px;">Choose next:</div>');
-
-    // Sort with self first
-    const sorted = [...sessionMembers].sort((a, b) => {
-      if (a === this.userId) return -1;
-      if (b === this.userId) return 1;
-      return 0;
-    });
-
-    for (const uuid of sorted) {
-      const { opacity } = this.getActivityFreshnessStyle(uuid);
-
-      let name: string;
-      if (uuid === this.userId) {
-        name = 'You';
-      } else {
-        name = this.nicknameMap.get(uuid) || '';
-        if (!name) continue;
-        name = this.escapeHtml(name);
-      }
-
-      const color = this.getParticipantColor(uuid);
-      const activity = this._state.co_watcher_activities?.[uuid];
-      const isWatching = activity && activity.activity_id && activity.service && CO_WATCHABLE_SERVICES.has(activity.service);
-
-      let row: string;
-      if (isWatching) {
-        // Get service icon
-        const serviceMap: Record<string, string> = {
-          'youtube': 'youtube.png',
-          'youtube-tab': 'youtube.png',
-          'twitch': 'twitch.png',
-          'twitch-tab': 'twitch.png',
-          'netflix': 'netflix.png',
-          'netflix-tab': 'netflix.png',
-          'video-tab': 'video.png',
-        };
-        let iconHtml = '';
-        if (activity.service && serviceMap[activity.service]) {
-          try {
-            const iconUrl = chrome.runtime.getURL(`public/icons/${serviceMap[activity.service]}`);
-            iconHtml = `<img src="${iconUrl}" style="width: 14px; height: 14px; object-fit: contain; flex-shrink: 0;" alt="">`;
-          } catch (e) {
-            // Silent fallback
-          }
-        }
-
-        const title = this.escapeHtml(activity.content.substring(0, 40));
-        const isSelf = uuid === this.userId;
-        const joinBtnHtml = isSelf ? '' : `
-          <button class="divergence-join-btn join-button" data-uuid="${uuid}" title="Join activity">
-            <svg viewBox="0 0 24 24" fill="currentColor" style="width: 12px; height: 12px; pointer-events: none;">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
-          </button>
-        `;
-
-        row = `
-          <div class="divergence-row" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); margin-bottom: 4px; opacity: ${opacity};">
-            <div style="display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1;">
-              <div class="attendee-chip" style="background: ${color}; flex-shrink: 0;"><span>${name}</span></div>
-              <div style="display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden;">
-                ${iconHtml}
-                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: rgba(255, 255, 255, 0.85);" title="${this.escapeHtml(activity.content)}">${title}</span>
-              </div>
-            </div>
-            ${joinBtnHtml}
-          </div>
-        `;
-      } else {
-        row = `
-          <div class="divergence-row" style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; opacity: ${opacity}; margin-bottom: 4px;">
-            <div class="attendee-chip" style="background: ${color}; flex-shrink: 0;"><span>${name}</span></div>
-            <span style="font-size: 11px; color: rgba(255, 255, 255, 0.4); font-style: italic;">Browsing...</span>
-          </div>
-        `;
-      }
-      rows.push(row);
-    }
-
-    if (rows.length === 1) {
-      container.innerHTML = '';
-    } else {
-      container.innerHTML = rows.join('');
-
-      // Attach join listeners
-      for (const btn of container.querySelectorAll('.join-button')) {
-        btn.addEventListener('click', (e) => {
-          const target = (e.target as HTMLElement).closest('.join-button') as HTMLElement;
-          const uuid = target?.getAttribute('data-uuid') || (e.target as HTMLElement).getAttribute('data-uuid');
-          if (uuid) this.handleJoinGuest(uuid);
-        });
       }
     }
   }
@@ -1932,7 +1049,7 @@ export class OverlayUI {
     for (const uuid of this._state.watching_together) {
       if (uuid === this.userId || uuid === hostUuid) continue;
 
-      const color = this.getParticipantColor(uuid);
+      const color = this.getColor(uuid);
       markersHtml += `<div class="guest-marker" id="guest-marker-${uuid}" style="background: ${color};"></div>`;
     }
 
@@ -1986,94 +1103,22 @@ export class OverlayUI {
       return;
     }
 
-    if (this._state.messages.length === 0) {
-      const emptyHtml = '<div style="text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 12px 0;">No messages yet</div>';
-      if (container.innerHTML !== emptyHtml) {
-        container.innerHTML = emptyHtml;
-      }
-      return;
-    }
+    const messagesHtml = buildMessagesHtml(
+      this._state.messages,
+      this.userId,
+      this._state.nicknameMap,
+      (uuid) => this.getColor(uuid),
+      this._state.co_watcher_activities
+    );
 
-    const validMessages = this._state.messages.filter(msg => msg && msg.content);
-
-    if (validMessages.length === 0) {
-      const emptyHtml = '<div style="text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 12px 0;">No messages yet</div>';
-      if (container.innerHTML !== emptyHtml) {
-        container.innerHTML = emptyHtml;
-      }
-      return;
-    }
-
-    // Sort messages strictly chronologically (ascending)
-    const sorted = [...validMessages].sort((a, b) => a.timestamp - b.timestamp);
-
-    // Deduplicate any echo/optimistic duplicates
-    const deduped: typeof validMessages = [];
-    for (const msg of sorted) {
-      const isDupe = deduped.some((existing) => {
-        if (existing.id && msg.id && existing.id === msg.id) return true;
-        if (existing.content === msg.content) {
-          return Math.abs(existing.timestamp - msg.timestamp) < 10000;
-        }
-        return false;
-      });
-      if (!isDupe) {
-        deduped.push(msg);
-      }
-    }
-
-    let html = '';
-    let lastSenderId: string | null = null;
-
-    for (const msg of deduped) {
-      const isUser = msg.sender_id === this.userId;
-      const userColor = this.getParticipantColor(msg.sender_id);
-      const displayName = isUser ? 'You' : (this._state.nicknameMap?.[msg.sender_id] || msg.sender || 'Unknown');
-      const { opacity } = this.getActivityFreshnessStyle(msg.sender_id);
-      const isConsecutive = lastSenderId === msg.sender_id;
-      lastSenderId = msg.sender_id;
-
-      const headerHtml = !isConsecutive
-        ? `<div class="attendee-chip" style="background: ${userColor}; opacity: ${opacity}; margin-bottom: 2px; font-size: 10px; padding: 1px 7px;">${this.escapeHtml(displayName)}</div>`
-        : '';
-
-      html += `
-        <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}" style="${isConsecutive ? 'margin-top: -3px;' : ''}">
-          ${headerHtml}
-          <div class="message-content">${this.linkifyContent(msg.content)}</div>
-        </div>
-      `;
-    }
-
-    if (container.innerHTML !== html) {
-      container.innerHTML = html;
+    if (container.innerHTML !== messagesHtml) {
+      container.innerHTML = messagesHtml;
 
       // Auto-scroll to bottom
       if (container.scrollHeight > 0) {
         container.scrollTop = container.scrollHeight;
       }
     }
-  }
-
-  /**
-   * Escape HTML to prevent XSS
-   */
-  private escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  /**
-   * Linkify URLs in text while escaping for XSS safety
-   */
-  private linkifyContent(text: string): string {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const escaped = this.escapeHtml(text);
-    return escaped.replace(urlRegex, (url) => {
-      const safeUrl = this.escapeHtml(url);
-      return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: underline;">${safeUrl}</a>`;
-    });
   }
 
   /**

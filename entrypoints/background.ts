@@ -4,16 +4,15 @@
  * Handles: lifecycle, message routing, activity detection, service integrations
  */
 
-import { STORAGE_KEYS, ExtensionMessage, ExtensionResponse, ServiceName, DEFAULT_RELAY_URLS, Activity } from '../src/types';
+import { STORAGE_KEYS, ExtensionMessage, ExtensionResponse, DEFAULT_RELAY_URLS, Activity } from '../src/types';
 import { RelayPool, relayPool } from '../src/modules/nostr';
 import { storageManager } from '../src/modules/storage';
 import { initializeIdentityManager, getIdentityManager } from '../src/modules/identity';
 import { initializeFriendManager, getFriendManager } from '../src/modules/friends';
 import { initializeMessagingManager, getMessagingManager } from '../src/modules/messaging';
-import { initializeNotificationManager, getNotificationManager } from '../src/modules/notifications';
+import { initializeNotificationManager } from '../src/modules/notifications';
 import { initializeActivityDatastore, getActivityDatastore } from '../src/modules/activity-datastore';
 import { initializeGameLibraryManager, GameLibraryManager } from '../src/modules/game-library';
-import { joinHandler } from '../src/modules/join-handler';
 import { ActivityDetector } from '../src/modules/activity';
 import { ActivityPublisher } from '../src/modules/publisher';
 import { TabService } from '../src/modules/services/tabs';
@@ -22,7 +21,6 @@ import { XboxService } from '../src/modules/services/xbox';
 import { SpotifyService } from '../src/modules/services/spotify';
 import { TwitchService } from '../src/modules/services/twitch';
 import { initializeMetadataFetcher, metadataFetcher } from '../src/modules/metadata-fetcher';
-import { ActivityDiagnostics } from '../src/modules/activity-diagnostics';
 import { initializeFileLogger, getFileLogger } from '../src/modules/file-logger';
 import { PublishQueue } from '../src/modules/publish-queue';
 import { initializeCoWatcherDetector, getCoWatcherDetector } from '../src/modules/co-watcher-detection';
@@ -31,6 +29,7 @@ import { registerContentScripts, reinjectContentScripts } from '../src/modules/c
 import { inviteManager } from '../src/modules/invite-manager';
 import { overlayCoordinator } from '../src/modules/overlay-coordinator';
 import { nostrSubscriptionManager } from '../src/modules/nostr-subscription-manager';
+import { AuthRouter, FriendsRouter, ActivityRouter, SettingsRouter } from '../src/modules/routers';
 
 // ============================================================================
 // GLOBAL ERROR HANDLING
@@ -262,7 +261,7 @@ async function initializeExtension(): Promise<void> {
       await metadataFetcher.startBackgroundFetcher();
 
       if (userGames.length > 0) {
-        const gamesNeedingMetadata = await _findGamesMissingMetadata(userGames);
+        const gamesNeedingMetadata = await SettingsRouter.findGamesMissingMetadata(userGames);
         if (gamesNeedingMetadata.length > 0) {
           await metadataFetcher.scheduleBackgroundRefresh(gamesNeedingMetadata);
         }
@@ -592,7 +591,6 @@ chrome.runtime.onMessage.addListener(
   }
 );
 
-import { AuthRouter, FriendsRouter, ActivityRouter, SettingsRouter } from '../src/modules/routers';
 
 async function _handleMessage(message: ExtensionMessage): Promise<ExtensionResponse> {
   switch (message.type) {
