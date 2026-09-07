@@ -1,4 +1,20 @@
 /**
+ * Format message timestamp into a clean, human-readable string (e.g. "10:42 PM" or "Sep 6, 10:42 PM")
+ */
+export function formatMessageTime(timestamp?: number): string {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return '';
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (isToday) {
+    return timeStr;
+  }
+  return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${timeStr}`;
+}
+
+/**
  * Hang Time - Overlay UI Components
  * Pure rendering functions and HTML template generators for overlay UI
  */
@@ -442,10 +458,13 @@ export function buildMessagesHtml(
       ? `<div class="attendee-chip" style="background: ${userColor}; opacity: ${opacity}; margin-bottom: 2px; font-size: 10px; padding: 1px 7px;">${escapeHtml(displayName)}</div>`
       : '';
 
+    const formattedTime = formatMessageTime(msg.timestamp);
+    const dataTimeAttr = formattedTime ? ` data-time="${escapeHtml(formattedTime)}"` : '';
+
     html += `
       <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}" style="${isConsecutive ? 'margin-top: -3px;' : ''}">
         ${headerHtml}
-        <div class="message-content">${linkifyContent(msg.content)}</div>
+        <div class="message-content"${dataTimeAttr}>${linkifyContent(msg.content)}</div>
       </div>
     `;
   }

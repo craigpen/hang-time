@@ -7,6 +7,7 @@ import { StorageManager } from '../storage';
 import { CoWatcherDetector } from '../co-watcher-detection';
 import { FriendManager } from '../friends';
 import { OverlayUI } from '../overlay-ui';
+import { formatMessageTime, buildMessagesHtml } from '../overlay/index.js';
 import { CoWatchSession, UserProfile, Friend, Activity, Message } from '../../types';
 
 // Mock storage map
@@ -583,6 +584,38 @@ describe('Session Model & Divergence', () => {
         }),
         '*'
       );
+    });
+  });
+  describe('Timestamp Tooltips', () => {
+    it('formats today timestamp with time only', () => {
+      const now = new Date();
+      const timeStr = formatMessageTime(now.getTime());
+      expect(timeStr).toMatch(/\d{1,2}:\d{2}/);
+    });
+
+    it('formats past date timestamp with date and time', () => {
+      const past = new Date(2025, 0, 15, 14, 30);
+      const timeStr = formatMessageTime(past.getTime());
+      expect(timeStr).toContain('Jan 15');
+      expect(timeStr).toMatch(/\d{1,2}:\d{2}/);
+    });
+
+    it('adds data-time attribute to rendered chat messages', () => {
+      const messages = [{
+        id: 'msg-1',
+        sender: 'Bob',
+        sender_id: 'friend-bob-uuid',
+        content: 'Hello with timestamp',
+        timestamp: Date.now(),
+      }];
+      const html = buildMessagesHtml(
+        messages,
+        'user-uuid-1234',
+        { 'friend-bob-uuid': 'Bob' },
+        () => '#3b82f6'
+      );
+      expect(html).toContain('data-time=');
+      expect(html).toContain('Hello with timestamp');
     });
   });
 });

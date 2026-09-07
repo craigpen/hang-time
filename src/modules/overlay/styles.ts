@@ -486,11 +486,52 @@ export function getOverlayStyles(): string {
       }
 
       .message-content {
+        position: relative;
         padding: 3px 8px;
         border-radius: 9px;
         word-wrap: break-word;
         font-size: 11.5px;
         flex: 0 1 auto;
+      }
+
+      .message-content[data-time]:hover::after {
+        content: attr(data-time);
+        position: absolute;
+        bottom: calc(100% + 4px);
+        padding: 2px 6px;
+        font-size: 9.5px;
+        font-weight: 500;
+        letter-spacing: 0.2px;
+        background: rgba(15, 23, 42, 0.94);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        color: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 4px;
+        white-space: nowrap;
+        pointer-events: none;
+        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+        z-index: 100;
+        animation: tooltipFadeIn 0.15s ease-out;
+      }
+
+      .message-user .message-content[data-time]:hover::after {
+        right: 0;
+      }
+
+      .message-friend .message-content[data-time]:hover::after {
+        left: 0;
+      }
+
+      @keyframes tooltipFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(2px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
       .message-friend .message-content {
