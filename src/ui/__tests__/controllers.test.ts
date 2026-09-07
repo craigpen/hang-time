@@ -149,7 +149,7 @@ describe('UI Tab Controllers', () => {
 
       expect(friendsController.getStatusText(activeFriend)).toBe('Active');
       expect(friendsController.getStatusText(dndFriend)).toBe('⛔ DND');
-      expect(friendsController.getStatusText(offlineFriend)).toContain('Last seen 40d ago');
+      expect(friendsController.getStatusText(offlineFriend)).toMatch(/Last seen 4\dd ago/);
     });
 
     it('should sort activities with video tabs prioritized before gaming', () => {

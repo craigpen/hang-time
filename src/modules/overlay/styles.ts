@@ -543,9 +543,12 @@ export function getOverlayStyles(): string {
       }
 
       #message-input {
+        box-sizing: border-box;
         flex: 1;
-        min-height: 20px;
-        max-height: 60px;
+        height: 32px;
+        min-height: 32px;
+        max-height: 68px;
+        line-height: 20px;
         padding: 5px 8px;
         background: rgba(255, 255, 255, 0.06);
         border: 1px solid rgba(255, 255, 255, 0.1);

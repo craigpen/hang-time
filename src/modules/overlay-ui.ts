@@ -466,8 +466,8 @@ export class OverlayUI {
       messageInput.addEventListener('input', (e) => {
         const textarea = e.target as HTMLTextAreaElement;
         textarea.style.height = 'auto';
-        textarea.style.height = Math.min(textarea.scrollHeight, 60) + 'px';
-
+        const newHeight = Math.max(32, Math.min(textarea.scrollHeight, 68));
+        textarea.style.height = newHeight + 'px';
       });
 
       // Send on Enter (Shift+Enter for newline)
@@ -515,7 +515,7 @@ export class OverlayUI {
 
     // Clear input and reset height
     input.value = '';
-    input.style.height = '20px';
+    input.style.height = '32px';
   }
 
   /**
