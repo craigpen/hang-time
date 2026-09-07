@@ -486,7 +486,33 @@ chrome.runtime.onConnect.addListener((port) => {
           } catch (e) {
             console.error('[Background] Failed to handle JOIN_GUEST_ACTIVITY:', e);
           }
-        } else if (message.type === 'CONTENT_SCRIPT_ACTIVITY') {
+                  } else if (message.type === 'SEND_TYPING') {
+            const profile = await storageManager.getUserProfile();
+            overlayCoordinator.broadcastToContentScripts({
+              type: 'CO_WATCH_TYPING',
+              data: {
+                sender_id: profile?.uuid || 'unknown',
+                activity_id: message.data?.activity_id,
+              },
+            }, tabId);
+          } else if (message.type === 'OPEN_DISCORD') {
+            try {
+              const { host_uuid } = message.data || {};
+              let discordUrl = 'https://discord.com/channels/@me';
+              if (host_uuid) {
+                const friend = await getFriendManager().getFriend(host_uuid);
+                if (friend?.discord_info) {
+                  discordUrl = friend.discord_info;
+                  if (!discordUrl.startsWith('http://') && !discordUrl.startsWith('https://') && !discordUrl.startsWith('discord://')) {
+                    discordUrl = 'https://' + discordUrl;
+                  }
+                }
+              }
+              await chrome.tabs.create({ url: discordUrl, active: true });
+            } catch (e) {
+              console.error('[Background] Failed to open Discord:', e);
+            }
+          } else if (message.type === 'CONTENT_SCRIPT_ACTIVITY') {
           await overlayCoordinator.handleContentScriptActivity(message.data?.key, message.data?.value, tabId, async () => {
             if (activityDetector) {
               await activityDetector.detectAndPublish();

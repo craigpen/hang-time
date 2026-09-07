@@ -560,6 +560,114 @@ export function getOverlayStyles(): string {
         color: #34d399;
         transform: translateY(0);
       }
+      /* Ephemeral In-Video Chat Toast Notifications */
+      #hang-time-toast-container {
+        position: fixed;
+        pointer-events: none;
+        z-index: 2147483646;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-width: 320px;
+        transition: opacity 0.2s ease;
+      }
+
+      .hang-time-chat-toast {
+        pointer-events: auto;
+        background: rgba(15, 23, 42, 0.88);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 10px;
+        padding: 7px 10px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 11.5px;
+        color: white;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        opacity: 0;
+        transform: translateY(-6px) scale(0.97);
+        transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        max-width: 100%;
+        word-break: break-word;
+        cursor: pointer;
+      }
+
+      .hang-time-chat-toast.toast-visible {
+        opacity: 0.95;
+        transform: translateY(0) scale(1);
+      }
+
+      .hang-time-chat-toast.toast-fading {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.97);
+      }
+
+      .hang-time-chat-toast:hover {
+        opacity: 1;
+        border-color: rgba(255, 255, 255, 0.25);
+      }
+
+      .toast-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .toast-content {
+        line-height: 1.35;
+        color: rgba(255, 255, 255, 0.95);
+        font-size: 11.5px;
+      }
+
+      /* Real-time Typing Indicator */
+      .typing-indicator-container {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 4px;
+        font-size: 10.5px;
+        color: rgba(255, 255, 255, 0.6);
+        font-style: italic;
+        user-select: none;
+      }
+
+      .typing-dots {
+        display: inline-flex;
+        gap: 2px;
+        align-items: center;
+        margin-left: 2px;
+      }
+
+      .typing-dot {
+        width: 3.5px;
+        height: 3.5px;
+        background: rgba(255, 255, 255, 0.7);
+        border-radius: 50%;
+        animation: typingPulse 1.2s infinite ease-in-out;
+      }
+
+      .typing-dot:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+
+      .typing-dot:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+
+      @keyframes typingPulse {
+        0%, 100% {
+          opacity: 0.3;
+          transform: scale(0.8);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.2);
+        }
+      }
+
     </style>
   `;
 }

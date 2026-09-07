@@ -12,6 +12,8 @@ import {
   buildGuestChipsHtml,
   buildChooseNextRowsHtml,
   buildMessagesHtml,
+  buildChatToastHtml,
+  buildTypingIndicatorHtml,
 } from './overlay/index.js';
 
 export interface OverlayState {
@@ -78,6 +80,12 @@ export class OverlayUI {
     messages: [],
   };
   private port: chrome.runtime.Port | null = null;
+  private toastContainer: HTMLElement | null = null;
+  private activeToastTimeouts: Map<HTMLElement, NodeJS.Timeout> = new Map();
+  private typingUsers: Map<string, number> = new Map(); // friendUuid -> lastSeenTimestamp
+  private typingClearTimer: NodeJS.Timeout | null = null;
+  private lastTypingSentTimestamp = 0;
+
 
   constructor(private userId: string) {}
 
@@ -463,6 +471,19 @@ export class OverlayUI {
         const textarea = e.target as HTMLTextAreaElement;
         textarea.style.height = 'auto';
         textarea.style.height = Math.min(textarea.scrollHeight, 60) + 'px';
+
+        const now = Date.now();
+        if (now - this.lastTypingSentTimestamp > 2500) {
+          this.lastTypingSentTimestamp = now;
+          if (this.port) {
+            this.port.postMessage({
+              type: 'SEND_TYPING',
+              data: {
+                activity_id: this._state.activity_id,
+              },
+            });
+          }
+        }
       });
 
       // Send on Enter (Shift+Enter for newline)
@@ -567,6 +588,187 @@ export class OverlayUI {
     return getParticipantColor(uuid, this.getHostUuid(), this.userId, this.userColorMap);
   }
 
+
+  /**
+   * Helper to check if overlay is currently open and visible to the user
+   */
+  private isOverlayFullyVisible(): boolean {
+    if (!this.container || !this._state.visible) return false;
+    if (this.container.classList.contains('hidden') || this.container.classList.contains('fading-out')) return false;
+    return true;
+  }
+
+  /**
+   * Create or attach toast container
+   */
+  private createToastContainer(): void {
+    if (this.toastContainer && this.toastContainer.parentElement) return;
+    const existing = document.getElementById('hang-time-toast-container');
+    if (existing) existing.remove();
+
+    this.toastContainer = document.createElement('div');
+    this.toastContainer.id = 'hang-time-toast-container';
+    if (document.body) {
+      document.body.appendChild(this.toastContainer);
+    }
+    this.updateToastPosition();
+  }
+
+  /**
+   * Position toast container to match overlay position and width
+   */
+  private updateToastPosition(): void {
+    if (!this.toastContainer || !this.container) return;
+    if (this.container.style.left && this.container.style.left !== 'auto') {
+      this.toastContainer.style.left = this.container.style.left;
+      this.toastContainer.style.right = 'auto';
+    } else {
+      this.toastContainer.style.right = this.container.style.right || '20px';
+      this.toastContainer.style.left = 'auto';
+    }
+    this.toastContainer.style.top = this.container.style.top || '20px';
+    this.toastContainer.style.width = this.container.style.width || '320px';
+  }
+
+  /**
+   * Display floating ephemeral chat toast when overlay is hidden/faded
+   */
+  showChatToast(sender: string, senderId: string, content: string): void {
+    if (this.isOverlayFullyVisible() || senderId === this.userId) {
+      return;
+    }
+
+    if (!this.toastContainer || !this.toastContainer.parentElement) {
+      this.createToastContainer();
+    }
+    if (!this.toastContainer) return;
+
+    this.updateToastPosition();
+
+    const senderColor = this.getColor(senderId);
+    const displayName = this.nicknameMap.get(senderId) || sender || 'Friend';
+
+    const toast = document.createElement('div');
+    toast.className = 'hang-time-chat-toast';
+    toast.innerHTML = buildChatToastHtml(displayName, senderColor, content);
+
+    // Clicking toast opens full overlay
+    toast.addEventListener('click', () => {
+      this.show();
+      this.clearChatToasts();
+    });
+
+    let fadeTimeout: NodeJS.Timeout | null = null;
+    const scheduleFade = () => {
+      fadeTimeout = setTimeout(() => {
+        toast.classList.remove('toast-visible');
+        toast.classList.add('toast-fading');
+        setTimeout(() => {
+          toast.remove();
+          this.activeToastTimeouts.delete(toast);
+        }, 300);
+      }, 4000);
+      this.activeToastTimeouts.set(toast, fadeTimeout);
+    };
+
+    toast.addEventListener('mouseenter', () => {
+      if (fadeTimeout) clearTimeout(fadeTimeout);
+      toast.classList.remove('toast-fading');
+      toast.classList.add('toast-visible');
+    });
+
+    toast.addEventListener('mouseleave', () => {
+      scheduleFade();
+    });
+
+    // Limit to max 3 toasts
+    if (this.toastContainer.children.length >= 3) {
+      const oldest = this.toastContainer.children[0] as HTMLElement;
+      if (oldest) {
+        const oldTimer = this.activeToastTimeouts.get(oldest);
+        if (oldTimer) clearTimeout(oldTimer);
+        oldest.remove();
+        this.activeToastTimeouts.delete(oldest);
+      }
+    }
+
+    this.toastContainer.appendChild(toast);
+    requestAnimationFrame(() => {
+      toast.classList.add('toast-visible');
+    });
+
+    scheduleFade();
+  }
+
+  /**
+   * Clear all active floating toasts (e.g. when opening overlay)
+   */
+  clearChatToasts(): void {
+    if (!this.toastContainer) return;
+    const toasts = Array.from(this.toastContainer.querySelectorAll('.hang-time-chat-toast')) as HTMLElement[];
+    for (const toast of toasts) {
+      const timer = this.activeToastTimeouts.get(toast);
+      if (timer) clearTimeout(timer);
+      toast.classList.remove('toast-visible');
+      toast.classList.add('toast-fading');
+      setTimeout(() => toast.remove(), 200);
+    }
+    this.activeToastTimeouts.clear();
+  }
+
+  /**
+   * Handle incoming typing status event from co-watcher
+   */
+  handleTypingStatus(senderUuid: string): void {
+    if (senderUuid === this.userId) return;
+    this.typingUsers.set(senderUuid, Date.now());
+    this.renderTypingIndicator();
+
+    if (this.typingClearTimer) clearTimeout(this.typingClearTimer);
+    this.typingClearTimer = setTimeout(() => {
+      this.cleanupExpiredTypingUsers();
+    }, 3500);
+  }
+
+  private cleanupExpiredTypingUsers(): void {
+    const cutoff = Date.now() - 3000;
+    for (const [uuid, timestamp] of this.typingUsers.entries()) {
+      if (timestamp < cutoff) {
+        this.typingUsers.delete(uuid);
+      }
+    }
+    this.renderTypingIndicator();
+  }
+
+  private renderTypingIndicator(): void {
+    const container = document.getElementById('hang-time-chat-container');
+    if (!container) return;
+
+    const existingIndicator = container.querySelector('#chat-typing-indicator');
+    const activeNames: string[] = [];
+    const cutoff = Date.now() - 3000;
+
+    for (const [uuid, timestamp] of this.typingUsers.entries()) {
+      if (timestamp >= cutoff) {
+        const name = this.nicknameMap.get(uuid) || 'Friend';
+        activeNames.push(name);
+      }
+    }
+
+    if (activeNames.length === 0) {
+      if (existingIndicator) existingIndicator.remove();
+      return;
+    }
+
+    const indicatorHtml = buildTypingIndicatorHtml(activeNames);
+    if (existingIndicator) {
+      existingIndicator.outerHTML = indicatorHtml;
+    } else {
+      container.insertAdjacentHTML('beforeend', indicatorHtml);
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+
   /**
    * Show overlay immediately
    */
@@ -580,6 +782,7 @@ export class OverlayUI {
       clearTimeout(this.fadeTimeoutId);
       this.fadeTimeoutId = null;
     }
+    this.clearChatToasts();
     this.container.classList.remove('hidden');
     this.container.classList.remove('fading-out');
     this._state.visible = true;
@@ -711,7 +914,13 @@ export class OverlayUI {
    */
   private onDiscordClick(): void {
     console.debug('[OverlayUI] Discord button clicked');
-    window.postMessage({ type: 'HANG_TIME_OPEN_DISCORD' }, '*');
+    const hostUuid = this.getHostUuid();
+    window.postMessage({
+      type: 'HANG_TIME_OPEN_DISCORD',
+      data: {
+        host_uuid: hostUuid,
+      },
+    }, '*');
   }
 
   /**
@@ -1139,6 +1348,11 @@ export class OverlayUI {
     }
 
     this.renderMessages();
+
+    // Trigger toast if overlay is not fully open
+    if (!this.isOverlayFullyVisible()) {
+      this.showChatToast(sender, senderId, content);
+    }
   }
 
   /**
@@ -1182,6 +1396,14 @@ export class OverlayUI {
     }
     if (this.progressUpdateInterval) {
       clearInterval(this.progressUpdateInterval);
+    }
+    if (this.typingClearTimer) {
+      clearTimeout(this.typingClearTimer);
+    }
+    this.clearChatToasts();
+    if (this.toastContainer) {
+      this.toastContainer.remove();
+      this.toastContainer = null;
     }
     console.debug('[OverlayUI] Destroy complete');
   }

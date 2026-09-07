@@ -516,5 +516,57 @@ describe('Session Model & Divergence', () => {
         },
       });
     });
+
+    it('displays ephemeral chat toasts when overlay is hidden and clears on show', () => {
+      // Start with overlay hidden
+      overlay.hide(true);
+
+      // Friend sends a message
+      overlay.addMessage('Bob', 'friend-bob-uuid', 'Check out this scene!');
+
+      const toastContainer = document.getElementById('hang-time-toast-container');
+      expect(toastContainer).not.toBeNull();
+      const toast = toastContainer?.querySelector('.hang-time-chat-toast');
+      expect(toast).not.toBeNull();
+      expect(toast?.textContent).toContain('Bob');
+      expect(toast?.textContent).toContain('Check out this scene!');
+
+      // Showing the overlay should clear active toasts
+      overlay.show();
+
+      expect(toast?.classList.contains('toast-fading')).toBe(true);
+    });
+
+    it('renders real-time typing indicator when a co-watcher types', () => {
+      overlay.handleTypingStatus('friend-bob-uuid');
+
+      const chatContainer = document.getElementById('hang-time-chat-container');
+      const typingIndicator = chatContainer?.querySelector('#chat-typing-indicator');
+      expect(typingIndicator).not.toBeNull();
+      expect(typingIndicator?.textContent).toContain('Bob is typing');
+    });
+
+    it('posts HANG_TIME_OPEN_DISCORD with host_uuid on discord button click', () => {
+      overlay.setState({
+        session_members: ['user-uuid-1234', 'friend-bob-uuid'],
+        watching_together: ['user-uuid-1234', 'friend-bob-uuid'],
+        host_uuid: 'friend-bob-uuid',
+      });
+
+      const postMessageSpy = vi.spyOn(window, 'postMessage');
+      const discordButton = document.getElementById('discord-button');
+      expect(discordButton).not.toBeNull();
+
+      discordButton?.click();
+
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'HANG_TIME_OPEN_DISCORD',
+          data: { host_uuid: 'friend-bob-uuid' },
+        }),
+        '*'
+      );
+    });
   });
 });
+

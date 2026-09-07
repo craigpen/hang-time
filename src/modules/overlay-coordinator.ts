@@ -159,8 +159,11 @@ export class OverlayCoordinator {
   /**
    * Broadcast message to all connected content scripts
    */
-  broadcastToContentScripts(message: any): void {
+  broadcastToContentScripts(message: any, excludeTabId?: number): void {
     for (const [tabId, port] of this.activeContentScriptPorts.entries()) {
+      if (excludeTabId !== undefined && tabId === excludeTabId) {
+        continue;
+      }
       try {
         port.postMessage(message);
       } catch (e) {

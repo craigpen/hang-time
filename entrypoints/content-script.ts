@@ -938,6 +938,7 @@ function initializeOverlay(): void {
       if (port) {
         port.postMessage({
           type: 'OPEN_DISCORD',
+          data: event.data.data,
         });
       }
     } else if (event.data.type === 'HANG_TIME_SYNC_COMPLETE') {
