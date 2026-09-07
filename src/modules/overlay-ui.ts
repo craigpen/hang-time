@@ -362,7 +362,8 @@ export class OverlayUI {
           clearTimeout(this.fadeTimeoutId);
           this.fadeTimeoutId = null;
         }
-        if (this.container?.classList.contains('fading-out')) {
+        const hasSession = (this._state.session_members?.length || 0) >= 2;
+        if (hasSession && this.container?.classList.contains('fading-out')) {
           this.show();
         }
       });
@@ -915,8 +916,11 @@ export class OverlayUI {
   /**
    * Show overlay immediately
    */
-  show(): void {
+  show(force = false): void {
     if (!this.container) return;
+    if (!force && (this._state.session_members?.length || 0) < 2) {
+      return;
+    }
     if (this.hideTimer) {
       clearTimeout(this.hideTimer);
       this.hideTimer = null;

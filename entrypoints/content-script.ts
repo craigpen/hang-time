@@ -605,7 +605,11 @@ function establishConnection(): void {
           const isSessionActive = (sessionMembers.length || 0) >= 2;
 
           if (!isSessionActive || !isMatchingTab) {
-            // Session is inactive (< 2 members) or not matching tab: immediately leave voice and hide overlay (even if pinned)
+            // Session is inactive (< 2 members) or not matching tab: update state, leave voice, and force hide overlay
+            overlayUI.setState({
+              session_members: [],
+              watching_together: [],
+            });
             overlayUI.leaveVoice();
             overlayUI.hide(true);
             overlayHasBeenShown = false;
@@ -735,6 +739,10 @@ function establishConnection(): void {
 
         case 'SESSION_ENDED':
           if (overlayUI) {
+            overlayUI.setState({
+              session_members: [],
+              watching_together: [],
+            });
             overlayUI.leaveVoice();
             overlayUI.hide(true);
             overlayHasBeenShown = false;

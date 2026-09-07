@@ -519,6 +519,10 @@ describe('Session Model & Divergence', () => {
     });
 
     it('displays ephemeral chat toasts when overlay is hidden and clears on show', () => {
+      overlay.setState({
+        session_members: ['user-uuid-1234', 'friend-bob-uuid'],
+        watching_together: ['user-uuid-1234', 'friend-bob-uuid'],
+      });
       // Start with overlay hidden
       overlay.hide(true);
 
