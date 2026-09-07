@@ -133,12 +133,13 @@ export class VoiceMeshManager {
       this.isInVoice = true;
       this.startVoiceActivityDetection();
 
-      // 3. Connect to all other session members
+      // 3. Connect to other session members who are already in voice
       for (const memberUuid of sessionMembers) {
         if (memberUuid !== this.currentUserId) {
-          // Deterministic initiator: the alphabetically smaller UUID initiates the offer
-          const isInitiator = this.currentUserId < memberUuid;
-          this.initiatePeerConnection(memberUuid, isInitiator);
+          if (this.remoteVoiceStates.get(memberUuid)?.inVoice) {
+            const isInitiator = this.currentUserId < memberUuid;
+            this.initiatePeerConnection(memberUuid, isInitiator);
+          }
         }
       }
 
@@ -195,6 +196,13 @@ export class VoiceMeshManager {
       }
       this.notifyParticipantsChanged();
     }
+  }
+
+  /**
+   * Get volume for a specific remote peer (0.0 to 1.0)
+   */
+  public getPeerVolume(peerUuid: string): number {
+    return this.peers.get(peerUuid)?.volume ?? 1.0;
   }
 
   /**
@@ -310,25 +318,44 @@ export class VoiceMeshManager {
       });
 
       for (const [uuid, peer] of this.peers.entries()) {
-        list.push({
-          uuid,
-          isMuted: peer.isMuted,
-          isSpeaking: peer.isSpeaking,
-          volume: peer.volume,
-          connectionState: (peer.pc.connectionState || 'connecting') as any,
-          stream: peer.stream,
-        });
+        const isPeerInVoice = this.remoteVoiceStates.get(uuid)?.inVoice === true;
+        const isPeerConnected = peer.pc.connectionState === 'connected';
+        if (isPeerInVoice || isPeerConnected) {
+          list.push({
+            uuid,
+            isMuted: peer.isMuted,
+            isSpeaking: peer.isSpeaking,
+            volume: peer.volume,
+            connectionState: (peer.pc.connectionState || 'connected') as any,
+            stream: peer.stream,
+          });
+        }
+      }
+
+      // Also include any remote peers known to be in voice who might still be connecting
+      for (const [uuid, state] of this.remoteVoiceStates.entries()) {
+        if (state.inVoice && !this.peers.has(uuid) && uuid !== this.currentUserId) {
+          list.push({
+            uuid,
+            isMuted: state.isMuted,
+            isSpeaking: false,
+            volume: 1.0,
+            connectionState: 'connecting',
+          });
+        }
       }
     } else {
       // Remote voice states when local client is not in voice
       for (const [uuid, state] of this.remoteVoiceStates.entries()) {
-        list.push({
-          uuid,
-          isMuted: state.isMuted,
-          isSpeaking: false,
-          volume: 1.0,
-          connectionState: 'disconnected',
-        });
+        if (state.inVoice) {
+          list.push({
+            uuid,
+            isMuted: state.isMuted,
+            isSpeaking: false,
+            volume: 1.0,
+            connectionState: 'disconnected',
+          });
+        }
       }
     }
 

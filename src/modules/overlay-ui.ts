@@ -84,6 +84,7 @@ export class OverlayUI {
   private activeToastTimeouts: Map<HTMLElement, NodeJS.Timeout> = new Map();
   private voiceManager: VoiceMeshManager = new VoiceMeshManager();
   private pttActive = false;
+  private activeGuestVolumeUuid: string | null = null;
 
 
   constructor(private userId: string) {}
@@ -506,10 +507,13 @@ export class OverlayUI {
         textarea.style.height = newHeight + 'px';
       });
 
-      // Dedicated Voice Bar Controls (Solution A)
+      // Dedicated Voice Bar Controls (Option A)
       const joinBtn = document.getElementById('voice-join-btn');
-      const muteToggle = document.getElementById('voice-mute-toggle');
       const leaveBtn = document.getElementById('voice-leave-btn');
+      const chipsContainer = document.getElementById('room-participants-chips');
+      const volumePopover = document.getElementById('guest-volume-popover');
+      const volumeSlider = document.getElementById('guest-volume-slider') as HTMLInputElement | null;
+      const volumeMuteBtn = document.getElementById('guest-volume-local-mute-btn');
 
       if (joinBtn) {
         joinBtn.addEventListener('click', async () => {
@@ -518,19 +522,125 @@ export class OverlayUI {
         });
       }
 
-      if (muteToggle) {
-        muteToggle.addEventListener('click', () => {
-          if (this.voiceManager.getInVoice()) {
-            this.voiceManager.setMuted(!this.voiceManager.getIsMuted());
+      if (leaveBtn) {
+        leaveBtn.addEventListener('click', () => {
+          this.voiceManager.leaveVoice();
+          if (volumePopover) volumePopover.style.display = 'none';
+        });
+      }
+
+      // Interactive Chip Clicks (Self Mute Toggle & Guest Volume Popover)
+      if (chipsContainer) {
+        chipsContainer.addEventListener('click', (e) => {
+          const target = e.target as HTMLElement;
+          const selfChip = target.closest('.attendee-chip-self.in-voice') as HTMLElement | null;
+          const guestChip = target.closest('.attendee-chip-guest.in-voice') as HTMLElement | null;
+
+          if (selfChip) {
+            if (this.voiceManager.getInVoice()) {
+              this.voiceManager.setMuted(!this.voiceManager.getIsMuted());
+            }
+            return;
+          }
+
+          if (guestChip) {
+            const uuid = guestChip.dataset['uuid'];
+            if (!uuid || !volumePopover) return;
+
+            if (this.activeGuestVolumeUuid === uuid && volumePopover.style.display !== 'none') {
+              volumePopover.style.display = 'none';
+              this.activeGuestVolumeUuid = null;
+              return;
+            }
+
+            this.activeGuestVolumeUuid = uuid;
+            const guestName = this.nicknameMap.get(uuid) || 'Guest';
+            const nameEl = document.getElementById('guest-volume-name');
+            if (nameEl) nameEl.textContent = guestName;
+
+            const currentVol = Math.round(this.voiceManager.getPeerVolume(uuid) * 100);
+            if (volumeSlider) {
+              volumeSlider.value = String(currentVol);
+            }
+            const labelEl = document.getElementById('guest-volume-label');
+            if (labelEl) labelEl.textContent = `${currentVol}%`;
+
+            if (volumeMuteBtn) {
+              if (currentVol === 0) {
+                volumeMuteBtn.classList.add('muted');
+                volumeMuteBtn.title = 'Unmute for me';
+              } else {
+                volumeMuteBtn.classList.remove('muted');
+                volumeMuteBtn.title = 'Mute for me';
+              }
+            }
+
+            // Position popover below the chip
+            const chipRect = guestChip.getBoundingClientRect();
+            const overlayEl = document.getElementById('hang-time-overlay');
+            if (overlayEl) {
+              const overlayRect = overlayEl.getBoundingClientRect();
+              const topOffset = chipRect.bottom - overlayRect.top + 4;
+              const leftOffset = Math.max(8, Math.min(chipRect.left - overlayRect.left, overlayRect.width - 185));
+              volumePopover.style.top = `${topOffset}px`;
+              volumePopover.style.left = `${leftOffset}px`;
+            }
+            volumePopover.style.display = 'flex';
           }
         });
       }
 
-      if (leaveBtn) {
-        leaveBtn.addEventListener('click', () => {
-          this.voiceManager.leaveVoice();
+      if (volumeSlider) {
+        volumeSlider.addEventListener('input', (e) => {
+          if (!this.activeGuestVolumeUuid) return;
+          const val = parseInt((e.target as HTMLInputElement).value, 10);
+          this.voiceManager.setPeerVolume(this.activeGuestVolumeUuid, val / 100);
+          const labelEl = document.getElementById('guest-volume-label');
+          if (labelEl) labelEl.textContent = `${val}%`;
+
+          if (volumeMuteBtn) {
+            if (val === 0) {
+              volumeMuteBtn.classList.add('muted');
+              volumeMuteBtn.title = 'Unmute for me';
+            } else {
+              volumeMuteBtn.classList.remove('muted');
+              volumeMuteBtn.title = 'Mute for me';
+            }
+          }
         });
       }
+
+      if (volumeMuteBtn) {
+        volumeMuteBtn.addEventListener('click', () => {
+          if (!this.activeGuestVolumeUuid) return;
+          const currentVol = this.voiceManager.getPeerVolume(this.activeGuestVolumeUuid);
+          const newVol = currentVol > 0 ? 0 : 1;
+          this.voiceManager.setPeerVolume(this.activeGuestVolumeUuid, newVol);
+          if (volumeSlider) {
+            volumeSlider.value = String(newVol * 100);
+          }
+          const labelEl = document.getElementById('guest-volume-label');
+          if (labelEl) labelEl.textContent = `${Math.round(newVol * 100)}%`;
+
+          if (newVol === 0) {
+            volumeMuteBtn.classList.add('muted');
+            volumeMuteBtn.title = 'Unmute for me';
+          } else {
+            volumeMuteBtn.classList.remove('muted');
+            volumeMuteBtn.title = 'Mute for me';
+          }
+        });
+      }
+
+      // Close volume popover when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!volumePopover || volumePopover.style.display === 'none') return;
+        const target = e.target as HTMLElement;
+        if (!volumePopover.contains(target) && !target.closest('.attendee-chip-guest.in-voice')) {
+          volumePopover.style.display = 'none';
+          this.activeGuestVolumeUuid = null;
+        }
+      });
 
       // Push-to-Talk (Hold V when not in input)
       window.addEventListener('keydown', (e) => {
@@ -1471,12 +1581,9 @@ export class OverlayUI {
     const joinBtn = document.getElementById('voice-join-btn');
     const joinLabel = document.getElementById('voice-join-label');
     const connectedStrip = document.getElementById('voice-connected-strip');
-    const muteToggle = document.getElementById('voice-mute-toggle');
-    const muteLabel = document.getElementById('voice-mute-label');
     const participantsContainer = document.getElementById('room-participants-chips');
 
     const inVoice = this.voiceManager.getInVoice();
-    const isMuted = this.voiceManager.getIsMuted();
 
     if (joinBtn && connectedStrip) {
       if (inVoice) {
@@ -1485,10 +1592,11 @@ export class OverlayUI {
       } else {
         joinBtn.style.display = 'inline-flex';
         connectedStrip.style.display = 'none';
-        if (participants.length > 0) {
+        const remoteCount = participants.filter(p => p.uuid !== this.userId).length;
+        if (remoteCount > 0) {
           joinBtn.classList.add('join-active');
-          joinBtn.title = `Join Voice Chat (${participants.length} in room)`;
-          if (joinLabel) joinLabel.textContent = `Join (${participants.length})`;
+          joinBtn.title = `Join Voice Chat (${remoteCount} in room)`;
+          if (joinLabel) joinLabel.textContent = `Join (${remoteCount})`;
         } else {
           joinBtn.classList.remove('join-active');
           joinBtn.title = 'Join Voice Chat';
@@ -1497,38 +1605,7 @@ export class OverlayUI {
       }
     }
 
-    if (muteToggle) {
-      if (isMuted) {
-        muteToggle.classList.remove('active');
-        muteToggle.classList.add('muted');
-        if (muteLabel) muteLabel.textContent = 'Unmute';
-        muteToggle.title = 'Unmute Microphone (V)';
-        muteToggle.innerHTML = `
-          <svg class="mic-icon muted" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="2" y1="2" x2="22" y2="22"></line>
-            <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"></path>
-            <path d="M5 10v2a7 7 0 0 0 12 5"></path>
-            <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"></path>
-            <path d="M9 9v3a3 3 0 0 0 5.12 2.12"></path>
-            <line x1="12" y1="19" x2="12" y2="22"></line>
-          </svg>
-        `;
-      } else {
-        muteToggle.classList.remove('muted');
-        muteToggle.classList.add('active');
-        if (muteLabel) muteLabel.textContent = 'Mute';
-        muteToggle.title = 'Mute Microphone (V)';
-        muteToggle.innerHTML = `
-          <svg class="mic-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-            <line x1="12" y1="19" x2="12" y2="22"></line>
-          </svg>
-        `;
-      }
-    }
-
-    // Refresh participant chips to reflect live mic states
+    // Refresh participant chips to reflect live interactive mic & presence states
     if (participantsContainer && this._state.session_members && this._state.session_members.length >= 2) {
       const participantsHtml = buildRoomParticipantsHtml(
         this._state.session_members,

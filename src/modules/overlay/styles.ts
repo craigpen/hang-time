@@ -930,6 +930,133 @@ export function getOverlayStyles(): string {
 
       
 
+    /* Interactive Attendee Chips in Voice */
+      .attendee-chip.in-voice {
+        cursor: pointer;
+      }
+
+      .attendee-chip.in-voice:hover {
+        background: rgba(255, 255, 255, 0.12);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+      }
+
+      .attendee-chip.in-voice:active {
+        transform: translateY(0);
+      }
+
+      .attendee-chip-self.in-voice.is-muted {
+        border-color: rgba(244, 63, 94, 0.6) !important;
+        color: #fb7185 !important;
+      }
+
+      .attendee-chip-self.in-voice.is-unmuted {
+        border-color: rgba(16, 185, 129, 0.6) !important;
+      }
+
+      /* Guest Volume Popover */
+      .guest-volume-popover {
+        position: absolute;
+        top: 96px;
+        left: 12px;
+        z-index: 100;
+        width: 175px;
+        padding: 8px 10px;
+        background: rgba(15, 23, 42, 0.95);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        box-sizing: border-box;
+      }
+
+      .guest-volume-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      .guest-volume-name {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 120px;
+      }
+
+      .guest-volume-mute-btn {
+        width: 20px;
+        height: 20px;
+        padding: 0;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: rgba(255, 255, 255, 0.8);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s ease;
+      }
+
+      .guest-volume-mute-btn:hover {
+        background: rgba(255, 255, 255, 0.18);
+        color: white;
+      }
+
+      .guest-volume-mute-btn.muted {
+        background: rgba(244, 63, 94, 0.2);
+        border-color: rgba(244, 63, 94, 0.4);
+        color: #fb7185;
+      }
+
+      .guest-volume-slider-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .guest-volume-icon {
+        color: rgba(255, 255, 255, 0.6);
+        flex-shrink: 0;
+      }
+
+      .guest-volume-slider {
+        flex: 1;
+        -webkit-appearance: none;
+        appearance: none;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+        outline: none;
+      }
+
+      .guest-volume-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #38bdf8;
+        cursor: pointer;
+        box-shadow: 0 0 4px rgba(56, 189, 248, 0.6);
+      }
+
+      .guest-volume-label {
+        font-size: 9.5px;
+        color: rgba(255, 255, 255, 0.6);
+        font-variant-numeric: tabular-nums;
+        min-width: 26px;
+        text-align: right;
+      }
     </style>
   `;
 }
+
+      

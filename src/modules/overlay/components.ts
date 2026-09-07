@@ -280,20 +280,34 @@ export function getOverlaySkeletonHtml(): string {
               </svg>
             </button>
             <div class="voice-connected-strip" id="voice-connected-strip" style="display: none;">
-              <button class="voice-action-btn voice-mute-toggle" id="voice-mute-toggle" title="Mute / Unmute Microphone (V)">
-                <svg class="mic-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                  <line x1="12" y1="19" x2="12" y2="22"></line>
-                </svg>
-              </button>
               <button class="voice-action-btn voice-leave-btn" id="voice-leave-btn" title="Leave Voice">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M18 6 6 18"></path>
                   <path d="m6 6 12 12"></path>
                 </svg>
               </button>
             </div>
+          </div>
+        </div>
+
+        <!-- Guest Volume Popover Modal -->
+        <div class="guest-volume-popover" id="guest-volume-popover" style="display: none;">
+          <div class="guest-volume-header">
+            <span class="guest-volume-name" id="guest-volume-name">Guest</span>
+            <button class="guest-volume-mute-btn" id="guest-volume-local-mute-btn" title="Mute for me">
+              <svg id="guest-volume-mute-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="guest-volume-slider-row">
+            <svg class="guest-volume-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+            <input type="range" min="0" max="100" value="100" class="guest-volume-slider" id="guest-volume-slider">
+            <span class="guest-volume-label" id="guest-volume-label">100%</span>
           </div>
         </div>
       </div>
@@ -381,32 +395,71 @@ export function buildRoomParticipantsHtml(
 
     const voiceState = voiceMap.get(uuid);
     let micHtml = '';
-    if (voiceState) {
-      if (voiceState.isMuted) {
-        micHtml = `
-          <svg class="chip-mic-svg muted" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" title="Muted">
-            <line x1="2" y1="2" x2="22" y2="22"></line>
-            <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"></path>
-            <path d="M5 10v2a7 7 0 0 0 12 5"></path>
-            <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"></path>
-            <path d="M9 9v3a3 3 0 0 0 5.12 2.12"></path>
-            <line x1="12" y1="19" x2="12" y2="22"></line>
-          </svg>
-        `;
+    let chipRole = '';
+    let chipTitle = isHost ? 'Session Host' : '';
+    let voiceClass = '';
+
+    if (isSelf) {
+      if (voiceState) {
+        voiceClass = ` in-voice ${voiceState.isMuted ? 'is-muted' : 'is-unmuted'}`;
+        chipRole = ' role="button" tabindex="0"';
+        chipTitle = voiceState.isMuted ? 'You are muted. Click to Unmute (V)' : 'You are speaking. Click to Mute (V)';
+        if (voiceState.isMuted) {
+          micHtml = `
+            <svg class="chip-mic-svg muted" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="2" y1="2" x2="22" y2="22"></line>
+              <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"></path>
+              <path d="M5 10v2a7 7 0 0 0 12 5"></path>
+              <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"></path>
+              <path d="M9 9v3a3 3 0 0 0 5.12 2.12"></path>
+              <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+          `;
+        } else {
+          micHtml = `
+            <svg class="chip-mic-svg active" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+          `;
+        }
       } else {
-        micHtml = `
-          <svg class="chip-mic-svg active" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" title="In Voice">
-            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-            <line x1="12" y1="19" x2="12" y2="22"></line>
-          </svg>
-        `;
+        chipTitle = isHost ? 'You (Host)' : 'You';
+      }
+    } else {
+      if (voiceState) {
+        voiceClass = ` in-voice ${voiceState.isMuted ? 'is-muted' : 'is-unmuted'}`;
+        chipRole = ' role="button" tabindex="0"';
+        chipTitle = `${name} is in voice. Click to adjust volume or mute.`;
+        if (voiceState.isMuted) {
+          micHtml = `
+            <svg class="chip-mic-svg muted" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="2" y1="2" x2="22" y2="22"></line>
+              <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"></path>
+              <path d="M5 10v2a7 7 0 0 0 12 5"></path>
+              <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"></path>
+              <path d="M9 9v3a3 3 0 0 0 5.12 2.12"></path>
+              <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+          `;
+        } else {
+          micHtml = `
+            <svg class="chip-mic-svg active" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+          `;
+        }
       }
     }
 
     const hostClass = isHost ? ' host-chip' : '';
+    const selfClass = isSelf ? ' attendee-chip-self' : ' attendee-chip-guest';
+
     chips.push(`
-      <div class="attendee-chip${hostClass}" data-uuid="${escapeHtml(uuid)}" style="border: 1px solid ${color}; color: ${color}; opacity: ${opacity};" title="${isHost ? 'Session Host' : ''}">
+      <div class="attendee-chip${hostClass}${selfClass}${voiceClass}" data-uuid="${escapeHtml(uuid)}"${chipRole} style="border: 1px solid ${color}; color: ${color}; opacity: ${opacity};" title="${escapeHtml(chipTitle)}">
         <span>${name}</span>
         ${micHtml}
       </div>
