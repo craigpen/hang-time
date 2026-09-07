@@ -209,11 +209,13 @@ export function getOverlaySkeletonHtml(): string {
           <span id="overlay-title-text">Hang Time</span>
         </div>
         <div class="icon-buttons">
-          <div class="voice-status-pill" id="voice-status-pill" title="Click to connect/disconnect voice">
-            <span class="voice-dot"></span>
-            <span class="voice-status-text" id="voice-status-text">Voice</span>
+          <div class="opacity-control" title="Overlay opacity">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-icon">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor"></path>
+            </svg>
+            <input type="range" min="10" max="100" value="80" class="opacity-slider" id="opacity-slider" title="Overlay opacity">
           </div>
-          <input type="range" min="10" max="100" value="80" class="opacity-slider" id="opacity-slider" title="Overlay opacity">
           <button class="icon-button" id="discord-button" title="Open Discord with host"></button>
           <button class="icon-button" id="pin-button" title="Pin overlay">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -255,18 +257,47 @@ export function getOverlaySkeletonHtml(): string {
       <div id="guest-rows-container"></div>
     </div>
 
+    <!-- Dedicated Voice Bar (Solution A) -->
+    <div class="voice-bar-container" id="voice-bar-container">
+      <button class="voice-join-btn" id="voice-join-btn" title="Join voice chat with co-watchers">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="22"></line>
+        </svg>
+        <span>Join Voice</span>
+      </button>
+
+      <div class="voice-connected-strip" id="voice-connected-strip" style="display: none;">
+        <div class="voice-room-info">
+          <span class="voice-live-dot"></span>
+          <span class="voice-live-text" id="voice-live-text">Voice (1)</span>
+        </div>
+        <div class="voice-strip-actions">
+          <button class="voice-action-btn voice-mute-toggle" id="voice-mute-toggle" title="Toggle Microphone (V to speak)">
+            <svg class="mic-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+            <span id="voice-mute-label">Mute</span>
+          </button>
+          <button class="voice-action-btn voice-leave-btn" id="voice-leave-btn" title="Leave voice room">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6 6 18"></path>
+              <path d="m6 6 12 12"></path>
+            </svg>
+            <span>Leave</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="hang-time-chat-container" id="hang-time-chat-container">
       <div style="text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 11px; padding: 12px 0;">No messages yet</div>
     </div>
 
     <div class="message-input-container">
-      <button class="voice-mic-btn muted" id="voice-mic-btn" title="Toggle Microphone (V to speak)">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-          <line x1="12" y1="19" x2="12" y2="22"></line>
-        </svg>
-      </button>
       <textarea id="message-input" placeholder="Send a message..." rows="1"></textarea>
       <button id="send-button" title="Send message">↑</button>
     </div>

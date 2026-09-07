@@ -479,29 +479,29 @@ export class OverlayUI {
         textarea.style.height = newHeight + 'px';
       });
 
-      // Voice chat controls
-      const micBtn = document.getElementById('voice-mic-btn');
-      const voicePill = document.getElementById('voice-status-pill');
+      // Dedicated Voice Bar Controls (Solution A)
+      const joinBtn = document.getElementById('voice-join-btn');
+      const muteToggle = document.getElementById('voice-mute-toggle');
+      const leaveBtn = document.getElementById('voice-leave-btn');
 
-      if (micBtn) {
-        micBtn.addEventListener('click', async () => {
-          if (!this.voiceManager.getInVoice()) {
-            await this.voiceManager.joinVoice(this._state.session_members);
-            this.voiceManager.setMuted(false);
-          } else {
+      if (joinBtn) {
+        joinBtn.addEventListener('click', async () => {
+          await this.voiceManager.joinVoice(this._state.session_members);
+          this.voiceManager.setMuted(false);
+        });
+      }
+
+      if (muteToggle) {
+        muteToggle.addEventListener('click', () => {
+          if (this.voiceManager.getInVoice()) {
             this.voiceManager.setMuted(!this.voiceManager.getIsMuted());
           }
         });
       }
 
-      if (voicePill) {
-        voicePill.addEventListener('click', async () => {
-          if (!this.voiceManager.getInVoice()) {
-            await this.voiceManager.joinVoice(this._state.session_members);
-            this.voiceManager.setMuted(false);
-          } else {
-            this.voiceManager.leaveVoice();
-          }
+      if (leaveBtn) {
+        leaveBtn.addEventListener('click', () => {
+          this.voiceManager.leaveVoice();
         });
       }
 
@@ -1447,32 +1447,39 @@ export class OverlayUI {
    * Update voice status indicator and mic button state
    */
   private renderVoiceState(participants: VoiceParticipant[]): void {
-    const statusPill = document.getElementById('voice-status-pill');
-    const statusText = document.getElementById('voice-status-text');
-    const micBtn = document.getElementById('voice-mic-btn');
+    const joinBtn = document.getElementById('voice-join-btn');
+    const connectedStrip = document.getElementById('voice-connected-strip');
+    const liveText = document.getElementById('voice-live-text');
+    const muteToggle = document.getElementById('voice-mute-toggle');
+    const muteLabel = document.getElementById('voice-mute-label');
 
     const inVoice = this.voiceManager.getInVoice();
     const isMuted = this.voiceManager.getIsMuted();
 
-    if (statusPill && statusText) {
+    if (joinBtn && connectedStrip) {
       if (inVoice) {
-        statusPill.classList.add('connected');
-        statusText.textContent = `Voice (${participants.length})`;
+        joinBtn.style.display = 'none';
+        connectedStrip.style.display = 'flex';
+        if (liveText) {
+          liveText.textContent = `Voice (${participants.length})`;
+        }
       } else {
-        statusPill.classList.remove('connected');
-        statusText.textContent = 'Voice';
+        joinBtn.style.display = 'inline-flex';
+        connectedStrip.style.display = 'none';
       }
     }
 
-    if (micBtn) {
-      if (!inVoice || isMuted) {
-        micBtn.classList.remove('active');
-        micBtn.classList.add('muted');
-        micBtn.title = inVoice ? 'Unmute Microphone (V)' : 'Join Voice Chat';
+    if (muteToggle && muteLabel) {
+      if (isMuted) {
+        muteToggle.classList.remove('active');
+        muteToggle.classList.add('muted');
+        muteLabel.textContent = 'Unmute (V)';
+        muteToggle.title = 'Unmute Microphone (V)';
       } else {
-        micBtn.classList.remove('muted');
-        micBtn.classList.add('active');
-        micBtn.title = 'Mute Microphone (V)';
+        muteToggle.classList.remove('muted');
+        muteToggle.classList.add('active');
+        muteLabel.textContent = 'Mute (V)';
+        muteToggle.title = 'Mute Microphone (V)';
       }
     }
   }
