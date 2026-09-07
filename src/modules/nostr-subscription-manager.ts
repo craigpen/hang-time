@@ -442,17 +442,24 @@ export class NostrSubscriptionManager {
         }
 
         const isFriendDnd = event.tags.some(t => t[0] === 'dnd' && t[1] === 'true') || activities.some(a => a.dnd || a.metadata?.dnd);
-        for (const act of Object.values(newCurrentActivities)) {
-          if (act) {
-            act.dnd = isFriendDnd;
-            if (act.metadata) {
-              act.metadata.dnd = isFriendDnd;
+        if (isFriendDnd) {
+          // When friend has DND enabled, wipe active activities from memory and storage
+          for (const service of Object.keys(newCurrentActivities)) {
+            delete newCurrentActivities[service as ServiceName];
+          }
+        } else {
+          for (const act of Object.values(newCurrentActivities)) {
+            if (act) {
+              act.dnd = false;
+              if (act.metadata) {
+                act.metadata.dnd = false;
+              }
             }
           }
         }
 
         await storageManager.updateFriend(friend.uuid, {
-          current_activities: newCurrentActivities,
+          current_activities: isFriendDnd ? {} : newCurrentActivities,
           dnd: isFriendDnd,
           last_seen: Date.now(),
           last_event_created_at: event.created_at,

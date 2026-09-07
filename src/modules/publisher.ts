@@ -182,7 +182,7 @@ export class ActivityPublisher {
 
       const tags: Array<[string, string]> = [
         ['type', 'bundled'],
-        ['count', String(activities.length)],
+        ['count', String(isDnd ? 0 : activities.length)],
       ];
 
       if (isDnd) {
@@ -190,7 +190,8 @@ export class ActivityPublisher {
       }
 
       // Serialize activities as JSON array with minimized payload (only published fields)
-      const publishableActivities = activities.map(a => this._toPublishableActivity(a, isDnd));
+      // When DND is active, publish an empty list [] so no video titles or metadata are transmitted
+      const publishableActivities = isDnd ? [] : activities.map(a => this._toPublishableActivity(a, isDnd));
       let content = JSON.stringify(publishableActivities);
 
       // Apply gzip compression if low_bandwidth_mode is enabled

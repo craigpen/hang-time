@@ -177,7 +177,7 @@ export class FriendsTabController {
           }
           friendElement.classList.add('pending');
         } else {
-          const activities = this.sortActivitiesByType(Object.values(friend.current_activities || {}));
+          const activities = friend.dnd ? [] : this.sortActivitiesByType(Object.values(friend.current_activities || {}));
           let friendElement = existingElements.get(friend.uuid);
           if (!friendElement) {
             friendElement = this.createFriendItem(friend.uuid, friend.local_name, activities, isExpanded, friend);
@@ -195,7 +195,7 @@ export class FriendsTabController {
             }
           }
 
-          const isIdle = Object.keys(friend.current_activities || {}).length === 0;
+          const isIdle = friend.dnd || Object.keys(friend.current_activities || {}).length === 0;
           friendElement.classList.toggle('idle', isIdle);
           friendElement.classList.toggle('expanded', isExpanded);
           friendElement.classList.remove('pending');

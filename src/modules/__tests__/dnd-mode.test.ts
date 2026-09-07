@@ -317,5 +317,62 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
       expect(cleared).toBeNull();
     });
   });
-});
 
+  describe('DND Activity Suppression & Privacy', () => {
+    const mockRelayPool: any = {
+      publish: vi.fn().mockResolvedValue(undefined),
+    };
+
+    it('suppresses activities payload and publishes empty list when DND is enabled in publisher', async () => {
+      await storage.setDndMode(true);
+      const publisher = new ActivityPublisher(mockRelayPool, storage, new IdentityManager(storage));
+
+      // Spy on relay pool publish
+      const publishSpy = vi.fn().mockResolvedValue(undefined);
+      (publisher as any).relayPool = { publish: publishSpy };
+
+      await (publisher as any)._publishBundled([mockUserActivity], 'all', { enabled: true });
+
+      expect(publishSpy).toHaveBeenCalled();
+      const publishedEvent = publishSpy.mock.calls[0][0];
+
+      // Verify DND tag and count 0
+      expect(publishedEvent.tags).toContainEqual(['dnd', 'true']);
+      expect(publishedEvent.tags).toContainEqual(['count', '0']);
+
+      // Content must be an empty array []
+      const parsedContent = JSON.parse(publishedEvent.content);
+      expect(parsedContent).toEqual([]);
+    });
+
+    it('clears friend current_activities when receiving DND event in subscription manager', async () => {
+      const { NostrSubscriptionManager } = await import('../nostr-subscription-manager.js');
+      const { storageManager } = await import('../storage.js');
+      await storageManager.init();
+      await storageManager.setFriends([{ ...mockFriend }]);
+
+      const subManager = new NostrSubscriptionManager();
+
+      const dndEvent: any = {
+        id: 'event-dnd-123',
+        pubkey: 'friend-pubkey-456',
+        kind: 10003,
+        created_at: Math.floor(Date.now() / 1000) + 10,
+        tags: [
+          ['type', 'bundled'],
+          ['count', '0'],
+          ['dnd', 'true'],
+        ],
+        content: JSON.stringify([]),
+      };
+
+      await subManager.handleActivityEvent('friend-uuid-456', dndEvent);
+
+      const friends = await storageManager.getFriends();
+      const updatedFriend = friends.find(f => f.uuid === 'friend-uuid-456');
+
+      expect(updatedFriend?.dnd).toBe(true);
+      expect(Object.keys(updatedFriend?.current_activities || {})).toHaveLength(0);
+    });
+  });
+});
