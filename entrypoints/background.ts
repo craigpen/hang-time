@@ -486,7 +486,52 @@ chrome.runtime.onConnect.addListener((port) => {
           } catch (e) {
             console.error('[Background] Failed to handle JOIN_GUEST_ACTIVITY:', e);
           }
-                  } else if (message.type === 'SEND_TYPING') {
+                          } else if (message.type === 'SEND_MESSAGE') {
+          try {
+            console.log('[Background] [MESSAGE_FLOW] SEND_MESSAGE received on port:', {
+              content: message.data?.content?.substring(0, 30),
+              activity_id: message.data?.activity_id,
+            });
+
+            const content = message.data?.content?.trim();
+            if (!content) return;
+
+            const profile = await storageManager.getUserProfile();
+            const friendManager = getFriendManager();
+            const messagingManager = getMessagingManager();
+            const detector = getCoWatcherDetector();
+            const session = await detector.detectCoWatchSession();
+
+            if (!session || !session.co_watchers || session.co_watchers.length < 2) {
+              console.warn('[Background] [MESSAGE_FLOW] Cannot send message - no active co-watch session with >= 2 members');
+              return;
+            }
+
+            const recipientIds = session.co_watchers.filter((id: string) => id !== profile?.uuid);
+            console.log('[Background] [MESSAGE_FLOW] Recipient IDs for message:', recipientIds);
+
+            const activity: any = {
+              id: session.activity_id || message.data?.activity_id || 'co-watch',
+              service: 'co-watch',
+              url: '',
+              title: '',
+            };
+
+            for (const friendId of recipientIds) {
+              const friend = await friendManager.getFriend(friendId);
+              if (!friend) continue;
+
+              const eventId = await messagingManager.sendChatMessage(activity, friend, content);
+              await inviteManager.trackPendingMessage(eventId, 'chat', friend.uuid, activity.id, content);
+              console.log('[Background] [MESSAGE_FLOW] ✅ Message queued for', friend.local_name);
+            }
+
+            // Immediately broadcast update so all connected tabs/scripts get the latest messages
+            await overlayCoordinator.broadcastCoWatchUpdate(detector);
+          } catch (e) {
+            console.error('[Background] Failed to send message:', e);
+          }
+        } else if (message.type === 'SEND_TYPING') {
             const profile = await storageManager.getUserProfile();
             overlayCoordinator.broadcastToContentScripts({
               type: 'CO_WATCH_TYPING',

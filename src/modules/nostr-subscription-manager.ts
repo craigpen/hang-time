@@ -19,6 +19,7 @@ import { hexToBytes } from './security-utils';
 import { relayPool } from './nostr';
 import { inviteManager } from './invite-manager';
 import { overlayCoordinator } from './overlay-coordinator';
+import { getCoWatcherDetector } from './co-watcher-detection';
 
 export class NostrSubscriptionManager {
   private static instance: NostrSubscriptionManager | null = null;
@@ -633,6 +634,11 @@ export class NostrSubscriptionManager {
             type: 'NEW_MESSAGE',
             data: { message, friendId: friend.uuid, activityId: message.activity_id },
           }).catch(() => {});
+        } catch (error) {}
+
+        try {
+          const detector = getCoWatcherDetector();
+          await overlayCoordinator.broadcastCoWatchUpdate(detector);
         } catch (error) {}
       }
     } catch (error) {
