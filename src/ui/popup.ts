@@ -149,7 +149,8 @@ export class PopupController {
       });
 
       if (response.success && response.data) {
-        const userActivities = (response.data.userActivities || []) as Activity[];
+        const rawActivities = response.data.userActivities || response.data.myActivities || {};
+        const userActivities = (Array.isArray(rawActivities) ? rawActivities : Object.values(rawActivities)).filter((a) => a) as Activity[];
         this.friendsTabController?.setUserActivities(userActivities);
         this._renderMyActivity(userActivities);
       }
@@ -238,13 +239,22 @@ export class PopupController {
     }
 
     if (dndState) {
-      dndBtn.textContent = '⛔ Do Not Disturb';
-      dndBtn.classList.add('active-dnd');
-      dndBtn.title = 'Click to switch to Available';
+      dndBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"></circle>
+          <line x1="5.6" y1="5.6" x2="18.4" y2="18.4"></line>
+        </svg>
+      `;
+      dndBtn.classList.add('dnd-active');
+      dndBtn.title = 'Do Not Disturb';
     } else {
-      dndBtn.textContent = '🟢 Available';
-      dndBtn.classList.remove('active-dnd');
-      dndBtn.title = 'Click to switch to Do Not Disturb';
+      dndBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"></circle>
+        </svg>
+      `;
+      dndBtn.classList.remove('dnd-active');
+      dndBtn.title = 'Available';
     }
   }
 

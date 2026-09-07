@@ -8,8 +8,8 @@
     "build:chrome": "node scripts/build.js chrome",
     "build:firefox": "node scripts/build.js firefox",
     "build:all": "npm run build:chrome && npm run build:firefox",
-    "test": "vitest",
-    "test:run": "vitest run",
+    "test": "vitest --root .",
+    "test:run": "vitest run --root .",
     "test:unit": "npm run test:run",
     "pretest:e2e": "npm run build:all",
     "test:e2e": "playwright test",
@@ -44,7 +44,8 @@
     "esbuild": "^0.28.1",
     "jsdom": "^29.1.1",
     "typescript": "^7.0.2",
-    "vitest": "^1.0.0"
+    "vitest": "^1.0.0",
+    "ws": "^8.21.3"
   },
   "dependencies": {
     "@noble/hashes": "^2.2.0",

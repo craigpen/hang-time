@@ -59,6 +59,7 @@ export class ActivityRouter {
       return {
         success: true,
         data: {
+          myActivities,
           userActivities: myActivities,
           friends: friendsData,
         },

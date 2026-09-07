@@ -46,8 +46,15 @@ export class FriendsTabController {
     this.onResizeNeeded = options?.onResizeNeeded;
   }
 
-  setUserActivities(activities: Activity[]): void {
-    this.userActivities = activities;
+  setUserActivities(activities: Activity[] | Record<string, Activity>): void {
+    const rawActivities = activities || [];
+    this.userActivities = (Array.isArray(rawActivities) ? rawActivities : Object.values(rawActivities)).filter((a) => a) as Activity[];
+    const selfElement = this.friendsList?.querySelector('[data-friend-id="self"]') as HTMLElement;
+    if (selfElement) {
+      const selfExpanded = this.expandedFriendsState.get('self') ?? true;
+      const sortedUserActivities = this.sortActivitiesByType(this.userActivities);
+      this.updateFriendItem(selfElement, 'self', 'You', sortedUserActivities, selfExpanded);
+    }
   }
 
   async openMessageModal(friend: Friend, activity?: Activity): Promise<void> {
@@ -89,6 +96,9 @@ export class FriendsTabController {
         toastManager.showError(`Failed to load friends: ${response.error || 'Unknown error'}`);
         return;
       }
+
+      const rawActivities = response.data.userActivities || response.data.myActivities || {};
+      this.userActivities = (Array.isArray(rawActivities) ? rawActivities : Object.values(rawActivities)).filter((a) => a) as Activity[];
 
       const friends = response.data.friends || [];
       await this.renderFriends(friends);
