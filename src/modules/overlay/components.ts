@@ -459,7 +459,7 @@ export function buildRoomParticipantsHtml(
     const selfClass = isSelf ? ' attendee-chip-self' : ' attendee-chip-guest';
 
     chips.push(`
-      <div class="attendee-chip${hostClass}${selfClass}${voiceClass}" data-uuid="${escapeHtml(uuid)}"${chipRole} style="border: 1px solid ${color}; color: ${color}; opacity: ${opacity};" title="${escapeHtml(chipTitle)}">
+      <div class="attendee-chip${hostClass}${selfClass}${voiceClass}" data-uuid="${escapeHtml(uuid)}"${chipRole} style="border: 1px solid ${color}; color: rgba(255, 255, 255, 0.95); opacity: ${opacity};" title="${escapeHtml(chipTitle)}">
         <span>${name}</span>
         ${micHtml}
       </div>
@@ -617,7 +617,7 @@ export function buildMessagesHtml(
       (new Date(nextMsg.timestamp).toDateString() !== new Date(msg.timestamp).toDateString());
 
     const headerHtml = !isConsecutive
-      ? `<div class="attendee-chip" style="border: 1px solid ${userColor}; color: ${userColor}; opacity: ${opacity}; margin-bottom: 2px; font-size: 10px; padding: 1px 7px;">${escapeHtml(displayName)}</div>`
+      ? `<div class="attendee-chip" style="border: 1px solid ${userColor}; color: rgba(255, 255, 255, 0.95); opacity: ${opacity}; margin-bottom: 2px; font-size: 10px; padding: 1px 7px;">${escapeHtml(displayName)}</div>`
       : '';
 
     const timeHtml = isLastInCluster
@@ -627,7 +627,7 @@ export function buildMessagesHtml(
     html += `
       <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}" style="${isConsecutive ? 'margin-top: -2px;' : ''}">
         ${headerHtml}
-        <div class="message-content" style="border: 1px solid ${userColor}40;">${linkifyContent(msg.content)}</div>
+        <div class="message-content">${linkifyContent(msg.content)}</div>
         ${timeHtml}
       </div>
     `;
@@ -647,7 +647,7 @@ export function buildChatToastHtml(
 ): string {
   return `
     <div class="toast-header">
-      <div class="attendee-chip" style="border: 1px solid ${senderColor}; color: ${senderColor}; font-size: 10px; padding: 1px 7px;"><span>${escapeHtml(senderName)}</span></div>
+      <div class="attendee-chip" style="border: 1px solid ${senderColor}; color: rgba(255, 255, 255, 0.95); font-size: 10px; padding: 1px 7px;"><span>${escapeHtml(senderName)}</span></div>
     </div>
     <div class="toast-content">${linkifyContent(content)}</div>
   `;
