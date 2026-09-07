@@ -178,4 +178,24 @@ export class FriendsRouter {
       return { success: false, error: error instanceof Error ? error.message : 'Failed to send message' };
     }
   }
+  static async getMessages(friendId?: string): Promise<ExtensionResponse> {
+    try {
+      const allMessages = await storageManager.getAllMessages();
+      const profile = await storageManager.getUserProfile();
+      const myUuid = profile?.uuid || '';
+
+      if (!friendId) {
+        return { success: true, data: allMessages };
+      }
+
+      const filtered = allMessages.filter(m =>
+        (m.from === friendId && (!m.recipients || m.recipients.includes(myUuid))) ||
+        (m.from === myUuid && m.recipients && m.recipients.includes(friendId))
+      );
+
+      return { success: true, data: filtered };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to get messages' };
+    }
+  }
 }

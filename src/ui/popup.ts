@@ -332,7 +332,13 @@ export class PopupController {
 
   private _setupMessageListener(): void {
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-      if (message.type === 'REFRESH_FRIENDS_UI' || message.type === 'ACTIVITY_UPDATED') {
+      if (
+        message.type === 'REFRESH_FRIENDS_UI' ||
+        message.type === 'ACTIVITY_UPDATED' ||
+        message.type === 'FRIEND_ACTIVITY_CHANGED' ||
+        message.type === 'FRIEND_REQUEST_RECEIVED' ||
+        message.type === 'ACTIVITY_DECLINED'
+      ) {
         this.refreshFriends().catch(() => {});
         this._loadMyActivity().catch(() => {});
         sendResponse({ success: true });

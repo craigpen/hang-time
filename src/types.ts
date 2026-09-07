@@ -479,6 +479,7 @@ export type ExtensionMessageType =
   | 'DECLINE_FRIEND_REQUEST'
   | 'DECLINE_INVITE'
   | 'SEND_MESSAGE'
+  | 'GET_MESSAGES'
   | 'TOGGLE_SERVICE'
   | 'MUTE_FRIEND'
   | 'UNMUTE_FRIEND'

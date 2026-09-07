@@ -716,6 +716,9 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'SEND_MESSAGE':
       return FriendsRouter.sendMessage(message.data?.['activity'], message.data?.['friendId'], message.data?.['content']);
 
+    case 'GET_MESSAGES':
+      return FriendsRouter.getMessages(message.data?.['friendId']);
+
     case 'TOGGLE_SERVICE':
       return ActivityRouter.toggleService(message.data?.['service'], message.data?.['enabled']);
 
