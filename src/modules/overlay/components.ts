@@ -209,6 +209,10 @@ export function getOverlaySkeletonHtml(): string {
           <span id="overlay-title-text">Hang Time</span>
         </div>
         <div class="icon-buttons">
+          <div class="voice-status-pill" id="voice-status-pill" title="Click to connect/disconnect voice">
+            <span class="voice-dot"></span>
+            <span class="voice-status-text" id="voice-status-text">Voice</span>
+          </div>
           <input type="range" min="10" max="100" value="80" class="opacity-slider" id="opacity-slider" title="Overlay opacity">
           <button class="icon-button" id="discord-button" title="Open Discord with host"></button>
           <button class="icon-button" id="pin-button" title="Pin overlay">
@@ -256,6 +260,13 @@ export function getOverlaySkeletonHtml(): string {
     </div>
 
     <div class="message-input-container">
+      <button class="voice-mic-btn muted" id="voice-mic-btn" title="Toggle Microphone (V to speak)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="22"></line>
+        </svg>
+      </button>
       <textarea id="message-input" placeholder="Send a message..." rows="1"></textarea>
       <button id="send-button" title="Send message">↑</button>
     </div>
@@ -297,7 +308,7 @@ export function buildHostChipHtml(
 
   return `
     <span class="overlay-role-label">HOST</span>
-    <div class="attendee-chip" style="background: ${hostColor}; flex-shrink: 0;"><span>${hostName}</span></div>
+    <div class="attendee-chip" data-uuid="${escapeHtml(hostUuid)}" style="background: ${hostColor}; flex-shrink: 0;"><span>${hostName}</span></div>
     ${mediaHtml}
   `;
 }
@@ -337,7 +348,7 @@ export function buildGuestChipsHtml(
     }
 
     const color = getColorFn(uuid);
-    chips.push(`<div class="attendee-chip" style="background: ${color}; opacity: ${opacity};"><span>${name}</span></div>`);
+    chips.push(`<div class="attendee-chip" data-uuid="${escapeHtml(uuid)}" style="background: ${color}; opacity: ${opacity};"><span>${name}</span></div>`);
   }
 
   if (chips.length > 0) {

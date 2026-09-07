@@ -650,6 +650,15 @@ export class FriendsTabController {
       }
       row.appendChild(contentText);
 
+      if (activity.metadata?.['in_voice'] || activity.metadata?.['voice_count']) {
+        const voiceBadge = document.createElement('span');
+        voiceBadge.className = 'activity-voice-badge';
+        const count = activity.metadata?.['voice_count'] ? ` (${activity.metadata['voice_count']})` : '';
+        voiceBadge.innerHTML = `<span class="voice-badge-dot"></span>🎙️${count}`;
+        voiceBadge.title = 'In voice room together';
+        row.appendChild(voiceBadge);
+      }
+
       const isDnd = activity.dnd || activity.metadata?.dnd;
       const buttonsDiv = document.createElement('div');
       buttonsDiv.className = 'activity-actions';

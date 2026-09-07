@@ -1,3 +1,4 @@
+import { VoiceMeshManager, WebRTCSignalPayload, AudioLevelEvent, VoiceParticipant } from './voice/index.js';
 /**
  * Hang Time - Overlay UI
  * Renders floating overlay panel for video co-watching
@@ -81,6 +82,8 @@ export class OverlayUI {
   private port: chrome.runtime.Port | null = null;
   private toastContainer: HTMLElement | null = null;
   private activeToastTimeouts: Map<HTMLElement, NodeJS.Timeout> = new Map();
+  private voiceManager: VoiceMeshManager = new VoiceMeshManager();
+  private pttActive = false;
 
 
   constructor(private userId: string) {}
@@ -103,6 +106,9 @@ export class OverlayUI {
     if (userId && userId !== this.userId) {
       this.userId = userId;
       this.render();
+      if (this._state.session_members) {
+        this.voiceManager.syncSessionMembers(this._state.session_members);
+      }
     }
   }
 
@@ -171,6 +177,9 @@ export class OverlayUI {
     // Render any state that was set before the overlay was added to DOM
     if (this._state.session_members.length > 0) {
       this.render();
+      if (this._state.session_members) {
+        this.voiceManager.syncSessionMembers(this._state.session_members);
+      }
     }
   }
 
@@ -469,6 +478,64 @@ export class OverlayUI {
         const newHeight = Math.max(32, Math.min(textarea.scrollHeight, 68));
         textarea.style.height = newHeight + 'px';
       });
+
+      // Voice chat controls
+      const micBtn = document.getElementById('voice-mic-btn');
+      const voicePill = document.getElementById('voice-status-pill');
+
+      if (micBtn) {
+        micBtn.addEventListener('click', async () => {
+          if (!this.voiceManager.getInVoice()) {
+            await this.voiceManager.joinVoice(this._state.session_members);
+            this.voiceManager.setMuted(false);
+          } else {
+            this.voiceManager.setMuted(!this.voiceManager.getIsMuted());
+          }
+        });
+      }
+
+      if (voicePill) {
+        voicePill.addEventListener('click', async () => {
+          if (!this.voiceManager.getInVoice()) {
+            await this.voiceManager.joinVoice(this._state.session_members);
+            this.voiceManager.setMuted(false);
+          } else {
+            this.voiceManager.leaveVoice();
+          }
+        });
+      }
+
+      // Push-to-Talk (Hold V when not in input)
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'KeyV' && !this.pttActive) {
+          const activeTag = (document.activeElement?.tagName || '').toLowerCase();
+          if (activeTag === 'input' || activeTag === 'textarea') return;
+          if (this.voiceManager.getInVoice() && this.voiceManager.getIsMuted()) {
+            this.pttActive = true;
+            this.voiceManager.setMuted(false);
+          }
+        }
+      });
+
+      window.addEventListener('keyup', (e) => {
+        if (e.code === 'KeyV' && this.pttActive) {
+          this.pttActive = false;
+          if (this.voiceManager.getInVoice()) {
+            this.voiceManager.setMuted(true);
+          }
+        }
+      });
+
+      // Initialize voice manager
+      this.voiceManager.initialize(
+        this.userId,
+        this._state.activity_id || '',
+        (targetUuid, signal) => this.sendWebRTCSignal(targetUuid, signal),
+        {
+          onParticipantsChanged: (participants) => this.renderVoiceState(participants),
+          onSpeakingChanged: (event) => this.handleSpeakingEvent(event),
+        }
+      );
 
       // Send on Enter (Shift+Enter for newline)
       messageInput.addEventListener('keydown', (e) => {
@@ -909,6 +976,9 @@ export class OverlayUI {
       this.renderHeader();
     } else {
       this.render();
+      if (this._state.session_members) {
+        this.voiceManager.syncSessionMembers(this._state.session_members);
+      }
     }
   }
 
@@ -1325,7 +1395,90 @@ export class OverlayUI {
   /**
    * Destroy overlay
    */
+
+  /**
+   * Handle incoming WebRTC signaling message from background
+   */
+  public handleWebRTCSignal(senderUuid: string, signal: WebRTCSignalPayload): void {
+    this.voiceManager.handleSignal(senderUuid, signal);
+  }
+
+  /**
+   * Send WebRTC signal to a peer via background port
+   */
+  private sendWebRTCSignal(targetUuid: string, signal: WebRTCSignalPayload): void {
+    if (this.port) {
+      this.port.postMessage({
+        type: 'SEND_WEBRTC_SIGNAL',
+        data: {
+          target_uuid: targetUuid,
+          activity_id: this._state.activity_id,
+          signal,
+        },
+      });
+    } else {
+      window.postMessage({
+        type: 'HANG_TIME_WEBRTC_SIGNAL',
+        data: {
+          target_uuid: targetUuid,
+          activity_id: this._state.activity_id,
+          signal,
+        },
+      }, '*');
+    }
+  }
+
+  /**
+   * Update speaking glow animation on attendee chips
+   */
+  private handleSpeakingEvent(event: AudioLevelEvent): void {
+    const targetUuid = event.uuid === 'self' ? this.userId : event.uuid;
+    const chips = document.querySelectorAll(`.attendee-chip[data-uuid="${targetUuid}"]`);
+    chips.forEach(chip => {
+      if (event.isSpeaking) {
+        chip.classList.add('speaking');
+      } else {
+        chip.classList.remove('speaking');
+      }
+    });
+  }
+
+  /**
+   * Update voice status indicator and mic button state
+   */
+  private renderVoiceState(participants: VoiceParticipant[]): void {
+    const statusPill = document.getElementById('voice-status-pill');
+    const statusText = document.getElementById('voice-status-text');
+    const micBtn = document.getElementById('voice-mic-btn');
+
+    const inVoice = this.voiceManager.getInVoice();
+    const isMuted = this.voiceManager.getIsMuted();
+
+    if (statusPill && statusText) {
+      if (inVoice) {
+        statusPill.classList.add('connected');
+        statusText.textContent = `Voice (${participants.length})`;
+      } else {
+        statusPill.classList.remove('connected');
+        statusText.textContent = 'Voice';
+      }
+    }
+
+    if (micBtn) {
+      if (!inVoice || isMuted) {
+        micBtn.classList.remove('active');
+        micBtn.classList.add('muted');
+        micBtn.title = inVoice ? 'Unmute Microphone (V)' : 'Join Voice Chat';
+      } else {
+        micBtn.classList.remove('muted');
+        micBtn.classList.add('active');
+        micBtn.title = 'Mute Microphone (V)';
+      }
+    }
+  }
+
   destroy(): void {
+    this.voiceManager.leaveVoice();
     console.debug('[OverlayUI] destroy() called for userId:', this.userId);
     if (this.initialMouseMoveListener) {
       document.removeEventListener('mousemove', this.initialMouseMoveListener);

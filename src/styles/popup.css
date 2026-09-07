@@ -2807,3 +2807,28 @@ body.settings-open .popup-container {
     opacity: 1;
   }
 }
+
+/* Voice Room Badge in Activity Row */
+.activity-voice-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  background: rgba(34, 197, 94, 0.14);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  border-radius: 8px;
+  font-size: 10px;
+  color: #86efac;
+  font-weight: 500;
+  margin-left: 4px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.voice-badge-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 4px rgba(34, 197, 94, 0.8);
+}

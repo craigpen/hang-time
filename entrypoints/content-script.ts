@@ -718,6 +718,11 @@ function establishConnection(): void {
           }
           break;
 
+        case 'CO_WATCH_WEBRTC_SIGNAL':
+          if (overlayUI && message.data) {
+            overlayUI.handleWebRTCSignal(message.data.sender_uuid, message.data.signal);
+          }
+          break;
         case 'ACTIVITY_UPDATE':
           if (!overlayUI) return;
           // Update overlay with current activity info
@@ -885,6 +890,16 @@ function initializeOverlay(): void {
     console.debug('[ContentScript] Window message event received:', event.data?.type);
     if (event.source !== window) {
       console.debug('[ContentScript] Ignoring message from different source');
+      return;
+    }
+
+    if (event.data.type === 'HANG_TIME_WEBRTC_SIGNAL') {
+      if (port) {
+        port.postMessage({
+          type: 'SEND_WEBRTC_SIGNAL',
+          data: event.data.data,
+        });
+      }
       return;
     }
 

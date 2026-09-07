@@ -232,7 +232,7 @@ export interface Message {
   sender_identifier?: string; // Deprecated: use from instead
   activity_id?: string; // Deprecated: not used in session model
 
-  type?: 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response' | 'friend_request'; // Message type
+  type?: 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response' | 'friend_request' | 'webrtc_signal'; // Message type
   content?: string; // Optional for invite/join messages
   is_outbound?: boolean;
   timestamp: number;

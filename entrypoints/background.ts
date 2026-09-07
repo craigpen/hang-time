@@ -531,6 +531,18 @@ chrome.runtime.onConnect.addListener((port) => {
           } catch (e) {
             console.error('[Background] Failed to send message:', e);
           }
+        } else if (message.type === 'SEND_WEBRTC_SIGNAL') {
+            try {
+              const { target_uuid, activity_id, signal } = message.data || {};
+              if (target_uuid && activity_id && signal) {
+                const friend = await getFriendManager().getFriend(target_uuid);
+                if (friend) {
+                  await getMessagingManager().sendWebRTCSignal(activity_id, friend, signal);
+                }
+              }
+            } catch (e) {
+              console.error('[Background] Failed to send WebRTC signal:', e);
+            }
         } else if (message.type === 'OPEN_DISCORD') {
             try {
               const { host_uuid } = message.data || {};

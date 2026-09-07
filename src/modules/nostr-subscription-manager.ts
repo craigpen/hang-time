@@ -572,6 +572,18 @@ export class NostrSubscriptionManager {
         return;
       }
 
+      if (message?.type === 'webrtc_signal' && message.signal) {
+        overlayCoordinator.broadcastToContentScripts({
+          type: 'CO_WATCH_WEBRTC_SIGNAL',
+          data: {
+            sender_uuid: friend.uuid,
+            activity_id: message.activity_id,
+            signal: message.signal,
+          },
+        });
+        return;
+      }
+
       if (message) {
         if (message.type === 'invite' && message.activity_id) {
           try {

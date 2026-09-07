@@ -16,7 +16,8 @@ import { hexToBytes } from './security-utils';
 let instance: MessagingManager | null = null;
 
 export interface ActivityMessage {
-  type: 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response' | 'friend_request';
+  type: 'chat' | 'invite' | 'join_accepted' | 'join_declined' | 'sync_request' | 'sync_response' | 'friend_request' | 'webrtc_signal';
+  signal?: any;
   activity_id: string;
   service?: string;
   content?: string;
@@ -346,11 +347,25 @@ export class MessagingManager {
         content: message.content,
         position: message.position,
         sent_at: message.sent_at,
+        signal: message.signal,
       };
     } catch (error) {
       console.error('[Messaging] Failed to receive/decrypt message:', error);
       return null;
     }
+  }
+
+  /**
+   * Send a WebRTC signaling message to a friend about an active session
+   */
+  async sendWebRTCSignal(activityId: string, recipientFriend: Friend, signal: any): Promise<string> {
+    const message: ActivityMessage = {
+      type: 'webrtc_signal',
+      activity_id: activityId,
+      signal,
+      timestamp: Date.now(),
+    };
+    return this._sendActivityMessage(recipientFriend, message);
   }
 }
 
