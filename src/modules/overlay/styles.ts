@@ -265,11 +265,12 @@ export function getOverlayStyles(): string {
         align-items: center;
         padding: 2px 8px;
         border-radius: 9999px;
-        font-size: 11px;
-        color: white;
+        font-size: 10.5px;
         font-weight: 600;
         letter-spacing: 0.2px;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.95);
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
         transition: all 0.15s ease;
       }
@@ -510,7 +511,7 @@ export function getOverlayStyles(): string {
 
       /* Unified Media Player Card */
       .media-player-card {
-        margin: 2px 10px 4px 10px;
+        margin: 0 0 6px 0;
         padding: 6px 8px;
         border-radius: 8px;
         background: rgba(255, 255, 255, 0.035);
@@ -552,7 +553,7 @@ export function getOverlayStyles(): string {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 10px 4px 10px;
+        padding: 0 0 2px 0;
         gap: 8px;
         box-sizing: border-box;
       }
@@ -614,16 +615,15 @@ export function getOverlayStyles(): string {
       .room-voice-btn {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
-        padding: 3px 8px;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        padding: 0;
         border-radius: 6px;
-        font-size: 10px;
-        font-weight: 600;
-        font-family: inherit;
-        cursor: pointer;
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.06);
         border: 1px solid rgba(255, 255, 255, 0.15);
         color: #cbd5e1;
+        cursor: pointer;
         transition: all 0.15s ease;
         outline: none;
         box-sizing: border-box;
@@ -631,7 +631,9 @@ export function getOverlayStyles(): string {
 
       .room-voice-btn:hover {
         background: rgba(255, 255, 255, 0.16);
+        border-color: rgba(255, 255, 255, 0.25);
         color: #ffffff;
+        transform: scale(1.05);
       }
 
       .room-voice-btn.join-active {
@@ -653,85 +655,55 @@ export function getOverlayStyles(): string {
         }
       }
 
-      .voice-pulse-dot {
-        width: 5px;
-        height: 5px;
-        border-radius: 50%;
-        background-color: #10b981;
-        box-shadow: 0 0 6px #10b981;
-      }
-
       .voice-connected-strip {
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 4px;
+        gap: 3px;
+        background: rgba(16, 185, 129, 0.08);
+        border: 1px solid rgba(16, 185, 129, 0.25);
+        padding: 1px;
+        border-radius: 6px;
       }
 
       .voice-action-btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 4px;
-        padding: 3px 6px;
-        border-radius: 5px;
-        font-size: 10px;
-        font-weight: 500;
-        font-family: inherit;
+        width: 20px;
+        height: 20px;
+        padding: 0;
+        border-radius: 4px;
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.88);
         cursor: pointer;
-        outline: none;
         transition: all 0.15s ease;
-        border: 1px solid transparent;
-        box-sizing: border-box;
+      }
+
+      .voice-action-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+        color: white;
       }
 
       .voice-mute-toggle {
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        color: #e2e8f0;
-      }
-
-      .voice-mute-toggle:hover {
-        background: rgba(255, 255, 255, 0.15);
-        border-color: rgba(255, 255, 255, 0.25);
-        color: #ffffff;
-      }
-
-      .voice-mute-toggle.active {
-        background: rgba(59, 130, 246, 0.15);
-        border-color: rgba(59, 130, 246, 0.35);
         color: #93c5fd;
       }
 
       .voice-mute-toggle.muted {
-        background: rgba(239, 68, 68, 0.15);
-        border-color: rgba(239, 68, 68, 0.35);
         color: #fca5a5;
       }
 
-      .voice-kbd-badge {
-        display: inline-block;
-        font-size: 8px;
-        font-weight: 700;
-        padding: 1px 3px;
-        border-radius: 2px;
-        background: rgba(255, 255, 255, 0.12);
-        color: #94a3b8;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        line-height: 1;
+      .voice-mute-toggle.muted:hover {
+        background: rgba(244, 63, 94, 0.2);
       }
 
       .voice-leave-btn {
-        background: rgba(239, 68, 68, 0.12);
-        border: 1px solid rgba(239, 68, 68, 0.25);
         color: #f87171;
-        padding: 3px 5px;
       }
 
       .voice-leave-btn:hover {
         background: rgba(239, 68, 68, 0.25);
-        border-color: rgba(239, 68, 68, 0.5);
         color: #ffffff;
-        box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
       }
 
       .divergence-join-btn {
@@ -799,13 +771,7 @@ export function getOverlayStyles(): string {
         align-items: flex-start;
       }
 
-      .message-content {
-        padding: 3px 8px;
-        border-radius: 9px;
-        word-wrap: break-word;
-        font-size: 11.5px;
-        flex: 0 1 auto;
-      }
+
 
       .message-time {
         font-size: 9px;
@@ -824,16 +790,22 @@ export function getOverlayStyles(): string {
         align-self: flex-start;
       }
 
-      .message-friend .message-content {
-        background: rgba(255, 255, 255, 0.08);
+      .message-content {
+        padding: 4px 9px;
+        border-radius: 9px;
+        word-wrap: break-word;
+        font-size: 11.5px;
+        flex: 0 1 auto;
+        background: rgba(255, 255, 255, 0.06);
         color: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .message-friend .message-content {
         border-bottom-left-radius: 3px;
       }
 
       .message-user .message-content {
-        background: rgba(244, 63, 94, 0.25);
-        border: 1px solid rgba(244, 63, 94, 0.35);
-        color: white;
         border-bottom-right-radius: 3px;
       }
 

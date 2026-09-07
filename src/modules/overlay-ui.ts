@@ -1481,31 +1481,50 @@ export class OverlayUI {
     if (joinBtn && connectedStrip) {
       if (inVoice) {
         joinBtn.style.display = 'none';
-        connectedStrip.style.display = 'flex';
+        connectedStrip.style.display = 'inline-flex';
       } else {
         joinBtn.style.display = 'inline-flex';
         connectedStrip.style.display = 'none';
         if (participants.length > 0) {
           joinBtn.classList.add('join-active');
+          joinBtn.title = `Join Voice Chat (${participants.length} in room)`;
           if (joinLabel) joinLabel.textContent = `Join (${participants.length})`;
         } else {
           joinBtn.classList.remove('join-active');
+          joinBtn.title = 'Join Voice Chat';
           if (joinLabel) joinLabel.textContent = 'Voice';
         }
       }
     }
 
-    if (muteToggle && muteLabel) {
+    if (muteToggle) {
       if (isMuted) {
         muteToggle.classList.remove('active');
         muteToggle.classList.add('muted');
-        muteLabel.textContent = 'Unmute';
+        if (muteLabel) muteLabel.textContent = 'Unmute';
         muteToggle.title = 'Unmute Microphone (V)';
+        muteToggle.innerHTML = `
+          <svg class="mic-icon muted" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="2" y1="2" x2="22" y2="22"></line>
+            <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"></path>
+            <path d="M5 10v2a7 7 0 0 0 12 5"></path>
+            <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"></path>
+            <path d="M9 9v3a3 3 0 0 0 5.12 2.12"></path>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+          </svg>
+        `;
       } else {
         muteToggle.classList.remove('muted');
         muteToggle.classList.add('active');
-        muteLabel.textContent = 'Mute';
+        if (muteLabel) muteLabel.textContent = 'Mute';
         muteToggle.title = 'Mute Microphone (V)';
+        muteToggle.innerHTML = `
+          <svg class="mic-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="22"></line>
+          </svg>
+        `;
       }
     }
 

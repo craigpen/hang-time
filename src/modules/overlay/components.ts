@@ -272,25 +272,22 @@ export function getOverlaySkeletonHtml(): string {
         <div class="room-participants-strip" id="room-participants-strip">
           <div class="room-participants-chips" id="room-participants-chips"></div>
           <div class="room-voice-actions" id="room-voice-actions">
-            <button class="room-voice-btn" id="voice-join-btn" title="Join voice chat">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button class="room-voice-btn" id="voice-join-btn" title="Join Voice Chat">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                 <line x1="12" y1="19" x2="12" y2="22"></line>
               </svg>
-              <span id="voice-join-label">Voice</span>
             </button>
             <div class="voice-connected-strip" id="voice-connected-strip" style="display: none;">
-              <button class="voice-action-btn voice-mute-toggle" id="voice-mute-toggle" title="Toggle Microphone (V)">
-                <svg class="mic-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <button class="voice-action-btn voice-mute-toggle" id="voice-mute-toggle" title="Mute / Unmute Microphone (V)">
+                <svg class="mic-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
                   <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                   <line x1="12" y1="19" x2="12" y2="22"></line>
                 </svg>
-                <span id="voice-mute-label">Mute</span>
-                <span class="voice-kbd-badge">V</span>
               </button>
-              <button class="voice-action-btn voice-leave-btn" id="voice-leave-btn" title="Leave voice room">
+              <button class="voice-action-btn voice-leave-btn" id="voice-leave-btn" title="Leave Voice">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M18 6 6 18"></path>
                   <path d="m6 6 12 12"></path>
@@ -409,7 +406,7 @@ export function buildRoomParticipantsHtml(
 
     const hostClass = isHost ? ' host-chip' : '';
     chips.push(`
-      <div class="attendee-chip${hostClass}" data-uuid="${escapeHtml(uuid)}" style="background: ${color}; opacity: ${opacity};" title="${isHost ? 'Session Host' : ''}">
+      <div class="attendee-chip${hostClass}" data-uuid="${escapeHtml(uuid)}" style="border: 1px solid ${color}; color: ${color}; opacity: ${opacity};" title="${isHost ? 'Session Host' : ''}">
         <span>${name}</span>
         ${micHtml}
       </div>
@@ -567,7 +564,7 @@ export function buildMessagesHtml(
       (new Date(nextMsg.timestamp).toDateString() !== new Date(msg.timestamp).toDateString());
 
     const headerHtml = !isConsecutive
-      ? `<div class="attendee-chip" style="background: ${userColor}; opacity: ${opacity}; margin-bottom: 2px; font-size: 10px; padding: 1px 7px;">${escapeHtml(displayName)}</div>`
+      ? `<div class="attendee-chip" style="border: 1px solid ${userColor}; color: ${userColor}; opacity: ${opacity}; margin-bottom: 2px; font-size: 10px; padding: 1px 7px;">${escapeHtml(displayName)}</div>`
       : '';
 
     const timeHtml = isLastInCluster
@@ -577,7 +574,7 @@ export function buildMessagesHtml(
     html += `
       <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}" style="${isConsecutive ? 'margin-top: -2px;' : ''}">
         ${headerHtml}
-        <div class="message-content">${linkifyContent(msg.content)}</div>
+        <div class="message-content" style="border: 1px solid ${userColor}40;">${linkifyContent(msg.content)}</div>
         ${timeHtml}
       </div>
     `;
@@ -597,7 +594,7 @@ export function buildChatToastHtml(
 ): string {
   return `
     <div class="toast-header">
-      <div class="attendee-chip" style="background: ${senderColor}; font-size: 10px; padding: 1px 7px;"><span>${escapeHtml(senderName)}</span></div>
+      <div class="attendee-chip" style="border: 1px solid ${senderColor}; color: ${senderColor}; font-size: 10px; padding: 1px 7px;"><span>${escapeHtml(senderName)}</span></div>
     </div>
     <div class="toast-content">${linkifyContent(content)}</div>
   `;
