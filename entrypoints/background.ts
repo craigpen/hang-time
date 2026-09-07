@@ -734,8 +734,10 @@ async function _handleMessage(message: ExtensionMessage): Promise<ExtensionRespo
     case 'GET_DND_MODE':
       return SettingsRouter.getDndMode();
 
-    case 'SET_DND_MODE':
-      return SettingsRouter.setDndMode(message.data?.['enabled'], activityPublisher);
+    case 'SET_DND_MODE': {
+      const enabled = message.data?.['enabled'] !== undefined ? message.data?.['enabled'] : message.data?.['dnd'];
+      return SettingsRouter.setDndMode(enabled, activityPublisher);
+    }
 
     case 'GET_OAUTH_STATUS':
       return AuthRouter.getOAuthStatus(message.data?.['service']);

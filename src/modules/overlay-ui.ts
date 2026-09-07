@@ -210,7 +210,9 @@ export class OverlayUI {
             if (this._state.pinned) {
               pinButton.classList.add('pinned');
               pinButton.setAttribute('title', 'Unpin overlay');
-              this.show();
+              if ((this._state.session_members?.length || 0) >= 2) {
+                this.show();
+              }
             } else {
               pinButton.classList.remove('pinned');
               pinButton.setAttribute('title', 'Pin overlay');
@@ -302,7 +304,7 @@ export class OverlayUI {
         if (!this.container) return;
 
         const hasSession = (this._state.session_members?.length || 0) >= 2;
-        if (!hasSession && !this._state.pinned) return;
+        if (!hasSession) return;
 
         const now = Date.now();
         if (now - lastWakeTime < 80) return; // Throttle to avoid excessive execution
@@ -346,7 +348,7 @@ export class OverlayUI {
           this.fadeTimeoutId = null;
         }
         const hasSession = (this._state.session_members?.length || 0) >= 2;
-        if (hasSession || this._state.pinned) {
+        if (hasSession) {
           this.show();
         }
       });
@@ -1006,7 +1008,9 @@ export class OverlayUI {
       if (this.fadeTimeoutId) clearTimeout(this.fadeTimeoutId);
       this.hideTimer = null;
       this.fadeTimeoutId = null;
-      this.show();
+      if ((this._state.session_members?.length || 0) >= 2) {
+        this.show();
+      }
     } else {
       this.startFadeOut();
     }
@@ -1115,10 +1119,10 @@ export class OverlayUI {
       this.voiceManager.setActivityId(newState.activity_id);
     }
 
-    // If co-watch session ended (< 2 members), leave voice and hide the overlay
-    if (this._state.session_members.length < 2) {
+    // If co-watch session ended (< 2 members), leave voice and force hide the overlay
+    if ((this._state.session_members?.length || 0) < 2) {
       this.voiceManager.leaveVoice();
-      this.hide();
+      this.hide(true);
     } else if (isProgressOnly) {
       // Lightweight progress update: only update progress bar elements without tearing down/re-rendering list DOM
       this.renderHeader();

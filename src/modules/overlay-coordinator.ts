@@ -175,7 +175,7 @@ export class OverlayCoordinator {
   /**
    * Broadcast co-watch updates to content scripts
    */
-  async broadcastCoWatchUpdate(detector: any, callCount = 0): Promise<void> {
+  async broadcastCoWatchUpdate(detector: any, _callCount = 0): Promise<void> {
     try {
       const activitySession = await detector.detectCoWatchSession();
       let persistentSession = await detector.getCurrentCoWatchSession();
@@ -213,7 +213,7 @@ export class OverlayCoordinator {
         }
       }
 
-      if (!activitySession && !persistentSession && callCount > 1) {
+      if (!activitySession && !persistentSession) {
         console.log('[OverlayCoordinator] Broadcasting session cleared to close overlays');
         for (const tabId of this.activeContentScriptPorts.keys()) {
           try {

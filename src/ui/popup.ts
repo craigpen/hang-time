@@ -312,7 +312,7 @@ export class PopupController {
 
         chrome.runtime.sendMessage({
           type: 'SET_DND_MODE',
-          data: { dnd: newDnd },
+          data: { enabled: newDnd, dnd: newDnd },
         }).catch((err) => {
           console.debug('[Popup] Failed to notify background of DND change:', err);
         });

@@ -603,11 +603,11 @@ function establishConnection(): void {
           // The overlay is for active video co-watching on the matching tab (or persistent if pinned)
           const isMatchingTab = Boolean(userCurrentActivityId && sessionActivityId && userCurrentActivityId === sessionActivityId);
           const isSessionActive = (sessionMembers.length || 0) >= 2;
-          const isPinned = overlayUI.state.pinned;
 
-          if (!isPinned && (!isMatchingTab || !isSessionActive)) {
-            // Tab does not match the active co-watch session or session is inactive - hide overlay if not pinned
-            overlayUI.hide();
+          if (!isSessionActive || !isMatchingTab) {
+            // Session is inactive (< 2 members) or not matching tab: immediately leave voice and hide overlay (even if pinned)
+            overlayUI.leaveVoice();
+            overlayUI.hide(true);
             overlayHasBeenShown = false;
             break;
           }
@@ -736,7 +736,7 @@ function establishConnection(): void {
         case 'SESSION_ENDED':
           if (overlayUI) {
             overlayUI.leaveVoice();
-            overlayUI.hide();
+            overlayUI.hide(true);
             overlayHasBeenShown = false;
           }
           break;

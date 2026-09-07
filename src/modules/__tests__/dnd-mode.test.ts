@@ -374,5 +374,61 @@ describe('Do Not Disturb (DND) / Solo Mode', () => {
       expect(updatedFriend?.dnd).toBe(true);
       expect(Object.keys(updatedFriend?.current_activities || {})).toHaveLength(0);
     });
+
+    it('SettingsRouter.setDndMode(true) clears active session and broadcasts SESSION_ENDED to content scripts', async () => {
+      const { SettingsRouter } = await import('../routers/settings-router.js');
+      const { overlayCoordinator } = await import('../overlay-coordinator.js');
+      const { storageManager } = await import('../storage.js');
+      await storageManager.init();
+      await storageManager.setUserProfile({ ...mockUserProfile });
+
+      await storageManager.setActiveSession({
+        session_id: 'sess-123',
+        members: ['user-uuid-123', 'friend-uuid-456'],
+        activity_id: 'yt-video-1',
+        host_friend_uuid: 'self',
+        created_at: Date.now(),
+        is_active: true,
+      });
+
+      const broadcastSpy = vi.spyOn(overlayCoordinator, 'broadcastToContentScripts');
+
+      const res = await SettingsRouter.setDndMode(true);
+      expect(res.success).toBe(true);
+
+      const session = await storageManager.getActiveSession();
+      expect(session).toBeNull();
+
+      expect(broadcastSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'SESSION_ENDED' }));
+      expect(broadcastSpy).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'CO_WATCH_UPDATE',
+        data: expect.objectContaining({ session_members: [] })
+      }));
+    });
+
+    it('OverlayUI force hides and leaves voice when session_members < 2 even if pinned', async () => {
+      const { OverlayUI } = await import('../overlay-ui.js');
+      const ui = new OverlayUI('user-uuid-123');
+
+      // Mount container in DOM
+      document.body.innerHTML = '';
+      ui.init();
+
+      // Pin overlay
+      (ui as any)._state.pinned = true;
+      (ui as any)._state.visible = true;
+
+      const leaveVoiceSpy = vi.spyOn((ui as any).voiceManager, 'leaveVoice');
+      const hideSpy = vi.spyOn(ui, 'hide');
+
+      // Set state with session ended (< 2 members)
+      ui.setState({
+        session_members: [],
+        watching_together: [],
+      });
+
+      expect(leaveVoiceSpy).toHaveBeenCalled();
+      expect(hideSpy).toHaveBeenCalledWith(true);
+    });
   });
 });
