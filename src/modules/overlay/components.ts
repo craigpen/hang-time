@@ -349,6 +349,13 @@ export function buildMediaTitleHtml(activity?: ActivityInfo): string {
 /**
  * Render consolidated room participants HTML (Host first with accent border, followed by guests, with live voice indicators)
  */
+/**
+ * Crown SVG Icon for Session Host (Transparent with gold outline)
+ */
+export function getHostCrownSvg(size: number = 10): string {
+  return `<svg class="host-crown-svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; margin-right: 3px; vertical-align: -1px; flex-shrink: 0;" title="Room Host"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.2a2 2 0 0 1-1.928 1.464H6.78a2 2 0 0 1-1.928-1.464L2.019 6.02a.5.5 0 0 1 .798-.52l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></svg>`;
+}
+
 export function buildRoomParticipantsHtml(
   sessionMembers: string[],
   hostUuid: string | undefined,
@@ -455,12 +462,13 @@ export function buildRoomParticipantsHtml(
       }
     }
 
+    const crownHtml = isHost ? getHostCrownSvg(10) : '';
     const hostClass = isHost ? ' host-chip' : '';
     const selfClass = isSelf ? ' attendee-chip-self' : ' attendee-chip-guest';
 
     chips.push(`
       <div class="attendee-chip${hostClass}${selfClass}${voiceClass}" data-uuid="${escapeHtml(uuid)}"${chipRole} style="border: 1px solid ${color}; color: rgba(255, 255, 255, 0.95); opacity: ${opacity};" title="${escapeHtml(chipTitle)}">
-        <span>${name}</span>
+        ${crownHtml}<span>${name}</span>
         ${micHtml}
       </div>
     `);
@@ -557,7 +565,8 @@ export function buildMessagesHtml(
   currentUserId: string,
   nicknameMapRecord: Record<string, string> | undefined,
   getColorFn: (uuid: string) => string,
-  coWatcherActivities?: Record<string, ActivityInfo>
+  coWatcherActivities?: Record<string, ActivityInfo>,
+  hostUuid?: string
 ): string {
   const validMessages = messages.filter(msg => msg && msg.content);
 
@@ -616,8 +625,10 @@ export function buildMessagesHtml(
       (nextMsg.timestamp - msg.timestamp >= 3 * 60 * 1000) ||
       (new Date(nextMsg.timestamp).toDateString() !== new Date(msg.timestamp).toDateString());
 
+    const isHostMsg = !!hostUuid && msg.sender_id === hostUuid;
+    const crownHtml = isHostMsg ? getHostCrownSvg(9) : '';
     const headerHtml = !isConsecutive
-      ? `<div class="attendee-chip" style="border: 1px solid ${userColor}; color: rgba(255, 255, 255, 0.95); opacity: ${opacity}; margin-bottom: 2px; font-size: 10px; padding: 1px 7px;">${escapeHtml(displayName)}</div>`
+      ? `<div class="attendee-chip" style="border: 1px solid ${userColor}; color: rgba(255, 255, 255, 0.95); opacity: ${opacity}; margin-bottom: 2px; font-size: 10px; padding: 1px 7px;">${crownHtml}<span>${escapeHtml(displayName)}</span></div>`
       : '';
 
     const timeHtml = isLastInCluster
@@ -643,11 +654,13 @@ export function buildMessagesHtml(
 export function buildChatToastHtml(
   senderName: string,
   senderColor: string,
-  content: string
+  content: string,
+  isHost: boolean = false
 ): string {
+  const crownHtml = isHost ? getHostCrownSvg(9) : '';
   return `
     <div class="toast-header">
-      <div class="attendee-chip" style="border: 1px solid ${senderColor}; color: rgba(255, 255, 255, 0.95); font-size: 10px; padding: 1px 7px;"><span>${escapeHtml(senderName)}</span></div>
+      <div class="attendee-chip" style="border: 1px solid ${senderColor}; color: rgba(255, 255, 255, 0.95); font-size: 10px; padding: 1px 7px;">${crownHtml}<span>${escapeHtml(senderName)}</span></div>
     </div>
     <div class="toast-content">${linkifyContent(content)}</div>
   `;

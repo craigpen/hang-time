@@ -49,6 +49,50 @@ describe('Overlay Components & Color Consistency', () => {
     });
   });
 
+  describe('Host Crown SVG & Role Badging', () => {
+    it('renders a gold-outlined transparent crown SVG for host in room bar and chat', () => {
+      const sessionMembers = ['host-1', 'user-1'];
+      const hostUuid = 'host-1';
+      const currentUserId = 'user-1';
+      const nicknameMap = new Map([
+        ['host-1', 'HostAlice'],
+        ['user-1', 'Bob'],
+      ]);
+
+      const getColor = (uuid: string) =>
+        getParticipantColor(uuid, hostUuid, currentUserId, userColorMap);
+
+      const roomHtml = buildRoomParticipantsHtml(
+        sessionMembers,
+        hostUuid,
+        currentUserId,
+        nicknameMap,
+        getColor
+      );
+
+      expect(roomHtml).toContain('host-crown-svg');
+      expect(roomHtml).toContain('stroke="#fbbf24"');
+
+      const messagesHtml = buildMessagesHtml(
+        [
+          { id: '1', sender: 'HostAlice', sender_id: 'host-1', content: 'welcome', timestamp: 1000 },
+          { id: '2', sender: 'You', sender_id: 'user-1', content: 'thanks', timestamp: 2000 },
+        ],
+        currentUserId,
+        Object.fromEntries(nicknameMap),
+        getColor,
+        undefined,
+        hostUuid
+      );
+
+      // Host message has crown SVG in chip
+      expect(messagesHtml).toContain('host-crown-svg');
+      // Toast with isHost has crown SVG
+      const toastHtml = buildChatToastHtml('HostAlice', '#10b981', 'welcome', true);
+      expect(toastHtml).toContain('host-crown-svg');
+    });
+  });
+
   describe('Color matching between Room Strip and Chat Messages', () => {
     it('ensures guest chips in room strip and chat messages share identical border colors', () => {
       const sessionMembers = ['host-1', 'user-1', 'test3'];

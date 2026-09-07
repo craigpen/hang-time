@@ -568,6 +568,15 @@ export function getOverlayStyles(): string {
       }
 
       /* Host Chip Subtle Distinction (Inherits author border color) */
+            /* Host Crown SVG */
+      .host-crown-svg {
+        display: inline-block;
+        margin-right: 3px;
+        vertical-align: -1px;
+        flex-shrink: 0;
+        filter: drop-shadow(0 0 2px rgba(251, 191, 36, 0.4));
+      }
+
       .attendee-chip.host-chip {
         box-shadow: 0 0 6px rgba(255, 255, 255, 0.2);
         font-weight: 600;

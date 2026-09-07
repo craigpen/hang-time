@@ -841,9 +841,10 @@ export class OverlayUI {
     const senderColor = this.getColor(senderId);
     const displayName = this.nicknameMap.get(senderId) || sender || 'Friend';
 
+    const isHost = senderId === this.getHostUuid();
     const toast = document.createElement('div');
     toast.className = 'hang-time-chat-toast';
-    toast.innerHTML = buildChatToastHtml(displayName, senderColor, content);
+    toast.innerHTML = buildChatToastHtml(displayName, senderColor, content, isHost);
 
     // Clicking toast opens full overlay
     toast.addEventListener('click', () => {
@@ -1479,7 +1480,8 @@ export class OverlayUI {
       this.userId,
       this._state.nicknameMap,
       (uuid) => this.getColor(uuid),
-      this._state.co_watcher_activities
+      this._state.co_watcher_activities,
+      this.getHostUuid()
     );
 
     if (container.innerHTML !== messagesHtml) {
