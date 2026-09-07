@@ -193,17 +193,15 @@ export function getOverlayStyles(): string {
 
       #progress-sync-button {
         display: none;
-        padding: 0 6px;
+        padding: 0;
+        width: 18px;
         height: 18px;
-        line-height: 16px;
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        color: white;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        color: #cbd5e1;
         border-radius: 4px;
         cursor: pointer;
-        font-size: 11px;
-        white-space: nowrap;
-        transition: all 0.2s ease;
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
@@ -211,8 +209,10 @@ export function getOverlayStyles(): string {
       }
 
       #progress-sync-button:hover {
-        background: rgba(255, 255, 255, 0.22);
-        border-color: rgba(255, 255, 255, 0.35);
+        background: rgba(59, 130, 246, 0.25);
+        border-color: rgba(59, 130, 246, 0.5);
+        color: #ffffff;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.35);
       }
 
       .progress-bar-fill {
@@ -508,9 +508,21 @@ export function getOverlayStyles(): string {
         border: none;
       }
 
+      /* Unified Media Player Card */
+      .media-player-card {
+        margin: 2px 10px 4px 10px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        box-sizing: border-box;
+      }
+
       /* Media Title Row */
       .media-title-container {
-        padding: 0 10px;
         display: flex;
         align-items: center;
         min-width: 0;
@@ -528,7 +540,7 @@ export function getOverlayStyles(): string {
 
       .media-title-text {
         font-size: 11px;
-        color: rgba(255, 255, 255, 0.85);
+        color: rgba(255, 255, 255, 0.88);
         font-weight: 500;
         white-space: nowrap;
         overflow: hidden;
@@ -540,7 +552,7 @@ export function getOverlayStyles(): string {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 2px 10px 4px 10px;
+        padding: 0 10px 4px 10px;
         gap: 8px;
         box-sizing: border-box;
       }
@@ -561,27 +573,34 @@ export function getOverlayStyles(): string {
         font-weight: 600;
       }
 
-      /* In-Chip Voice Indicator */
-      .chip-mic {
-        display: inline-flex;
-        align-items: center;
-        font-size: 9px;
-        margin-left: 2px;
-        line-height: 1;
+      /* In-Chip SVG Voice Indicator */
+      .chip-mic-svg {
+        display: inline-block;
+        margin-left: 3px;
+        vertical-align: middle;
+        flex-shrink: 0;
       }
 
-      .chip-mic.active {
+      .chip-mic-svg.active {
+        color: #10b981;
         filter: drop-shadow(0 0 4px #10b981);
-        animation: micPulse 1.5s infinite ease-in-out;
+        animation: micPulseSvg 1.8s infinite ease-in-out;
       }
 
-      @keyframes micPulse {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.15); }
+      @keyframes micPulseSvg {
+        0%, 100% {
+          transform: scale(1);
+          filter: drop-shadow(0 0 3px #10b981);
+        }
+        50% {
+          transform: scale(1.15);
+          filter: drop-shadow(0 0 6px #34d399);
+        }
       }
 
-      .chip-mic.muted {
-        opacity: 0.6;
+      .chip-mic-svg.muted {
+        color: #94a3b8;
+        opacity: 0.65;
       }
 
       /* Compact Room Voice Actions */
