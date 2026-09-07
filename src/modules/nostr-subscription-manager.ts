@@ -489,6 +489,13 @@ export class NostrSubscriptionManager {
             } else {
               activeSession.members = remaining;
               await storageManager.setActiveSession(activeSession);
+              overlayCoordinator.broadcastToContentScripts({
+                type: 'CO_WATCH_UPDATE',
+                data: {
+                  session_members: remaining,
+                  watching_together: remaining,
+                },
+              });
             }
           }
         }

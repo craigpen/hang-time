@@ -732,6 +732,14 @@ function establishConnection(): void {
             });
           }
           break;
+
+        case 'SESSION_ENDED':
+          if (overlayUI) {
+            overlayUI.leaveVoice();
+            overlayUI.hide();
+            overlayHasBeenShown = false;
+          }
+          break;
       }
     });
 

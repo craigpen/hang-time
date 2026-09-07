@@ -1115,8 +1115,9 @@ export class OverlayUI {
       this.voiceManager.setActivityId(newState.activity_id);
     }
 
-    // If co-watch session ended, hide the overlay
-    if (this._state.session_members.length === 0) {
+    // If co-watch session ended (< 2 members), leave voice and hide the overlay
+    if (this._state.session_members.length < 2) {
+      this.voiceManager.leaveVoice();
       this.hide();
     } else if (isProgressOnly) {
       // Lightweight progress update: only update progress bar elements without tearing down/re-rendering list DOM
@@ -1631,6 +1632,10 @@ export class OverlayUI {
         participantsContainer.innerHTML = participantsHtml;
       }
     }
+  }
+
+  public leaveVoice(): void {
+    this.voiceManager.leaveVoice();
   }
 
   destroy(): void {
