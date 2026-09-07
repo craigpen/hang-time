@@ -1,18 +1,38 @@
 /**
- * Format message timestamp into a clean, human-readable string (e.g. "10:42 PM" or "Sep 6, 10:42 PM")
+ * Format message timestamp into a clean time string (e.g. "10:42 PM")
  */
 export function formatMessageTime(timestamp?: number): string {
   if (!timestamp) return '';
   const date = new Date(timestamp);
   if (isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+/**
+ * Format timestamp for conversation section dividers (e.g. "Today 10:42 PM", "Yesterday 8:15 PM", "Sep 5, 2:30 PM")
+ */
+export function formatDividerDate(timestamp?: number): string {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return '';
   const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
   const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  const isToday = date.toDateString() === now.toDateString();
   if (isToday) {
-    return timeStr;
+    return `Today ${timeStr}`;
   }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+  if (isYesterday) {
+    return `Yesterday ${timeStr}`;
+  }
+
   return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${timeStr}`;
 }
+
 
 /**
  * Hang Time - Overlay UI Components
@@ -444,27 +464,51 @@ export function buildMessagesHtml(
   }
 
   let html = '';
-  let lastSenderId: string | null = null;
 
-  for (const msg of deduped) {
+  for (let i = 0; i < deduped.length; i++) {
+    const msg = deduped[i];
+    if (!msg) continue;
+
+    const prevMsg = i > 0 ? deduped[i - 1] : null;
+    const nextMsg = i < deduped.length - 1 ? deduped[i + 1] : null;
+
+    // Check if we need a time divider (first message, >15m gap, or new calendar day)
+    const isNewDay = prevMsg ? new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString() : false;
+    const isTimeGap = prevMsg ? (msg.timestamp - prevMsg.timestamp > 15 * 60 * 1000) : false;
+    if (i === 0 || isNewDay || isTimeGap) {
+      html += `<div class="chat-time-divider">${escapeHtml(formatDividerDate(msg.timestamp))}</div>`;
+    }
+
     const isUser = msg.sender_id === currentUserId;
     const userColor = getColorFn(msg.sender_id);
     const displayName = isUser ? 'You' : (nicknameMapRecord?.[msg.sender_id] || msg.sender || 'Unknown');
     const { opacity } = getActivityFreshnessStyle(msg.sender_id, coWatcherActivities);
-    const isConsecutive = lastSenderId === msg.sender_id;
-    lastSenderId = msg.sender_id;
+
+    // Consecutive if same sender within 3 minutes and no time divider in between
+    const isConsecutive = !!prevMsg &&
+      prevMsg.sender_id === msg.sender_id &&
+      (msg.timestamp - prevMsg.timestamp < 3 * 60 * 1000) &&
+      !isNewDay && !isTimeGap;
+
+    // Last in cluster if next message is different sender, >3 mins away, or end of list
+    const isLastInCluster = !nextMsg ||
+      nextMsg.sender_id !== msg.sender_id ||
+      (nextMsg.timestamp - msg.timestamp >= 3 * 60 * 1000) ||
+      (new Date(nextMsg.timestamp).toDateString() !== new Date(msg.timestamp).toDateString());
 
     const headerHtml = !isConsecutive
       ? `<div class="attendee-chip" style="background: ${userColor}; opacity: ${opacity}; margin-bottom: 2px; font-size: 10px; padding: 1px 7px;">${escapeHtml(displayName)}</div>`
       : '';
 
-    const formattedTime = formatMessageTime(msg.timestamp);
-    const dataTimeAttr = formattedTime ? ` data-time="${escapeHtml(formattedTime)}"` : '';
+    const timeHtml = isLastInCluster
+      ? `<div class="message-time">${escapeHtml(formatMessageTime(msg.timestamp))}</div>`
+      : '';
 
     html += `
-      <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}" style="${isConsecutive ? 'margin-top: -3px;' : ''}">
+      <div class="chat-message ${isUser ? 'message-user' : 'message-friend'}" style="${isConsecutive ? 'margin-top: -2px;' : ''}">
         ${headerHtml}
-        <div class="message-content"${dataTimeAttr}>${linkifyContent(msg.content)}</div>
+        <div class="message-content">${linkifyContent(msg.content)}</div>
+        ${timeHtml}
       </div>
     `;
   }

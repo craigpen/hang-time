@@ -7,7 +7,7 @@ import { StorageManager } from '../storage';
 import { CoWatcherDetector } from '../co-watcher-detection';
 import { FriendManager } from '../friends';
 import { OverlayUI } from '../overlay-ui';
-import { formatMessageTime, buildMessagesHtml } from '../overlay/index.js';
+import { formatMessageTime, formatDividerDate, buildMessagesHtml } from '../overlay/index.js';
 import { CoWatchSession, UserProfile, Friend, Activity, Message } from '../../types';
 
 // Mock storage map
@@ -586,36 +586,59 @@ describe('Session Model & Divergence', () => {
       );
     });
   });
-  describe('Timestamp Tooltips', () => {
-    it('formats today timestamp with time only', () => {
+    describe('Consolidated Timestamps & Dividers', () => {
+    it('formats message time as a clean hour:minute string', () => {
       const now = new Date();
       const timeStr = formatMessageTime(now.getTime());
       expect(timeStr).toMatch(/\d{1,2}:\d{2}/);
     });
 
-    it('formats past date timestamp with date and time', () => {
-      const past = new Date(2025, 0, 15, 14, 30);
-      const timeStr = formatMessageTime(past.getTime());
-      expect(timeStr).toContain('Jan 15');
-      expect(timeStr).toMatch(/\d{1,2}:\d{2}/);
+    it('formats today divider with Today prefix', () => {
+      const now = new Date();
+      const dividerStr = formatDividerDate(now.getTime());
+      expect(dividerStr).toContain('Today');
     });
 
-    it('adds data-time attribute to rendered chat messages', () => {
-      const messages = [{
-        id: 'msg-1',
-        sender: 'Bob',
-        sender_id: 'friend-bob-uuid',
-        content: 'Hello with timestamp',
-        timestamp: Date.now(),
-      }];
+    it('renders chat time divider and consolidated message time underneath bubble', () => {
+      const baseTime = Date.now();
+      const messages = [
+        {
+          id: 'msg-1',
+          sender: 'Bob',
+          sender_id: 'friend-bob-uuid',
+          content: 'First bubble',
+          timestamp: baseTime,
+        },
+        {
+          id: 'msg-2',
+          sender: 'Bob',
+          sender_id: 'friend-bob-uuid',
+          content: 'Second bubble (same burst)',
+          timestamp: baseTime + 10000,
+        },
+        {
+          id: 'msg-3',
+          sender: 'User',
+          sender_id: 'user-uuid-1234',
+          content: 'My reply',
+          timestamp: baseTime + 20000,
+        },
+      ];
       const html = buildMessagesHtml(
         messages,
         'user-uuid-1234',
         { 'friend-bob-uuid': 'Bob' },
         () => '#3b82f6'
       );
-      expect(html).toContain('data-time=');
-      expect(html).toContain('Hello with timestamp');
+
+      // Should render at least one divider
+      expect(html).toContain('chat-time-divider');
+
+      // msg-1 is NOT the last in burst, so msg-1 should not have message-time, but msg-2 and msg-3 should
+      expect(html).toContain('First bubble');
+      expect(html).toContain('Second bubble (same burst)');
+      expect(html).toContain('message-time');
+      expect(html).toContain('My reply');
     });
   });
 });
