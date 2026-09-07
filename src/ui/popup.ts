@@ -182,7 +182,7 @@ export class PopupController {
   }
 
   private _setupGamesController(): void {
-    const gamesContent = document.getElementById('games-content');
+    const gamesContent = document.getElementById('games-tab') || document.getElementById('games-content');
     if (gamesContent) {
       const gameLibraryManager = GameLibraryManager.getInstance(this.storage);
       const metadataFetcher = MetadataFetcher.getInstance(this.storage);
@@ -199,7 +199,7 @@ export class PopupController {
   }
 
   private _setupTabNavigation(): void {
-    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabButtons = document.querySelectorAll('.tab-button, .tab-btn');
     tabButtons.forEach((btn) => {
       btn.addEventListener('click', (e) => {
         const target = e.currentTarget as HTMLElement;
@@ -213,12 +213,13 @@ export class PopupController {
           content.classList.remove('active');
         });
 
-        const activeContent = document.getElementById(`${tabName}-content`);
+        const targetId = tabName.endsWith('-tab') ? tabName : `${tabName}-tab`;
+        const activeContent = document.getElementById(targetId) || document.getElementById(tabName) || document.getElementById(`${tabName}-content`);
         if (activeContent) {
           activeContent.classList.add('active');
         }
 
-        if (tabName === 'games' && this.gamesTabController) {
+        if ((tabName === 'games' || tabName === 'games-tab') && this.gamesTabController) {
           this.gamesTabController.render().catch((error) => {
             console.error('[Popup] Failed to render games tab:', error);
           });
@@ -259,14 +260,14 @@ export class PopupController {
   }
 
   private _setupEventListeners(): void {
-    const addFriendBtn = document.getElementById('btn-add-friend');
+    const addFriendBtn = document.getElementById('add-friend-btn') || document.getElementById('btn-add-friend');
     if (addFriendBtn) {
       addFriendBtn.addEventListener('click', () => {
         this.friendsTabController?.showAddFriendForm();
       });
     }
 
-    const cancelAddFriendBtn = document.getElementById('cancel-add-friend');
+    const cancelAddFriendBtn = document.getElementById('friend-cancel-btn') || document.getElementById('cancel-add-friend');
     if (cancelAddFriendBtn) {
       cancelAddFriendBtn.addEventListener('click', () => {
         this.friendsTabController?.hideAddFriendForm();
@@ -294,7 +295,7 @@ export class PopupController {
       });
     }
 
-    const closeSettingsBtn = document.getElementById('close-settings-btn');
+    const closeSettingsBtn = document.getElementById('settings-close-btn') || document.getElementById('close-settings-btn');
     if (closeSettingsBtn) {
       closeSettingsBtn.addEventListener('click', () => {
         this.settingsTabController?.hideSettingsPanel();
@@ -321,7 +322,7 @@ export class PopupController {
       });
     }
 
-    const refreshBtn = document.getElementById('refresh-btn');
+    const refreshBtn = document.getElementById('refresh-friends-btn') || document.getElementById('refresh-btn');
     if (refreshBtn) {
       refreshBtn.addEventListener('click', () => {
         this.refreshAll();

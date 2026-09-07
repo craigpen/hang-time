@@ -646,6 +646,8 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
+  height: 100%;
+  max-height: 600px;
   background-color: var(--bg-primary);
   display: flex;
   flex-direction: column;
@@ -657,10 +659,14 @@ body {
 
 /* Hide main popup scrollbar when settings panel is open */
 body.settings-open {
+  height: 600px !important;
+  max-height: 600px !important;
   overflow: hidden !important;
 }
 
 body.settings-open .popup-container {
+  height: 600px !important;
+  max-height: 600px !important;
   overflow: hidden !important;
 }
 
@@ -721,8 +727,9 @@ body.settings-open .popup-container {
 }
 
 .settings-panel-content {
-  flex: 1;
-  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0; /* CRITICAL for flexbox child scrolling */
+  overflow-y: auto !important;
   overflow-x: hidden;
   padding: 12px 14px;
   box-sizing: border-box;

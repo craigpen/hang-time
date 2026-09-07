@@ -229,7 +229,7 @@ describe('UI Tab Controllers', () => {
 
     it('should show and hide settings panel with body classes', async () => {
       settingsController.showSettingsPanel();
-      expect(settingsPanel.style.display).toBe('block');
+      expect(settingsPanel.style.display).toBe('flex');
       expect(document.body.classList.contains('settings-open')).toBe(true);
 
       await settingsController.hideSettingsPanel();

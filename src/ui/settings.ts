@@ -32,7 +32,7 @@ export class SettingsTabController {
 
   showSettingsPanel(): void {
     if (this.settingsPanel) {
-      this.settingsPanel.style.display = 'block';
+      this.settingsPanel.style.display = 'flex';
       document.body.classList.add('settings-open');
       this.resizePopupToFitSettings();
       // Always reload freshest saved values into settings panel inputs
@@ -48,14 +48,19 @@ export class SettingsTabController {
       await this.saveSettingsPanel();
       this.settingsPanel.style.display = 'none';
       document.body.classList.remove('settings-open');
+      document.body.style.height = '';
+      document.body.style.minHeight = '';
+      document.body.style.maxHeight = '';
       this.resizePopupToFitContent();
     }
   }
 
   resizePopupToFitSettings(): void {
     const body = document.body;
+    body.style.height = '600px';
     body.style.minHeight = '600px';
-    console.debug(`[Settings] Settings panel opened (min height: 600px)`);
+    body.style.maxHeight = '600px';
+    console.debug(`[Settings] Settings panel opened (height: 600px)`);
   }
 
   resizePopupToFitContent(): void {
@@ -348,6 +353,14 @@ export class SettingsTabController {
     if (this.settingsListenersSetup) return;
     this.settingsListenersSetup = true;
 
+    // Close button
+    const closeBtn = document.getElementById('settings-close-btn') || document.getElementById('close-settings-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        this.hideSettingsPanel();
+      });
+    }
+
     // Copy identifier button
     const copyBtn = document.getElementById('copy-id-popup-btn');
     if (copyBtn) {
@@ -528,7 +541,11 @@ export class SettingsTabController {
       exportBtn.addEventListener('click', () => this.exportSettings());
     }
 
-    const importInput = document.getElementById('import-settings-popup-input') as HTMLInputElement;
+    const importBtn = document.getElementById('import-settings-popup-btn');
+    const importInput = (document.getElementById('import-file-popup-input') || document.getElementById('import-settings-popup-input')) as HTMLInputElement;
+    if (importBtn && importInput) {
+      importBtn.addEventListener('click', () => importInput.click());
+    }
     if (importInput) {
       importInput.addEventListener('change', (e: Event) => {
         const file = (e.target as HTMLInputElement).files?.[0];
