@@ -393,11 +393,87 @@ export function getOverlayStyles(): string {
         opacity: 0.9;
       }
 
+      .opacity-control {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .opacity-popover {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: -6px;
+        background: rgba(15, 23, 42, 0.96);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        padding: 8px 10px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+        display: none;
+        flex-direction: column;
+        gap: 6px;
+        width: 120px;
+        z-index: 100;
+        pointer-events: auto;
+      }
+
+      /* Invisible bridge to prevent mouse leaving while moving from button to popover */
+      .opacity-control::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        left: -10px;
+        right: -10px;
+        height: 10px;
+        display: none;
+      }
+
+      .opacity-control:hover::after,
+      .opacity-control:focus-within::after {
+        display: block;
+      }
+
+      .opacity-control:hover .opacity-popover,
+      .opacity-control:focus-within .opacity-popover,
+      .opacity-control.open .opacity-popover {
+        display: flex;
+        animation: popoverFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      @keyframes popoverFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-4px) scale(0.96);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .opacity-popover-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 10px;
+        font-weight: 600;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .opacity-value-label {
+        font-size: 10px;
+        font-weight: 700;
+        color: #38bdf8;
+      }
+
       .opacity-slider {
-        width: 55px;
+        width: 100%;
         height: 4px;
         cursor: pointer;
-        accent-color: #94a3b8;
+        accent-color: #38bdf8;
         flex-shrink: 0;
         -webkit-appearance: none;
         appearance: none;
@@ -412,17 +488,19 @@ export function getOverlayStyles(): string {
         width: 12px;
         height: 12px;
         border-radius: 50%;
-        background: #cbd5e1;
+        background: #38bdf8;
         cursor: pointer;
+        box-shadow: 0 0 6px rgba(56, 189, 248, 0.6);
       }
 
       .opacity-slider::-moz-range-thumb {
         width: 12px;
         height: 12px;
         border-radius: 50%;
-        background: #cbd5e1;
+        background: #38bdf8;
         cursor: pointer;
         border: none;
+        box-shadow: 0 0 6px rgba(56, 189, 248, 0.6);
       }
 
       .opacity-slider::-moz-range-track {

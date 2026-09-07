@@ -209,12 +209,20 @@ export function getOverlaySkeletonHtml(): string {
           <span id="overlay-title-text">Hang Time</span>
         </div>
         <div class="icon-buttons">
-          <div class="opacity-control" title="Overlay opacity">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-icon">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor"></path>
-            </svg>
-            <input type="range" min="10" max="100" value="80" class="opacity-slider" id="opacity-slider" title="Overlay opacity">
+          <div class="opacity-control" id="opacity-control">
+            <button class="icon-button" id="opacity-button" title="Overlay opacity">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-icon">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 2a10 10 0 0 1 0 20z" fill="currentColor"></path>
+              </svg>
+            </button>
+            <div class="opacity-popover" id="opacity-popover">
+              <div class="opacity-popover-header">
+                <span>Opacity</span>
+                <span class="opacity-value-label" id="opacity-value-label">80%</span>
+              </div>
+              <input type="range" min="10" max="100" value="80" class="opacity-slider" id="opacity-slider">
+            </div>
           </div>
           <button class="icon-button" id="discord-button" title="Open Discord with host"></button>
           <button class="icon-button" id="pin-button" title="Pin overlay">

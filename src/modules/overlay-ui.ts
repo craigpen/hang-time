@@ -223,12 +223,31 @@ export class OverlayUI {
    * Setup opacity slider
    */
   private setupOpacitySlider(): void {
+    const opacityControl = this.container?.querySelector('#opacity-control');
+    const opacityBtn = this.container?.querySelector('#opacity-button');
     const slider = this.container?.querySelector('#opacity-slider') as HTMLInputElement;
+
+    if (opacityBtn && opacityControl) {
+      opacityBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        opacityControl.classList.toggle('open');
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!opacityControl.contains(e.target as Node)) {
+          opacityControl.classList.remove('open');
+        }
+      });
+    }
+
     if (!slider) return;
 
     slider.value = this._state.opacity.toString();
 
     slider.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+    });
+    slider.addEventListener('click', (e) => {
       e.stopPropagation();
     });
 
@@ -254,6 +273,14 @@ export class OverlayUI {
     if (!this.container) return;
     const opacityValue = (this._state.opacity / 100).toString();
     this.container.style.setProperty('--overlay-opacity', opacityValue);
+    const label = this.container.querySelector('#opacity-value-label');
+    if (label) {
+      label.textContent = `${this._state.opacity}%`;
+    }
+    const slider = this.container.querySelector('#opacity-slider') as HTMLInputElement;
+    if (slider && slider.value !== this._state.opacity.toString()) {
+      slider.value = this._state.opacity.toString();
+    }
   }
 
   /**
