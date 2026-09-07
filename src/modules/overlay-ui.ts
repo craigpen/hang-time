@@ -1488,7 +1488,8 @@ export class OverlayUI {
         joinBtn.style.display = 'none';
         connectedStrip.style.display = 'flex';
         if (liveText) {
-          liveText.textContent = `Voice (${participants.length})`;
+          const count = participants.length > 0 ? participants.length : 1;
+          liveText.textContent = `Voice (${count})`;
         }
       } else {
         joinBtn.style.display = 'inline-flex';
@@ -1500,12 +1501,12 @@ export class OverlayUI {
       if (isMuted) {
         muteToggle.classList.remove('active');
         muteToggle.classList.add('muted');
-        muteLabel.textContent = 'Unmute (V)';
+        muteLabel.textContent = 'Unmute';
         muteToggle.title = 'Unmute Microphone (V)';
       } else {
         muteToggle.classList.remove('muted');
         muteToggle.classList.add('active');
-        muteLabel.textContent = 'Mute (V)';
+        muteLabel.textContent = 'Mute';
         muteToggle.title = 'Mute Microphone (V)';
       }
     }

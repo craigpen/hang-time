@@ -508,6 +508,185 @@ export function getOverlayStyles(): string {
         border: none;
       }
 
+      /* Voice Bar Container */
+      .voice-bar-container {
+        margin: 4px 10px 8px 10px;
+        padding: 4px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(12px);
+        box-sizing: border-box;
+      }
+
+      /* Join Voice Button */
+      .voice-join-btn {
+        width: 100%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(16, 185, 129, 0.2));
+        border: 1px solid rgba(59, 130, 246, 0.4);
+        border-radius: 6px;
+        color: #f1f5f9;
+        font-size: 11px;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        outline: none;
+        box-sizing: border-box;
+      }
+
+      .voice-join-btn:hover {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.35), rgba(16, 185, 129, 0.35));
+        border-color: rgba(59, 130, 246, 0.6);
+        box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
+        color: #ffffff;
+        transform: translateY(-1px);
+      }
+
+      .voice-join-btn:active {
+        transform: translateY(0);
+      }
+
+      /* Connected Voice Strip */
+      .voice-connected-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 2px 4px;
+        box-sizing: border-box;
+      }
+
+      .voice-status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        background: rgba(16, 185, 129, 0.12);
+        border: 1px solid rgba(16, 185, 129, 0.25);
+        border-radius: 6px;
+        box-sizing: border-box;
+      }
+
+      .voice-pulse-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background-color: #10b981;
+        box-shadow: 0 0 8px #10b981;
+        animation: voicePulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+      }
+
+      @keyframes voicePulse {
+        0%, 100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.4;
+          transform: scale(0.85);
+        }
+      }
+
+      .voice-status-text {
+        font-size: 11px;
+        font-weight: 600;
+        color: #34d399;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+      }
+
+      .voice-strip-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .voice-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 500;
+        font-family: inherit;
+        cursor: pointer;
+        outline: none;
+        transition: all 0.15s ease;
+        border: 1px solid transparent;
+        box-sizing: border-box;
+      }
+
+      /* Mute Toggle Button */
+      .voice-mute-toggle {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: #e2e8f0;
+      }
+
+      .voice-mute-toggle:hover {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.25);
+        color: #ffffff;
+      }
+
+      .voice-mute-toggle.active {
+        background: rgba(59, 130, 246, 0.15);
+        border-color: rgba(59, 130, 246, 0.35);
+        color: #93c5fd;
+      }
+
+      .voice-mute-toggle.active:hover {
+        background: rgba(59, 130, 246, 0.25);
+        border-color: rgba(59, 130, 246, 0.5);
+        color: #ffffff;
+      }
+
+      .voice-mute-toggle.muted {
+        background: rgba(239, 68, 68, 0.15);
+        border-color: rgba(239, 68, 68, 0.35);
+        color: #fca5a5;
+      }
+
+      .voice-mute-toggle.muted:hover {
+        background: rgba(239, 68, 68, 0.25);
+        border-color: rgba(239, 68, 68, 0.5);
+        color: #ffffff;
+      }
+
+      .voice-kbd-badge {
+        display: inline-block;
+        font-size: 9px;
+        font-weight: 700;
+        padding: 1px 4px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.12);
+        color: #94a3b8;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        line-height: 1;
+      }
+
+      /* Leave Button */
+      .voice-leave-btn {
+        background: rgba(239, 68, 68, 0.12);
+        border: 1px solid rgba(239, 68, 68, 0.25);
+        color: #f87171;
+      }
+
+      .voice-leave-btn:hover {
+        background: rgba(239, 68, 68, 0.25);
+        border-color: rgba(239, 68, 68, 0.5);
+        color: #ffffff;
+        box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+      }
+
       .divergence-join-btn {
         background: rgba(16, 185, 129, 0.15);
         border: 1px solid rgba(16, 185, 129, 0.3);

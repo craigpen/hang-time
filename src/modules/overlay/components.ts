@@ -268,18 +268,18 @@ export function getOverlaySkeletonHtml(): string {
     <!-- Dedicated Voice Bar (Solution A) -->
     <div class="voice-bar-container" id="voice-bar-container">
       <button class="voice-join-btn" id="voice-join-btn" title="Join voice chat with co-watchers">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
           <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
           <line x1="12" y1="19" x2="12" y2="22"></line>
         </svg>
-        <span>Join Voice</span>
+        <span>Join Voice Chat</span>
       </button>
 
       <div class="voice-connected-strip" id="voice-connected-strip" style="display: none;">
-        <div class="voice-room-info">
-          <span class="voice-live-dot"></span>
-          <span class="voice-live-text" id="voice-live-text">Voice (1)</span>
+        <div class="voice-status-pill">
+          <span class="voice-pulse-dot"></span>
+          <span class="voice-status-text" id="voice-live-text">Voice (1)</span>
         </div>
         <div class="voice-strip-actions">
           <button class="voice-action-btn voice-mute-toggle" id="voice-mute-toggle" title="Toggle Microphone (V to speak)">
@@ -289,6 +289,7 @@ export function getOverlaySkeletonHtml(): string {
               <line x1="12" y1="19" x2="12" y2="22"></line>
             </svg>
             <span id="voice-mute-label">Mute</span>
+            <span class="voice-kbd-badge">V</span>
           </button>
           <button class="voice-action-btn voice-leave-btn" id="voice-leave-btn" title="Leave voice room">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
