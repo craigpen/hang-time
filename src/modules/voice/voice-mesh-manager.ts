@@ -37,6 +37,7 @@ export class VoiceMeshManager {
 
   private peers: Map<string, PeerAudioEntry> = new Map();
   private remoteVoiceStates = new Map<string, { inVoice: boolean; isMuted: boolean }>();
+  private sessionMembers: string[] = [];
   private vadInterval: NodeJS.Timeout | null = null;
 
   public settings: VoiceSettings = {
@@ -75,6 +76,18 @@ export class VoiceMeshManager {
     if (callbacks?.onSpeakingChanged) this.onSpeakingChanged = callbacks.onSpeakingChanged;
   }
 
+  public setUserId(userId: string): void {
+    if (userId) {
+      this.currentUserId = userId;
+    }
+  }
+
+  public setActivityId(activityId: string): void {
+    if (activityId) {
+      this.activityId = activityId;
+    }
+  }
+
   public getInVoice(): boolean {
     return this.isInVoice;
   }
@@ -88,6 +101,7 @@ export class VoiceMeshManager {
    */
   public async joinVoice(sessionMembers: string[] = []): Promise<boolean> {
     if (this.isInVoice) return true;
+    this.sessionMembers = sessionMembers;
 
     try {
       // 1. Acquire microphone
@@ -279,6 +293,7 @@ export class VoiceMeshManager {
    * Sync active session members (connects newly joined, removes parted)
    */
   public syncSessionMembers(members: string[]): void {
+    this.sessionMembers = members;
     if (!this.isInVoice) return;
 
     const memberSet = new Set(members);
@@ -543,16 +558,19 @@ export class VoiceMeshManager {
   private broadcastVoiceState(inVoice = this.isInVoice): void {
     if (!this.sendSignalFn) return;
 
-    for (const peerUuid of this.peers.keys()) {
-      this.sendSignalFn(peerUuid, {
-        target_uuid: peerUuid,
-        sender_uuid: this.currentUserId,
-        activity_id: this.activityId,
-        type: 'voice-state',
-        is_muted: this.isMuted,
-        in_voice: inVoice,
-        timestamp: Date.now(),
-      });
+    const targetUuids = new Set<string>([...this.sessionMembers, ...this.peers.keys()]);
+    for (const targetUuid of targetUuids) {
+      if (targetUuid && targetUuid !== this.currentUserId) {
+        this.sendSignalFn(targetUuid, {
+          target_uuid: targetUuid,
+          sender_uuid: this.currentUserId,
+          activity_id: this.activityId,
+          type: 'voice-state',
+          is_muted: this.isMuted,
+          in_voice: inVoice,
+          timestamp: Date.now(),
+        });
+      }
     }
   }
 

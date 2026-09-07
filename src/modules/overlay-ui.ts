@@ -104,8 +104,9 @@ export class OverlayUI {
    * Update the user ID without recreating the overlay DOM
    */
   setUserId(userId: string): void {
-    if (userId && userId !== this.userId) {
+    if (userId) {
       this.userId = userId;
+      this.voiceManager.setUserId(userId);
       this.render();
       if (this._state.session_members) {
         this.voiceManager.syncSessionMembers(this._state.session_members);
@@ -533,12 +534,16 @@ export class OverlayUI {
       if (chipsContainer) {
         chipsContainer.addEventListener('click', (e) => {
           const target = e.target as HTMLElement;
-          const selfChip = target.closest('.attendee-chip-self.in-voice') as HTMLElement | null;
-          const guestChip = target.closest('.attendee-chip-guest.in-voice') as HTMLElement | null;
+          const selfChip = target.closest('.attendee-chip-self') as HTMLElement | null;
+          const guestChip = target.closest('.attendee-chip-guest') as HTMLElement | null;
 
           if (selfChip) {
             if (this.voiceManager.getInVoice()) {
               this.voiceManager.setMuted(!this.voiceManager.getIsMuted());
+            } else {
+              this.voiceManager.joinVoice(this._state.session_members).then(() => {
+                this.voiceManager.setMuted(false);
+              });
             }
             return;
           }
@@ -636,7 +641,7 @@ export class OverlayUI {
       document.addEventListener('click', (e) => {
         if (!volumePopover || volumePopover.style.display === 'none') return;
         const target = e.target as HTMLElement;
-        if (!volumePopover.contains(target) && !target.closest('.attendee-chip-guest.in-voice')) {
+        if (!volumePopover.contains(target) && !target.closest('.attendee-chip-guest')) {
           volumePopover.style.display = 'none';
           this.activeGuestVolumeUuid = null;
         }
@@ -1104,6 +1109,10 @@ export class OverlayUI {
       opacity: newState.opacity !== undefined ? newState.opacity : preservedOpacity,
       visible: newState.visible !== undefined ? newState.visible : preservedVisible,
     };
+
+    if (newState.activity_id) {
+      this.voiceManager.setActivityId(newState.activity_id);
+    }
 
     // If co-watch session ended, hide the overlay
     if (this._state.session_members.length === 0) {
