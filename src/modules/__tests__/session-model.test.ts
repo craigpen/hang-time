@@ -537,6 +537,31 @@ describe('Session Model & Divergence', () => {
       expect(toast?.classList.contains('toast-fading')).toBe(true);
     });
 
+    it('displays ephemeral chat toasts when incoming messages arrive via setState while overlay is hidden', () => {
+      overlay.hide(true);
+
+      const now = Date.now();
+      overlay.setState({
+        session_members: ['user-uuid-1234', 'friend-bob-uuid'],
+        messages: [
+          {
+            id: 'msg-1',
+            sender: 'Bob',
+            sender_id: 'friend-bob-uuid',
+            content: 'Incoming co-watch message via broadcast',
+            timestamp: now,
+          },
+        ],
+      });
+
+      const toastContainer = document.getElementById('hang-time-toast-container');
+      expect(toastContainer).not.toBeNull();
+      const toast = toastContainer?.querySelector('.hang-time-chat-toast');
+      expect(toast).not.toBeNull();
+      expect(toast?.textContent).toContain('Bob');
+      expect(toast?.textContent).toContain('Incoming co-watch message via broadcast');
+    });
+
     it('renders real-time typing indicator when a co-watcher types', () => {
       overlay.handleTypingStatus('friend-bob-uuid');
 

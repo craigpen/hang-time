@@ -693,9 +693,8 @@ export class OverlayUI {
     }
 
     this.toastContainer.appendChild(toast);
-    requestAnimationFrame(() => {
-      toast.classList.add('toast-visible');
-    });
+    void toast.offsetWidth; // Force reflow to ensure CSS transition fires reliably
+    toast.classList.add('toast-visible');
 
     scheduleFade();
   }
@@ -930,6 +929,27 @@ export class OverlayUI {
     // Update userId if provided in state
     if (newState.user_uuid && newState.user_uuid !== this.userId && newState.user_uuid !== 'unknown') {
       this.userId = newState.user_uuid;
+    }
+
+    // Check for new incoming messages from other participants to display as floating toasts if overlay is hidden
+    if (newState.messages && Array.isArray(newState.messages) && this._state.messages) {
+      const existingIds = new Set(this._state.messages.map(m => m.id || `${m.sender_id}_${m.timestamp}_${m.content}`));
+      const newIncoming = newState.messages.filter(m => {
+        if (!m || !m.content) return false;
+        if (m.sender_id === this.userId) return false; // Don't toast self messages
+        const id = m.id || `${m.sender_id}_${m.timestamp}_${m.content}`;
+        return !existingIds.has(id);
+      });
+
+      if (!this.isOverlayFullyVisible() && newIncoming.length > 0) {
+        const now = Date.now();
+        for (const msg of newIncoming) {
+          // Only toast recent messages (sent within last 30s) to avoid spam on initial load
+          if (!msg.timestamp || (now - msg.timestamp) < 30000) {
+            this.showChatToast(msg.sender, msg.sender_id, msg.content);
+          }
+        }
+      }
     }
 
     // Check if this is only a playback progress update (avoids expensive DOM re-renders of chat/participants)
