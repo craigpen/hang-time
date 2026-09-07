@@ -9,8 +9,8 @@ import {
   formatTime,
   getParticipantColor,
   getOverlaySkeletonHtml,
-  buildHostChipHtml,
-  buildGuestChipsHtml,
+  buildMediaTitleHtml,
+  buildRoomParticipantsHtml,
   buildChooseNextRowsHtml,
   buildMessagesHtml,
   buildChatToastHtml,
@@ -1211,11 +1211,11 @@ export class OverlayUI {
     const isHostMode = watchingTogether.length >= 2;
     const watchingRow = document.getElementById('watching-together-row');
     const watchingSection = document.getElementById('watching-together-section');
-    const hostContainer = document.getElementById('host-chip-container');
-    const guestContainer = document.getElementById('guest-chips-container');
+    const mediaTitleContainer = document.getElementById('media-title-container');
+    const participantsContainer = document.getElementById('room-participants-chips');
     const guestRowsContainer = document.getElementById('guest-rows-container');
 
-    if (!watchingRow || !hostContainer || !guestContainer || !guestRowsContainer) return;
+    if (!watchingRow || !mediaTitleContainer || !participantsContainer || !guestRowsContainer) return;
 
     if (isHostMode) {
       // HOST MODE: 2+ watching same video
@@ -1223,33 +1223,27 @@ export class OverlayUI {
       watchingRow.style.display = '';
       guestRowsContainer.innerHTML = ''; // Hide divergence rows
 
-      // Render host chip + inline media title
+      // Render media title
       const hostUuid = this.getHostUuid();
-      if (hostUuid) {
-        const hostHtml = buildHostChipHtml(
-          hostUuid,
-          !!this._state.is_user_host,
-          this._state.host_nickname,
-          this.nicknameMap,
-          this.getColor(hostUuid),
-          this._state.co_watcher_activities?.[hostUuid]
-        );
-        if (hostContainer.innerHTML !== hostHtml) {
-          hostContainer.innerHTML = hostHtml;
-        }
+      const hostActivity = hostUuid ? this._state.co_watcher_activities?.[hostUuid] : undefined;
+      const mediaHtml = buildMediaTitleHtml(hostActivity);
+      if (mediaTitleContainer.innerHTML !== mediaHtml) {
+        mediaTitleContainer.innerHTML = mediaHtml;
       }
 
-      // Render guest chips
-      const guestHtml = buildGuestChipsHtml(
+      // Render consolidated room participants (host first with accent border, guests, and mic icons)
+      const voiceParticipants = this.voiceManager.getParticipants();
+      const participantsHtml = buildRoomParticipantsHtml(
         this._state.session_members || [],
         this.getHostUuid(),
         this.userId,
         this.nicknameMap,
         (uuid) => this.getColor(uuid),
+        voiceParticipants,
         this._state.co_watcher_activities
       );
-      if (guestContainer.innerHTML !== guestHtml) {
-        guestContainer.innerHTML = guestHtml;
+      if (participantsContainer.innerHTML !== participantsHtml) {
+        participantsContainer.innerHTML = participantsHtml;
       }
 
       // Render guest markers if user is host
@@ -1260,8 +1254,8 @@ export class OverlayUI {
       // GUEST MODE: <2 watching same video (divergence)
       if (watchingSection) watchingSection.style.display = 'none';
       watchingRow.style.display = 'none';
-      hostContainer.innerHTML = '';
-      guestContainer.innerHTML = '';
+      mediaTitleContainer.innerHTML = '';
+      participantsContainer.innerHTML = '';
 
       // Render "Choose next:" with guest rows
       const divergenceHtml = buildChooseNextRowsHtml(
@@ -1475,10 +1469,11 @@ export class OverlayUI {
    */
   private renderVoiceState(participants: VoiceParticipant[]): void {
     const joinBtn = document.getElementById('voice-join-btn');
+    const joinLabel = document.getElementById('voice-join-label');
     const connectedStrip = document.getElementById('voice-connected-strip');
-    const liveText = document.getElementById('voice-live-text');
     const muteToggle = document.getElementById('voice-mute-toggle');
     const muteLabel = document.getElementById('voice-mute-label');
+    const participantsContainer = document.getElementById('room-participants-chips');
 
     const inVoice = this.voiceManager.getInVoice();
     const isMuted = this.voiceManager.getIsMuted();
@@ -1487,13 +1482,16 @@ export class OverlayUI {
       if (inVoice) {
         joinBtn.style.display = 'none';
         connectedStrip.style.display = 'flex';
-        if (liveText) {
-          const count = participants.length > 0 ? participants.length : 1;
-          liveText.textContent = `Voice (${count})`;
-        }
       } else {
         joinBtn.style.display = 'inline-flex';
         connectedStrip.style.display = 'none';
+        if (participants.length > 0) {
+          joinBtn.classList.add('join-active');
+          if (joinLabel) joinLabel.textContent = `Join (${participants.length})`;
+        } else {
+          joinBtn.classList.remove('join-active');
+          if (joinLabel) joinLabel.textContent = 'Voice';
+        }
       }
     }
 
@@ -1508,6 +1506,22 @@ export class OverlayUI {
         muteToggle.classList.add('active');
         muteLabel.textContent = 'Mute';
         muteToggle.title = 'Mute Microphone (V)';
+      }
+    }
+
+    // Refresh participant chips to reflect live mic states
+    if (participantsContainer && this._state.session_members && this._state.session_members.length >= 2) {
+      const participantsHtml = buildRoomParticipantsHtml(
+        this._state.session_members,
+        this.getHostUuid(),
+        this.userId,
+        this.nicknameMap,
+        (uuid) => this.getColor(uuid),
+        participants,
+        this._state.co_watcher_activities
+      );
+      if (participantsContainer.innerHTML !== participantsHtml) {
+        participantsContainer.innerHTML = participantsHtml;
       }
     }
   }

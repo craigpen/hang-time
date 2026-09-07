@@ -36,6 +36,7 @@ export class VoiceMeshManager {
   private isLocallySpeaking = false;
 
   private peers: Map<string, PeerAudioEntry> = new Map();
+  private remoteVoiceStates = new Map<string, { inVoice: boolean; isMuted: boolean }>();
   private vadInterval: NodeJS.Timeout | null = null;
 
   public settings: VoiceSettings = {
@@ -206,17 +207,25 @@ export class VoiceMeshManager {
 
     try {
       if (signal.type === 'voice-state') {
-        const peer = this.peers.get(senderUuid);
-        if (peer) {
-          peer.isMuted = signal.is_muted ?? false;
-          if (signal.in_voice === false) {
+        if (signal.in_voice === false) {
+          this.remoteVoiceStates.delete(senderUuid);
+          if (this.peers.has(senderUuid)) {
             this.removePeer(senderUuid);
           }
-          this.notifyParticipantsChanged();
-        } else if (signal.in_voice && this.isInVoice) {
-          const isInitiator = this.currentUserId < senderUuid;
-          this.initiatePeerConnection(senderUuid, isInitiator);
+        } else {
+          this.remoteVoiceStates.set(senderUuid, {
+            inVoice: true,
+            isMuted: signal.is_muted ?? false,
+          });
+          if (this.isInVoice && !this.peers.has(senderUuid)) {
+            const isInitiator = this.currentUserId < senderUuid;
+            this.initiatePeerConnection(senderUuid, isInitiator);
+          } else if (this.peers.has(senderUuid)) {
+            const peer = this.peers.get(senderUuid)!;
+            peer.isMuted = signal.is_muted ?? false;
+          }
         }
+        this.notifyParticipantsChanged();
         return;
       }
 
@@ -299,17 +308,28 @@ export class VoiceMeshManager {
         connectionState: 'connected',
         stream: this.localStream || undefined,
       });
-    }
 
-    for (const [uuid, peer] of this.peers.entries()) {
-      list.push({
-        uuid,
-        isMuted: peer.isMuted,
-        isSpeaking: peer.isSpeaking,
-        volume: peer.volume,
-        connectionState: (peer.pc.connectionState || 'connecting') as any,
-        stream: peer.stream,
-      });
+      for (const [uuid, peer] of this.peers.entries()) {
+        list.push({
+          uuid,
+          isMuted: peer.isMuted,
+          isSpeaking: peer.isSpeaking,
+          volume: peer.volume,
+          connectionState: (peer.pc.connectionState || 'connecting') as any,
+          stream: peer.stream,
+        });
+      }
+    } else {
+      // Remote voice states when local client is not in voice
+      for (const [uuid, state] of this.remoteVoiceStates.entries()) {
+        list.push({
+          uuid,
+          isMuted: state.isMuted,
+          isSpeaking: false,
+          volume: 1.0,
+          connectionState: 'disconnected',
+        });
+      }
     }
 
     return list;

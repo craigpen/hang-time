@@ -190,4 +190,63 @@ describe('VoiceMeshManager', () => {
     expect(voiceManager.getInVoice()).toBe(false);
     expect(voiceManager.getParticipants().length).toBe(0);
   });
+
+  it('tracks remote voice presence even when local user has not joined voice', async () => {
+    let participantUpdates: VoiceParticipant[] = [];
+    voiceManager.initialize(
+      'user-1',
+      'act-123',
+      (targetUuid, signal) => sentSignals.push({ targetUuid, signal }),
+      {
+        onParticipantsChanged: (parts) => {
+          participantUpdates = parts;
+        },
+      }
+    );
+
+    expect(voiceManager.getInVoice()).toBe(false);
+
+    // Friend Alice joins voice
+    await voiceManager.handleSignal('friend-alice', {
+      target_uuid: 'user-1',
+      sender_uuid: 'friend-alice',
+      activity_id: 'act-123',
+      type: 'voice-state',
+      in_voice: true,
+      is_muted: false,
+      timestamp: Date.now(),
+    });
+
+    expect(voiceManager.getInVoice()).toBe(false);
+    expect(participantUpdates.length).toBe(1);
+    expect(participantUpdates[0]?.uuid).toBe('friend-alice');
+    expect(participantUpdates[0]?.isMuted).toBe(false);
+
+    // Friend Alice mutes
+    await voiceManager.handleSignal('friend-alice', {
+      target_uuid: 'user-1',
+      sender_uuid: 'friend-alice',
+      activity_id: 'act-123',
+      type: 'voice-state',
+      in_voice: true,
+      is_muted: true,
+      timestamp: Date.now(),
+    });
+
+    expect(participantUpdates[0]?.isMuted).toBe(true);
+
+    // Friend Alice leaves voice
+    await voiceManager.handleSignal('friend-alice', {
+      target_uuid: 'user-1',
+      sender_uuid: 'friend-alice',
+      activity_id: 'act-123',
+      type: 'voice-state',
+      in_voice: false,
+      timestamp: Date.now(),
+    });
+
+    expect(participantUpdates.length).toBe(0);
+    expect(voiceManager.getParticipants().length).toBe(0);
+  });
 });
+

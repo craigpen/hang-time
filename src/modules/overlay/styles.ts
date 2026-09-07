@@ -508,113 +508,154 @@ export function getOverlayStyles(): string {
         border: none;
       }
 
-      /* Voice Bar Container */
-      .voice-bar-container {
-        margin: 4px 10px 8px 10px;
-        padding: 4px;
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        backdrop-filter: blur(12px);
+      /* Media Title Row */
+      .media-title-container {
+        padding: 0 10px;
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      .media-title-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        width: 100%;
+        overflow: hidden;
+      }
+
+      .media-title-text {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.85);
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Consolidated Room Strip (Participants + Voice Actions) */
+      .room-participants-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 2px 10px 4px 10px;
+        gap: 8px;
         box-sizing: border-box;
       }
 
-      /* Join Voice Button */
-      .voice-join-btn {
-        width: 100%;
+      .room-participants-chips {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        flex-wrap: wrap;
+        min-width: 0;
+        flex: 1;
+      }
+
+      /* Host Chip Distinct Accent Border (No emoji) */
+      .attendee-chip.host-chip {
+        border: 1.5px solid #38bdf8 !important;
+        box-shadow: 0 0 8px rgba(56, 189, 248, 0.35);
+        font-weight: 600;
+      }
+
+      /* In-Chip Voice Indicator */
+      .chip-mic {
         display: inline-flex;
         align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 6px 12px;
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(16, 185, 129, 0.2));
-        border: 1px solid rgba(59, 130, 246, 0.4);
+        font-size: 9px;
+        margin-left: 2px;
+        line-height: 1;
+      }
+
+      .chip-mic.active {
+        filter: drop-shadow(0 0 4px #10b981);
+        animation: micPulse 1.5s infinite ease-in-out;
+      }
+
+      @keyframes micPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.15); }
+      }
+
+      .chip-mic.muted {
+        opacity: 0.6;
+      }
+
+      /* Compact Room Voice Actions */
+      .room-voice-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+
+      .room-voice-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
         border-radius: 6px;
-        color: #f1f5f9;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 600;
         font-family: inherit;
         cursor: pointer;
-        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #cbd5e1;
+        transition: all 0.15s ease;
         outline: none;
         box-sizing: border-box;
       }
 
-      .voice-join-btn:hover {
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.35), rgba(16, 185, 129, 0.35));
-        border-color: rgba(59, 130, 246, 0.6);
-        box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
+      .room-voice-btn:hover {
+        background: rgba(255, 255, 255, 0.16);
         color: #ffffff;
-        transform: translateY(-1px);
       }
 
-      .voice-join-btn:active {
-        transform: translateY(0);
+      .room-voice-btn.join-active {
+        background: rgba(16, 185, 129, 0.18);
+        border-color: rgba(16, 185, 129, 0.45);
+        color: #34d399;
+        box-shadow: 0 0 8px rgba(16, 185, 129, 0.25);
+        animation: voiceJoinPulse 2s infinite ease-in-out;
       }
 
-      /* Connected Voice Strip */
-      .voice-connected-strip {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        padding: 2px 4px;
-        box-sizing: border-box;
-      }
-
-      .voice-status-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 8px;
-        background: rgba(16, 185, 129, 0.12);
-        border: 1px solid rgba(16, 185, 129, 0.25);
-        border-radius: 6px;
-        box-sizing: border-box;
+      @keyframes voiceJoinPulse {
+        0%, 100% {
+          border-color: rgba(16, 185, 129, 0.45);
+          box-shadow: 0 0 6px rgba(16, 185, 129, 0.2);
+        }
+        50% {
+          border-color: rgba(16, 185, 129, 0.85);
+          box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+        }
       }
 
       .voice-pulse-dot {
-        width: 6px;
-        height: 6px;
+        width: 5px;
+        height: 5px;
         border-radius: 50%;
         background-color: #10b981;
-        box-shadow: 0 0 8px #10b981;
-        animation: voicePulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+        box-shadow: 0 0 6px #10b981;
       }
 
-      @keyframes voicePulse {
-        0%, 100% {
-          opacity: 1;
-          transform: scale(1);
-        }
-        50% {
-          opacity: 0.4;
-          transform: scale(0.85);
-        }
-      }
-
-      .voice-status-text {
-        font-size: 11px;
-        font-weight: 600;
-        color: #34d399;
-        letter-spacing: 0.02em;
-        white-space: nowrap;
-      }
-
-      .voice-strip-actions {
+      .voice-connected-strip {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 4px;
       }
 
       .voice-action-btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 5px;
-        padding: 4px 8px;
-        border-radius: 6px;
-        font-size: 11px;
+        gap: 4px;
+        padding: 3px 6px;
+        border-radius: 5px;
+        font-size: 10px;
         font-weight: 500;
         font-family: inherit;
         cursor: pointer;
@@ -624,7 +665,6 @@ export function getOverlayStyles(): string {
         box-sizing: border-box;
       }
 
-      /* Mute Toggle Button */
       .voice-mute-toggle {
         background: rgba(255, 255, 255, 0.08);
         border: 1px solid rgba(255, 255, 255, 0.12);
@@ -643,41 +683,29 @@ export function getOverlayStyles(): string {
         color: #93c5fd;
       }
 
-      .voice-mute-toggle.active:hover {
-        background: rgba(59, 130, 246, 0.25);
-        border-color: rgba(59, 130, 246, 0.5);
-        color: #ffffff;
-      }
-
       .voice-mute-toggle.muted {
         background: rgba(239, 68, 68, 0.15);
         border-color: rgba(239, 68, 68, 0.35);
         color: #fca5a5;
       }
 
-      .voice-mute-toggle.muted:hover {
-        background: rgba(239, 68, 68, 0.25);
-        border-color: rgba(239, 68, 68, 0.5);
-        color: #ffffff;
-      }
-
       .voice-kbd-badge {
         display: inline-block;
-        font-size: 9px;
+        font-size: 8px;
         font-weight: 700;
-        padding: 1px 4px;
-        border-radius: 3px;
+        padding: 1px 3px;
+        border-radius: 2px;
         background: rgba(255, 255, 255, 0.12);
         color: #94a3b8;
         border: 1px solid rgba(255, 255, 255, 0.15);
         line-height: 1;
       }
 
-      /* Leave Button */
       .voice-leave-btn {
         background: rgba(239, 68, 68, 0.12);
         border: 1px solid rgba(239, 68, 68, 0.25);
         color: #f87171;
+        padding: 3px 5px;
       }
 
       .voice-leave-btn:hover {

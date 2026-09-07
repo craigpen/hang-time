@@ -40,6 +40,7 @@ export function formatDividerDate(timestamp?: number): string {
  */
 
 import { CO_WATCHABLE_SERVICES } from '../co-watcher-detection.js';
+import { VoiceParticipant } from '../voice/types.js';
 import { getOverlayStyles } from './styles.js';
 
 export interface RenderMessageItem {
@@ -235,11 +236,11 @@ export function getOverlaySkeletonHtml(): string {
       </div>
 
       <!-- Mode A: Co-Watching Layout -->
-      <div id="watching-together-section" style="display: flex; flex-direction: column; gap: 6px;">
-        <!-- Line 1: Host Row (Includes inline Title) -->
-        <div id="host-chip-container" class="overlay-role-row"></div>
+      <div id="watching-together-section" style="display: flex; flex-direction: column; gap: 4px;">
+        <!-- Line 1: Media Title -->
+        <div id="media-title-container" class="media-title-container"></div>
 
-        <!-- Line 2: Left Controls (State + Time) + Progress Bar + Sync button -->
+        <!-- Line 2: Playback Bar (Time + Scrubber Bar + Sync button) -->
         <div class="watching-together-row" id="watching-together-row">
           <div class="progress-bar-wrapper">
             <div class="progress-bar-controls-left">
@@ -257,49 +258,41 @@ export function getOverlaySkeletonHtml(): string {
           </div>
         </div>
 
-        <!-- Line 3: Guest chips -->
-        <div id="guest-chips-container" class="overlay-role-row"></div>
+        <!-- Line 3: Consolidated Room Strip (Participants + Voice Controls) -->
+        <div class="room-participants-strip" id="room-participants-strip">
+          <div class="room-participants-chips" id="room-participants-chips"></div>
+          <div class="room-voice-actions" id="room-voice-actions">
+            <button class="room-voice-btn" id="voice-join-btn" title="Join voice chat">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="22"></line>
+              </svg>
+              <span id="voice-join-label">Voice</span>
+            </button>
+            <div class="voice-connected-strip" id="voice-connected-strip" style="display: none;">
+              <button class="voice-action-btn voice-mute-toggle" id="voice-mute-toggle" title="Toggle Microphone (V)">
+                <svg class="mic-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="22"></line>
+                </svg>
+                <span id="voice-mute-label">Mute</span>
+                <span class="voice-kbd-badge">V</span>
+              </button>
+              <button class="voice-action-btn voice-leave-btn" id="voice-leave-btn" title="Leave voice room">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 6 6 18"></path>
+                  <path d="m6 6 12 12"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Mode B: Divergence display (< 2 watching together) -->
       <div id="guest-rows-container"></div>
-    </div>
-
-    <!-- Dedicated Voice Bar (Solution A) -->
-    <div class="voice-bar-container" id="voice-bar-container">
-      <button class="voice-join-btn" id="voice-join-btn" title="Join voice chat with co-watchers">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-          <line x1="12" y1="19" x2="12" y2="22"></line>
-        </svg>
-        <span>Join Voice Chat</span>
-      </button>
-
-      <div class="voice-connected-strip" id="voice-connected-strip" style="display: none;">
-        <div class="voice-status-pill">
-          <span class="voice-pulse-dot"></span>
-          <span class="voice-status-text" id="voice-live-text">Voice (1)</span>
-        </div>
-        <div class="voice-strip-actions">
-          <button class="voice-action-btn voice-mute-toggle" id="voice-mute-toggle" title="Toggle Microphone (V to speak)">
-            <svg class="mic-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-              <line x1="12" y1="19" x2="12" y2="22"></line>
-            </svg>
-            <span id="voice-mute-label">Mute</span>
-            <span class="voice-kbd-badge">V</span>
-          </button>
-          <button class="voice-action-btn voice-leave-btn" id="voice-leave-btn" title="Leave voice room">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18 6 6 18"></path>
-              <path d="m6 6 12 12"></path>
-            </svg>
-            <span>Leave</span>
-          </button>
-        </div>
-      </div>
     </div>
 
     <div class="hang-time-chat-container" id="hang-time-chat-container">
@@ -318,86 +311,87 @@ export function getOverlaySkeletonHtml(): string {
 /**
  * Render host chip with inline media title & icon HTML
  */
-export function buildHostChipHtml(
-  hostUuid: string,
-  isUserHost: boolean,
-  hostNickname: string | undefined,
-  nicknameMap: Map<string, string>,
-  hostColor: string,
-  activity?: ActivityInfo
-): string {
-  let hostName: string;
-  if (isUserHost) {
-    hostName = 'You';
-  } else {
-    hostName = nicknameMap.get(hostUuid) || hostNickname || 'Host';
+export function buildMediaTitleHtml(activity?: ActivityInfo): string {
+  if (!activity || !activity.content || !activity.service || !CO_WATCHABLE_SERVICES.has(activity.service)) {
+    return '';
   }
-  hostName = escapeHtml(hostName);
-
-  let mediaHtml = '';
-  if (activity && activity.content && activity.service && CO_WATCHABLE_SERVICES.has(activity.service)) {
-    const iconHtml = getServiceIconHtml(activity.service);
-    const title = escapeHtml(activity.content);
-    mediaHtml = `
-      <div style="display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; flex: 1;">
-        ${iconHtml}
-        <span class="media-title-text" style="font-size: 11px; color: rgba(255, 255, 255, 0.85); font-weight: 500;" title="${title}">${title}</span>
-      </div>
-    `;
-  }
-
+  const iconHtml = getServiceIconHtml(activity.service);
+  const title = escapeHtml(activity.content);
   return `
-    <span class="overlay-role-label">HOST</span>
-    <div class="attendee-chip" data-uuid="${escapeHtml(hostUuid)}" style="background: ${hostColor}; flex-shrink: 0;"><span>${hostName}</span></div>
-    ${mediaHtml}
+    <div class="media-title-row">
+      ${iconHtml}
+      <span class="media-title-text" title="${title}">${title}</span>
+    </div>
   `;
 }
 
 /**
- * Render guest chips HTML
+ * Render consolidated room participants HTML (Host first with accent border, followed by guests, with live voice indicators)
  */
-export function buildGuestChipsHtml(
+export function buildRoomParticipantsHtml(
   sessionMembers: string[],
   hostUuid: string | undefined,
   currentUserId: string,
   nicknameMap: Map<string, string>,
   getColorFn: (uuid: string) => string,
+  voiceParticipants: VoiceParticipant[] = [],
   coWatcherActivities?: Record<string, ActivityInfo>
 ): string {
+  const voiceMap = new Map<string, VoiceParticipant>();
+  for (const p of voiceParticipants) {
+    voiceMap.set(p.uuid, p);
+  }
+
+  // Sort participants: Host ALWAYS first, then Self (if not host), then other members
+  const orderedUuids: string[] = [];
+  if (hostUuid && sessionMembers.includes(hostUuid)) {
+    orderedUuids.push(hostUuid);
+  }
+  if (currentUserId !== hostUuid && sessionMembers.includes(currentUserId)) {
+    orderedUuids.push(currentUserId);
+  }
+  for (const uuid of sessionMembers) {
+    if (!orderedUuids.includes(uuid)) {
+      orderedUuids.push(uuid);
+    }
+  }
+
   const chips: string[] = [];
 
-  // Sort with self first
-  const sorted = [...sessionMembers].sort((a, b) => {
-    if (a === currentUserId) return -1;
-    if (b === currentUserId) return 1;
-    return 0;
-  });
-
-  for (const uuid of sorted) {
-    if (uuid === hostUuid) continue; // Skip host (shown separately)
-
+  for (const uuid of orderedUuids) {
+    const isHost = uuid === hostUuid;
+    const isSelf = uuid === currentUserId;
     const { opacity } = getActivityFreshnessStyle(uuid, coWatcherActivities);
+    const color = getColorFn(uuid);
 
     let name: string;
-    if (uuid === currentUserId) {
+    if (isSelf) {
       name = 'You';
     } else {
-      name = nicknameMap.get(uuid) || '';
-      if (!name) continue; // Skip if no nickname
-      name = escapeHtml(name);
+      name = nicknameMap.get(uuid) || (isHost ? 'Host' : 'Guest');
+    }
+    name = escapeHtml(name);
+
+    const voiceState = voiceMap.get(uuid);
+    let micHtml = '';
+    if (voiceState) {
+      if (voiceState.isMuted) {
+        micHtml = `<span class="chip-mic muted" title="Muted">🔇</span>`;
+      } else {
+        micHtml = `<span class="chip-mic active" title="In Voice">🎙️</span>`;
+      }
     }
 
-    const color = getColorFn(uuid);
-    chips.push(`<div class="attendee-chip" data-uuid="${escapeHtml(uuid)}" style="background: ${color}; opacity: ${opacity};"><span>${name}</span></div>`);
+    const hostClass = isHost ? ' host-chip' : '';
+    chips.push(`
+      <div class="attendee-chip${hostClass}" data-uuid="${escapeHtml(uuid)}" style="background: ${color}; opacity: ${opacity};" title="${isHost ? 'Session Host' : ''}">
+        <span>${name}</span>
+        ${micHtml}
+      </div>
+    `);
   }
 
-  if (chips.length > 0) {
-    return `
-      <span class="overlay-role-label">GUESTS</span>
-      <div style="display: flex; gap: 4px; flex-wrap: wrap; align-items: center;">${chips.join('')}</div>
-    `;
-  }
-  return '';
+  return chips.join('');
 }
 
 /**
