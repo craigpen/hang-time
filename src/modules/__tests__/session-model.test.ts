@@ -562,14 +562,6 @@ describe('Session Model & Divergence', () => {
       expect(toast?.textContent).toContain('Incoming co-watch message via broadcast');
     });
 
-    it('renders real-time typing indicator when a co-watcher types', () => {
-      overlay.handleTypingStatus('friend-bob-uuid');
-
-      const chatContainer = document.getElementById('hang-time-chat-container');
-      const typingIndicator = chatContainer?.querySelector('#chat-typing-indicator');
-      expect(typingIndicator).not.toBeNull();
-      expect(typingIndicator?.textContent).toContain('Bob is typing');
-    });
 
     it('posts HANG_TIME_OPEN_DISCORD with host_uuid on discord button click', () => {
       overlay.setState({

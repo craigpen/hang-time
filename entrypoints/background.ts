@@ -531,16 +531,7 @@ chrome.runtime.onConnect.addListener((port) => {
           } catch (e) {
             console.error('[Background] Failed to send message:', e);
           }
-        } else if (message.type === 'SEND_TYPING') {
-            const profile = await storageManager.getUserProfile();
-            overlayCoordinator.broadcastToContentScripts({
-              type: 'CO_WATCH_TYPING',
-              data: {
-                sender_id: profile?.uuid || 'unknown',
-                activity_id: message.data?.activity_id,
-              },
-            }, tabId);
-          } else if (message.type === 'OPEN_DISCORD') {
+        } else if (message.type === 'OPEN_DISCORD') {
             try {
               const { host_uuid } = message.data || {};
               let discordUrl = 'https://discord.com/channels/@me';

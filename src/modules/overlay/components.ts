@@ -469,33 +469,3 @@ export function buildChatToastHtml(
     <div class="toast-content">${linkifyContent(content)}</div>
   `;
 }
-
-/**
- * Render typing indicator HTML
- */
-export function buildTypingIndicatorHtml(
-  typingNames: string[]
-): string {
-  if (!typingNames || typingNames.length === 0) return '';
-  const first = escapeHtml(typingNames[0] || 'Friend');
-  let text = '';
-  if (typingNames.length === 1) {
-    text = `${first} is typing`;
-  } else if (typingNames.length === 2) {
-    const second = escapeHtml(typingNames[1] || 'Friend');
-    text = `${first} and ${second} are typing`;
-  } else {
-    text = `${first} and ${typingNames.length - 1} others are typing`;
-  }
-
-  return `
-    <div class="typing-indicator-container" id="chat-typing-indicator">
-      <span>${text}</span>
-      <div class="typing-dots">
-        <span class="typing-dot"></span>
-        <span class="typing-dot"></span>
-        <span class="typing-dot"></span>
-      </div>
-    </div>
-  `;
-}

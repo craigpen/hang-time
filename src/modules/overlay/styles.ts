@@ -622,51 +622,7 @@ export function getOverlayStyles(): string {
         font-size: 11.5px;
       }
 
-      /* Real-time Typing Indicator */
-      .typing-indicator-container {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        padding: 2px 4px;
-        font-size: 10.5px;
-        color: rgba(255, 255, 255, 0.6);
-        font-style: italic;
-        user-select: none;
-      }
-
-      .typing-dots {
-        display: inline-flex;
-        gap: 2px;
-        align-items: center;
-        margin-left: 2px;
-      }
-
-      .typing-dot {
-        width: 3.5px;
-        height: 3.5px;
-        background: rgba(255, 255, 255, 0.7);
-        border-radius: 50%;
-        animation: typingPulse 1.2s infinite ease-in-out;
-      }
-
-      .typing-dot:nth-child(2) {
-        animation-delay: 0.2s;
-      }
-
-      .typing-dot:nth-child(3) {
-        animation-delay: 0.4s;
-      }
-
-      @keyframes typingPulse {
-        0%, 100% {
-          opacity: 0.3;
-          transform: scale(0.8);
-        }
-        50% {
-          opacity: 1;
-          transform: scale(1.2);
-        }
-      }
+      
 
     </style>
   `;

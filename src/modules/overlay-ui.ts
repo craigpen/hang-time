@@ -13,7 +13,6 @@ import {
   buildChooseNextRowsHtml,
   buildMessagesHtml,
   buildChatToastHtml,
-  buildTypingIndicatorHtml,
 } from './overlay/index.js';
 
 export interface OverlayState {
@@ -82,9 +81,6 @@ export class OverlayUI {
   private port: chrome.runtime.Port | null = null;
   private toastContainer: HTMLElement | null = null;
   private activeToastTimeouts: Map<HTMLElement, NodeJS.Timeout> = new Map();
-  private typingUsers: Map<string, number> = new Map(); // friendUuid -> lastSeenTimestamp
-  private typingClearTimer: NodeJS.Timeout | null = null;
-  private lastTypingSentTimestamp = 0;
 
 
   constructor(private userId: string) {}
@@ -472,18 +468,6 @@ export class OverlayUI {
         textarea.style.height = 'auto';
         textarea.style.height = Math.min(textarea.scrollHeight, 60) + 'px';
 
-        const now = Date.now();
-        if (now - this.lastTypingSentTimestamp > 2500) {
-          this.lastTypingSentTimestamp = now;
-          if (this.port) {
-            this.port.postMessage({
-              type: 'SEND_TYPING',
-              data: {
-                activity_id: this._state.activity_id,
-              },
-            });
-          }
-        }
       });
 
       // Send on Enter (Shift+Enter for newline)
@@ -715,58 +699,6 @@ export class OverlayUI {
     this.activeToastTimeouts.clear();
   }
 
-  /**
-   * Handle incoming typing status event from co-watcher
-   */
-  handleTypingStatus(senderUuid: string): void {
-    if (senderUuid === this.userId) return;
-    this.typingUsers.set(senderUuid, Date.now());
-    this.renderTypingIndicator();
-
-    if (this.typingClearTimer) clearTimeout(this.typingClearTimer);
-    this.typingClearTimer = setTimeout(() => {
-      this.cleanupExpiredTypingUsers();
-    }, 3500);
-  }
-
-  private cleanupExpiredTypingUsers(): void {
-    const cutoff = Date.now() - 3000;
-    for (const [uuid, timestamp] of this.typingUsers.entries()) {
-      if (timestamp < cutoff) {
-        this.typingUsers.delete(uuid);
-      }
-    }
-    this.renderTypingIndicator();
-  }
-
-  private renderTypingIndicator(): void {
-    const container = document.getElementById('hang-time-chat-container');
-    if (!container) return;
-
-    const existingIndicator = container.querySelector('#chat-typing-indicator');
-    const activeNames: string[] = [];
-    const cutoff = Date.now() - 3000;
-
-    for (const [uuid, timestamp] of this.typingUsers.entries()) {
-      if (timestamp >= cutoff) {
-        const name = this.nicknameMap.get(uuid) || 'Friend';
-        activeNames.push(name);
-      }
-    }
-
-    if (activeNames.length === 0) {
-      if (existingIndicator) existingIndicator.remove();
-      return;
-    }
-
-    const indicatorHtml = buildTypingIndicatorHtml(activeNames);
-    if (existingIndicator) {
-      existingIndicator.outerHTML = indicatorHtml;
-    } else {
-      container.insertAdjacentHTML('beforeend', indicatorHtml);
-      container.scrollTop = container.scrollHeight;
-    }
-  }
 
   /**
    * Show overlay immediately
@@ -1416,9 +1348,6 @@ export class OverlayUI {
     }
     if (this.progressUpdateInterval) {
       clearInterval(this.progressUpdateInterval);
-    }
-    if (this.typingClearTimer) {
-      clearTimeout(this.typingClearTimer);
     }
     this.clearChatToasts();
     if (this.toastContainer) {
