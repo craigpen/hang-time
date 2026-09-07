@@ -567,10 +567,9 @@ export function getOverlayStyles(): string {
         flex: 1;
       }
 
-      /* Host Chip Distinct Accent Border (No emoji) */
+      /* Host Chip Subtle Distinction (Inherits author border color) */
       .attendee-chip.host-chip {
-        border: 1.5px solid #38bdf8 !important;
-        box-shadow: 0 0 8px rgba(56, 189, 248, 0.35);
+        box-shadow: 0 0 6px rgba(255, 255, 255, 0.2);
         font-weight: 600;
       }
 
@@ -945,13 +944,10 @@ export function getOverlayStyles(): string {
         transform: translateY(0);
       }
 
-      .attendee-chip-self.in-voice.is-muted {
-        border-color: rgba(244, 63, 94, 0.6) !important;
-        color: #fb7185 !important;
-      }
-
-      .attendee-chip-self.in-voice.is-unmuted {
-        border-color: rgba(16, 185, 129, 0.6) !important;
+      /* Self chip maintains red border + white text in voice */
+      .attendee-chip-self.in-voice {
+        border-color: #f43f5e !important;
+        color: rgba(255, 255, 255, 0.95) !important;
       }
 
       /* Guest Volume Popover */

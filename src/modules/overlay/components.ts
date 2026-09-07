@@ -109,14 +109,14 @@ export function getParticipantColor(
     return '#6b7280'; // Gray fallback
   }
 
-  // Rule 1: Host is always green/emerald
-  if (uuid === hostUuid) {
-    return '#10b981';
+  // Rule 1: Current user ("You") is ALWAYS vivid coral red (#f43f5e) to match video position marker and arrows
+  if (uuid === currentUserId || uuid === 'user') {
+    return '#f43f5e';
   }
 
-  // Rule 2: Current user (when guest) is vivid coral
-  if (uuid === currentUserId) {
-    return '#f43f5e';
+  // Rule 2: Host (when remote/another user) is always green/emerald (#10b981)
+  if (uuid === hostUuid) {
+    return '#10b981';
   }
 
   // Rule 3: Other guests get fixed mapped color
@@ -523,7 +523,7 @@ export function buildChooseNextRowsHtml(
       row = `
         <div class="divergence-row" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.04); margin-bottom: 4px; opacity: ${opacity};">
           <div style="display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1;">
-            <div class="attendee-chip" style="background: ${color}; flex-shrink: 0;"><span>${name}</span></div>
+            <div class="attendee-chip" style="border: 1px solid ${color}; color: rgba(255, 255, 255, 0.95); flex-shrink: 0;"><span>${name}</span></div>
             <div style="display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden;">
               ${iconHtml}
               <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: rgba(255, 255, 255, 0.85);" title="${escapeHtml(activity.content)}">${title}</span>
@@ -535,7 +535,7 @@ export function buildChooseNextRowsHtml(
     } else {
       row = `
         <div class="divergence-row" style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; opacity: ${opacity}; margin-bottom: 4px;">
-          <div class="attendee-chip" style="background: ${color}; flex-shrink: 0;"><span>${name}</span></div>
+          <div class="attendee-chip" style="border: 1px solid ${color}; color: rgba(255, 255, 255, 0.95); flex-shrink: 0;"><span>${name}</span></div>
           <span style="font-size: 11px; color: rgba(255, 255, 255, 0.4); font-style: italic;">Browsing...</span>
         </div>
       `;
